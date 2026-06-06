@@ -1964,15 +1964,17 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
                 [],
                 services=self.services)
         count = 0
-        while count < 15:
+        max_rebalance_wait = max(15, self.num_items // 1000)
+        while count < max_rebalance_wait:
             reb_status = rest._rebalance_status_and_progress()
             if reb_status != "none":
                 self.sleep(2, "wait rebalance to complete")
                 count += 1
             else:
                 break
-            if count == 15:
-                self.fail("Status still shows running after rebalance complete 30 seconds")
+            if count == max_rebalance_wait:
+                self.fail("Status still shows running after rebalance complete {} seconds"
+                          .format(max_rebalance_wait * 2))
         return kv_quota
 
     def _collect_logs(self):
@@ -2619,15 +2621,17 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
             rebalance = self.cluster.async_rebalance(self.cluster_to_restore, [], [])
             rebalance.result()
             count = 0
-            while count < 15:
+            max_rebalance_wait = max(15, self.num_items // 1000)
+            while count < max_rebalance_wait:
                 reb_st, _ = rest_rs._rebalance_status_and_progress()
                 if reb_st != "none":
                     self.sleep(2, "wait rebalance to complete")
                     count += 1
                 else:
                     break
-                if count == 15:
-                    self.fail("Status still shows running after rebalance complete 30 seconds")
+                if count == max_rebalance_wait:
+                    self.fail("Status still shows running after rebalance complete {} seconds"
+                              .format(max_rebalance_wait * 2))
         else:
             self.log.info("No availabe node to create cluster.")
 

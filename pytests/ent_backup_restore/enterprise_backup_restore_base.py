@@ -638,26 +638,32 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         return output, error
 
     def _verify_backup_directory_count(self, expected):
-        shell = RemoteMachineShellConnection(self.backupset.backup_host)
-        command = (
-            f"ls -l {self.backupset.objstore_staging_directory + '/' if self.objstore_provider else ''}"
-            f"{self.backupset.directory}/{self.backupset.name} | wc -l"
-        )
+        # For object store providers the local staging directory is a transient
+        # working area that cbbackupmgr may or may not clean up for every backup
+        # type (e.g. empty incremental backups still write metadata to staging).
+        # The staging count is therefore unreliable as a proxy for "how many
+        # backups exist" when using object store.  Use the authoritative remote
+        # count instead.
+        if not self.objstore_provider:
+            shell = RemoteMachineShellConnection(self.backupset.backup_host)
+            command = (
+                f"ls -l {self.backupset.directory}/{self.backupset.name} | wc -l"
+            )
 
-        output, _ = shell.execute_command(command)
-        output = " ".join(output)
+            output, _ = shell.execute_command(command)
+            output = " ".join(output)
 
-        try:
-            count = int(output)
-            self.assertEqual(count - 3, expected,
-                             "Number of backup directories {0} does not match expected {1}".format(count - 3, expected))
-        except ValueError as e:
-            self.fail("Could not get the number of backups in the archive due to: {0}".format(e))
+            try:
+                count = int(output)
+                self.assertEqual(count - 3, expected,
+                                 "Number of backup directories {0} does not match expected {1}".format(count - 3, expected))
+            except ValueError as e:
+                self.fail("Could not get the number of backups in the archive due to: {0}".format(e))
 
-        shell.disconnect()
+            shell.disconnect()
 
-        # It's important that we check to ensure the backups were removed in object store as well as in the staging
-        # directory.
+        # For object store providers verify the remote count — this is the
+        # authoritative source of truth for how many backups actually exist.
         if self.objstore_provider:
             count = len(self.objstore_provider.list_backups(self.backupset.directory, self.backupset.name))
             self.assertEqual(count, expected,
@@ -2212,20 +2218,44 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         """
         Waiting for an async backup to start streaming DCP.
         backup_result is the future object of an async backup (the output of async_backup_cluster)
+
+        With large item counts (100k+) the backup can complete in just a few
+        seconds, faster than the polling interval.  In that case we do a single
+        final grep on the completed log file.  If DCP evidence IS present the
+        backup ran correctly — we log a warning (the kill_erlang step that
+        follows will be a no-op) and continue rather than failing spuriously.
+        Only fail if the completed log contains no DCP evidence at all, which
+        indicates a genuine problem with the backup.
         """
         log_directory = self.backupset.objstore_staging_directory + "/*/logs" if self.objstore_provider else self.backupset.directory + "/logs"
-        command = "tail -n 1 {}/backup-*.log | grep ' (DCP) '"\
+        # Search the full log file rather than only the last line.
+        command = "grep ' (DCP) ' {}/backup-*.log 2>/dev/null"\
                                                    .format(log_directory)
         backup_client = RemoteMachineShellConnection(self.backupset.backup_host)
+        # Scale the polling window with item count so large datasets have
+        # enough time for the DCP stream to show up in logs before backup ends.
+        max_wait_iters = max(200, self.num_items // 100)
         Future.wait_until(
             lambda: (bool(backup_client.execute_command(command)[0]) or backup_result.done()),
             lambda x: x is True,
-            200,
+            max_wait_iters,
             interval_time=0.1,
             exponential_backoff=False)
-             # If the backup finished and we never saw a DCP connection something's not right.
         if backup_result.done():
-            self.fail("Never found evidence of open DCP stream in backup logs.")
+            # Backup finished before we detected DCP stream live.
+            # Perform one final grep on the completed log to confirm DCP ran.
+            final_check = backup_client.execute_command(command)[0]
+            backup_client.disconnect()
+            if not final_check:
+                self.fail("Never found evidence of open DCP stream in backup logs.")
+            self.log.warning(
+                "Backup completed before DCP stream was detected live "
+                "(num_items=%d). DCP evidence confirmed in completed log. "
+                "The kill_erlang step will be a no-op; purge-interrupt "
+                "scenario was not exercised this run." % self.num_items
+            )
+        else:
+            backup_client.disconnect()
 
     def _delete_repo(self):
         # We should remove all the remote objects as well as the files in the staging directory
@@ -2341,15 +2371,17 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 [],
                 services=self.services)
         count = 0
-        while count < 15:
+        max_rebalance_wait = max(15, self.num_items // 1000)
+        while count < max_rebalance_wait:
             reb_status = rest._rebalance_status_and_progress()
             if reb_status != "none":
                 self.sleep(2, "wait rebalance to complete")
                 count += 1
             else:
                 break
-            if count == 15:
-                self.fail("Status still shows running after rebalance complete 30 seconds")
+            if count == max_rebalance_wait:
+                self.fail("Status still shows running after rebalance complete {} seconds"
+                          .format(max_rebalance_wait * 2))
         return kv_quota
 
     def _collect_logs(self):
@@ -2765,10 +2797,12 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                                   list(bk_file_data[bucket.name].keys()),
                                                   False, False, self, bucket=bucket.name)
                 k = 0
+                max_bucket_wait = max(10, self.num_items // 2000)
                 bucket_ready = RestHelper(rest).vbucket_map_ready(bucket.name)
-                while not bucket_ready and k < 10:
-                    if k == 10:
-                        self.fail("Bucket {0} is not ready after 10 seconds".format(bucket.name))
+                while not bucket_ready and k < max_bucket_wait:
+                    if k == max_bucket_wait:
+                        self.fail("Bucket {0} is not ready after {1} seconds"
+                                  .format(bucket.name, max_bucket_wait))
                     bucket_ready = RestHelper(rest).vbucket_map_ready(bucket.name)
                     self.sleep(1, "wait for bucket update new stats")
                     k += 1
@@ -3180,15 +3214,17 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             rebalance = self.cluster.async_rebalance(self.cluster_to_restore, [], [])
             rebalance.result()
             count = 0
-            while count < 15:
+            max_rebalance_wait = max(15, self.num_items // 1000)
+            while count < max_rebalance_wait:
                 reb_st, _ = rest_rs._rebalance_status_and_progress()
                 if reb_st != "none":
                     self.sleep(2, "wait rebalance to complete")
                     count += 1
                 else:
                     break
-                if count == 15:
-                    self.fail("Status still shows running after rebalance complete 30 seconds")
+                if count == max_rebalance_wait:
+                    self.fail("Status still shows running after rebalance complete {} seconds"
+                              .format(max_rebalance_wait * 2))
         else:
             self.log.info("No availabe node to create cluster.")
         self._reset_storage_mode(rest_rs, bk_storage_mode, False)

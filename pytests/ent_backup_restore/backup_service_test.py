@@ -549,7 +549,7 @@ class BackupServiceTest(BackupServiceBase):
 
         self.create_repository(repo_name="test_repo", body=Body2(plan="test_plan", archive=self.backupset.directory))
 
-        mergeTaskDone = self.wait_for_task("test_repo", merge_task.name, one_off=False)
+        mergeTaskDone = self.wait_for_task("test_repo", merge_task.name, timeout=None, one_off=False)
         self.assertEqual(mergeTaskDone, True, "Scheduled merge not successful")
 
     def test_invalid_repository(self):
@@ -862,7 +862,7 @@ class BackupServiceTest(BackupServiceBase):
         task_name = self.take_one_off_backup_with_name(repo_name, body=Body4(full_backup=full_backup)).task_name
 
         # Wait until task has completed
-        self.assertTrue(self.wait_for_task(repo_name, task_name, timeout=400))
+        self.assertTrue(self.wait_for_task(repo_name, task_name, timeout=max(400, self.num_items // 50)))
 
         # Configure repository name
         self.backupset.name = repository.repo
@@ -909,7 +909,7 @@ class BackupServiceTest(BackupServiceBase):
             task_name = self.take_one_off_backup_with_name(repo_name, body=Body4(full_backup= i < 1)).task_name
 
             # Wait until task has completed
-            self.assertTrue(self.wait_for_task(repo_name, task_name, timeout=400))
+            self.assertTrue(self.wait_for_task(repo_name, task_name, timeout=max(400, self.num_items // 50)))
 
             # Configure repository name
             self.backupset.name = repository.repo
@@ -957,13 +957,13 @@ class BackupServiceTest(BackupServiceBase):
             task_name = self.take_one_off_backup_with_name(repo_name, body=Body4(full_backup= i < 1)).task_name
 
             # Wait until task has completed
-            self.assertTrue(self.wait_for_task(repo_name, task_name, timeout=400))
+            self.assertTrue(self.wait_for_task(repo_name, task_name, timeout=max(400, self.num_items // 50)))
 
         backups = [backup._date for backup in self.get_backups("active", repo_name)]
 
         task_name = self.take_one_off_merge_with_name(repo_name, body=Body5(start=backups[0], end=backups[no_of_backups - subtrahend_for_no_of_backups - 1], data_range="")).task_name
 
-        self.assertTrue(self.wait_for_task(repo_name, task_name, timeout=800))
+        self.assertTrue(self.wait_for_task(repo_name, task_name, timeout=max(800, self.num_items // 50)))
 
         backup_name = self.map_task_to_backup("active", repo_name, task_name)
 
@@ -1049,7 +1049,7 @@ class BackupServiceTest(BackupServiceBase):
         task_name = self.take_one_off_backup_with_name(repo_name, body=Body4(full_backup=full_backup)).task_name
 
         # Wait until task has completed
-        self.assertTrue(self.wait_for_task(repo_name, task_name, timeout=400))
+        self.assertTrue(self.wait_for_task(repo_name, task_name, timeout=max(400, self.num_items // 50)))
 
         # Get backup name
         backup_name = self.map_task_to_backup("active", repo_name, task_name)

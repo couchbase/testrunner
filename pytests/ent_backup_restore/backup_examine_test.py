@@ -1,13 +1,7 @@
 import copy
 import json
 import math
-import re
 import couchbase.subdocument as SD
-try:
-    from couchbase.options import MutateInOptions  # SDK 4.x
-except ImportError:
-    # Older SDK (if it ever had this symbol here)
-    from couchbase.collection import MutateInOptions
 
 from enum import (
     Enum
@@ -22,8 +16,7 @@ from membase.helper.rebalance_helper import (
     RebalanceHelper
 )
 from couchbase_helper.documentgenerator import (
-    BlobGenerator,
-    DocumentGenerator
+    BlobGenerator
 )
 from remote.remote_util import (
     RemoteMachineShellConnection
@@ -45,13 +38,6 @@ from couchbase.cluster import (
 )
 from couchbase.auth import (
     PasswordAuthenticator
-)
-from couchbase.durability import (
-    Durability,
-    ServerDurability,
-    ClientDurability,
-    ReplicateTo,
-    PersistTo
 )
 
 
@@ -255,7 +241,8 @@ class ExamineSimulation:
             mutation.apply(self.backup_base, backup)
 
         for bucket_name in backup.buckets.keys():
-            if not RebalanceHelper.wait_for_stats_on_all(self.backup_base.master, bucket_name, 'ep_queue_size', 0, timeout_in_seconds=10):
+            persist_timeout = max(60, self.backup_base.num_items // 1000)
+            if not RebalanceHelper.wait_for_stats_on_all(self.backup_base.master, bucket_name, 'ep_queue_size', 0, timeout_in_seconds=persist_timeout):
                 return False, f"Timed out waiting for ep_queue_size to reach 0"
 
         # Take a backup of the simulated documents

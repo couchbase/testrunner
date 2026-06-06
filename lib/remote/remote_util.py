@@ -19,7 +19,6 @@ import logger
 from builds.build_query import BuildQuery
 import testconstants
 from testconstants import VERSION_FILE
-from testconstants import MISSING_UBUNTU_LIB
 from testconstants import MV_LATESTBUILD_REPO
 from testconstants import SHERLOCK_BUILD_REPO
 from testconstants import SYSTEMD_SERVER
@@ -61,12 +60,6 @@ except ImportError:
     log.warning("{0} {1} {2}".format("Warning: proceeding without importing",
                                   "paramiko due to import error.",
                                   "ssh connections to remote machines will fail!\n"))
-
-try:
-    import pexpect
-except ImportError:
-    log.warning("Warning: pexpect not installed. TTY-based command execution will not be available.")
-
 
 class RemoteMachineInfo(object):
     def __init__(self):
@@ -207,44 +200,6 @@ class RemoteMachineShellConnection(KeepRefs):
     connections = 0
     disconnections = 0
     _ssh_client = None
-
-    @not_for_capella
-    def __init__(self, username='root',
-                 pkey_location='',
-                 ip='', port=''):
-        super(RemoteMachineShellConnection, self).__init__()
-        RemoteMachineShellConnection.connections += 1
-        self.username = username
-        self.use_sudo = True
-        self.nonroot = False
-        """ in nonroot, we could extract Couchbase Server at
-            any directory that non root user could create
-        """
-        self.nr_home_path = "/home/%s/cb/" % self.username
-        if self.username == 'root':
-            self.use_sudo = False
-        elif self.username != "Administrator":
-            self.use_sudo = False
-            self.nonroot = True
-        # let's create a connection
-        self._ssh_client = paramiko.SSHClient()
-        self.ip = ip
-        self.port = port
-        self.remote = (self.ip != "localhost" and self.ip != "127.0.0.1")
-        self._ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        log.info('connecting to {0} with username : {1} pem key : {2}'.format(ip, username, pkey_location))
-        try:
-            if self.remote:
-                self._ssh_client.connect(hostname=ip, username=username, key_filename=pkey_location)
-        except paramiko.AuthenticationException:
-            log.info("Authentication failed for {0}".format(self.ip))
-            exit(1)
-        except paramiko.BadHostKeyException:
-            log.info("Invalid Host key for {0}".format(self.ip))
-            exit(1)
-        except Exception:
-            log.info("Can't establish SSH session with {0}".format(self.ip))
-            exit(1)
 
     @not_for_capella
     def __init__(self, serverInfo, exit_on_failure=True, verbose=True):
@@ -1244,7 +1199,6 @@ class RemoteMachineShellConnection(KeepRefs):
                       "-O {1}.msi {0} " \
                       "--no-check-certificate; ls -lh;".format(url, version)
             file_location = "/cygdrive/c/tmp/"
-            deliverable_type = "msi"
             if not exist:
                 output, error = self.execute_command(command)
                 self.log_command_output(output, error)
@@ -1586,7 +1540,6 @@ class RemoteMachineShellConnection(KeepRefs):
                                  [s + "-*" for s in CB_RELEASE_BUILDS.keys()])
         self.disable_firewall()
 
-        deliverable_type = "msi"
         file_location = "/cygdrive/c/tmp/"
         msi_filename = "{0}.msi".format(version)
         full_path = "{0}{1}".format(file_location, msi_filename)
@@ -1697,8 +1650,6 @@ class RemoteMachineShellConnection(KeepRefs):
         log.info("copy files from {0} to {1}".format(src_path, des_path))
         # self.execute_batch_command("cp -r  {0}/* {1}".format(src_path, des_path))
         for file in files:
-            if file.find("wget") != 1:
-                a = ""
             full_src_path = os.path.join(src_path, file)
             full_des_path = os.path.join(des_path, file)
             self.copy_file_local_to_remote(full_src_path, full_des_path)
@@ -2148,7 +2099,7 @@ class RemoteMachineShellConnection(KeepRefs):
         try:
             log.info("Checking if the directory {0} exists or not.".format(remote_path))
             sftp.stat(remote_path)
-        except IOError as e:
+        except IOError:
                 log.info(f'Directory at {remote_path} DOES NOT exist.')
                 sftp.close()
                 return False
@@ -2179,14 +2130,11 @@ class RemoteMachineShellConnection(KeepRefs):
         success = True
         if fts_query_limit is None:
             fts_query_limit = 10000000
-        start_server_after_install = True
         track_words = ("warning", "error", "fail")
         if build.name.lower().find("membase") != -1:
             server_type = 'membase'
-            abbr_product = "mb"
         elif build.name.lower().find("couchbase") != -1:
             server_type = 'couchbase'
-            abbr_product = "cb"
         else:
             raise Exception("its not a membase or couchbase?")
         # upgrade couchbase server
@@ -2285,9 +2233,6 @@ class RemoteMachineShellConnection(KeepRefs):
         return found
 
     def couchbase_upgrade_win(self, architecture, windows_name, version, startup_retries=5, startup_poll_interval=5):
-        task = "upgrade"
-        bat_file = "upgrade.bat"
-        deleted = False
         self.remove_win_backup_dir()
         self.remove_win_collect_tmp()
         output, error = self.execute_command("cat "
@@ -4933,8 +4878,16 @@ class RemoteMachineShellConnection(KeepRefs):
                                                           source,
                                                           destination,
                                                           command_options)
+        # cbtransfer transfers all docs serially; at 100k+ items it can take
+        # 10-20 minutes.  The default 600s SSH channel timeout fires mid-transfer
+        # and raises socket.timeout.  14400s (4 h) is a generous ceiling: it
+        # covers even very large datasets while still terminating any genuine
+        # hang within a single CI slot.  execute_cbtransfer does not receive
+        # num_items, so caller-side scaling is not possible here; the ceiling
+        # is the pragmatic choice.
         output, error = self.execute_command(command + uncompress_flag,
-                                             debug=debug, use_channel=True)
+                                             debug=debug, use_channel=True,
+                                             timeout=14400)
         if debug:
             self.log_command_output(output, error)
         log.info("done execute cbtransfer")
@@ -5287,7 +5240,13 @@ class RemoteMachineShellConnection(KeepRefs):
         return output, error
 
     def execute_cbworkloadgen(self, username, password, num_items, ratio, bucket,
-                              item_size, command_options, timeout=1200):
+                              item_size, command_options, timeout=None):
+        # Scale timeout with the number of items so large datasets do not
+        # time out spuriously, while hangs are still caught in a reasonable
+        # CI window.  Floor of 1200 s preserves the previous default;
+        # ceiling of 14400 s guards against indefinite CI hangs.
+        if timeout is None:
+            timeout = min(14400, max(1200, num_items // 10))
         cbworkloadgen_command = self._get_cbworkloadgen_command()
 
         protocol = "https://" if self.port == "18091" else ""

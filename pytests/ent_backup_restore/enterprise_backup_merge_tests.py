@@ -95,8 +95,9 @@ class EnterpriseBackupMergeTest(EnterpriseBackupMergeBase):
         self.set_meta_purge_interval()
         self._load_all_buckets(self.master, self.delete_gen, "delete",
                                self.expires)
-        self.sleep(360, "Sleep for 6 minutes for the meta-data purge "
-                        "interval to be completed")
+        meta_purge_wait = max(360, self.num_items // 100)
+        self.sleep(meta_purge_wait, "Sleep for meta-data purge interval to be completed "
+                                    "({} seconds scaled for {} items)".format(meta_purge_wait, self.num_items))
         self.compact_buckets()
         self.backup()
         self.backupset.start = 1

@@ -414,7 +414,6 @@ class EnterpriseBackupRestoreBWCTest(EnterpriseBackupRestoreBase, NewUpgradeBase
         """
         if "5.5" > self.cb_version[:3]:
             self.fail("This test is only for cb version 5.5 and later. ")
-        self.num_items = 1000
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()

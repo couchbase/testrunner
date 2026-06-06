@@ -5,7 +5,6 @@ import logger
 import math
 import os
 import random
-import re
 import shlex
 import time
 
@@ -28,8 +27,7 @@ from membase.helper.rebalance_helper import (
     RebalanceHelper
 )
 from remote.remote_util import (
-    RemoteMachineShellConnection,
-    RemoteUtilHelper
+    RemoteMachineShellConnection
 )
 from testconstants import (
     CLUSTER_QUOTA_RATIO
@@ -736,8 +734,10 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
             self.validate_backup_data(backup_host, cluster_host, "ent-backup", False, False, "memory", item_count, None,
                     backup_name=backup_name, skip_stats_check=True, filter_keys=filter_keys)
 
-    def wait_for_task(self, repo_name, task_name, timeout=200, task_scheduled_time=None, one_off=True):
-        self.log.info(f"Waiting for running {task_name}")
+    def wait_for_task(self, repo_name, task_name, timeout=None, task_scheduled_time=None, one_off=True):
+        if timeout is None:
+            timeout = max(200, self.num_items // 50)
+        self.log.info(f"Waiting for running {task_name} (timeout={timeout}s)")
 
         timeout = timeout + time.time()
 
@@ -771,7 +771,18 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
 
     def wait_for_backup_task(self, state, repo_name, retries, sleep_time, task_name=None, task_scheduled_time=None):
         """ Wait for the latest backup Task to complete.
+
+        Retries are automatically scaled up when the caller-supplied budget
+        (retries × sleep_time seconds) is shorter than what num_items requires.
+        This prevents spurious failures when callers pass small hardcoded values
+        (e.g. retries=20, sleep_time=20 → 400 s) that were calibrated for
+        small item counts but are insufficient at 100k+ items.
         """
+        # Scale retries so total wait is at least max(400, num_items // 50) s
+        min_total_wait = max(400, self.num_items // 50)
+        if retries * sleep_time < min_total_wait:
+            retries = max(retries, (min_total_wait + sleep_time - 1) // sleep_time)
+
         # Wait for any existing running tasks to finish running
         for i in range(0, retries):
             repository = self.repository_api.cluster_self_repository_state_id_get(state, repo_name)
@@ -814,11 +825,14 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
 
         return False
 
-    def wait_until_documents_are_persisted(self, timeout=120):
+    def wait_until_documents_are_persisted(self, timeout=None):
         """ Wait until the documents are persisted to disk
 
         The 'ep_queue_size' stat represents the disk queue size, this reaches the value 0 when all documents have been persisted to disk.
+        Timeout scales linearly with num_items so large datasets don't cause spurious failures.
         """
+        if timeout is None:
+            timeout = max(120, self.num_items // 100)
         for bucket in self.buckets:
             if not RebalanceHelper.wait_for_stats_on_all(self.backupset.cluster_host, bucket.name, 'ep_queue_size', 0, timeout_in_seconds=timeout):
                 return False
@@ -899,9 +913,11 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         return self.active_repository_api.cluster_self_repository_active_id_backup_post(repo_name, **kwargs)
 
 
-    def take_n_one_off_backups(self, state, repo_name, generator_function, no_of_backups, doc_load_sleep=10, sleep_time=20, retries=20, data_provisioning_function=None):
+    def take_n_one_off_backups(self, state, repo_name, generator_function, no_of_backups, doc_load_sleep=10, sleep_time=20, retries=None, data_provisioning_function=None):
         """ Take n one off backups
         """
+        if retries is None:
+            retries = max(20, self.num_items // 500)
         for i in range(0, no_of_backups):
             # Load buckets with data
             if generator_function:

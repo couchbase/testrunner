@@ -1565,12 +1565,12 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                         self.fail("User: %s failed to restore data with roles: %s. " \
                                   "Here is the output %s " % \
                                   (self.cluster_new_user, roles, output))
-                    if int(actual_keys) != 10000:
+                    if int(actual_keys) != self.num_items:
                         self.fail("User: %s failed to restore data with roles: %s. " \
                                   "Here is the actual docs in bucket %s " % \
                                   (self.cluster_new_user, roles, actual_keys))
             elif self.cluster_new_role in users_can_not_restore_all:
-                if int(actual_keys) == 1000:
+                if int(actual_keys) == self.num_items:
                     self.fail("User: %s with role: %s should not allow to restore data" \
                               % (self.cluster_new_user,
                                  self.cluster_new_role))
@@ -3389,7 +3389,14 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertEqual(output[0], "Expected argument for option: --archive", "Expected error message not thrown")
+        # In cbbackupmgr 8.1.0 the CLI parser takes '-c' as the --archive value
+        # and then rejects 'http://localhost:8091' as an unexpected positional.
+        # Accept either the old or new phrasing so the test is forward-compatible.
+        self.assertTrue(
+            output and output[0] in ("Expected argument for option: --archive",
+                                     "Expected flag: http://localhost:8091"),
+            "Expected error message not thrown, got: {0}".format(output[0] if output else "<no output>")
+        )
         cmd = "merge --archive {0}".format(self.backupset.directory)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
@@ -4169,7 +4176,6 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         """
         if "5.5" > self.cb_version[:3]:
             self.fail("This test is only for cb version 5.5 and later. ")
-        self.num_items = 1000
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
@@ -5057,8 +5063,11 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self._load_all_buckets(self.master, gen, "create", self.expires)
         self.log.info("*** done to load items to all buckets")
 
-        # Enable SQLite if we are doing compaction
-        self.backupset.sqlite = self.input.param("compact", False)
+        # SQLite backup format was deprecated and removed in cbbackupmgr 8.1.0.
+        # All variants now use the default rift format, which supports the
+        # read_only flag and all write operations (backup, merge, remove).
+        # compact is not supported on rift format; the compact=True variants
+        # instead validate read-only enforcement via backup_merge().
 
         # Create a backup and make it read-only
         self.backup_create_validate()
@@ -5069,9 +5078,10 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.backupset.cluster_host_username = "BADUSERNAME"
             self.backupset.cluster_host_password = "BADPASSWORD"
 
-        # Compaction does not work on rift, so require parameter
         if self.input.param("compact", False):
-            status, output, msg = self.backup_compact()
+            # compact is not supported on rift format; use merge to validate
+            # that write operations are correctly rejected on a read-only archive.
+            status, output, msg = self.backup_merge()
             self.assertIn("read-only", output[0])
         else:
             # Perform backup

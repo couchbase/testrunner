@@ -289,7 +289,6 @@ class DataAnalyzer(object):
         for key in set(info1.keys()) & set(info2.keys()):
             data1 = info1[key]
             data2 = info2[key]
-            isNotEqual = False
             reason = {}
             if len(list(data1.keys())) == len(list(data2.keys())):
                 for vkey in list(data1.keys()):
@@ -521,9 +520,6 @@ class DataCollector(object):
                           U vbucket_details {key:value} U vbucket {key:value}]}
         """
         bucketMap = {}
-        vbucket = []
-        vbucket_seqno = []
-        vbucket_details = []
         for bucket in buckets:
             bucketMap[bucket.name] = {}
         for bucket in buckets:
@@ -702,12 +698,10 @@ class DataCollector(object):
         for bucket in buckets:
             bucketMap[bucket.name] = True
         for bucket in buckets:
-            dataMap = {}
             for server in servers:
                 shell = RemoteMachineShellConnection(server)
                 cbstat = Cbstats(shell)
                 stats = cbstat.all_stats(bucket, stat_name='dcp')
-                map_data = {}
                 for key in list(stats.keys()):
                     filter = False
                     if stat_name in key:
@@ -875,7 +869,6 @@ class DataCollector(object):
         cluster_version = RestConnection(server).get_nodes_version()
         backup_data = {}
         status = False
-        now = datetime.datetime.now()
         shards_with_data = {}
         previous_staging_directory = None
 
@@ -903,7 +896,6 @@ class DataCollector(object):
             print("---- Collecting data in backup repo")
             if master_key == "random_keys":
                 master_key = ".{12}$"
-            dump_output = []
 
             repository = backupset.name if backupset else "backup"
 
@@ -971,7 +963,7 @@ class DataCollector(object):
                             data_dumps = json.loads(x)
                             if 'value' in data_dumps:
                                 if type(data_dumps.get('value')) is str:
-                                    key_value.append(bytes.fromhex(data_dumps['value']).decode('utf-8'))
+                                    key_value.append(bytes.fromhex(data_dumps['value']).decode('utf-8', errors='replace'))
                                 else:
                                     key_value.append(str(data_dumps['value']).replace("'", '"'))
                                 key_ids.append(data_dumps['key'])
