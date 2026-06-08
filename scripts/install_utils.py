@@ -1502,13 +1502,42 @@ def download_cb_non_package_installer(node_helper):
         arch_suffix = "-aarch64" if arch == "aarch64" else "-x86_64"
         url = install_constants.CB_NON_PACKAGE_INSTALLER_BASE_URL + arch_suffix
         cb_non_package_installer_name = install_constants.CB_NON_PACKAGE_INSTALLER_NAME
-    # Use curl (with a wget fallback) instead of the deliverable-type download
-    # command, since wget is not installed by default on some distros (e.g. RHEL 10)
-    cmd = install_constants.CB_NON_PACKAGE_INSTALLER_DOWNLOAD_CMD.format(
-        download_dir, cb_non_package_installer_name, url)
-    node_helper.shell.execute_command(cmd, debug=True)
-    node_helper.shell.execute_command("chmod a+x {0}{1}".format(download_dir,
-                                                         cb_non_package_installer_name))
+
+    remote_path = download_dir + cb_non_package_installer_name
+
+    if not params["skip_local_download"]:
+        # Download on the dispatcher (where internal/private URLs are reachable)
+        # then SCP to the remote node.
+        local_dir = _get_local_download_dir()
+        local_path = local_dir + cb_non_package_installer_name
+        duration, event, timeout = install_constants.WAIT_TIMES[
+            node_helper.info.deliverable_type]["download_binary"]
+        cmd = install_constants.WGET_CMD.format(local_dir, cb_non_package_installer_name, url)
+        log.info("Downloading non-package installer locally to {0}".format(local_path))
+        start_time = time.time()
+        while time.time() < start_time + timeout:
+            try:
+                exit_code = _execute_local(cmd, timeout)
+                if exit_code == 0 and os.path.exists(local_path):
+                    break
+                time.sleep(duration)
+            except Exception as e:
+                log.warning("download_cb_non_package_installer: local download failed: {0}, retrying..".format(e))
+                time.sleep(duration)
+        else:
+            print_result_and_exit(
+                "Unable to download non-package installer locally in {0}s at {1}, exiting".format(
+                    timeout, local_path))
+        log.info("Copying non-package installer to {0} at {1}".format(node_helper.ip, remote_path))
+        node_helper.shell.copy_file_local_to_remote(local_path, remote_path)
+    else:
+        # Use curl (with a wget fallback) instead of the deliverable-type download
+        # command, since wget is not installed by default on some distros (e.g. RHEL 10)
+        cmd = install_constants.CB_NON_PACKAGE_INSTALLER_DOWNLOAD_CMD.format(
+            download_dir, cb_non_package_installer_name, url)
+        node_helper.shell.execute_command(cmd, debug=True)
+
+    node_helper.shell.execute_command("chmod a+x {0}".format(remote_path))
 
 
 def install_tools(node_helpers):
