@@ -320,6 +320,8 @@ class OnPremBaseTestCase(unittest.TestCase):
                 self.rest = RestConnection(self.master)
                 self.log.info(f"start installing")
                 self._install(self.servers, version=self.initial_version)
+            #skipping corruption checks where data corruption is expected
+            self.skip_corruption_checks = self.input.param("skip_corruption_checks", False)
             # avoid any cluster operations in setup for new upgrade
             #  & upgradeXDCR tests
             if str(self.__class__).find('newupgradetests') != -1 or \

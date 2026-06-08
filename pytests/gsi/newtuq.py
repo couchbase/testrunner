@@ -113,7 +113,8 @@ class QueryTests(BaseTestCase):
     def tearDown(self):
         if not self.capella_run:
             self.check_gsi_logs_for_panic()
-            self.check_gsi_logs_for_corruption()
+            if not self.skip_corruption_checks:
+                self.check_gsi_logs_for_corruption()
         if hasattr(self, 'n1ql_helper'):
             if hasattr(self, 'skip_cleanup') and not self.skip_cleanup:
                 self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
@@ -374,6 +375,8 @@ class QueryTests(BaseTestCase):
                 for string in strings_to_monitor:
                     if string == "fatal":
                         cmd = "zgrep -i \"{0}\" {1} | grep -iv \"fatal remote\" | wc -l".format(string, indexer_log)
+                    elif string == "corruption":
+                        cmd = "zgrep \"{0}\" {1} | grep -iv \"NCorruptionErrors\" | wc -l".format(string, indexer_log)
                     else:
                         cmd = "zgrep -i \"{0}\" {1} | wc -l".format(string, indexer_log)
                     count, err = shell.execute_command(cmd)
