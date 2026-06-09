@@ -69,6 +69,16 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
                 drop_index_tasks.append(drop_task.submit(self.run_cbq_query, query=drop_query))
         return drop_index_tasks
 
+    def wait_for_index_status_empty(self, timeout=60, interval=2):
+        # Indexer cleanup after BSC delete is async; poll until metadata is clear.
+        for _ in range(timeout // interval):
+            index_status = self.rest.get_index_status()
+            if not index_status:
+                return
+            self.sleep(interval)
+        index_status = self.rest.get_index_status()
+        self.assertFalse(index_status, f"Indexes still present after {timeout}s: {index_status}")
+
     def test_index_creation_with_keyspace_delete(self):
         """
         summary: This test validate process of index creation with delete/drop of Bucket/Scope/Collection
@@ -92,9 +102,7 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
                 self.assertTrue(result, f"Index was successfully created with deletion of {self.item_to_delete}")
         except Exception as err:
             self.log.info(str(err))
-            self.sleep(30)
-            index_status = self.rest.get_index_status()
-            self.assertFalse(index_status)
+            self.wait_for_index_status_empty()
 
     def test_index_during_scan_with_delete_bsc(self):
         self.prepare_collection_for_indexing(num_of_docs_per_collection=self.num_of_docs_per_collection)
@@ -138,9 +146,7 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
                 self.assertEqual(len(result), 0, f"Index scanned docs for deleted: {self.item_to_delete}")
         except Exception as err:
             self.log.info(str(err))
-            self.sleep(5)
-            index_status = self.rest.get_index_status()
-            self.assertFalse(index_status)
+            self.wait_for_index_status_empty()
 
     def test_drop_index_with_delete_bsc(self):
 
@@ -199,9 +205,7 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
                     self.log.info(result)
         except Exception as err:
             self.log.info(str(err))
-            self.sleep(5)
-            index_status = self.rest.get_index_status()
-            self.assertFalse(index_status)
+            self.wait_for_index_status_empty()
 
     def test_delete_bsc_while_index_updates_mutation(self):
         #num_of_docs = 10 ** 4
@@ -233,9 +237,7 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
                 self.assertTrue(delete_result, f"Failed to delete: {self.item_to_delete}")
                 count = select_task.result()['results'][0]['$1']
                 self.assertTrue(count > self.num_of_docs_per_collection, "Delete bucket happened before mutation operation began")
-            self.sleep(30)
-            index_status = self.rest.get_index_status()
-            self.assertFalse(index_status)
+            self.wait_for_index_status_empty()
         except Exception as err:
             if self.item_to_delete == 'scope' or self.item_to_delete == 'collection':
                 self.log.info(str(err))
@@ -243,8 +245,7 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
                 # self.assertTrue(err_msg in str(err), "Error msg not matching")
             else:
                 self.fail(str(err))
-            index_status = self.rest.get_index_status()
-            self.assertFalse(index_status)
+            self.wait_for_index_status_empty()
 
     def test_delete_multiple_bsc(self):
         bucket_prefix = self.test_bucket
@@ -328,9 +329,7 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
                 self.assertTrue(result, f"Failed to Delete {self.item_to_delete}")
                 flush_result = task1.result()
                 self.log.info(flush_result)
-                self.sleep(30)
-                index_status = self.rest.get_index_status()
-                self.assertFalse(index_status)
+                self.wait_for_index_status_empty()
         except Exception as err:
             self.fail(str(err))
 
@@ -350,9 +349,7 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
                                                          collection=collection)
 
             self.assertTrue(result, f"Failed to Delete {self.item_to_delete}")
-            self.sleep(30)
-            index_status = self.rest.get_index_status()
-            self.assertFalse(index_status)
+            self.wait_for_index_status_empty()
         except Exception as err:
             self.fail(str(err))
 
@@ -477,8 +474,6 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
                 self.assertTrue(result, f"Failed to Delete {self.item_to_delete}")
                 result = task2.result()
                 self.assertFalse(result, f"Got second success for delete operation")
-                self.sleep(10)
-                index_status = self.rest.get_index_status()
-                self.assertFalse(index_status)
+                self.wait_for_index_status_empty()
         except Exception as err:
             self.fail(str(err))
