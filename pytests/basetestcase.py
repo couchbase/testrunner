@@ -255,6 +255,9 @@ class OnPremBaseTestCase(unittest.TestCase):
             self.validate_system_event_logs = \
                 self.input.param("validate_sys_event_logs", False)
 
+            # skipping corruption checks where data corruption is expected
+            self.skip_corruption_checks = self.input.param("skip_corruption_checks", False)
+
             self.log.info("==============  basetestcase setup was started for test #{0} {1}==============" \
                           .format(self.case_number, self._testMethodName))
 
@@ -320,8 +323,6 @@ class OnPremBaseTestCase(unittest.TestCase):
                 self.rest = RestConnection(self.master)
                 self.log.info(f"start installing")
                 self._install(self.servers, version=self.initial_version)
-            #skipping corruption checks where data corruption is expected
-            self.skip_corruption_checks = self.input.param("skip_corruption_checks", False)
             # avoid any cluster operations in setup for new upgrade
             #  & upgradeXDCR tests
             if str(self.__class__).find('newupgradetests') != -1 or \
