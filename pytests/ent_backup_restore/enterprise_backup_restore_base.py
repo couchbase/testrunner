@@ -83,6 +83,16 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.merge_should_fail = self.input.param("merge_should_fail", False)
         self.database_path = COUCHBASE_DATA_PATH
 
+        # ---- Encryption at Rest (EaR): single class-level switch ----
+        # Hoisted above the TLS block below: EaR encrypts at the client, so
+        # backups/restores must use https (see EAR-FN-024). Setting enforce_tls
+        # here lets the existing port-switching path pick it up.
+        print("EaR Flag Setup Start")
+        self.ear_enabled = self.input.param("ear", False)
+        if self.ear_enabled and not self.enforce_tls:
+            self.enforce_tls = True
+        print("EaR Flag Setup Complete")
+
         self.master.protocol = "http://"
         if self.enforce_tls:
             self.master.port = '18091'
@@ -405,6 +415,26 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
 
         self.backupset.read_only = False
 
+        # ---- Encryption at Rest (EaR): hydrate Backupset flags from params ----
+        # self.ear_enabled was set early (above the TLS block). Default-off keeps
+        # Mode A as the existing, untouched code path.
+        self.backupset.encrypted             = self.ear_enabled
+        self.backupset.protection            = self.input.param("ear_protection", "passphrase")
+        self.backupset.encryption_algo       = self.input.param("ear_encryption_algo", None)
+        self.backupset.derivation_algo       = self.input.param("ear_derivation_algo", None)
+        self.backupset.encryption_passphrase = self.input.param("ear_passphrase", "ear-passphrase")
+        self.backupset.passphrase_via_env    = self.input.param("ear_passphrase_via_env", False)
+        self.backupset.km_key_url            = self.input.param("ear_km_key_url", None)
+        self.backupset.km_region             = self.input.param("ear_km_region", None)
+        self.backupset.km_endpoint           = self.input.param("ear_km_endpoint", None)
+        self.backupset.km_access_key_id      = self.input.param("ear_km_access_key_id", None)
+        self.backupset.km_secret_access_key  = self.input.param("ear_km_secret_access_key", None)
+        self.backupset.km_tenant_id          = self.input.param("ear_km_tenant_id", None)
+        self.backupset.km_auth_file          = self.input.param("ear_km_auth_file", None)
+        self.backupset.disable_log_encryption = self.input.param("ear_disable_log_encryption", False)
+        self.backupset.omit_credentials      = self.input.param("ear_omit_credentials", False)
+        self.backupset.wrong_passphrase      = self.input.param("ear_wrong_passphrase", None)
+
     def clean_up(self, server, skip_eject_and_rebalance=False):
         """ Clean up files and directories left by backup testing.
 
@@ -467,6 +497,14 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     self.objstore_provider.__del__()
         except AttributeError:
             pass
+
+        # ---- EaR teardown ----
+        # EaR env vars are exported per-command subshell (via _encryption_env_prefix)
+        # so they do not persist across SSH sessions; this unset is a harmless safety.
+        # Restore the original cbbackupmgr binary path if a cross-version swap occurred.
+        remote_client.execute_command("unset CB_ENCRYPTION_PASSPHRASE CB_DISABLE_LOG_ENCRYPTION")
+        if getattr(self, "previous_cli", None):
+            self.cli_command_location = self.previous_cli
 
         remote_client.disconnect()
 
@@ -553,6 +591,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             f"config --archive {self.objstore_provider.schema_prefix() + self.backupset.objstore_bucket + '/' if self.objstore_provider else ''}{self.backupset.directory}"
             f" --repo {self.backupset.name}"
             f"{self._common_objstore_arguments()}"
+            f"{self._common_encryption_arguments(for_config=True)}"
         )
 
         cbbkmgr_version = RestConnection(self.backupset.backup_host).get_nodes_version()
@@ -601,7 +640,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             else:
                 args += " --vbucket-filter {0}".format(self.vbucket_filter)
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
-        command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
+        command = "{2}{0}/cbbackupmgr {1}".format(self.cli_command_location, args,
+                                                  self._encryption_env_prefix())
         if del_old_backup:
             # Since we are just wiping out the archive here, we can just run the object store teardown
             if self.objstore_provider:
@@ -725,6 +765,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             f" {password_input}"
             f"{' --full-backup' if self.backupset.full_backup else ''}"
             f"{self._common_objstore_arguments()}"
+            f"{self._common_encryption_arguments()}"
         )
 
         if self.backupset.no_ssl_verify:
@@ -763,8 +804,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             self.log.info("set password env to prompt")
             password_env = "unset CB_PASSWORD; export CB_PASSWORD;"
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
-        command = "{3} {2} {0}/cbbackupmgr {1}".format(self.cli_command_location, args,
-                                                       password_env, user_env)
+        command = "{4} {3} {2} {0}/cbbackupmgr {1}".format(self.cli_command_location, args,
+                                                           password_env, user_env,
+                                                           self._encryption_env_prefix())
 
         output, error = remote_client.execute_command(command)
         self.backup_outputs.append(output)
@@ -873,6 +915,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             f" --start {backup_start}"
             f" --end {backup_end}"
             f"{self._common_objstore_arguments()}"
+            f"{self._common_encryption_arguments()}"
         )
 
         if version >= "6.5" and self.backupset.auto_select_threads:
@@ -1102,8 +1145,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 args += " --replace-ttl-with {0}".format(self.replace_ttl_with)
             else:
                 args += " --replace-ttl {0}".format(self.replace_ttl)
-        command = "{3} {2} {0}/cbbackupmgr {1}".format(self.cli_command_location, args,
-                                                       password_env, user_env)
+        command = "{4} {3} {2} {0}/cbbackupmgr {1}".format(self.cli_command_location, args,
+                                                           password_env, user_env,
+                                                           self._encryption_env_prefix())
         output, error = shell.execute_command_raw(command)
         self.restore_outputs.append(output)
         self.restore_errors.append(error)
@@ -1338,8 +1382,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
     def backup_compact(self):
         args = "compact --archive {0} --repo {1} --backup {2}".format(self.backupset.directory, self.backupset.name,
                                                                       self.backups[self.backupset.backup_to_compact])
+        args += self._common_encryption_arguments()
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
-        command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
+        command = "{2}{0}/cbbackupmgr {1}".format(self.cli_command_location, args,
+                                                  self._encryption_env_prefix())
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         for line in output:
@@ -1354,6 +1400,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             f"remove --archive {self.objstore_provider.schema_prefix() + self.backupset.objstore_bucket + '/' if self.objstore_provider else ''}{self.backupset.directory}"
             f" --repo {self.backupset.name}"
             f"{self._common_objstore_arguments()}"
+            f"{self._common_encryption_arguments()}"
         )
 
         if backup_range is not None:
@@ -1363,7 +1410,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             args += " --disable-safe-remove-check"
 
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
-        command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
+        command = "{2}{0}/cbbackupmgr {1}".format(self.cli_command_location, args,
+                                                  self._encryption_env_prefix())
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         remote_client.disconnect()
@@ -1725,8 +1773,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                                                             self.backupset.name,
                                                                             self.backupset.date_range)
 
+        args += self._common_encryption_arguments()
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
-        command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
+        command = "{2}{0}/cbbackupmgr {1}".format(self.cli_command_location, args,
+                                                  self._encryption_env_prefix())
         output, error, exit_code = remote_client.execute_command(command,
                 get_exit_code=True)
         remote_client.log_command_output(output, error)
@@ -2395,6 +2445,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         args = (
             f"collect-logs --archive {self.objstore_provider.schema_prefix() + self.backupset.objstore_bucket + '/' if self.objstore_provider else ''}{self.backupset.directory}"
             f"{self._common_objstore_arguments()}"
+            f"{self._common_encryption_arguments()}"
         )
 
         if self.backupset.ex_logs_path:
@@ -2438,17 +2489,20 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             if self.backupset.ex_logs_path:
                 self.log.info("overwrite env log path with flag -o")
                 args_env += " -o {0}".format(ex_logs_path)
-            command = "{0} {1}/cbbackupmgr collect-logs {2}" \
+            args_env += self._common_encryption_arguments()
+            command = "{3}{0} {1}/cbbackupmgr collect-logs {2}" \
                 .format(log_archive_env,
                         self.cli_command_location,
-                        args_env)
+                        args_env,
+                        self._encryption_env_prefix())
         else:
             if "-o" in args and self.backupset.no_log_output_flag:
                 args = args.replace("-o", " ")
-            command = "{0} {1}/cbbackupmgr {2}" \
+            command = "{3}{0} {1}/cbbackupmgr {2}" \
                 .format(log_archive_env,
                         self.cli_command_location,
-                        args)
+                        args,
+                        self._encryption_env_prefix())
         collection_time = datetime.datetime.utcnow()
         output, error = shell.execute_command(command)
         shell.disconnect()
@@ -3232,6 +3286,151 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
     def _common_objstore_arguments(self):
         return self.backupset.common_objstore_arguments(self.objstore_provider)
 
+    def _common_encryption_arguments(self, for_config=False):
+        """Return the cbbackupmgr CLI fragment for Encryption at Rest.
+
+        for_config: `--encrypted`, `--encryption-algo`, `--derivation-algo` are
+                    only valid on the `config` command. backup/restore/merge/
+                    examine/collect-logs take only the credential flags
+                    (--passphrase or --km-*).
+
+        Honors negative-test controls: `omit_credentials` returns no key (to
+        drive EAR-KM-001); `wrong_passphrase` substitutes a bad passphrase
+        (EAR-KM-002). The passphrase may instead be exported via env (see
+        _encryption_env_prefix()).
+        """
+        if not self.ear_enabled:
+            return ""
+        args = ""
+        if for_config:
+            args += " --encrypted"
+            if self.backupset.encryption_algo:
+                args += " --encryption-algo {0}".format(self.backupset.encryption_algo)
+            if self.backupset.protection == "passphrase" and self.backupset.derivation_algo:
+                args += " --derivation-algo {0}".format(self.backupset.derivation_algo)
+
+        if self.backupset.omit_credentials:
+            return args  # deliberately no key → command must fail (negative path)
+
+        if self.backupset.protection == "passphrase":
+            if not self.backupset.passphrase_via_env:
+                pw = self.backupset.wrong_passphrase or self.backupset.encryption_passphrase
+                args += " --passphrase {0}".format(pw)
+        elif self.backupset.protection == "kms":
+            args += " --km-key-url {0}".format(self.backupset.km_key_url)
+            for flag, val in (("--km-region", self.backupset.km_region),
+                              ("--km-endpoint", self.backupset.km_endpoint),
+                              ("--km-access-key-id", self.backupset.km_access_key_id),
+                              ("--km-secret-access-key", self.backupset.km_secret_access_key),
+                              ("--km-tenant-id", self.backupset.km_tenant_id),
+                              ("--km-auth-file", self.backupset.km_auth_file)):
+                if val:
+                    args += " {0} {1}".format(flag, val)
+        return args
+
+    def _encryption_env_prefix(self):
+        """Shell prefix exporting EaR env vars, composed like the existing
+        user_env/password_env prefixes in backup_cluster()/backup_restore().
+        Returns '' unless an env-based path is requested, so it is safe to
+        prepend to every command unconditionally."""
+        prefix = ""
+        if self.ear_enabled and self.backupset.protection == "passphrase" \
+                and self.backupset.passphrase_via_env and not self.backupset.omit_credentials:
+            pw = self.backupset.wrong_passphrase or self.backupset.encryption_passphrase
+            prefix += "export CB_ENCRYPTION_PASSPHRASE={0}; ".format(pw)
+        if self.ear_enabled and self.backupset.disable_log_encryption:
+            prefix += "export CB_DISABLE_LOG_ENCRYPTION=1; "
+        return prefix
+
+    def use_cbbackupmgr_version(self, version, upgrade_cb=False):
+        """Switch the cbbackupmgr CLI used by subsequent commands to `version`,
+        WITHOUT touching the Couchbase Server cluster by default.
+
+        version    : a build/version string to install on the bkrs client
+                     (self.backupset.backup_host), OR a tools-package bin-dir
+                     path token (contains '/').
+        upgrade_cb : if True, ALSO upgrade the CB cluster. Default False —
+                     cross-version is exercised purely by swapping the client
+                     binary on the existing cluster.
+
+        Note: `_install` is provided by NewUpgradeBaseTest, which the
+        cross-version test classes mix in; this base method is only meant to be
+        called from such classes.
+        """
+        if not hasattr(self, "previous_cli") or self.previous_cli is None:
+            self.previous_cli = self.cli_command_location
+        if isinstance(version, str) and "/" in version:
+            # A tools-package bin directory was supplied — just repoint the CLI.
+            self.cli_command_location = version
+        else:
+            # Install the requested cbbackupmgr build on the backup host only;
+            # the binary lands at the existing cli_command_location path.
+            self._install([self.backupset.backup_host], version)
+        if upgrade_cb:
+            self.log.info("upgrade_cb=True → upgrading CB cluster to {0}".format(version))
+            self._install(self.cluster_to_backup, version)
+        self.backupset.current_bkrs_client_version = self._get_current_bkrs_client_version()
+        self.log.info("cbbackupmgr now at {0} (cli: {1})".format(
+            self.backupset.current_bkrs_client_version, self.cli_command_location))
+
+    def validate_artifact_confidentiality(self, tokens, paths=None, artifact=None,
+                                           must_be_absent=True):
+        """Grep/find the on-disk artifact(s) on the backup host for plaintext
+        `tokens`.
+
+        tokens         : a secret string or list of secrets (bucket names,
+                         scope/collection names, filter values).
+        paths/artifact : limit the scan to an explicit path glob (`paths`), an
+                         artifact type (`artifact`: uuid_dirs | bucket_config |
+                         plan | manifest | repo_config | logs | stats | merge),
+                         or the whole archive (default → full sweep, EAR-FN-015).
+        must_be_absent : assert tokens absent (encrypted) vs present (Mode A /
+                         exception logs).
+
+        Honors the objstore staging-dir prefix exactly like
+        _verify_backup_directory_count(). Returns (status, message); callers
+        self.fail(message) on mismatch.
+        """
+        if isinstance(tokens, str):
+            tokens = [tokens]
+        scan_root = (
+            f"{self.backupset.objstore_staging_directory + '/' if self.objstore_provider else ''}"
+            f"{self.backupset.directory}"
+        )
+        repo_root = "{0}/{1}".format(scan_root, self.backupset.name)
+        artifact_roots = {
+            "uuid_dirs": repo_root, "bucket_config": repo_root, "plan": repo_root,
+            "manifest": repo_root, "repo_config": repo_root, "logs": repo_root,
+            "stats": repo_root, "merge": repo_root,
+        }
+        target = paths or artifact_roots.get(artifact, scan_root)
+
+        shell = RemoteMachineShellConnection(self.backupset.backup_host)
+        found = []
+        for token in tokens:
+            # -a: treat (encrypted) binary files as text so plaintext leaks are
+            #     still caught; -r recurse; -l list matching files only.
+            out_c, _ = shell.execute_command(
+                "grep -ral -- '{0}' {1} 2>/dev/null".format(token, target))
+            # Also catch the token appearing in a file/dir NAME (e.g. a plaintext
+            # bucket-name directory that should now be a UUID).
+            out_n, _ = shell.execute_command(
+                "find {1} -iname '*{0}*' 2>/dev/null".format(token, target))
+            hits = [line for line in (out_c or []) + (out_n or []) if line.strip()]
+            if hits:
+                found.append((token, hits))
+        shell.disconnect()
+
+        leaked = bool(found)
+        if must_be_absent and leaked:
+            return False, ("EaR confidentiality FAIL: plaintext token(s) recoverable "
+                           "at rest: {0}".format([t for t, _ in found]))
+        if not must_be_absent and not leaked:
+            return False, ("Expected token(s) present (unencrypted) but none "
+                           "found: {0}".format(tokens))
+        return True, ("No targeted plaintext recoverable at rest" if must_be_absent
+                      else "Tokens present as expected (unencrypted path)")
+
     def setup_multi_root_certs(self):
         # Generate and upload the certs
         self.x509 = x509main(host=self.master)
@@ -3451,6 +3650,27 @@ class Backupset:
         self.auto_create_buckets = False
         self.sqlite = False
         self.enable_users = False
+
+        # --- Encryption at Rest (EaR) ---
+        self.encrypted = False                 # adds --encrypted at config time
+        self.protection = "passphrase"         # "passphrase" | "kms"
+        self.encryption_algo = None            # None (AES256GCM default) | "AES256CBC"
+        self.derivation_algo = None            # None (ARGON2id default) | alt algo (passphrase mode)
+        # passphrase mode
+        self.encryption_passphrase = "couchbase"
+        self.passphrase_via_env = False        # supply via CB_ENCRYPTION_PASSPHRASE instead of --passphrase
+        # KMS mode
+        self.km_key_url = None                 # awskms://… | gcpkms://… | azurekeyvault://… | hashivault://…
+        self.km_region = None
+        self.km_endpoint = None
+        self.km_access_key_id = None
+        self.km_secret_access_key = None
+        self.km_tenant_id = None
+        self.km_auth_file = None
+        # break-glass + negative-test controls
+        self.disable_log_encryption = False    # sets CB_DISABLE_LOG_ENCRYPTION
+        self.omit_credentials = False          # deliberately run an encrypted-repo cmd with NO key (negative)
+        self.wrong_passphrase = None           # supply an incorrect passphrase (negative)
 
         # Common configuration which is to be shared accross cloud providers
         self.objstore_access_key_id = ""
