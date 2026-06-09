@@ -438,6 +438,13 @@ class LoadVector(object):
                 cb_coll.upsert_multi(documents)
             except Exception as e:
                 print(e)
+            if is_xattr:
+                for key in documents:
+                    cb_coll.mutate_in(
+                        key,
+                        [SD.upsert(vector_field, documents[key][vector_field], xattr=True),
+                         SD.remove(vector_field)]
+                    )
             return
         documents = {}
         for is1, size in enumerate(cfg["sizes"]):
