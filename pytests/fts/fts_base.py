@@ -7,6 +7,7 @@ import datetime
 import hashlib
 import json
 import logging
+import math
 import os
 import random
 import string
@@ -2349,6 +2350,7 @@ class CouchbaseCluster:
         self.__fts_nodes = []
         self.__n1ql_nodes = []
         self.__non_fts_nodes = []
+        self.__kv_nodes = []
         if not CbServer.capella_run:
             service_map = RestConnection(self.__master_node).get_nodes_services()
         else:
@@ -4833,6 +4835,147 @@ class UDFHelper:
             time.sleep(5)
         self._test.log.warning(f"Index count did not reach {expected_count} in {timeout}s")
 
+
+class LazyIndexUpdateHelper:
+    """Helper for the FTS lazy index update feature (MB-57888 / enableLazyIndexUpdate).
+    Index lifecycle and queries go through the framework's FTSIndex object; this helper
+    only provides the feature-specific pieces: the index-definition payload, the
+    (case-sensitive, non-durable) flag, pindex layout, fts.log access, and verdict
+    classification. Docs use the framework 'emp' dataset (name/dept/salary)."""
+
+    INDEX = "lazy_update_index"
+
+    def __init__(self, test):
+        self._test = test
+
+    def _cluster(self):
+        return getattr(self._test, '_cb_cluster', None) or getattr(self._test, 'cb_cluster', None)
+
+    def build_payload(self, name=None, index_partitions=1, num_replicas=0, salary_docvalues=True):
+        name = name or self.INDEX
+        max_per_pindex = max(1, math.ceil(1024 / index_partitions))
+
+        def fld(fname, ftype, docvalues=True):
+            f = {"index": True, "store": True, "docvalues": docvalues,
+                 "include_in_all": False, "name": fname, "type": ftype}
+            if ftype == "text":
+                f["analyzer"] = "standard"
+            return {"enabled": True, "dynamic": False, "fields": [f]}
+
+        # Full UI-style mapping; a stripped-down one makes cbft full-rebuild on
+        # enabled->false / field-removal that are otherwise selective (test artifact).
+        return {
+            "type": "fulltext-index", "name": name, "sourceType": "gocbcore", "sourceName": "default",
+            "params": {
+                "doc_config": {"docid_prefix_delim": "", "docid_regexp": "",
+                               "mode": "type_field", "type_field": "type"},
+                "mapping": {
+                    "analysis": {}, "default_analyzer": "standard",
+                    "default_datetime_parser": "dateTimeOptional", "default_field": "_all",
+                    "default_mapping": {"dynamic": False, "enabled": False}, "default_type": "_default",
+                    "docvalues_dynamic": False, "index_dynamic": False, "scoring_model": "tf-idf",
+                    "store_dynamic": False, "type_field": "_type",
+                    "types": {"emp": {"enabled": True, "dynamic": False, "properties": {
+                        "name": fld("name", "text"),
+                        "dept": fld("dept", "text"),
+                        "salary": fld("salary", "number", docvalues=salary_docvalues)}}}},
+                "store": {"indexType": "scorch", "segmentVersion": 16}},
+            "planParams": {"maxPartitionsPerPIndex": max_per_pindex,
+                           "indexPartitions": index_partitions, "numReplicas": num_replicas},
+        }
+
+    @staticmethod
+    def props(index_def):
+        return index_def["params"]["mapping"]["types"]["emp"]["properties"]
+
+    @staticmethod
+    def salary_field(index_def):
+        return index_def["params"]["mapping"]["types"]["emp"]["properties"]["salary"]["fields"][0]
+
+    # The flag value is CASE-SENSITIVE ("True" only) and not durable (an FTS restart /
+    # quota change clears it) -> re-asserted on every FTS node before each change.
+    def _set_flag_all_nodes(self, value):
+        for node in self._cluster().get_fts_nodes():
+            RestConnection(node).set_node_setting("enableLazyIndexUpdate", value)
+
+    def enable_lazy_update(self):
+        self._set_flag_all_nodes("True")
+
+    def disable_lazy_update(self):
+        self._set_flag_all_nodes("False")
+
+    def lazy_update(self, index, mutate_fn):
+        """Re-assert the flag, mutate the FTSIndex's definition, update it, and return
+        the per-node fts.log baselines captured just before the update."""
+        self._set_flag_all_nodes("True")
+        mutate_fn(index.index_definition)
+        index.index_definition['uuid'] = index.get_uuid()
+        baselines = self.fts_log_baselines()
+        index.update()
+        time.sleep(8)
+        return baselines
+
+    def pindex_layout(self, index_name):
+        _, cfg = RestConnection(self._cluster().get_fts_nodes()[0]).get_cfg_stats()
+        node_host = {u: i["hostPort"].split(":")[0]
+                     for u, i in cfg["nodeDefsKnown"]["nodeDefs"].items()}
+        layout = {}
+        for pname, pinfo in cfg["planPIndexes"]["planPIndexes"].items():
+            if index_name in pname:
+                layout[pname.split("_")[-1]] = sorted(node_host.get(n, n) for n in pinfo.get("nodes", {}))
+        return layout
+
+    def wait_stable_layout(self, index_name, timeout=180, quiet=10):
+        # After a rebalance the doc count can be complete while pindexes are still
+        # moving; wait for two identical reads so settling isn't misread as movement.
+        prev = None
+        start = time.time()
+        while time.time() - start < timeout:
+            cur = self.pindex_layout(index_name)
+            if cur and cur == prev:
+                return cur
+            prev = cur
+            time.sleep(quiet)
+        return prev or {}
+
+    # fts.log is aggregated across all FTS nodes (a pindex's lines live on its host node).
+    @staticmethod
+    def _fts_log_path(node):
+        log_dir = NodeHelper.get_log_dir(node).strip().strip('"')   # get_log_dir returns it quoted
+        return f"{log_dir}/fts.log"
+
+    def fts_log_baselines(self):
+        baselines = {}
+        for node in self._cluster().get_fts_nodes():
+            shell = RemoteMachineShellConnection(node)
+            try:
+                out, _ = shell.execute_command(f"wc -l < {self._fts_log_path(node)}")
+                txt = (out[0] if isinstance(out, list) and out else (out or "")).strip()
+                baselines[node.ip] = int(txt) if str(txt).isdigit() else 0
+            finally:
+                shell.disconnect()
+        return baselines
+
+    def fts_log_since(self, baselines):
+        chunks = []
+        for node in self._cluster().get_fts_nodes():
+            shell = RemoteMachineShellConnection(node)
+            try:
+                out, _ = shell.execute_command(
+                    f"tail -n +{baselines.get(node.ip, 0) + 1} {self._fts_log_path(node)}")
+                chunks.append("\n".join(out) if isinstance(out, list) else (out or ""))
+            finally:
+                shell.disconnect()
+        return "\n".join(chunks)
+
+    def classify_update(self, log_text):
+        new_mapping = "newMapping" in log_text
+        purged = "Close started with remove: true" in log_text
+        if new_mapping and not purged:
+            return "selective", True
+        if purged:
+            return "rebuild", new_mapping
+        return "unknown", new_mapping
 
 class FTSBaseTest(unittest.TestCase):
     es_index_name = None

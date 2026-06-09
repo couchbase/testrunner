@@ -16,7 +16,8 @@ from TestInput import TestInputSingleton
 from tasks.task import ESRunQueryCompare
 from lib.testconstants import FUZZY_FTS_SMALL_DATASET, FUZZY_FTS_LARGE_DATASET
 from .fts_base import (FTSBaseTest, FTSIndex, INDEX_DEFAULTS, QUERY,
-                       download_from_s3, _ScanPlusHashMap, _make_vec, UDFHelper)
+                       download_from_s3, _ScanPlusHashMap, _make_vec, UDFHelper,
+                       LazyIndexUpdateHelper)
 from lib.membase.api.exception import FTSException, ServerUnavailableException
 from lib.membase.api.rest_client import RestConnection
 from couchbase_helper.documentgenerator import SDKDataLoader
@@ -66,6 +67,15 @@ class StableTopFTS(FTSBaseTest):
             self._udf._create_udf_index()
             self._udf._wait_udf_index(self._udf_total)
             self._udf._enable_udf()
+
+        if TestInputSingleton.input.param("lazy_index_update", False):
+            self._lazy = LazyIndexUpdateHelper(self)
+            self._lazy.enable_lazy_update()
+            gen = SDKDataLoader(num_ops=TestInputSingleton.input.param("lazy_num_docs", 1000),
+                                percent_create=100, key_prefix="emp_", json_template="emp", op_type="create")
+            for task in self._cb_cluster.async_load_bucket_from_generator(
+                    self._cb_cluster.get_bucket_by_name('default'), gen):
+                task.result()
 
     def read_from_replica_setup(self):
         #skips the validation check for random / random balanced queries
@@ -5918,6 +5928,204 @@ class StableTopFTS(FTSBaseTest):
             )
         else:
             self.log.info("[scan_plus_vector] PASSED — all batches validated")
+
+    # =========================================================================
+    # Lazy Index Update Tests — MB-57888 (enableLazyIndexUpdate). Requires conf
+    # param lazy_index_update=true; parametrized by index_partitions and cluster=.
+    # Uses the framework 'emp' dataset (text 'dept', numeric 'salary') and FTSIndex.
+    # =========================================================================
+
+    def _lazy_new_index(self, partitions, num_replicas=0):
+        bucket = self._cb_cluster.get_bucket_by_name('default')
+        return self._cb_cluster.create_fts_index(
+            name=LazyIndexUpdateHelper.INDEX, source_name=bucket.name,
+            payload=self._lazy.build_payload(index_partitions=partitions, num_replicas=num_replicas))
+
+    def test_lazy_index_update(self):
+        lazy = self._lazy
+        P = LazyIndexUpdateHelper.props
+        SF = LazyIndexUpdateHelper.salary_field
+        partitions = int(TestInputSingleton.input.param("index_partitions", 1))
+        replicas = int(TestInputSingleton.input.param("num_replicas", 0))
+        num_fts = len(self._cb_cluster.get_fts_nodes())
+        if replicas and num_fts < replicas + 1:
+            self.fail(f"need >= {replicas + 1} FTS nodes to host {replicas} replica(s); have {num_fts}")
+        dept = "Support"
+
+        def ordered(vals, asc=True):
+            v = [float(x[0] if isinstance(x, list) else x) for x in vals if x not in (None, [], "")]
+            return len(v) >= 2 and all((v[i] <= v[i + 1]) if asc else (v[i] >= v[i + 1])
+                                       for i in range(len(v) - 1))
+
+        def probe_store(index):
+            _, matches, _, _ = index.execute_query({"match_all": {}}, return_raw_hits=True, fields=["name"])
+            ret = bool(matches and matches[0].get("fields", {}).get("name"))
+            return [] if not ret else ["stored 'name' still returned after store disabled"]
+
+        def probe_dept_gone(index):
+            hits, _, _, _ = index.execute_query({"match": dept, "field": "dept"})
+            return [] if hits == 0 else [f"dept:{dept} hits={hits} after dept disabled/removed (expected 0)"]
+
+        def probe_salary_sort(index):
+            _, asc, _, _ = index.execute_query({"match_all": {}}, return_raw_hits=True, fields=["salary"],
+                                               sort_fields=[{"by": "field", "field": "salary", "type": "number", "desc": False}])
+            _, desc, _, _ = index.execute_query({"match_all": {}}, return_raw_hits=True, fields=["salary"],
+                                                sort_fields=[{"by": "field", "field": "salary", "type": "number", "desc": True}])
+            av = [m.get("fields", {}).get("salary") for m in asc]
+            dv = [m.get("fields", {}).get("salary") for m in desc]
+            if not (ordered(av, True) and ordered(dv, False) and av != dv):
+                return [f"numeric sort broke after doc_values disabled: asc={av[:5]} desc={dv[:5]}"]
+            return []
+
+        def probe_multi(index):
+            return probe_store(index) + probe_salary_sort(index)
+
+        def add_field(d):
+            P(d)["email"] = {"enabled": True, "dynamic": False,
+                             "fields": [{"index": True, "store": True, "docvalues": True,
+                                         "include_in_all": False, "name": "email",
+                                         "type": "text", "analyzer": "standard"}]}
+
+        def disable_multi(d):
+            P(d)["name"]["fields"][0]["store"] = False
+            SF(d)["docvalues"] = False
+
+        updatable = [
+            ("store true->false",     lambda d: P(d)["name"]["fields"][0].__setitem__("store", False),  probe_store),
+            ("index true->false",     lambda d: P(d)["dept"]["fields"][0].__setitem__("index", False),   probe_dept_gone),
+            ("docvalues true->false", lambda d: SF(d).__setitem__("docvalues", False),                   probe_salary_sort),
+            ("field enabled->false",  lambda d: P(d)["dept"].__setitem__("enabled", False),              probe_dept_gone),
+            ("remove field mapping",  lambda d: P(d).__delitem__("dept"),                                probe_dept_gone),
+            ("multi store+docvalues", disable_multi,                                                     probe_multi),
+        ]
+        non_updatable = [
+            ("add new field",              add_field),
+            ("change analyzer",            lambda d: P(d)["name"]["fields"][0].__setitem__("analyzer", "keyword")),
+            ("include_in_all false->true", lambda d: P(d)["dept"]["fields"][0].__setitem__("include_in_all", True)),
+        ]
+
+        failures = []
+
+        def run_change(label, mutate, expect, probe=None):
+            index = self._lazy_new_index(partitions, num_replicas=replicas)
+            self.wait_for_indexing_complete()
+            n = index.get_indexed_doc_count()
+            before = lazy.pindex_layout(index.name)
+            verdict, nm = lazy.classify_update(lazy.fts_log_since(lazy.lazy_update(index, mutate)))
+            after = lazy.pindex_layout(index.name)
+            moved = [s for s in before if s in after and before[s] != after[s]]
+            tag = f"[p={partitions},r={replicas}][{label}]"
+            if verdict != expect:
+                failures.append(f"{tag} expected {expect} update, got '{verdict}' (newMapping={nm})")
+            if expect == "selective":
+                if moved:
+                    failures.append(f"{tag} pindex moved nodes: "
+                                    + "; ".join(f"{s}:{before[s]}->{after[s]}" for s in moved))
+                if set(before) != set(after):
+                    failures.append(f"{tag} partition set changed: {sorted(before)} -> {sorted(after)}")
+                if index.get_indexed_doc_count() != n:
+                    failures.append(f"{tag} doc count changed to {index.get_indexed_doc_count()} (expected {n})")
+                if probe:
+                    for detail in probe(index):
+                        failures.append(f"{tag} short-circuit/correctness: {detail}")
+            self.log.info(f"{tag} verdict={verdict} moved={bool(moved)}")
+            index.delete()
+
+        for label, mutate, probe in updatable:
+            run_change(label, mutate, "selective", probe)
+        for label, mutate in non_updatable:
+            run_change(label, mutate, "rebuild")
+
+        ctx = f"(partitions={partitions}, fts_nodes={num_fts})"
+        if failures:
+            self.fail(f"test_lazy_index_update {ctx} failures:\n" + "\n".join(failures))
+        self.log.info(f"test_lazy_index_update {ctx} PASSED")
+
+    def test_lazy_index_update_with_replicas(self):
+        """Active and replica copies of each partition must both update selectively
+        and relocate neither. Needs >= replicas+1 FTS nodes."""
+        lazy = self._lazy
+        P = LazyIndexUpdateHelper.props
+        partitions = int(TestInputSingleton.input.param("index_partitions", 3))
+        replicas = int(TestInputSingleton.input.param("num_replicas", 1))
+        num_fts = len(self._cb_cluster.get_fts_nodes())
+        if num_fts < replicas + 1:
+            self.fail(f"need >= {replicas + 1} FTS nodes to host {replicas} replica(s); have {num_fts}")
+
+        index = self._lazy_new_index(partitions, num_replicas=replicas)
+        self.wait_for_indexing_complete()
+        n = index.get_indexed_doc_count()
+
+        failures = []
+        before = lazy.wait_stable_layout(index.name)
+        wrong = {s: before[s] for s in before if len(before[s]) != replicas + 1}
+        if wrong:
+            failures.append(f"partitions not hosting {replicas + 1} copies (active+replica): {wrong}")
+
+        verdict, nm = lazy.classify_update(lazy.fts_log_since(
+            lazy.lazy_update(index, lambda d: P(d)["dept"]["fields"][0].__setitem__("index", False))))
+        after = lazy.pindex_layout(index.name)
+        moved = [s for s in before if s in after and before[s] != after[s]]
+
+        if verdict != "selective":
+            failures.append(f"expected selective update, got '{verdict}' (newMapping={nm})")
+        if moved:
+            failures.append("active/replica copies moved nodes: "
+                            + "; ".join(f"{s}:{before[s]}->{after[s]}" for s in moved))
+        if set(before) != set(after):
+            failures.append(f"partition set changed: {sorted(before)} -> {sorted(after)}")
+        if index.get_indexed_doc_count() != n:
+            failures.append(f"doc count changed to {index.get_indexed_doc_count()} (expected {n})")
+        hits, _, _, _ = index.execute_query({"match": "Support", "field": "dept"})
+        if hits != 0:
+            failures.append(f"dept:Support hits={hits} after index disabled (expected 0)")
+
+        self.log.info(f"[lazy-replica] partitions={partitions} replicas={replicas} verdict={verdict} moved={bool(moved)}")
+        index.delete()
+        if failures:
+            self.fail("test_lazy_index_update_with_replicas failures:\n" + "\n".join(failures))
+        self.log.info("test_lazy_index_update_with_replicas PASSED")
+
+    def test_lazy_index_update_concurrent_crud(self):
+        """Disable dept indexing while docs are being created. After it settles, no doc
+        (incl. ones inserted during the change) may be searchable by dept, and the index
+        must still cover every live doc."""
+        lazy = self._lazy
+        P = LazyIndexUpdateHelper.props
+        partitions = int(TestInputSingleton.input.param("index_partitions", 1))
+        bucket = self._cb_cluster.get_bucket_by_name('default')
+
+        index = self._lazy_new_index(partitions)
+        self.wait_for_indexing_complete()
+
+        gen = SDKDataLoader(num_ops=3000, percent_create=100, key_prefix="crud_",
+                            json_template="emp", op_type="create", ops_rate=200)
+        tasks = self._cb_cluster.async_load_bucket_from_generator(bucket, gen)
+        self.sleep(5, "let background creates warm up")
+        verdict, nm = lazy.classify_update(lazy.fts_log_since(
+            lazy.lazy_update(index, lambda d: P(d)["dept"]["fields"][0].__setitem__("index", False))))
+        for t in tasks:
+            t.result()
+        self.wait_for_indexing_complete()
+
+        failures = []
+        if verdict != "selective":
+            failures.append(f"expected selective update during CRUD, got '{verdict}' (newMapping={nm})")
+        hits, _, _, _ = index.execute_query({"match": "Support", "field": "dept"})
+        if hits != 0:
+            failures.append(f"dept:Support hits={hits} after index disabled — concurrently-indexed docs "
+                            f"leaked the old mapping (expected 0)")
+        total = index.get_indexed_doc_count()
+        mhits, _, _, _ = index.execute_query({"match_all": {}})
+        if mhits != total:
+            failures.append(f"match_all hits={mhits} != indexed doc count {total} (docs lost during concurrent update)")
+
+        self.log.info(f"[lazy-crud] verdict={verdict} indexed={total}")
+        index.delete()
+        if failures:
+            self.fail("test_lazy_index_update_concurrent_crud failures:\n" + "\n".join(failures))
+        self.log.info("test_lazy_index_update_concurrent_crud PASSED")
+
     # =========================================================================
     # UDF Tests — Epic MB-65018
     # Related cases are grouped; failures collected and reported at end of each method.

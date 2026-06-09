@@ -7,7 +7,8 @@ from threading import Thread
 
 from lib import global_vars
 from lib.SystemEventLogLib.fts_service_events import SearchServiceEvents
-from .fts_base import FTSBaseTest, NodeHelper, FloatingServers, UDFHelper
+from .fts_base import FTSBaseTest, NodeHelper, FloatingServers, UDFHelper, LazyIndexUpdateHelper
+from couchbase_helper.documentgenerator import SDKDataLoader
 from TestInput import TestInputSingleton
 from lib.remote.remote_util import RemoteMachineShellConnection
 from lib.memcached.helper.data_helper import MemcachedClientHelper
@@ -3600,3 +3601,115 @@ class MovingTopFTS(FTSBaseTest):
         if errors:
             self.log.warning(f"DN-9: {len(errors)} transient error(s) during swap rebalance")
         self.log.info(f"DN-9 PASSED — hits={hits} correct after swap rebalance")
+
+    # =========================================================================
+    # Lazy Index Update — moving topology (MB-57888). Phase A applies an updatable
+    # change DURING a topology op (corruption/crash stress); Phase B applies one
+    # AFTER it settles (must be selective + no movement). Requires lazy_index_update=true.
+    #   topology_op: fts_rebalance | kv_rebalance | fts_failover | swap
+    # =========================================================================
+
+    def test_lazy_index_update_during_topology(self):
+        op = TestInputSingleton.input.param("topology_op", "fts_rebalance")
+        partitions = int(TestInputSingleton.input.param("index_partitions", 4))
+        replicas = int(TestInputSingleton.input.param("num_replicas", 0))
+        lazy = LazyIndexUpdateHelper(self)
+        P = LazyIndexUpdateHelper.props
+        bucket = self._cb_cluster.get_bucket_by_name('default')
+        num_fts = len(self._cb_cluster.get_fts_nodes())
+        if replicas and num_fts < replicas + 1:
+            self.fail(f"need >= {replicas + 1} FTS nodes to host {replicas} replica(s); have {num_fts}")
+
+        lazy.enable_lazy_update()
+        gen = SDKDataLoader(num_ops=1000, percent_create=100, key_prefix="emp_",
+                            json_template="emp", op_type="create")
+        for task in self._cb_cluster.async_load_bucket_from_generator(bucket, gen):
+            task.result()
+        index = self._cb_cluster.create_fts_index(
+            name=LazyIndexUpdateHelper.INDEX, source_name=bucket.name,
+            payload=lazy.build_payload(index_partitions=partitions, num_replicas=replicas))
+        self.wait_for_indexing_complete()
+        n = index.get_indexed_doc_count()
+        self.log.info(f"[lazy-mt] op={op} partitions={partitions} replicas={replicas} built with {n} docs")
+
+        def disrupt():
+            if op == "fts_rebalance":
+                self._cb_cluster.async_rebalance_out_node(node=self._cb_cluster.get_fts_nodes()[-1]).result()
+                self._cb_cluster.rebalance_in(num_nodes=1, services=["fts"])
+            elif op == "kv_rebalance":
+                self._cb_cluster.async_rebalance_out_node(node=self._cb_cluster.get_kv_nodes()[-1]).result()
+                self._cb_cluster.rebalance_in(num_nodes=1, services=["kv"])
+            elif op == "fts_failover":
+                self._cb_cluster.async_failover(graceful=False, node=self._cb_cluster.get_fts_nodes()[-1]).result()
+                self._cb_cluster.add_back_node(recovery_type='full', services=["fts"])
+            elif op == "swap":
+                self._cb_cluster.swap_rebalance(services=["fts", "fts"], num_nodes=2)   # swaps 2 FTS nodes, not KV
+            else:
+                raise ValueError(f"unknown topology_op: {op}")
+
+        # PHASE A — apply an updatable change while the topology op runs (retried across
+        # transient windows). No selective-vs-rebuild assertion (a rebalance legitimately
+        # relocates pindexes); this only checks consistency.
+        during = {"applied": False, "error": None}
+        def do_update():
+            deadline = time.time() + 180
+            last_err = None
+            while time.time() < deadline:
+                try:
+                    lazy.lazy_update(index, lambda d: P(d)["dept"]["fields"][0].__setitem__("index", False))
+                    during["applied"] = True
+                    return
+                except Exception as e:
+                    last_err = e
+                    time.sleep(5)
+            during["error"] = repr(last_err)
+
+        disrupt_thread = Thread(target=disrupt, name="lazy_mt_disrupt")
+        update_thread = Thread(target=do_update, name="lazy_mt_update")
+        disrupt_thread.start()
+        self.sleep(5, "let the topology change begin before updating the index")
+        update_thread.start()
+        update_thread.join()
+        disrupt_thread.join()
+
+        self.wait_for_indexing_complete()
+        failures = []
+        if not during["applied"]:
+            failures.append(f"[during] updatable change never applied through {op}: {during['error']}")
+        cnt = index.get_indexed_doc_count()
+        if cnt != n:
+            failures.append(f"[during] doc count after {op} = {cnt} (expected {n})")
+        mhits, _, _, _ = index.execute_query({"match_all": {}})
+        if mhits != n:
+            failures.append(f"[during] match_all hits={mhits} after {op} (expected {n})")
+        hits, _, _, _ = index.execute_query({"match": "Support", "field": "dept"})
+        if hits != 0:
+            failures.append(f"[during] dept:Support hits={hits} after {op} "
+                            f"(expected 0 — the dept-disable did not hold through the topology change)")
+
+        # PHASE B — on the settled cluster a fresh updatable change must be selective with
+        # no movement. wait_stable_layout first so cluster settling isn't misread.
+        before = lazy.wait_stable_layout(index.name)
+        self.log.info(f"[lazy-mt] settled layout before post-update: {before}")
+        verdict, nm = lazy.classify_update(lazy.fts_log_since(
+            lazy.lazy_update(index, lambda d: P(d)["name"]["fields"][0].__setitem__("store", False))))
+        after = lazy.pindex_layout(index.name)
+        moved = [s for s in before if s in after and before[s] != after[s]]
+        self.log.info(f"[lazy-mt] post-settle update verdict={verdict} moved={bool(moved)}")
+
+        if verdict != "selective":
+            failures.append(f"[post-settle] expected selective, got '{verdict}' (newMapping={nm})")
+        if moved:
+            failures.append("[post-settle] pindex moved nodes on a steady-state updatable change: "
+                            + "; ".join(f"{s}:{before[s]}->{after[s]}" for s in moved))
+        if set(before) != set(after):
+            failures.append(f"[post-settle] partition set changed: {sorted(before)} -> {sorted(after)}")
+        _, matches, _, _ = index.execute_query({"match_all": {}}, return_raw_hits=True, fields=["name"])
+        if matches and matches[0].get("fields", {}).get("name"):
+            failures.append("[post-settle] stored 'name' still returned after store disabled")
+
+        index.delete()
+        ctx = f"[op={op}, partitions={partitions}]"
+        if failures:
+            self.fail(f"test_lazy_index_update_during_topology {ctx} failures:\n" + "\n".join(failures))
+        self.log.info(f"test_lazy_index_update_during_topology {ctx} PASSED")
