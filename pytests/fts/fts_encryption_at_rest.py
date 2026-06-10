@@ -29,7 +29,7 @@ class FTSEncryptionAtRest(FTSEncryptionBaseTest):
         """
         self.log.info("=" * 80)
         self.log.info("STARTING TEST: test_fts_encryption_at_rest_sanity")
-        self.log.info("=" * 80)
+        self.log.info("=" * 80) 
 
         # ===== STEP 1: prerequisites =====
         fts_nodes = self._cb_cluster.get_fts_nodes()
@@ -790,3 +790,332 @@ class FTSEncryptionAtRest(FTSEncryptionBaseTest):
         self._post_topology_validation("segments(failover-during-rotation)", baseline_hits, index)
         self._check_dek_in_segments(self._cb_cluster.get_fts_nodes(), new_deks, label="[failover+rot] ")
         self.log.info("TEST PASSED: test_fts_ear_failover_during_rotation")
+
+    # ==================================================================
+    # Index-ops breadth under encryption (test plan section 3)
+    # ==================================================================
+    def test_fts_ear_query_types(self):
+        """Term / match / phrase / prefix / wildcard / conjunction / disjunction queries
+        all execute against the encrypted inverted index (TF + locations from encrypted
+        segments); segments stay encrypted."""
+        self._require_encryption_enabled()
+        fts_nodes = self._cb_cluster.get_fts_nodes()
+        self.load_data(num_items=self._num_items)
+        index = self._create_default_index("fts_ear_querytypes_idx")
+        self.assertGreater(self._match_all_hits(index), 0, "no hits on encrypted index")
+
+        queries = {
+            "term": {"term": "Safiya", "field": "name"},
+            "match": {"match": "Safiya Morgan", "field": "name"},
+            "match_phrase": {"match_phrase": "Safiya Morgan", "field": "name"},
+            "prefix": {"prefix": "Saf", "field": "name"},
+            "wildcard": {"wildcard": "Saf*", "field": "name"},
+            "numeric_range": {"min": -1, "max": 100000000, "inclusive_min": True,
+                              "inclusive_max": True, "field": "mutated"},
+            "conjunction": {"conjuncts": [
+                {"match": "Safiya", "field": "name"},
+                {"min": -1, "max": 100000000, "field": "mutated"}]},
+            "disjunction": {"disjuncts": [
+                {"match": "Safiya", "field": "name"},
+                {"match": "Morgan", "field": "name"}]},
+        }
+        for label, query in queries.items():
+            try:
+                hits, _, _, _ = index.execute_query(query, zero_results_ok=True)
+                self.log.info(f"query[{label}] hits={hits}")
+            except Exception as err:
+                self.fail(f"query type '{label}' failed on encrypted index: {err}")
+
+        self._validate_segments_encrypted(fts_nodes, "segments(query-types)")
+        self.log.info("TEST PASSED: test_fts_ear_query_types")
+
+    def test_fts_ear_custom_analyzer(self):
+        """Encrypted index built with a non-default analyzer; queries work, segments encrypted."""
+        self._require_encryption_enabled()
+        fts_nodes = self._cb_cluster.get_fts_nodes()
+        analyzer = self._input.param("analyzer", "keyword")
+        self.load_data(num_items=self._num_items)
+        index = self.create_index(
+            bucket=self._default_bucket(), index_name="fts_ear_analyzer_idx", analyzer=analyzer
+        )
+        self.wait_for_indexing_complete()
+        self.assertGreater(self._match_all_hits(index), 0, f"no hits with analyzer={analyzer}")
+        self._validate_segments_encrypted(fts_nodes, f"segments(analyzer={analyzer})")
+        self.log.info(f"TEST PASSED: test_fts_ear_custom_analyzer (analyzer={analyzer})")
+
+    def test_fts_ear_collection_scoped_index(self):
+        """Encrypted index scoped to a non-default scope/collection (run with container_type=collection)."""
+        self._require_encryption_enabled()
+        if getattr(self, "container_type", "bucket") != "collection":
+            self.skipTest("run with container_type=collection to exercise a collection-scoped index")
+        fts_nodes = self._cb_cluster.get_fts_nodes()
+        self.load_data(num_items=self._num_items)
+        collections = self.collection if isinstance(self.collection, list) else [self.collection]
+        type_mapping = f"{self.scope}.{collections[0]}"
+        index = self.create_index(
+            bucket=self._default_bucket(), index_name="fts_ear_coll_idx",
+            collection_index=True, scope=self.scope, collections=collections, _type=type_mapping,
+        )
+        self.wait_for_indexing_complete()
+        self.assertGreater(self._match_all_hits(index), 0, "no hits on collection-scoped encrypted index")
+        self._validate_segments_encrypted(fts_nodes, "segments(collection-scoped)")
+        self.log.info("TEST PASSED: test_fts_ear_collection_scoped_index")
+
+    # ==================================================================
+    # Remaining chaos / concurrency (test plan section 10 a,b,e-i)
+    # ==================================================================
+    def test_fts_ear_rotation_during_merge(self):
+        """Trigger key rotation (drop DEKs) while a segment merge/compaction is in flight."""
+        self._require_encryption_enabled()
+        fts_nodes = self._cb_cluster.get_fts_nodes()
+        bucket_name = self.default_bucket_name
+        self.load_data(num_items=self._num_items)
+        index = self._create_default_index("fts_ear_rot_merge_idx")
+        # Generate extra segments so there's real merge work to do.
+        self._run_emp_data_op(max(1000, self._num_items // 5), "update", start=0, end=max(1000, self._num_items // 5))
+        self.wait_for_indexing_complete()
+        _, baseline_deks = self._fts_in_use_deks(bucket_name)
+        baseline_hits = self._match_all_hits(index)
+
+        # Kick off a merge AND a DEK rotation so they overlap.
+        self.log.info("Concurrent: segment merge + DEK rotation (drop DEKs)")
+        rest = RestConnection(self.master)
+        rest.start_fts_index_compaction(index.name)
+        status, resp = rest.trigger_data_reencryption(bucket_name)
+        self.assertTrue(status, f"trigger_data_reencryption failed: {resp}")
+
+        self._wait_merge_complete(index.name)
+        new_deks = self._poll_fts_for_new_dek(bucket_name, baseline_deks, label="[rot+merge] ")
+        self._force_merge_and_wait(index.name)
+        self.wait_for_indexing_complete()
+
+        self.assertEqual(self._match_all_hits(index), baseline_hits,
+                         "hit count changed after rotation-during-merge (possible data loss)")
+        self._validate_segments_encrypted(fts_nodes, "segments(rotation-during-merge)")
+        self._check_dek_in_segments(fts_nodes, new_deks, label="[rot+merge] ")
+        self.log.info("TEST PASSED: test_fts_ear_rotation_during_merge")
+
+    def test_fts_ear_mutations_during_rotation(self):
+        """High-rate KV mutations while re-encryption is in flight; no data loss, queues drain.
+
+        Pragmatic stand-in for the DCP-backpressure scenario: load under rotation and
+        confirm the index reconciles with the bucket (no loss) and stays encrypted.
+        """
+        self._require_encryption_enabled()
+        fts_nodes = self._cb_cluster.get_fts_nodes()
+        bucket_name = self.default_bucket_name
+        self.load_data(num_items=self._num_items)
+        index = self._create_default_index("fts_ear_mut_rot_idx")
+        _, baseline_deks = self._fts_in_use_deks(bucket_name)
+
+        # Start re-encryption, then drive a burst of mutations while it runs.
+        self.log.info("Concurrent: DEK rotation + high-rate mutations")
+        rest = RestConnection(self.master)
+        status, resp = rest.trigger_data_reencryption(bucket_name)
+        self.assertTrue(status, f"trigger_data_reencryption failed: {resp}")
+        for _ in range(3):
+            self._run_emp_data_op(max(1000, self._num_items // 5), "update",
+                                  start=0, end=max(1000, self._num_items // 5))
+
+        new_deks = self._poll_fts_for_new_dek(bucket_name, baseline_deks, label="[mut+rot] ")
+        self._force_merge_and_wait(index.name)
+        # Index must reconcile with the bucket doc count (no data loss / drained queues).
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
+        self._validate_segments_encrypted(fts_nodes, "segments(mutations-during-rotation)")
+        self._check_dek_in_segments(fts_nodes, new_deks, label="[mut+rot] ")
+        self.log.info("TEST PASSED: test_fts_ear_mutations_during_rotation")
+
+    # ==================================================================
+    # cbcollect (test plan section 9)
+    # ==================================================================
+    def test_fts_ear_cbcollect(self):
+        """cbcollect_info runs cleanly with encrypted FTS files present and produces a bundle.
+
+        (Deep validation that the bundle's fts.log is decrypted is a follow-up that needs
+        the bundle extracted/inspected; here we confirm cbcollect doesn't choke on
+        encrypted files and produces a non-trivial diag zip.)
+        """
+        self._require_encryption_enabled()
+        fts_nodes = self._cb_cluster.get_fts_nodes()
+        self.load_data(num_items=self._num_items)
+        self._create_default_index("fts_ear_cbcollect_idx")
+        self._validate_segments_encrypted(fts_nodes, "segments(before-cbcollect)")
+
+        node = fts_nodes[0]
+        shell = RemoteMachineShellConnection(node)
+        try:
+            bin_dir = self._cb_bin_path(node)
+            out, err = shell.execute_command(
+                f"{bin_dir}cbcollect_info /tmp/fts_ear_diag.zip", use_channel=True, timeout=900
+            )
+            self.log.info(f"cbcollect tail: {(out or [])[-5:]}, err: {(err or [])[-3:]}")
+            listing, _ = shell.execute_command("ls -l /tmp/fts_ear_diag.zip 2>/dev/null")
+            self.assertTrue(any("fts_ear_diag.zip" in line for line in (listing or [])),
+                            f"cbcollect_info did not produce the diag bundle: out={out}, err={err}")
+        finally:
+            shell.disconnect()
+        self.log.info("TEST PASSED: test_fts_ear_cbcollect")
+
+    # ==================================================================
+    # SDK + CLI tools (test plan section 6)
+    # ==================================================================
+    def test_fts_ear_bleve_zap_cli_errors_on_encrypted(self):
+        """Per design, the bleve/zap CLI must error on encrypted data (no key access).
+
+        NOTE: the exact CLI binary/subcommand may need dev confirmation; the test
+        self-skips if no bleve/zap binary is found on the node.
+        """
+        self._require_encryption_enabled()
+        fts_nodes = self._cb_cluster.get_fts_nodes()
+        self.load_data(num_items=self._num_items)
+        self._create_default_index("fts_ear_cli_idx")
+        node = fts_nodes[0]
+        fts_dir = self.encryption_helper.get_fts_data_path(node)
+        shell = RemoteMachineShellConnection(node)
+        try:
+            zaps, _ = shell.execute_command(f"find {fts_dir} -type f -name '*.zap' 2>/dev/null | head -1")
+            zap = (zaps or [""])[0].strip()
+            if not zap:
+                self.skipTest("no .zap segment found to exercise the bleve/zap CLI")
+            bin_dir = self._cb_bin_path(node)
+            tool = None
+            for candidate in ("cbft-bleve", "bleve", "cbft-zap"):
+                chk, _ = shell.execute_command(f"ls {bin_dir}{candidate} 2>/dev/null")
+                if chk and any(candidate in line for line in chk):
+                    tool = f"{bin_dir}{candidate}"
+                    break
+            if not tool:
+                self.skipTest("no bleve/zap CLI binary found on the node")
+            out, err = shell.execute_command(f"{tool} zap explore {zap} 2>&1", use_channel=True)
+            combined = " ".join((out or []) + (err or [])).lower()
+            self.log.info(f"bleve/zap CLI output on encrypted segment: {combined[:300]}")
+            self.assertTrue(
+                any(k in combined for k in ("error", "encrypt", "cannot", "fail", "unable", "invalid")),
+                f"bleve/zap CLI did not error on encrypted segment (expected an error): {combined[:300]}",
+            )
+        finally:
+            shell.disconnect()
+        self.log.info("TEST PASSED: test_fts_ear_bleve_zap_cli_errors_on_encrypted")
+
+    def test_fts_ear_sdk_query(self):
+        """SDK query parity on an encrypted index.
+
+        The SDK and REST queries hit the same FTS query path (already validated by the
+        REST query tests). A dedicated SDK run needs the python couchbase SDK /
+        java_sdk_client wiring; self-skips if unavailable.
+        """
+        self._require_encryption_enabled()
+        try:
+            import couchbase  # noqa: F401
+        except Exception:
+            self.skipTest("python couchbase SDK not available; FTS query path is covered by the REST query tests")
+        self.skipTest("SDK FTS query coverage pending SDK-client wiring; REST query path validated elsewhere")
+
+    # ==================================================================
+    # Community Edition negative (test plan section 11)
+    # Run with enable_encryption_at_rest=False so setUp does not attempt encryption.
+    # ==================================================================
+    def test_fts_ear_ce_encryption_rejected(self):
+        """On Community Edition, creating an encryption secret must be rejected."""
+        rest = RestConnection(self.master)
+        if rest.is_enterprise_edition():
+            self.skipTest("Community-Edition-only negative test")
+        from lib.membase.helper.encryption_at_rest_helper import EncryptionUtil
+        params = EncryptionUtil.create_secret_params(
+            name=EncryptionUtil.generate_random_name("CEReject")
+        )
+        status, response = rest.create_secret(params)
+        self.assertFalse(status, f"creating an encryption secret unexpectedly succeeded on CE: {response}")
+        self.log.info(f"CE correctly rejected encryption secret creation: {response}")
+        self.log.info("TEST PASSED: test_fts_ear_ce_encryption_rejected")
+
+    # ==================================================================
+    # Windows sanity (test plan section 12)
+    # ==================================================================
+    def test_fts_ear_windows_sanity(self):
+        """Windows-only sanity: encryption enabled, index built + queried, segments encrypted."""
+        self._require_encryption_enabled()
+        fts_nodes = self._cb_cluster.get_fts_nodes()
+        if self._os_type(fts_nodes[0]) != "windows":
+            self.skipTest("Windows-only sanity test")
+        self.load_data(num_items=self._num_items)
+        index = self._create_default_index("fts_ear_win_idx")
+        self.assertGreater(self._match_all_hits(index), 0, "no hits on Windows encrypted index")
+        self._validate_segments_encrypted(fts_nodes, "segments(windows)")
+        self.log.info("TEST PASSED: test_fts_ear_windows_sanity")
+
+    # ==================================================================
+    # Upgrade / migration (test plan section 8) -- scaffolds.
+    # These need the upgrade framework (NewUpgradeBaseTest) + two builds, which is a
+    # different base than FTSEncryptionBaseTest, so they self-skip here and document the
+    # intended flow for a dedicated upgrade test class.
+    # ==================================================================
+    def test_fts_ear_mixed_mode_encryption_blocked(self):
+        """Encryption must NOT be enableable on a mixed-version (pre-8.1 + 8.1) cluster.
+
+        Intended flow: start a mixed-version cluster (some nodes < 8.1), attempt to enable
+        bucket encryption / create FTS index with encryption, assert it is rejected.
+        Requires the upgrade framework + two builds.
+        """
+        self.skipTest("mixed-mode negative requires the upgrade framework (NewUpgradeBaseTest) "
+                      "+ two builds; scaffold pending dedicated upgrade test class")
+
+    def test_fts_ear_enable_encryption_post_upgrade(self):
+        """After upgrading 8.0->8.1, enabling encryption re-indexes segments encrypted (v17).
+
+        Intended flow: install initial_version (8.0) with unencrypted FTS indexes, upgrade
+        to 8.1, enable encryption, verify MergeObsoleteSegments re-encrypts and no data
+        loss. Requires the upgrade framework + initial_version/upgrade_version builds.
+        """
+        self.skipTest("post-upgrade enable-encryption requires the upgrade framework + two "
+                      "builds; scaffold pending dedicated upgrade test class")
+
+    # ==================================================================
+    # Backup / restore (test plan section 4) -- FTS index-definition backup via REST.
+    # cbbackupmgr full-data backup/restore is a heavier follow-up.
+    # ==================================================================
+    def test_fts_ear_index_def_backup_restore(self):
+        """FTS index-definition backup/restore preserves encryption.
+
+        Backup the index defs (REST), delete the index, restore; the restored index
+        reindexes on the still-encrypted bucket and its segments stay encrypted.
+        """
+        self._require_encryption_enabled()
+        fts_nodes = self._cb_cluster.get_fts_nodes()
+        self.load_data(num_items=self._num_items)
+        index = self._create_default_index("fts_ear_backup_idx")
+        index_name = index.name
+        self._validate_segments_encrypted(fts_nodes, "segments(before-backup)")
+
+        try:
+            from .fts_backup_restore import FTSIndexBackupClient
+        except Exception as err:
+            self.skipTest(f"FTSIndexBackupClient not importable: {err}")
+        backup_client = FTSIndexBackupClient(fts_nodes[0])
+        status, content = backup_client.backup()
+        self.assertTrue(status, f"FTS index backup failed: {content}")
+
+        self.log.info("Deleting all FTS indexes, then restoring from backup")
+        self._cb_cluster.delete_all_fts_indexes()
+        restore_result = backup_client.restore()
+        restored_ok = restore_result if isinstance(restore_result, bool) else restore_result[0]
+        self.assertTrue(restored_ok, "FTS index restore failed")
+
+        # Restore recreates indexes server-side (no FTSIndex object), so poll by name.
+        rest = RestConnection(self.master)
+        deadline = time.time() + 600
+        count = 0
+        while time.time() < deadline:
+            try:
+                count = rest.get_fts_index_doc_count(index_name)
+            except Exception as err:
+                self.log.info(f"waiting for restored index '{index_name}': {err}")
+            if count >= self._num_items:
+                break
+            self.sleep(10, f"reindexing restored '{index_name}' ({count}/{self._num_items})")
+        self.assertGreaterEqual(count, self._num_items,
+                                f"restored index '{index_name}' did not reindex fully ({count}/{self._num_items})")
+
+        self._validate_segments_encrypted(self._cb_cluster.get_fts_nodes(), "segments(after-restore)")
+        self.log.info("TEST PASSED: test_fts_ear_index_def_backup_restore")

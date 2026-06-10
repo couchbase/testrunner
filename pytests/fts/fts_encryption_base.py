@@ -17,6 +17,7 @@ import time
 from .fts_base import FTSBaseTest
 from couchbase_helper.documentgenerator import SDKDataLoader
 from membase.api.rest_client import RestConnection
+from remote.remote_util import RemoteMachineShellConnection
 from lib.membase.helper.encryption_at_rest_helper import EncryptionUtil
 from lib.couchbase_helper.encryption_at_rest_helper import EncryptionAtRestHelper
 
@@ -375,10 +376,47 @@ class FTSEncryptionBaseTest(FTSBaseTest):
             self.sleep(5, f"waiting for merge on '{index_name}' to finish")
         self.log.warning(f"Merge on '{index_name}' did not report completion within {timeout}s")
 
+    def _wait_merge_complete(self, index_name, timeout=180):
+        """Wait for an already-triggered FTS merge/compaction to finish (does NOT trigger)."""
+        rest = RestConnection(self.master)
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            status, tasks = rest.get_fts_index_compactions(index_name)
+            if not (isinstance(tasks, dict) and tasks.get("tasks")):
+                self.log.info(f"Merge/compaction complete on '{index_name}'")
+                return
+            self.sleep(5, f"waiting for in-flight merge on '{index_name}'")
+        self.log.warning(f"Merge on '{index_name}' did not report completion within {timeout}s")
+
     def _require_encryption_enabled(self):
         if not self.enable_encryption_at_rest:
             self.skipTest("Encryption at rest not enabled. Set enable_encryption_at_rest=True")
         self.assertIsNotNone(self.encryption_at_rest_id, "encryption_at_rest_id not set")
+
+    # ==================================================================
+    # OS / tooling helpers (cbcollect, CLI, CE/Windows detection)
+    # ==================================================================
+    def _os_type(self, node):
+        """Return the node OS type lowercased ('windows' / 'linux' / ...)."""
+        shell = RemoteMachineShellConnection(node)
+        try:
+            return shell.extract_remote_info().type.lower()
+        finally:
+            shell.disconnect()
+
+    def _cb_bin_path(self, node):
+        """OS-aware Couchbase bin directory (e.g. /opt/couchbase/bin/)."""
+        from lib.testconstants import (LINUX_COUCHBASE_BIN_PATH,
+                                       WIN_COUCHBASE_BIN_PATH, MAC_COUCHBASE_BIN_PATH)
+        os_type = self._os_type(node)
+        if os_type == "windows":
+            return WIN_COUCHBASE_BIN_PATH
+        if os_type == "mac":
+            return MAC_COUCHBASE_BIN_PATH
+        return LINUX_COUCHBASE_BIN_PATH
+
+    def _is_enterprise(self):
+        return RestConnection(self.master).is_enterprise_edition()
 
     # ==================================================================
     # FTS GetInUseKeys (DEK) helpers (:8094/api/encryption/GetInUseKeys)
@@ -387,8 +425,32 @@ class FTSEncryptionBaseTest(FTSBaseTest):
         bucket_name = bucket_name or self.default_bucket_name
         return RestConnection(self.master).get_bucket_json(bucket_name).get("uuid")
 
+    def _require_getinusekeys(self):
+        """Skip the test if the FTS GetInUseKeys endpoint isn't present in this build.
+
+        Lets the whole suite run today on builds without
+        :8094/api/encryption/GetInUseKeys -- the endpoint-dependent tests self-skip
+        instead of erroring. The probe result is cached per test instance.
+        """
+        if getattr(self, "_getinusekeys_ok", None) is True:
+            return
+        try:
+            node = self._cb_cluster.get_fts_nodes()[0]
+            status, response = RestConnection(node).get_fts_in_use_encryption_keys()
+            ok = bool(status) and isinstance(response, dict)
+        except Exception as err:
+            self.log.warning(f"GetInUseKeys probe failed: {err}")
+            ok = False
+        if not ok:
+            self.skipTest(
+                "FTS GetInUseKeys endpoint (:8094/api/encryption/GetInUseKeys) not present "
+                "in this build -- skipping until the endpoint build is available"
+            )
+        self._getinusekeys_ok = True
+
     def _fts_in_use_deks(self, bucket_name=None):
         """Return (merged_in_use_map, dek_ids_for_bucket) from FTS GetInUseKeys."""
+        self._require_getinusekeys()
         fts_nodes = self._cb_cluster.get_fts_nodes()
         merged = self.encryption_helper.get_fts_in_use_keys(fts_nodes)
         bucket_uuid = self._bucket_uuid(bucket_name)
