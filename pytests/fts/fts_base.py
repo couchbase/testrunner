@@ -4112,7 +4112,7 @@ class CouchbaseCluster:
         for remove_node in to_remove_node:
             node_services = remove_node.services.split(",")
 
-            if "kv" in node_services:
+            if "kv" in node_services and remove_node in self.__kv_nodes:
                 self.__kv_nodes.remove(remove_node)
 
         if master:
@@ -4412,7 +4412,7 @@ class CouchbaseCluster:
         [self.__nodes.remove(node) for node in self.__fail_over_nodes]
         for node in self.__fail_over_nodes:
             node_services = node.services.split(",")
-            if "kv" in node_services:
+            if "kv" in node_services and node in self.__kv_nodes:
                 self.__kv_nodes.remove(node)
         self.__fail_over_nodes = []
 
@@ -6465,12 +6465,12 @@ class FTSBaseTest(unittest.TestCase):
             if item_count == None:
                 while True and retry_mut_count:
                     num_mutations_to_index = index.get_num_mutations_to_index()
-                    if num_mutations_to_index > 0:
+                    if num_mutations_to_index is None or num_mutations_to_index > 0:
                         self.sleep(5, f"num_mutations_to_index: {num_mutations_to_index} > 0")
                         retry_mut_count -= 1
                     else:
                         break
-                if num_mutations_to_index > 0:
+                if num_mutations_to_index is None or num_mutations_to_index > 0:
                     self.fail(f"num_mutations_to_index: {num_mutations_to_index} > 0 even after {self._input.param('mutation_retry', 100)} retries")
 
     def construct_plan_params(self):

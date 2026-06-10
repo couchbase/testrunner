@@ -322,7 +322,6 @@ class MemcachedClientHelper(object):
         else:
             client.vbucket_count = 0
         bucket_info = rest.get_bucket(bucket)
-        # todo raise exception for not bucket_info
 
         cluster_compatibility = rest.check_cluster_compatibility("5.0")
         if cluster_compatibility is None:
@@ -330,6 +329,12 @@ class MemcachedClientHelper(object):
         else:
             pre_spock = not cluster_compatibility
         if pre_spock:
+            if bucket_info is None:
+                server_ip = server["ip"] if isinstance(server, dict) \
+                    else server.ip
+                raise Exception("Bucket {0} not found on node {1} - the node "
+                                "may no longer be part of the cluster"
+                                .format(bucket, server_ip))
             log.info("Atleast 1 of the server is on pre-spock "
                      "version. Using the old ssl auth to connect to "
                      "bucket.")
