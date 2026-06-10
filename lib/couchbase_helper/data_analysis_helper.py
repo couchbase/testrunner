@@ -915,9 +915,23 @@ class DataCollector(object):
                 if not bucket_name:
                     return None, status
             else:
+                # Resolve the on-disk bucket sub-directory. 8.x names it by
+                # bucket-UUID (verified the same for EaR and non-EaR); older
+                # layouts use "<bucket>-<uuid>" or the plaintext name. Match all
+                # three, additively (version fix — Backup_EaR_Implementation.md §5.3.2).
+                bucket_uuid = getattr(bucket, "uuid", None)
+                if not bucket_uuid and backupset is not None:
+                    try:
+                        bucket_uuid = RestConnection(backupset.cluster_host) \
+                            .get_bucket_json(bucket.name).get("uuid")
+                    except Exception:
+                        bucket_uuid = None
                 for item in conn.list_files(f"{backupset.directory}/{repository}/{backup_name[0]}"):
-                    if bucket.name == "-".join(item["file"].split("-")[:-1]):
-                        bucket_name = [item["file"]]
+                    entry = item["file"]
+                    if bucket.name == "-".join(entry.split("-")[:-1]) \
+                            or entry == bucket.name \
+                            or (bucket_uuid and entry == bucket_uuid):
+                        bucket_name = [entry]
                         break
                 if not bucket_name:
                     return None, status

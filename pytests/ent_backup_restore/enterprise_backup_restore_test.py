@@ -314,7 +314,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
 
     def test_ear_backup_restore_lifecycle(self):
-        """EAR-FN-009/010/016/018/019/022/023/024/025.
+        """EAR-FN-009/010/016/018/019/022/023/025.
 
         Full config -> backup -> incrementals -> restore on an encrypted repo.
         Protection/algorithm/credential-delivery variants flow through purely as
@@ -323,18 +323,11 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
 
         Params: ear=True, ear_protection, ear_km_*, ear_encryption_algo,
                 ear_passphrase_via_env, ear_derivation_algo, number_of_backups,
-                transport (https|http), info_no_key (bool), with_collections.
+                info_no_key (bool), with_collections.
         """
         self._ear_require_enabled()
-        transport = self.input.param("transport", "https")
         info_no_key = self.input.param("info_no_key", False)
         with_collections = self.input.param("with_collections", False)
-        if transport == "http":
-            # EaR encrypts client-side and setUp forces https (enforce_tls). Wire-level
-            # plaintext detection is out of this harness's scope; we note the caveat
-            # and run the lifecycle over the (https) transport.
-            self.log.warning("EaR forces https end-to-end (EAR-FN-024); running over https. "
-                             "http wire-leak detection is out of scope for this harness.")
 
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", self.expires)
@@ -1011,7 +1004,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                     self.log.info("{0} matched in list command output".format(backup_name))
         backup_bucket_config_path = self.backupset.directory + "/backup" + \
                                     "/" + self.backups[self.backupset.number_of_backups - 1] + \
-                                    "/" + self.buckets[0].name + "-*" \
+                                    "/" + self.buckets[0].uuid + "-*" \
                                                                  "/bucket-config.json"
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         self.log.info("Remove } in bucket-config.json to make it invalid json ")

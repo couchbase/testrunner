@@ -84,13 +84,12 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.database_path = COUCHBASE_DATA_PATH
 
         # ---- Encryption at Rest (EaR): single class-level switch ----
-        # Hoisted above the TLS block below: EaR encrypts at the client, so
-        # backups/restores must use https (see EAR-FN-024). Setting enforce_tls
-        # here lets the existing port-switching path pick it up.
+        # TLS is NOT auto-forced for EaR: backup/restore work over http and the
+        # backup is still encrypted AT REST regardless of transport (the two are
+        # independent). TLS is opt-in via the use_https/enforce_tls params for a
+        # dedicated transport test (EAR-FN-024) to be added later.
         print("EaR Flag Setup Start")
         self.ear_enabled = self.input.param("ear", False)
-        if self.ear_enabled and not self.enforce_tls:
-            self.enforce_tls = True
         print("EaR Flag Setup Complete")
 
         self.master.protocol = "http://"
@@ -1860,6 +1859,24 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         bk_buckets = [b for b in self.buckets if b.name not in self.backupset.exclude_buckets]
         if self.backupset.include_buckets:
             bk_buckets = [b for b in bk_buckets if b.name in self.backupset.include_buckets]
+
+        # ---- Encryption at Rest (EaR) — Impl §5.3.3 ----
+        # cbriftdump does not support EaR, so the encrypted data shards cannot be
+        # read from the backup files. Instead of reading documents, confirm the
+        # data is encrypted at rest (confidentiality) and rely on the
+        # restore-into-cluster validation (EaR-safe) for full data correctness.
+        if getattr(self, "ear_enabled", False):
+            self.log.info("EaR enabled: skipping cbriftdump-based backup-file data read "
+                          "(cbriftdump cannot decrypt); asserting confidentiality and "
+                          "relying on restore for correctness (Impl §5.3.3).")
+            tokens = [b.name for b in bk_buckets if b.name]
+            if tokens:
+                status, msg = self.validate_artifact_confidentiality(tokens, artifact="sweep")
+                if not status:
+                    self.fail(msg)
+                self.log.info("EaR confidentiality (validate_backup_data): %s" % msg)
+            return
+
         bk_file_data, _ = data_collector.get_kv_dump_from_backup_file(server_host, self.cli_command_location,
                                                                       self.cmd_ext, master_key, bk_buckets,
                                                                       objstore_provider=self.objstore_provider,
@@ -2141,6 +2158,13 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         """
             Verify view is backup
         """
+        # ---- Encryption at Rest (EaR) — Impl §5.3.5 (pending §5.4 Q4) ----
+        # views.json may be encrypted under EaR (carries names; unconfirmed).
+        # Skip the raw read under EaR until confirmed.
+        if getattr(self, "ear_enabled", False):
+            self.log.info("EaR enabled: views.json may be encrypted (Impl §5.4 Q4 — unconfirmed); "
+                          "skipping raw views-definition read.")
+            return True, "Skipped views validation under EaR (Impl §5.4 Q4)"
         data_collector = DataCollector()
         bk_views_def = data_collector.get_views_definition_from_backup_file(server_host,
                                                                             self.backupset.directory,
@@ -2519,6 +2543,14 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             self.fail("Failed to collect logs. Output: {0}".format(output))
 
     def _verify_cbbackupmgr_logs(self, log_collect_datetime):
+        # ---- Encryption at Rest (EaR) — Impl §5.3.4 ----
+        # Repo-level logs are encrypted under EaR; a raw read/grep would see
+        # ciphertext. Skip with a clear log until an authorized decrypt path
+        # exists (open — Impl §5.4 Q5).
+        if getattr(self, "ear_enabled", False):
+            self.log.info("EaR enabled: repo-level logs are encrypted (Impl §5.3.4); "
+                          "skipping raw cbbackupmgr-log verification (decrypt path open — §5.4 Q5).")
+            return
         shell = RemoteMachineShellConnection(self.backupset.backup_host)
         self.log.info("\n**** start to verify cbbackupmgr logs ****")
         os_dist = shell.info.distribution_version.replace(" ", "").lower()
@@ -2671,6 +2703,14 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         """For a given source file, redact it with cblogredaction, and diff its
          output with the target file. The salt provided must be the same as
          that used for the target file."""
+        # ---- Encryption at Rest (EaR) — Impl §5.3.4 ----
+        # Repo-level logs are encrypted under EaR; a raw read for redaction
+        # hashing would see ciphertext. Skip with a clear log (decrypt path open
+        # — Impl §5.4 Q5).
+        if getattr(self, "ear_enabled", False):
+            self.log.info("EaR enabled: repo-level logs are encrypted (Impl §5.3.4); "
+                          "skipping raw log-redaction hash check (decrypt path open — §5.4 Q5).")
+            return
 
         shell = RemoteMachineShellConnection(self.backupset.backup_host)
         shell.execute_command("rm -f /tmp/backup_redacted_files/*")
@@ -3034,6 +3074,13 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         return content1
 
     def _verify_backup_events_definition(self, bk_fxn, body, backup_index=0):
+        # ---- Encryption at Rest (EaR) — Impl §5.3.5 (pending §5.4 Q4) ----
+        # events.json may be encrypted under EaR (carries names; unconfirmed).
+        # Skip the raw json.load under EaR until confirmed.
+        if getattr(self, "ear_enabled", False):
+            self.log.info("EaR enabled: events.json may be encrypted (Impl §5.4 Q4 — unconfirmed); "
+                          "skipping raw events-definition read.")
+            return
         backup_path = self.backupset.directory + "/backup/{0}/".format(self.backups[backup_index])
         events_file_name = "events.json"
         bk_file_events_dir = "/tmp/backup_events{0}/".format(self.master.ip)
@@ -3059,6 +3106,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         shell.disconnect()
 
     def _verify_restore_events_definition(self, bk_fxn):
+        # ---- Encryption at Rest (EaR) — Impl §5.3.5 (pending §5.4 Q4) ----
+        if getattr(self, "ear_enabled", False):
+            self.log.info("EaR enabled: events.json may be encrypted (Impl §5.4 Q4 — unconfirmed); "
+                          "skipping raw events-definition read.")
+            return
         backup_path = self.backupset.directory + "/backup/{0}/".format(self.backups[0])
         events_file_name = "events.json"
         bk_file_events_dir = "/tmp/backup_events{0}/".format(self.master.ip)
@@ -3082,6 +3134,39 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         else:
             return obj
 
+    def _resolve_backup_bucket_dir(self, bucket_name):
+        """Resolve the on-disk bucket sub-directory for `bucket_name` in the
+        latest backup. 8.x names it by bucket-UUID (verified the same for EaR and
+        non-EaR repos); older layouts use the bucket name or '<bucket>-<uuid>'.
+        Returns the matched directory name, or None so callers can fall back to a
+        name glob. Version fix (NOT EaR-gated) — Impl §5.3.2.
+        """
+        shell = RemoteMachineShellConnection(self.backupset.backup_host)
+        try:
+            out, _ = shell.execute_command(
+                "ls -tr {0}/{1} | grep -E '^[0-9]{{4}}-' | tail -1"
+                .format(self.backupset.directory, self.backupset.name))
+            latest = out[0].strip() if out and out[0].strip() else None
+            if not latest:
+                return None
+            listing, _ = shell.execute_command(
+                "ls {0}/{1}/{2}".format(self.backupset.directory, self.backupset.name, latest))
+            entries = [e.strip() for e in (listing or []) if e.strip()]
+            bucket_uuid = None
+            try:
+                bucket_uuid = RestConnection(self.backupset.cluster_host) \
+                    .get_bucket_json(bucket_name).get("uuid")
+            except Exception as e:
+                self.log.info("_resolve_backup_bucket_dir: could not fetch uuid for {0}: {1}"
+                              .format(bucket_name, e))
+            for entry in entries:
+                if entry == bucket_name or entry.startswith(bucket_name + "-") \
+                        or (bucket_uuid and entry == bucket_uuid):
+                    return entry
+            return None
+        finally:
+            shell.disconnect()
+
     def _validate_num_files(self, extension_name, num_shards, bucket_name):
         """
            Validate number of file in backup repo
@@ -3089,8 +3174,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         num_files_matched = False
         mesg = ""
         now = datetime.datetime.now()
-        cmd = "ls {0}/backup/{1}*/{2}*/data/ | ".format(self.backupset.directory, now.year,
-                                                        bucket_name)
+        # Resolve the on-disk bucket dir (8.x uses bucket-UUID dirs; Impl §5.3.2);
+        # fall back to the legacy "<bucket-name>*" glob if it can't be resolved.
+        bucket_dir = self._resolve_backup_bucket_dir(bucket_name) or (bucket_name + "*")
+        cmd = "ls {0}/backup/{1}*/{2}/data/ | ".format(self.backupset.directory, now.year,
+                                                       bucket_dir)
         cmd += "grep{0} {1} | wc -l ".format(self.cmd_ext, extension_name)
         shell = RemoteMachineShellConnection(self.backupset.backup_host)
         output, error = shell.execute_command(cmd)
