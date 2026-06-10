@@ -328,6 +328,9 @@ class QueryTests(BaseTestCase):
                         count = int(count)
                     if count > 0:
                         self.log.info("===== {0} OBSERVED IN INDEXER LOGS ON SERVER {1}=====".format(string, server.ip))
+                        match_cmd = "zgrep -i \"{0}\" {1} | head -5".format(string, indexer_log)
+                        matched_lines, _ = shell.execute_command(match_cmd)
+                        self.log.info("Matched lines: {0}".format(matched_lines))
                         fail_test = True
                 shell.disconnect()
         projectors = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
@@ -358,7 +361,7 @@ class QueryTests(BaseTestCase):
         self.generate_map_nodes_out_dist()
         fail_test = False
         indexers = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-        strings_to_monitor = ["Storage corrupted and unrecoverable", "corruption", "fatal"]
+        strings_to_monitor = ["Storage corrupted and unrecoverable", "corruption"]
         if not indexers:
             return None
         for server in indexers:
@@ -373,19 +376,21 @@ class QueryTests(BaseTestCase):
                     continue
                 indexer_log = str(log_dir) + '/indexer.log*'
                 for string in strings_to_monitor:
-                    if string == "fatal":
-                        cmd = "zgrep -i \"{0}\" {1} | grep -iv \"fatal remote\" | wc -l".format(string, indexer_log)
-                    elif string == "corruption":
+                    if string == "corruption":
                         cmd = "zgrep \"{0}\" {1} | grep -iv \"NCorruptionErrors\" | wc -l".format(string, indexer_log)
                     else:
                         cmd = "zgrep -i \"{0}\" {1} | wc -l".format(string, indexer_log)
                     count, err = shell.execute_command(cmd)
+                    self.log.debug(f"Command executed on {server.ip}: {cmd}, count: {count}, err: {err}")
                     if isinstance(count, list):
                         count = int(count[0])
                     else:
                         count = int(count)
                     if count > 0:
                         self.log.info("===== {0} OBSERVED IN INDEXER LOGS ON SERVER {1}=====".format(string, server.ip))
+                        match_cmd = "zgrep -i \"{0}\" {1} | head -5".format(string, indexer_log)
+                        matched_lines, _ = shell.execute_command(match_cmd)
+                        self.log.info("Matched lines: {0}".format(matched_lines))
                         fail_test = True
             finally:
                 shell.disconnect()

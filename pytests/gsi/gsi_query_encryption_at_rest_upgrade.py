@@ -27,6 +27,7 @@ Two test variants differ only in upgrade mechanic:
 import concurrent.futures
 import itertools
 import json
+import threading
 import time
 
 from couchbase_helper.query_definitions import QueryDefinition
@@ -72,6 +73,49 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
             f"-> upgrade_to={self.upgrade_to} (file_ear={self.target_supports_file_ear})"
         )
         self.encryption_key_id = None
+        self._install_tools()
+
+    def _install_tools(self):
+        """
+        Ensure xxd is installed on every cluster node.
+
+        xxd ships in vim-common on Debian/Ubuntu and on RHEL/CentOS/Fedora.
+        The check is skipped for nodes where xxd is already present so
+        repeated suite runs are fast.
+        """
+        for node in self.servers:
+            shell = RemoteMachineShellConnection(node, verbose=False)
+            try:
+                info = shell.extract_remote_info()
+                distro = (info.distribution_type or "").lower()
+
+                out, _ = shell.execute_command("which xxd 2>/dev/null")
+                if out and out[0].strip():
+                    self.log.info(f"xxd already present on {node.ip}: {out[0].strip()}")
+                    continue
+
+                self.log.info(f"Installing xxd on {node.ip} (distro={distro})")
+                if "ubuntu" in distro or "debian" in distro:
+                    install_out, _ = shell.execute_command(
+                        "apt-get install -y xxd 2>&1"
+                    )
+                elif any(d in distro for d in ("centos", "rhel", "fedora", "amazon")):
+                    install_out, _ = shell.execute_command(
+                        "yum install -y vim-common 2>&1 || dnf install -y vim-common 2>&1"
+                    )
+                else:
+                    install_out, _ = shell.execute_command(
+                        "apt-get install -y xxd 2>&1 || yum install -y vim-common 2>&1"
+                    )
+                self.log.info(f"Install output on {node.ip}: {' '.join(install_out or [])}")
+
+                verify_out, _ = shell.execute_command("which xxd 2>/dev/null")
+                if verify_out and verify_out[0].strip():
+                    self.log.info(f"xxd installed successfully on {node.ip}: {verify_out[0].strip()}")
+                else:
+                    self.log.warning(f"xxd installation may have failed on {node.ip}")
+            finally:
+                shell.disconnect()
 
     def tearDown(self):
         # Best-effort restore of query admin settings so subsequent tests start clean.
@@ -368,6 +412,34 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
         self.log.warning(
             f"[history] No local_request_log.* archives after {MAX_ITER} iters; continuing"
         )
+
+    def _dispatch_background_query_batch(self, select_queries, query_nodes,
+                                          workers=5):
+        """Run select_queries x query_nodes concurrently in a background thread.
+
+        Returns the thread so callers can join it. Failures inside individual
+        queries are swallowed — these batches are load generators, not assertions.
+        Ported from n1ql_encryption_at_rest._dispatch_background_query_batch.
+        """
+        queries_list = list(select_queries)
+        nodes = list(query_nodes)
+        pairs = [(q, n) for n in nodes for q in queries_list]
+
+        def _runner():
+            with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+                futures = [
+                    pool.submit(self.run_cbq_query, query=q, server=n, verbose=False)
+                    for q, n in pairs
+                ]
+                for f in concurrent.futures.as_completed(futures):
+                    try:
+                        f.result()
+                    except Exception as e:
+                        self.log.debug(f"[bg-query] failed: {e}")
+
+        t = threading.Thread(target=_runner, daemon=True, name="bg-query-batch")
+        t.start()
+        return t
 
     def _trigger_ffdc_and_poll(self, query_nodes, expected_key_ids=None, label=""):
         """Trigger FFDC on every query node, poll up to 180s for files to appear.
@@ -1588,7 +1660,17 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
 
         # 5c. Generate completed-requests / history / spill files.
         self.log.info("[post-upgrade] 5c: Generating new query artifacts")
-        self._generate_completed_requests_and_history(query_nodes, all_queries)
+        self._set_query_completed_settings(stream_size=500, threshold=0)
+        self.log.info("[post-upgrade] 5c: Running 5-minute background query load to fill rlstream...")
+        bg_thread = self._dispatch_background_query_batch(
+            all_queries, query_nodes, workers=5
+        )
+        self.sleep(300, "Running background queries for 5 minutes")
+        bg_thread.join(timeout=30)
+        self.log.info("[post-upgrade] 5c: Background load complete, setting completed-threshold=720000...")
+        self._set_query_completed_settings(stream_size=500, threshold=720000)
+        self.sleep(720, "Waiting 12 minutes for local_request_log.* files to be created")
+        self.log.info("[post-upgrade] 5c: Wait complete - local_request_log.* should be created")
         if namespaces:
             self._run_spill_and_backfill_workload(query_nodes, namespaces[0])
 
@@ -1735,9 +1817,16 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
         # STEP 3: Query settings + drive workload to produce rlstream + history + spill + FFDC
         self.log.info("[STEP 3] Driving pre-upgrade query workload")
         self._set_query_completed_settings(stream_size=500, threshold=0)
-        self._generate_completed_requests_and_history(
-            query_nodes_initial, baseline_queries,
+        self.log.info("[STEP 3] Running 5-minute background query load to fill rlstream...")
+        bg_thread = self._dispatch_background_query_batch(
+            baseline_queries, query_nodes_initial, workers=5
         )
+        self.sleep(300, "Running background queries for 5 minutes")
+        bg_thread.join(timeout=30)
+        self.log.info("[STEP 3] Background load complete, setting completed-threshold=720000...")
+        self._set_query_completed_settings(stream_size=500, threshold=720000)
+        self.sleep(720, "Waiting 12 minutes for local_request_log.* files to be created")
+        self.log.info("[STEP 3] Wait complete - local_request_log.* should be created")
         self._run_spill_and_backfill_workload(query_nodes_initial, namespaces[0])
         pre_query_keys = (
             self._get_query_in_use_key_ids() if self.initial_supports_file_ear else {}

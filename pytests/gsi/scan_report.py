@@ -70,6 +70,7 @@ class Scan_Report(FileBasedRebalance):
         self.skip_default = self.input.param("skip_default", True)
         self.use_python_sdk = self.input.param("use_python_sdk", False)
         self.log_query_response = self.input.param("log_query_response", False)
+        self.no_limit = self.input.param("no_limit", False)
         self.encoder = SentenceTransformer(self.data_model, device="cpu")
         self.encoder.cpu()
         self.gsi_util_obj.set_encoder(encoder=self.encoder)
@@ -957,6 +958,13 @@ class Scan_Report(FileBasedRebalance):
             self.log.info(f"Inducing DGM with index resident ratio: {index_resident_ratio}")
             time.sleep(120)
             self.load_until_index_dgm(resident_ratio=index_resident_ratio,use_magma_loader=True)
+        if self.no_limit:
+            limit_pattern = re.compile(r'\s+LIMIT\s+\d+\s*;?\s*$', re.IGNORECASE)
+            stripped_selects = [limit_pattern.sub('', q).rstrip().rstrip(';') for q in scalar_selects]
+            for original, stripped in zip(scalar_selects, stripped_selects):
+                if original != stripped:
+                    self.log.info(f"Stripped LIMIT clause: '{original}' -> '{stripped}'")
+            scalar_selects = stripped_selects
         query_groups = [
             {"name": "scalar", "queries": scalar_selects , "index_names": scalar_index_names },
         ]

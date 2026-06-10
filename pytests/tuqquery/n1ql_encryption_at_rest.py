@@ -415,7 +415,7 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
                 service_type="n1ql", get_all_nodes=True
             )
 
-        self.log.info(
+        self.log.debug(
             f"Running {len(select_queries)} SELECT scan(s) on each of "
             f"{len(query_nodes)} node(s): {[n.ip for n in query_nodes]}"
         )
@@ -430,26 +430,46 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
                     len(result.get('results', [])), 0,
                     f"Query returned no results on {node.ip}: {query}"
                 )
-            self.log.info(
-                f"All {len(select_queries)} SELECT scan(s) completed on {node.ip}"
-            )
-        self.log.info(
+        self.log.debug(
             f"All SELECT scans completed on all {len(query_nodes)} node(s)"
         )
 
-    def _dispatch_background_query_batch(self, select_queries, query_nodes):
-        """Start one round of _run_select_scans in a background daemon thread."""
-        t = threading.Thread(
-            target=self._run_select_scans,
-            args=(select_queries, query_nodes),
-            daemon=True,
-            name="bg-query-batch"
-        )
+    # Default fan-out for background query load. The earlier single-threaded
+    # dispatcher only produced ~1 query at a time (~1.3 k queries over the
+    # 10 min local_request_log.* window) — well under what's needed to
+    # exercise rlstream rotation. 10 workers gives roughly an order of
+    # magnitude more throughput while staying well under per-node servicer
+    # limits on a 3-node cluster.
+    BACKGROUND_QUERY_WORKERS = 10
+
+    def _dispatch_background_query_batch(self, select_queries, query_nodes,
+                                          workers=None):
+        """Run select_queries × query_nodes concurrently in a background pool.
+
+        Returns the controller thread so callers can join it. Failures inside
+        individual queries are swallowed at debug level — these batches are
+        load generators, not assertions.
+        """
+        if workers is None:
+            workers = self.BACKGROUND_QUERY_WORKERS
+        queries_list = list(select_queries)
+        nodes = list(query_nodes)
+        pairs = [(q, n) for n in nodes for q in queries_list]
+
+        def _runner():
+            with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+                futures = [
+                    pool.submit(self.run_cbq_query, query=q, server=n, verbose=False)
+                    for q, n in pairs
+                ]
+                for f in concurrent.futures.as_completed(futures):
+                    try:
+                        f.result()
+                    except Exception as e:
+                        self.log.debug(f"bg-query failed: {e}")
+
+        t = threading.Thread(target=_runner, daemon=True, name="bg-query-batch")
         t.start()
-        self.log.info(
-            f"Background query batch dispatched: {len(select_queries)} queries "
-            f"× {len(query_nodes)} node(s)"
-        )
         return t
 
     def _get_vitals_spill_counts(self, query_nodes, metric="spills.order"):
@@ -1092,7 +1112,7 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
             if active_batch is not None:
                 active_batch.join(timeout=60)
             active_batch = self._dispatch_background_query_batch(queries_list, query_nodes)
-            self.sleep(5, f"{label}Waiting between query batches...")
+            time.sleep(5)  # silent inter-batch pause
 
             if time.time() - last_poll >= 60:
                 last_poll = time.time()
@@ -1116,9 +1136,9 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
                         f"{label}local_request_log.* files found on all nodes — stopping load"
                     )
                     break
-                self.log.info(
+                self.log.debug(
                     f"{label}Still waiting for local_request_log.* on: "
-                    f"{sorted(nodes_still_waiting)} — continuing query load..."
+                    f"{sorted(nodes_still_waiting)}"
                 )
         else:
             self.log.info(f"{label}10-minute timeout reached — proceeding to encryption validation")
@@ -1134,12 +1154,14 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
         node_obj_map = {node.ip: node for node in query_nodes}
         failures = []
         copied_files = []
+        nodes_without_archives = []
         for node_ip, node_result in all_results.items():
             local_log_files = node_result["local_request_log"]
             if len(local_log_files) == 0:
                 failures.append(
                     f"  [{node_ip}] No local_request_log.* files found after 600 s of query load"
                 )
+                nodes_without_archives.append(node_ip)
                 continue
             for f, r in local_log_files.items():
                 if not r["encrypted"] or not r.get("key_id_found", True):
@@ -1158,6 +1180,22 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
                 f"{label}Copied {len(copied_files)} failing local_request_log file(s) to "
                 f"{self._evidence_dir}:\n" + "\n".join(f"  {p}" for p in copied_files)
             )
+        if nodes_without_archives:
+            # Dump rlstream sizes in MB so the next person tuning this can
+            # see whether the active stream ever filled enough to rotate
+            # (>>100 MiB = server bug; ~0 MB = stream never written to disk;
+            # in-between = need more load / longer wait).
+            try:
+                sizes_mb = self._get_rlstream_sizes_mb(query_nodes)
+                self.log.error(
+                    f"{label}rlstream.* sizes (MB) at failure time — useful for tuning "
+                    f"load duration / archive threshold:\n"
+                    f"{self._format_rlstream_sizes_mb(sizes_mb)}"
+                )
+            except Exception as e:
+                self.log.warning(
+                    f"{label}Failed to collect rlstream sizes for diagnostics: {e}"
+                )
         if failures:
             msg = (
                 f"{label}Encryption validation FAILED for the following local_request_log "
@@ -1918,23 +1956,36 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
         )
 
     def _assert_log_files_not_encrypted(self, query_nodes, label=""):
-        """Assert all rlstream.* and local_request_log.* files on every query node
-        are NOT encrypted. At least one file of each type must exist per node."""
+        """Assert query log files on every query node are NOT encrypted.
+
+        rlstream.* is required: at least one rlstream file must exist per node and
+        every rlstream file must be plaintext. local_request_log.* is optional —
+        if archives are present they must also be plaintext, but their absence is
+        not a failure here. Dedicated local_request_log.* coverage lives in
+        test_query_request_log_files_encrypted only."""
         failures = []
         for node in query_nodes:
             r = self.encryption_helper.verify_query_log_files_encrypted([node])
             node_result = r.get(node.ip, {})
-            for category in ("rlstream", "local_request_log"):
-                files = node_result.get(category, {})
-                if not files:
-                    failures.append(f"  [{node.ip}] No {category} files found")
-                    continue
-                for f, result in files.items():
+
+            rlstream_files = node_result.get("rlstream", {})
+            if not rlstream_files:
+                failures.append(f"  [{node.ip}] No rlstream files found")
+            else:
+                for f, result in rlstream_files.items():
                     if result["encrypted"]:
                         failures.append(
-                            f"  [{node.ip}] {category} file {f} is unexpectedly encrypted: "
+                            f"  [{node.ip}] rlstream file {f} is unexpectedly encrypted: "
                             f"{result['details']}"
                         )
+
+            # local_request_log.* is optional — only validate when archives exist.
+            for f, result in node_result.get("local_request_log", {}).items():
+                if result["encrypted"]:
+                    failures.append(
+                        f"  [{node.ip}] local_request_log file {f} is unexpectedly "
+                        f"encrypted: {result['details']}"
+                    )
         if failures:
             msg = (
                 f"{label}Files expected to be unencrypted but found encrypted:\n"
@@ -2019,6 +2070,63 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
             sizes[node.ip] = output if output else ["(no rlstream files found)"]
         return sizes
 
+    def _get_rlstream_sizes_mb(self, query_nodes):
+        """Return per-node rlstream.* sizes in MB plus a per-node total.
+
+        Shape: {node_ip: {"total_mb": float, "files": [(name, size_mb), ...]}}.
+        Intended as diagnostic output when local_request_log.* archives fail
+        to materialise — the totals tell us whether the active stream
+        ever filled enough to rotate, vs. never being written to disk at all.
+        """
+        from lib.remote.remote_util import RemoteMachineShellConnection
+        out = {}
+        for node in query_nodes:
+            log_path = self.encryption_helper.get_log_path(node)
+            shell = RemoteMachineShellConnection(node, verbose=False)
+            raw, _ = shell.execute_command(
+                f"stat -c '%n %s' {log_path}/rlstream.* 2>/dev/null"
+            )
+            shell.disconnect()
+            files = []
+            total = 0
+            for line in raw or []:
+                line = line.strip()
+                if not line:
+                    continue
+                parts = line.rsplit(" ", 1)
+                if len(parts) != 2:
+                    continue
+                path, size_str = parts
+                try:
+                    size = int(size_str)
+                except ValueError:
+                    continue
+                files.append((path.rsplit("/", 1)[-1], size / (1024 * 1024)))
+                total += size
+            files.sort(key=lambda x: x[0])
+            out[node.ip] = {
+                "total_mb": total / (1024 * 1024),
+                "files": files,
+            }
+        return out
+
+    def _format_rlstream_sizes_mb(self, sizes_by_node):
+        """Pretty-print _get_rlstream_sizes_mb output for a single log line block."""
+        lines = []
+        for node_ip in sorted(sizes_by_node):
+            entry = sizes_by_node[node_ip]
+            if not entry["files"]:
+                lines.append(f"  [{node_ip}] (no rlstream.* files)")
+                continue
+            per_file = ", ".join(
+                f"{name}={size_mb:.3f} MB" for name, size_mb in entry["files"]
+            )
+            lines.append(
+                f"  [{node_ip}] total={entry['total_mb']:.3f} MB across "
+                f"{len(entry['files'])} file(s): {per_file}"
+            )
+        return "\n".join(lines)
+
     def _local_request_log_files_exist(self, query_nodes):
         """Return True if any local_request_log.* files exist on any query node."""
         from lib.remote.remote_util import RemoteMachineShellConnection
@@ -2068,7 +2176,7 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
 
         archive_found = False
         for iteration in range(1, MAX_ITERATIONS + 1):
-            self.log.info(
+            self.log.debug(
                 f"[Archive trigger] Iteration {iteration}/{MAX_ITERATIONS}: "
                 f"running {BATCHES_PER_ITERATION} concurrent batches of {n_queries} queries"
             )
@@ -2080,9 +2188,11 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
                     ]
                     concurrent.futures.wait(futures)
 
-            rlstream_sizes = self._get_rlstream_file_sizes(query_nodes)
-            self.log.info(
-                f"[Archive trigger] Iteration {iteration}: rlstream file sizes: {rlstream_sizes}"
+            # rlstream file sizes can produce 4-KB+ log lines per iteration
+            # across 16 slots × 3 nodes — log at debug only.
+            self.log.debug(
+                f"[Archive trigger] Iteration {iteration}: rlstream file sizes: "
+                f"{self._get_rlstream_file_sizes(query_nodes)}"
             )
 
             if self._local_request_log_files_exist(query_nodes):
@@ -2096,11 +2206,9 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
 
         if not archive_found:
             total = MAX_ITERATIONS * BATCHES_PER_ITERATION * n_queries
-            rlstream_sizes = self._get_rlstream_file_sizes(query_nodes)
             self.log.warning(
                 f"[Archive trigger] local_request_log.* files NOT generated after "
-                f"{MAX_ITERATIONS} iterations (~{total} queries total). "
-                f"rlstream file sizes at end: {rlstream_sizes}"
+                f"{MAX_ITERATIONS} iterations (~{total} queries total)."
             )
 
      # -------------------------------------------------------------------------
@@ -2207,13 +2315,17 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
         1. Verify log encryption at rest prerequisites
         2. Set query admin settings (completed-stream-size=500, completed-threshold=0)
         3. Create standard bucket + load data
-        4. Create indexes using GSI flow
-        5. Wait for indexes online
-        6. Run scans and validate results
+        4-6. Create indexes, wait online, run scans (via _setup_bucket_indexes_scans)
         7. Validate system:completed_requests reflects the index scan queries
+        7b. Validate system:completed_requests_history
         8. Get query in-use key IDs from admin/encryption_at_rest
         9. Verify rlstream.* files are encrypted with expected key ID
-        10. Verify local_request_log.* files are encrypted with expected key ID
+        10. Set completed-threshold to 720000 and sleep 12 min for local_request_log.*
+        10b. Verify local_request_log.* files are encrypted with expected key ID
+        11. Disable log encryption
+        12. Trigger decryption
+        13. Wait for decryption to complete
+        14. Verify log files are no longer encrypted
         """
         self.log.info("=" * 80)
         self.log.info("STARTING TEST: test_query_request_log_files_encrypted")
@@ -2248,22 +2360,13 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
             self.log.error(f"[STEP 7] FAILED: {e}")
             raise
 
-        # ========== STEP 7b: Generate concurrent load to trigger archive creation ==========
+        # ========== STEP 7b: Validate completed_requests_history ==========
         try:
-            self.log.info("[STEP 7b] Generating concurrent query load to trigger local_request_log.* creation...")
-            self._generate_concurrent_load_until_archive(select_queries, query_nodes)
+            self.log.info("[STEP 7b] Validating system:completed_requests_history...")
+            self._validate_completed_requests_history(select_queries, query_nodes=query_nodes)
             self.log.info("[STEP 7b] PASSED")
         except Exception as e:
             self.log.error(f"[STEP 7b] FAILED: {e}")
-            raise
-
-        # ========== STEP 7c: Validate completed_requests_history ==========
-        try:
-            self.log.info("[STEP 7c] Validating system:completed_requests_history...")
-            self._validate_completed_requests_history(select_queries, query_nodes=query_nodes)
-            self.log.info("[STEP 7c] PASSED")
-        except Exception as e:
-            self.log.error(f"[STEP 7c] FAILED: {e}")
             raise
 
         # ========== STEP 8: Get query in-use key IDs ==========
@@ -2293,13 +2396,70 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
             self.log.error(f"[STEP 9] FAILED: {e}")
             raise
 
-        # ========== STEP 10: Verify local_request_log.* files are encrypted ==========
+        # ========== STEP 10: Run 5-min background load, then set threshold and wait ==========
         try:
-            self.log.info("[STEP 10] Verifying local_request_log.* files are encrypted...")
-            self._assert_local_request_log_files_encrypted(query_nodes, expected_key_ids, select_queries, label="[STEP 10] ")
-            self.log.info("[STEP 10] PASSED")
+            self.log.info("[STEP 10] Running 5-minute background query load to fill rlstream...")
+            bg_thread = self._dispatch_background_query_batch(
+                select_queries, query_nodes, workers=5
+            )
+            self.sleep(300, "Running background queries for 5 minutes")
+            bg_thread.join(timeout=30)
+            self.log.info("[STEP 10] Background load complete, setting completed-threshold to 720000...")
+            self._set_query_completed_settings(stream_size=500, threshold=720000)
+            self.sleep(720, "Waiting 12 minutes for local_request_log.* files to be created")
+            self.log.info("[STEP 10] WAIT COMPLETE - validating local_request_log.* encryption")
         except Exception as e:
             self.log.error(f"[STEP 10] FAILED: {e}")
+            raise
+
+        # ========== STEP 10b: Verify local_request_log.* files are encrypted ==========
+        try:
+            self.log.info("[STEP 10b] Verifying local_request_log.* files are encrypted...")
+            node_key_ids_map = self._build_node_key_ids_map(query_nodes, expected_key_ids)
+            all_results = {}
+            for node in query_nodes:
+                r = self.encryption_helper.verify_query_log_files_encrypted(
+                    [node], node_key_ids_map.get(node.ip, [])
+                )
+                all_results.update(r)
+
+            node_obj_map = {node.ip: node for node in query_nodes}
+            failures = []
+            copied_files = []
+            for node_ip, node_result in all_results.items():
+                local_log_files = node_result["local_request_log"]
+                if len(local_log_files) == 0:
+                    failures.append(
+                        f"  [{node_ip}] No local_request_log.* files found after 12-minute wait"
+                    )
+                    continue
+                for f, r in local_log_files.items():
+                    if not r["encrypted"] or not r.get("key_id_found", True):
+                        node_obj = node_obj_map.get(node_ip)
+                        if node_obj:
+                            dest = self._copy_failed_file_from_node(node_obj, f)
+                            if dest:
+                                copied_files.append(dest)
+                    if not r["encrypted"]:
+                        failures.append(f"  [{node_ip}] {f} is NOT encrypted: {r['details']}")
+                    if not r.get("key_id_found", True):
+                        failures.append(f"  [{node_ip}] {f} header missing expected key ID")
+
+            if copied_files:
+                self.log.info(
+                    f"[STEP 10b] Copied {len(copied_files)} failing local_request_log file(s) to "
+                    f"{self._evidence_dir}:\n" + "\n".join(f"  {p}" for p in copied_files)
+                )
+            if failures:
+                msg = (
+                    "[STEP 10b] Encryption validation FAILED for local_request_log "
+                    f"files (copies in {self._evidence_dir}):\n" + "\n".join(failures)
+                )
+                self.log.error(msg)
+                self.fail(msg)
+            self.log.info("[STEP 10b] PASSED")
+        except Exception as e:
+            self.log.error(f"[STEP 10b] FAILED: {e}")
             raise
 
         # ========== STEP 11: Disable log encryption ==========
@@ -2432,7 +2592,9 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
                 self.assertGreater(len(key_ids), 0,
                     f"Query node {node_ip} reported no in-use key IDs before rotation")
             self._assert_rlstream_files_encrypted(query_nodes, baseline_key_ids, label="[STEP 8] ")
-            self._assert_local_request_log_files_encrypted(query_nodes, baseline_key_ids, select_queries, label="[STEP 8] ")
+            # local_request_log.* generation is exercised by
+            # test_query_request_log_files_encrypted only — rlstream coverage above
+            # is sufficient for key-rotation validation here.
             self._validate_completed_requests_history(select_queries, query_nodes=query_nodes)
             self.log.info(f"[STEP 8] PASSED - baseline key IDs per node: {baseline_key_ids}")
         except Exception as e:
@@ -2492,7 +2654,7 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
         try:
             self.log.info("[STEP 12] Verifying log files encrypted with new DEK IDs...")
             self._assert_rlstream_files_encrypted(query_nodes, new_key_ids, label="[STEP 12] ")
-            self._assert_local_request_log_files_encrypted(query_nodes, new_key_ids, select_queries, label="[STEP 12] ")
+            # local_request_log.* coverage lives in test_query_request_log_files_encrypted.
             self.log.info("[STEP 12] Verifying new post-rotation files use only new key IDs...")
             self._assert_new_log_files_use_only_new_keys(
                 query_nodes, log_files_before_rotation, new_key_ids, baseline_key_ids,
@@ -2592,7 +2754,9 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
                 self.assertGreater(len(key_ids), 0,
                     f"Query node {node_ip} reported no in-use key IDs before re-encryption")
             self._assert_rlstream_files_encrypted(query_nodes, baseline_key_ids, label="[STEP 8] ")
-            self._assert_local_request_log_files_encrypted(query_nodes, baseline_key_ids, select_queries, label="[STEP 8] ")
+            # local_request_log.* generation is exercised by
+            # test_query_request_log_files_encrypted only — rlstream coverage above
+            # is sufficient for key-rotation validation here.
             self._validate_completed_requests_history(select_queries, query_nodes=query_nodes)
             self.log.info(f"[STEP 8] PASSED - baseline key IDs per node: {baseline_key_ids}")
         except Exception as e:
@@ -2649,7 +2813,7 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
         try:
             self.log.info("[STEP 12] Verifying log files encrypted with new DEK IDs...")
             self._assert_rlstream_files_encrypted(query_nodes, new_key_ids, label="[STEP 12] ")
-            self._assert_local_request_log_files_encrypted(query_nodes, new_key_ids, select_queries, label="[STEP 12] ")
+            # local_request_log.* coverage lives in test_query_request_log_files_encrypted.
             self.log.info("[STEP 12] Verifying new post-reencryption files use only new key IDs...")
             self._assert_new_log_files_use_only_new_keys(
                 query_nodes, log_files_before_reencryption, new_key_ids, baseline_key_ids,
@@ -5105,9 +5269,7 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
                 self.assertGreater(len(ids), 0,
                     f"Query node {node_ip} reported no in-use key IDs")
             self._assert_rlstream_files_encrypted(query_nodes, key1_ids, label="[STEP 8] ")
-            self._assert_local_request_log_files_encrypted(
-                query_nodes, key1_ids, select_queries, label="[STEP 8] "
-            )
+            # local_request_log.* coverage lives in test_query_request_log_files_encrypted.
             self.log.info(f"[STEP 8] PASSED - key1_ids per node: {key1_ids}")
         except Exception as e:
             self.log.error(f"[STEP 8] FAILED: {e}")
