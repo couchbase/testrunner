@@ -1473,13 +1473,40 @@ class FTSIndex:
     def get_num_mutations_to_index(self, rest=None):
         if not rest:
             rest = RestConnection(self.__cluster.get_random_fts_node())
-        name = self.name
-        if self.is_elixir:
-            name = self._source_name + self.scope + self.name
-        status, stat_value = rest.get_fts_stats(index_name=name,
-                                                bucket_name=self._source_name,
-                                                stat_name='num_mutations_to_index')
-        return stat_value
+
+        # Couchbase 8.x keys scoped FTS stats as "{bucket}.{scope}.{index}:{stat}"
+        # rather than the legacy "{bucket}:{index}:{stat}". Fetch the full blob
+        # once and probe both shapes (plus a regex fallback) instead of letting
+        # get_fts_stats burn 5 retries on a wrong-format key.
+        status, raw = rest.get_fts_stats()
+        if not status:
+            self.__log.warning(
+                f"Could not fetch fts nsstats for {self.name}, assuming 0 mutations")
+            return 0
+        try:
+            parsed = json.loads(raw) if isinstance(raw, (str, bytes, bytearray)) else raw
+        except Exception as e:
+            self.__log.warning(f"Failed to parse nsstats for {self.name}: {e}")
+            return 0
+
+        candidates = []
+        if self.scope:
+            candidates.append(
+                f"{self._source_name}.{self.scope}.{self.name}:num_mutations_to_index")
+        candidates.append(
+            f"{self._source_name}:{self.name}:num_mutations_to_index")
+        for key in candidates:
+            if key in parsed:
+                return parsed[key]
+        # Last-resort scan — any key for this index ending in num_mutations_to_index
+        suffix = ":num_mutations_to_index"
+        for key, val in parsed.items():
+            if key.endswith(suffix) and self.name in key and self._source_name in key:
+                return val
+
+        self.__log.warning(
+            f"Could not find num_mutations_to_index stat for index {self.name}, assuming 0")
+        return 0
 
     def get_src_bucket_doc_count(self):
         return self.__cluster.get_doc_count_in_bucket(self.source_bucket)
@@ -2220,6 +2247,7 @@ class CouchbaseCluster:
         self.__fts_nodes = []
         self.__n1ql_nodes = []
         self.__non_fts_nodes = []
+        self.__kv_nodes = []
         if not CbServer.capella_run:
             service_map = RestConnection(self.__master_node).get_nodes_services()
         else:
@@ -3563,7 +3591,7 @@ class CouchbaseCluster:
         for remove_node in to_remove_node:
             node_services = remove_node.services.split(",")
 
-            if "kv" in node_services:
+            if "kv" in node_services and remove_node in self.__kv_nodes:
                 self.__kv_nodes.remove(remove_node)
 
         if master:
@@ -3863,7 +3891,7 @@ class CouchbaseCluster:
         [self.__nodes.remove(node) for node in self.__fail_over_nodes]
         for node in self.__fail_over_nodes:
             node_services = node.services.split(",")
-            if "kv" in node_services:
+            if "kv" in node_services and node in self.__kv_nodes:
                 self.__kv_nodes.remove(node)
         self.__fail_over_nodes = []
 
@@ -5328,12 +5356,12 @@ class FTSBaseTest(unittest.TestCase):
             if item_count == None:
                 while True and retry_mut_count:
                     num_mutations_to_index = index.get_num_mutations_to_index()
-                    if num_mutations_to_index > 0:
+                    if num_mutations_to_index is None or num_mutations_to_index > 0:
                         self.sleep(5, f"num_mutations_to_index: {num_mutations_to_index} > 0")
                         retry_mut_count -= 1
                     else:
                         break
-                if num_mutations_to_index > 0:
+                if num_mutations_to_index is None or num_mutations_to_index > 0:
                     self.fail(f"num_mutations_to_index: {num_mutations_to_index} > 0 even after 20 retries")
 
     def construct_plan_params(self):

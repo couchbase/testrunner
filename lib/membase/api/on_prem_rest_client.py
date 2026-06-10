@@ -3028,6 +3028,8 @@ class RestConnection(object):
             time.sleep(1)
         log.error("ERROR: Stat {0} error on {1} on bucket {2}".
                   format(stat_name, index_name, bucket_name))
+        return False, None
+
     def get_specific_nsstats(self, node, creds):
         try:
             endpoint = f"https://{node}:18094/api/nsstats"
