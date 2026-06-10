@@ -453,3 +453,68 @@ class FTSEncryptionBaseTest(FTSBaseTest):
             f"(embedded key-id form may differ -- best-effort check)"
         )
         return False
+
+    # ==================================================================
+    # Rebalance / failover helpers
+    # ==================================================================
+    def _free_server(self):
+        """Return an ini server that is NOT currently in the cluster (for rebalance-in)."""
+        in_cluster = {s.ip for s in self._cb_cluster.get_nodes()}
+        for server in self._input.servers:
+            if server.ip not in in_cluster:
+                return server
+        return None
+
+    def _bucket_dek_on_node(self, node, bucket_name=None):
+        """Per-node GetInUseKeys DEK ids for a bucket.
+
+        Best-effort: returns [] (and logs) if the endpoint isn't present yet, so the
+        rebalance/failover tests can still run their segment/count/query validations on
+        builds without the GetInUseKeys endpoint. Becomes a hard assertion in the caller
+        once the endpoint build is available.
+        """
+        bucket_name = bucket_name or self.default_bucket_name
+        try:
+            merged = self.encryption_helper.get_fts_in_use_keys([node])
+            return self.encryption_helper.fts_dek_ids_for_bucket(merged, self._bucket_uuid(bucket_name))
+        except Exception as err:
+            self.log.warning(
+                f"per-node GetInUseKeys on {node.ip} failed (endpoint not in this build yet?): {err}"
+            )
+            return []
+
+    def _post_topology_validation(self, label, baseline_hits=None, index=None):
+        """Common post-rebalance/failover validation.
+
+        Indexing settles, partitions stay balanced, doc counts reconcile with the bucket,
+        all current FTS nodes' segments are encrypted, and (optionally) hit count is
+        unchanged vs a captured baseline.
+        """
+        self.wait_for_indexing_complete()
+        for idx in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(idx)
+        self.validate_index_count(equal_bucket_doc_count=True)
+        self._validate_segments_encrypted(self._cb_cluster.get_fts_nodes(), label)
+        if baseline_hits is not None and index is not None:
+            self.assertEqual(self._match_all_hits(index), baseline_hits,
+                             f"{label}: hit count changed (expected {baseline_hits})")
+
+    def _run_queries_no_error(self, index, duration_s=60, label=""):
+        """Query the index repeatedly for duration_s; assert none of them error.
+
+        Used during a concurrent operation (rebalance/rotation) where exact hit counts
+        may transiently vary, but queries must never fail. Exact-count is asserted
+        afterward by _post_topology_validation.
+        """
+        errors = []
+        deadline = time.time() + duration_s
+        attempts = 0
+        while time.time() < deadline:
+            attempts += 1
+            try:
+                self._match_all_hits(index, zero_ok=True)
+            except Exception as err:
+                errors.append(str(err))
+            self.sleep(5, f"{label}querying during concurrent operation")
+        self.log.info(f"{label}ran {attempts} queries during operation; errors={errors}")
+        self.assertEqual(errors, [], f"{label}queries errored during concurrent operation: {errors}")

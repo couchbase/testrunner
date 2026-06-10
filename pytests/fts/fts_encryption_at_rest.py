@@ -585,3 +585,208 @@ class FTSEncryptionAtRest(FTSEncryptionBaseTest):
             f"TEST PASSED: test_fts_ear_getinusekeys_during_boot "
             f"(boot-window error observed={boot_error_seen})"
         )
+
+    # ==================================================================
+    # Rebalance / failover under encryption (R-A topology, R-B failover)
+    # FTS uses file-transfer rebalance: partitions (encrypted) move with their KEK,
+    # the receiver ImportKeys; we validate segments stay encrypted, counts/queries
+    # hold, and (best-effort until the GetInUseKeys build lands) the receiving node
+    # reports the bucket DEK in use.
+    # ==================================================================
+    def test_fts_ear_rebalance_in(self):
+        """Rebalance an FTS node IN; moved partitions stay encrypted on the new node."""
+        self._require_encryption_enabled()
+        self.load_data(num_items=self._num_items)
+        index = self._create_default_index("fts_ear_rebin_idx")
+        baseline_hits = self._match_all_hits(index)
+        self.assertGreater(baseline_hits, 0, "no hits before rebalance-in")
+        self._validate_segments_encrypted(self._cb_cluster.get_fts_nodes(), "segments(before-rebalance-in)")
+
+        spare = self._free_server()
+        self.assertIsNotNone(spare, "no free server available to rebalance in (need a spare node in the ini)")
+        self.log.info(f"Rebalancing in FTS node {spare.ip}")
+        self._cb_cluster.rebalance_in_node(nodes_in=[spare], services=["fts"])
+
+        self._post_topology_validation("segments(after-rebalance-in)", baseline_hits, index)
+        # FTS file-transfer rebalance copies the KEK; the receiver ImportKeys -> the new
+        # node should report the bucket DEK in use (hard assert once the endpoint lands).
+        new_node_deks = self._bucket_dek_on_node(spare)
+        self.log.info(f"new node {spare.ip} in-use DEKs (best-effort): {new_node_deks}")
+        self.log.info("TEST PASSED: test_fts_ear_rebalance_in")
+
+    def test_fts_ear_rebalance_out(self):
+        """Rebalance an FTS node OUT; partitions relocate and stay encrypted, no data loss."""
+        self._require_encryption_enabled()
+        self.load_data(num_items=self._num_items)
+        index = self._create_default_index("fts_ear_rebout_idx")
+        baseline_hits = self._match_all_hits(index)
+        fts_nodes = self._cb_cluster.get_fts_nodes()
+        self.assertGreaterEqual(len(fts_nodes), 2, "need >=2 FTS nodes to rebalance one out")
+        self._validate_segments_encrypted(fts_nodes, "segments(before-rebalance-out)")
+
+        out_node = fts_nodes[-1]   # non-master FTS node
+        self.log.info(f"Rebalancing out FTS node {out_node.ip}")
+        self._cb_cluster.rebalance_out_node(node=out_node)
+
+        self._post_topology_validation("segments(after-rebalance-out)", baseline_hits, index)
+        self.log.info("TEST PASSED: test_fts_ear_rebalance_out")
+
+    def test_fts_ear_swap_rebalance(self):
+        """Swap-rebalance an FTS node; data stays encrypted on the swapped-in node."""
+        self._require_encryption_enabled()
+        self.load_data(num_items=self._num_items)
+        index = self._create_default_index("fts_ear_swap_idx")
+        baseline_hits = self._match_all_hits(index)
+        self.assertIsNotNone(self._free_server(), "no free server available to swap in")
+        self._validate_segments_encrypted(self._cb_cluster.get_fts_nodes(), "segments(before-swap)")
+
+        self.log.info("Swap-rebalancing an FTS node")
+        self._cb_cluster.swap_rebalance(services=["fts"], num_nodes=1)
+
+        self._post_topology_validation("segments(after-swap)", baseline_hits, index)
+        self.log.info("TEST PASSED: test_fts_ear_swap_rebalance")
+
+    def test_fts_ear_hard_failover_full_recovery(self):
+        """Hard failover an FTS node, add back with FULL recovery; reindexed data encrypted."""
+        self._require_encryption_enabled()
+        self.load_data(num_items=self._num_items)
+        index = self._create_default_index("fts_ear_failover_full_idx")
+        fts_nodes = self._cb_cluster.get_fts_nodes()
+        self.assertGreaterEqual(len(fts_nodes), 2, "need >=2 FTS nodes for failover")
+        baseline_hits = self._match_all_hits(index)
+        self._validate_segments_encrypted(fts_nodes, "segments(before-hard-failover)")
+
+        fo_node = fts_nodes[-1]
+        self.log.info(f"Hard failover of FTS node {fo_node.ip}")
+        task = self._cb_cluster.async_failover(node=fo_node, graceful=False)
+        task.result()
+        self.log.info("Adding node back with FULL recovery")
+        self._cb_cluster.add_back_node(recovery_type='full', services=["fts"])
+
+        self._post_topology_validation("segments(after-full-recovery)", baseline_hits, index)
+        self.log.info("TEST PASSED: test_fts_ear_hard_failover_full_recovery")
+
+    def test_fts_ear_graceful_failover_delta_recovery(self):
+        """Graceful failover an FTS node, add back with DELTA recovery; data encrypted, no loss."""
+        self._require_encryption_enabled()
+        self.load_data(num_items=self._num_items)
+        index = self._create_default_index("fts_ear_failover_delta_idx")
+        fts_nodes = self._cb_cluster.get_fts_nodes()
+        self.assertGreaterEqual(len(fts_nodes), 2, "need >=2 FTS nodes for failover")
+        baseline_hits = self._match_all_hits(index)
+        self._validate_segments_encrypted(fts_nodes, "segments(before-graceful-failover)")
+
+        fo_node = fts_nodes[-1]
+        self.log.info(f"Graceful failover of FTS node {fo_node.ip}")
+        task = self._cb_cluster.async_failover(node=fo_node, graceful=True)
+        task.result()
+        self.log.info("Adding node back with DELTA recovery")
+        self._cb_cluster.add_back_node(recovery_type='delta', services=["fts"])
+
+        self._post_topology_validation("segments(after-delta-recovery)", baseline_hits, index)
+        self.log.info("TEST PASSED: test_fts_ear_graceful_failover_delta_recovery")
+
+    # ==================================================================
+    # R-C: rebalance / failover concurrent with active key rotation (test plan 10c).
+    # Novel -- GSI/eventing do these sequentially. We deliberately overlap a topology
+    # change with an in-flight rotation and assert no corruption / data loss, queries
+    # keep working, and data ends up encrypted under the right key.
+    # ==================================================================
+    def test_fts_ear_rebalance_in_during_dek_rotation(self):
+        """Rebalance an FTS node IN while a DEK rotation (force re-encryption) is in flight."""
+        self._require_encryption_enabled()
+        bucket_name = self.default_bucket_name
+        self.load_data(num_items=self._num_items)
+        index = self._create_default_index("fts_ear_rebin_rot_idx")
+        baseline_hits = self._match_all_hits(index)
+        _, baseline_deks = self._fts_in_use_deks(bucket_name)
+        self.assertTrue(baseline_deks, "no baseline DEK before concurrent rebalance-in + rotation")
+
+        spare = self._free_server()
+        self.assertIsNotNone(spare, "no free server available to rebalance in")
+
+        # Start rebalance-in async, then immediately drop DEKs so re-encryption overlaps.
+        self.log.info(f"Concurrent: rebalance-in {spare.ip} + DEK rotation (drop DEKs)")
+        reb_task = self._cb_cluster.async_rebalance_in_node(nodes_in=[spare], services=["fts"])
+        rest = RestConnection(self.master)
+        status, resp = rest.trigger_data_reencryption(bucket_name)
+        self.assertTrue(status, f"trigger_data_reencryption failed: {resp}")
+        reb_task.result()
+
+        # Both done: a new DEK must be in use; KEK unchanged.
+        new_deks = self._poll_fts_for_new_dek(bucket_name, baseline_deks, label="[rebin+dek] ")
+        kek_after = rest.get_bucket_json(bucket_name).get("encryptionAtRestKeyId")
+        self.assertEqual(kek_after, self.encryption_at_rest_id,
+                         f"KEK id changed during concurrent rebalance-in + DEK rotation: {kek_after}")
+
+        # Write under the new DEK + merge so segments reflect it, then validate.
+        self._run_emp_data_op(max(1000, self._num_items // 10), "update", start=0, end=max(1000, self._num_items // 10))
+        self._force_merge_and_wait(index.name)
+        self._post_topology_validation("segments(rebalance-in-during-dek-rotation)", baseline_hits, index)
+        self._check_dek_in_segments(self._cb_cluster.get_fts_nodes(), new_deks, label="[rebin+dek] ")
+        self.log.info("TEST PASSED: test_fts_ear_rebalance_in_during_dek_rotation")
+
+    def test_fts_ear_rebalance_out_during_kek_rotation(self):
+        """Rebalance an FTS node OUT while a KEK rotation is in flight; queries keep working."""
+        self._require_encryption_enabled()
+        bucket_name = self.default_bucket_name
+        self.load_data(num_items=self._num_items)
+        index = self._create_default_index("fts_ear_rebout_kek_idx")
+        baseline_hits = self._match_all_hits(index)
+        fts_nodes = self._cb_cluster.get_fts_nodes()
+        self.assertGreaterEqual(len(fts_nodes), 2, "need >=2 FTS nodes to rebalance one out")
+        _, baseline_deks = self._fts_in_use_deks(bucket_name)
+        self.assertTrue(baseline_deks, "no baseline DEK before concurrent rebalance-out + KEK rotation")
+
+        out_node = fts_nodes[-1]
+        # Start rebalance-out async, then immediately rotate the KEK so they overlap.
+        self.log.info(f"Concurrent: rebalance-out {out_node.ip} + KEK rotation")
+        reb_task = self._cb_cluster.async_rebalance_out_node(node=out_node)
+        rest = RestConnection(self.master)
+        status, resp = rest.trigger_kek_rotation(self.encryption_at_rest_id)
+        self.assertTrue(status, f"trigger_kek_rotation failed: {resp}")
+
+        # Queries must keep working across the concurrent window.
+        self._run_queries_no_error(index, duration_s=45, label="[rebout+kek] ")
+        reb_task.result()
+
+        # Post: encrypted, balanced, no data loss, bucket still has a DEK and no "" marker.
+        self._post_topology_validation("segments(rebalance-out-during-kek-rotation)", baseline_hits, index)
+        merged_after, deks_after = self._fts_in_use_deks(bucket_name)
+        self.assertTrue(deks_after, "no in-use DEK after concurrent rebalance-out + KEK rotation")
+        self.assertFalse(
+            self.encryption_helper.fts_has_unencrypted_marker(
+                merged_after, f"service_bucket {self._bucket_uuid(bucket_name)}"),
+            "unencrypted ('') marker present after concurrent rebalance-out + KEK rotation",
+        )
+        self.log.info("TEST PASSED: test_fts_ear_rebalance_out_during_kek_rotation")
+
+    def test_fts_ear_failover_during_rotation(self):
+        """Hard failover an FTS node while re-encryption is in flight, then recover; no loss."""
+        self._require_encryption_enabled()
+        bucket_name = self.default_bucket_name
+        self.load_data(num_items=self._num_items)
+        index = self._create_default_index("fts_ear_failover_rot_idx")
+        fts_nodes = self._cb_cluster.get_fts_nodes()
+        self.assertGreaterEqual(len(fts_nodes), 2, "need >=2 FTS nodes for failover")
+        baseline_hits = self._match_all_hits(index)
+        _, baseline_deks = self._fts_in_use_deks(bucket_name)
+        self.assertTrue(baseline_deks, "no baseline DEK before failover-during-rotation")
+
+        # Start re-encryption, then immediately fail a node over while it is in flight.
+        self.log.info("Concurrent: DEK rotation (drop DEKs) + hard failover")
+        rest = RestConnection(self.master)
+        status, resp = rest.trigger_data_reencryption(bucket_name)
+        self.assertTrue(status, f"trigger_data_reencryption failed: {resp}")
+        fo_node = fts_nodes[-1]
+        task = self._cb_cluster.async_failover(node=fo_node, graceful=False)
+        task.result()
+        self.log.info("Adding node back with FULL recovery")
+        self._cb_cluster.add_back_node(recovery_type='full', services=["fts"])
+
+        # Recovery reindexes; a new DEK should be in use, data intact and encrypted.
+        new_deks = self._poll_fts_for_new_dek(bucket_name, baseline_deks, label="[failover+rot] ")
+        self._force_merge_and_wait(index.name)
+        self._post_topology_validation("segments(failover-during-rotation)", baseline_hits, index)
+        self._check_dek_in_segments(self._cb_cluster.get_fts_nodes(), new_deks, label="[failover+rot] ")
+        self.log.info("TEST PASSED: test_fts_ear_failover_during_rotation")
