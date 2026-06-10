@@ -1,4 +1,5 @@
 from .tuq import QueryTests
+from lib.membase.helper.rbac_exclusion_helper import verify_rbac_exclusion_syntax
 from membase.api.exception import CBQError
 from membase.helper.bucket_helper import BucketOperationHelper
 from lib.collection.collections_n1ql_client import CollectionsN1QL
@@ -250,6 +251,7 @@ class QueryCollectionsEnd2EndTests(QueryTests):
         self.log.info("==============  QueryCollectionsEnd2EndTests suite_tearDown has completed ==============")
 
     def test_end_to_end(self):
+        self._verify_rbac_exclusion_n1ql()
         test_name = self.input.param("test_name", '')
         if not test_name:
             self.fail("Test name cannot be empty, please fix .conf file")
@@ -269,6 +271,49 @@ class QueryCollectionsEnd2EndTests(QueryTests):
             for error in errors:
                 self.log.info(error["message"])
         self.assertTrue(result)
+
+    def _verify_rbac_exclusion_n1ql(self):
+        rest = self.rest
+        buckets = rest.get_buckets()
+        if not buckets:
+            self.log.warning("No buckets found for RBAC exclusion test; skipping")
+            return
+        bucket_name = buckets[0].name
+        scope_name = "rbac_excl_scope"
+        allowed_col = "coll_allowed"
+        excluded_col = "coll_excluded"
+        scope_created = False
+        try:
+            rest.create_scope(bucket_name, scope_name)
+            scope_created = True
+            rest.create_collection(bucket_name, scope_name, allowed_col)
+            rest.create_collection(bucket_name, scope_name, excluded_col)
+
+            def n1ql_service_validator(u, p):
+                q = "SELECT 1 FROM `{b}`.`{s}`.`{c}` LIMIT 1"
+                result = rest.query_tool(
+                    q.format(b=bucket_name, s=scope_name, c=allowed_col),
+                    query_params={'creds': [{'user': u, 'pass': p}]})
+                self.assertEqual(result.get('status'), 'success',
+                    "N1QL SELECT on allowed collection '%s' should succeed, got: %s"
+                    % (allowed_col, result))
+                result = rest.query_tool(
+                    q.format(b=bucket_name, s=scope_name, c=excluded_col),
+                    query_params={'creds': [{'user': u, 'pass': p}]})
+                self.assertNotEqual(result.get('status'), 'success',
+                    "N1QL SELECT on excluded collection '%s' should be denied" % excluded_col)
+                self.log.info("N1QL service validation passed: SELECT enforces RBAC exclusion")
+
+            verify_rbac_exclusion_syntax(
+                self, rest, bucket_name, scope_name, allowed_col, excluded_col,
+                "n1ql", runtype=self.input.param("runtype", "default"),
+                service_validator=n1ql_service_validator)
+        finally:
+            if scope_created:
+                try:
+                    rest.delete_scope(bucket_name, scope_name)
+                except Exception:
+                    pass
 
     def _perform_end_to_end_test(self, test_data=None):
         sanity_test = self.input.param("sanity_test", False)

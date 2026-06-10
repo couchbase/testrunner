@@ -3,6 +3,7 @@ import time
 
 from .xdcrnewbasetests import XDCRNewBaseTest
 from membase.api.rest_client import RestConnection
+from lib.membase.helper.rbac_exclusion_helper import verify_rbac_exclusion_syntax
 
 from pytests.xdcr.tenK_collection_helper import TenKCollectionHelper
 
@@ -38,6 +39,61 @@ class XDCRCollectionsTests(XDCRNewBaseTest):
             self.src_rest.set_xdcr_param('default', 'default', 'collectionsMigrationMode', "true")
         except Exception as e:
             self.fail(str(e))
+        self._verify_rbac_exclusion_xdcr()
+
+    def _verify_rbac_exclusion_xdcr(self):
+        rest = self.src_rest
+        buckets = rest.get_buckets()
+        if not buckets:
+            self.log.warning("No buckets found for RBAC exclusion test; skipping")
+            return
+        bucket_name = buckets[0].name
+        scope_name = "rbac_excl_scope"
+        allowed_col = "coll_allowed"
+        excluded_col = "coll_excluded"
+        scope_created = False
+        try:
+            rest.create_scope(bucket_name, scope_name)
+            scope_created = True
+            rest.create_collection(bucket_name, scope_name, allowed_col)
+            rest.create_collection(bucket_name, scope_name, excluded_col)
+
+            def xdcr_service_validator(u, p):
+                # Call XDCR-specific REST endpoint with user creds
+                api = rest.baseUrl + "pools/default/remoteClusters"
+                status, content, _ = rest._http_request(
+                    api, 'GET', headers=rest._create_headers_with_auth(u, p))
+                self.assertTrue(status,
+                    "XDCR: GET remoteClusters should succeed with user creds, got: %s"
+                    % content)
+                perm_allowed = (
+                    "cluster.collection[{b}:{s}:{c}].xdcr.execute!write".format(
+                        b=bucket_name, s=scope_name, c=allowed_col))
+                perm_excluded = (
+                    "cluster.collection[{b}:{s}:{c}].xdcr.execute!write".format(
+                        b=bucket_name, s=scope_name, c=excluded_col))
+                result = rest.check_user_permission(
+                    u, "password", ",".join([perm_allowed, perm_excluded]))
+                self.assertTrue(result.get(perm_allowed, False),
+                    "XDCR: allowed collection '%s' should have xdcr.execute!write, "
+                    "got: %s" % (allowed_col, result))
+                self.assertFalse(result.get(perm_excluded, True),
+                    "XDCR: excluded collection '%s' should be denied "
+                    "xdcr.execute!write, got: %s" % (excluded_col, result))
+                self.log.info(
+                    "XDCR service validation passed: remoteClusters accessible "
+                    "and xdcr.execute!write exclusion verified")
+
+            verify_rbac_exclusion_syntax(
+                self, rest, bucket_name, scope_name, allowed_col, excluded_col,
+                "xdcr", runtype=self._input.param("runtype", "default"),
+                service_validator=xdcr_service_validator)
+        finally:
+            if scope_created:
+                try:
+                    rest.delete_scope(bucket_name, scope_name)
+                except Exception:
+                    pass
 
     def test_migration_empty_mapping(self):
         try:

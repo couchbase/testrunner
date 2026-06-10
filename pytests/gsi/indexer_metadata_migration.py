@@ -5,6 +5,7 @@ __author__ = "Yash N Dodderi"
 
 
 from gsi.base_gsi import BaseSecondaryIndexingTests
+from lib.membase.helper.rbac_exclusion_helper import verify_rbac_exclusion_syntax
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
 from threading import Event
@@ -249,6 +250,47 @@ class IndexerMetadataMigration(BaseSecondaryIndexingTests):
 
         #drop all indexes and check for disk usage post dropping
         self.drop_index_node_resources_utilization_validations(sleep_time=900)
+        self._verify_rbac_exclusion_gsi()
+
+    def _verify_rbac_exclusion_gsi(self):
+        rest = self.rest
+        if not self.buckets:
+            self.log.warning("No buckets found for RBAC exclusion test; skipping")
+            return
+        bucket_name = self.buckets[0].name
+        manifest = rest.get_bucket_manifest(bucket_name)
+        scope_name = allowed_col = excluded_col = None
+        for scope in manifest.get("scopes", []):
+            if scope["name"].startswith("_"):
+                continue
+            cols = [c["name"] for c in scope.get("collections", [])]
+            if len(cols) >= 2:
+                scope_name = scope["name"]
+                allowed_col, excluded_col = cols[0], cols[1]
+                break
+        if not scope_name:
+            self.log.warning("No suitable scope found for RBAC exclusion test; skipping")
+            return
+
+        def gsi_service_validator(u, p):
+            q = "SELECT META().id FROM `{b}`.`{s}`.`{c}` LIMIT 1"
+            result = rest.query_tool(
+                q.format(b=bucket_name, s=scope_name, c=allowed_col),
+                query_params={'creds': [{'user': u, 'pass': p}]})
+            self.assertEqual(result.get('status'), 'success',
+                "GSI/N1QL SELECT on allowed collection '%s' should succeed, got: %s"
+                % (allowed_col, result))
+            result = rest.query_tool(
+                q.format(b=bucket_name, s=scope_name, c=excluded_col),
+                query_params={'creds': [{'user': u, 'pass': p}]})
+            self.assertNotEqual(result.get('status'), 'success',
+                "GSI/N1QL SELECT on excluded collection '%s' should be denied" % excluded_col)
+            self.log.info("GSI service validation passed: N1QL query enforces RBAC exclusion")
+
+        verify_rbac_exclusion_syntax(
+            self, rest, bucket_name, scope_name, allowed_col, excluded_col,
+            "gsi", runtype=self.input.param("runtype", "default"),
+            service_validator=gsi_service_validator)
 
     def test_indexes_compaction(self):
         """

@@ -1,4 +1,5 @@
 from .cbas_base import *
+from lib.membase.helper.rbac_exclusion_helper import verify_rbac_exclusion_syntax
 from remote.remote_util import RemoteMachineShellConnection
 
 
@@ -289,7 +290,62 @@ class CBASRBACTests(CBASBaseTest):
                 status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
                     query_statement, username=username)
 
+        self._verify_rbac_exclusion_cbas()
         return status
+
+    def _verify_rbac_exclusion_cbas(self):
+        rest = self.rest
+        buckets = rest.get_buckets()
+        if not buckets:
+            self.log.warning("No buckets found for RBAC exclusion test; skipping")
+            return
+        bucket_name = buckets[0].name
+        scope_name = "rbac_excl_scope"
+        allowed_col = "coll_allowed"
+        excluded_col = "coll_excluded"
+        scope_created = False
+        try:
+            rest.create_scope(bucket_name, scope_name)
+            scope_created = True
+            rest.create_collection(bucket_name, scope_name, allowed_col)
+            rest.create_collection(bucket_name, scope_name, excluded_col)
+
+            def cbas_service_validator(u, p):
+                stmt = ("CREATE ANALYTICS COLLECTION `{ds}` "
+                        "ON `{b}`.`{s}`.`{c}`")
+                # User creates analytics collection on allowed source - should succeed
+                result = rest.analytics_tool(
+                    stmt.format(ds="rbac_excl_ds_allowed",
+                                b=bucket_name, s=scope_name, c=allowed_col),
+                    query_params={'creds': [{'user': u, 'pass': p}]})
+                self.assertEqual(result.get('status'), 'success',
+                    "Analytics collection create on allowed '%s' should succeed, got: %s"
+                    % (allowed_col, result))
+                try:
+                    rest.analytics_tool(
+                        "DROP ANALYTICS COLLECTION IF EXISTS `rbac_excl_ds_allowed`")
+                except Exception:
+                    pass
+                # User tries to create analytics collection on excluded source - should fail
+                result = rest.analytics_tool(
+                    stmt.format(ds="rbac_excl_ds_excluded",
+                                b=bucket_name, s=scope_name, c=excluded_col),
+                    query_params={'creds': [{'user': u, 'pass': p}]})
+                self.assertNotEqual(result.get('status'), 'success',
+                    "Analytics collection create on excluded '%s' should be denied" % excluded_col)
+                self.log.info(
+                    "CBAS service validation passed: analytics enforces RBAC exclusion")
+
+            verify_rbac_exclusion_syntax(
+                self, rest, bucket_name, scope_name, allowed_col, excluded_col,
+                "cbas", runtype=self.input.param("runtype", "default"),
+                service_validator=cbas_service_validator)
+        finally:
+            if scope_created:
+                try:
+                    rest.delete_scope(bucket_name, scope_name)
+                except Exception:
+                    pass
 
     def test_rest_api_authorization_version_api_no_authentication(self):
         api_url = "http://{0}:8095/analytics/version".format(self.cbas_node.ip)

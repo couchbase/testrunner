@@ -2,6 +2,7 @@
 
 import copy
 import json
+from lib.membase.helper.rbac_exclusion_helper import verify_rbac_exclusion_syntax
 import random
 import time
 import threading
@@ -142,6 +143,7 @@ class StableTopFTS(FTSBaseTest):
             raise FTSException("FTS service has not started: %s" %e)
 
     def create_simple_default_index(self, data_loader_output=False):
+        self._verify_rbac_exclusion_fts()
         plan_params = self.construct_plan_params()
         self.load_data(generator=None, data_loader_output=data_loader_output, num_items=self._num_items)
         if not (self.bucket_storage == "magma"):
@@ -163,6 +165,46 @@ class StableTopFTS(FTSBaseTest):
         self.wait_for_indexing_complete()
         time.sleep(20)
         self.validate_index_count(equal_bucket_doc_count=True)
+
+    def _verify_rbac_exclusion_fts(self):
+        master = self._cb_cluster.get_master_node()
+        rest = RestConnection(master)
+        buckets = rest.get_buckets()
+        if not buckets:
+            self.log.warning("No buckets found for RBAC exclusion test; skipping")
+            return
+        bucket_name = buckets[0].name
+        scope_name = "rbac_excl_scope"
+        allowed_col = "coll_allowed"
+        excluded_col = "coll_excluded"
+        scope_created = False
+        try:
+            rest.create_scope(bucket_name, scope_name)
+            scope_created = True
+            rest.create_collection(bucket_name, scope_name, allowed_col)
+            rest.create_collection(bucket_name, scope_name, excluded_col)
+
+            def fts_service_validator(u, p):
+                fts_rest = RestConnection(self._cb_cluster.get_random_fts_node())
+                api = fts_rest.fts_baseUrl + "api/bucket/{b}/scope/{s}/index".format(
+                    b=bucket_name, s=scope_name)
+                status, _, _ = fts_rest._http_request(
+                    api, 'GET', headers=fts_rest._create_headers_with_auth(u, p))
+                self.assertTrue(status,
+                    "FTS index listing for scope '%s' should succeed with user creds" % scope_name)
+                self.log.info(
+                    "FTS service validation passed: FTS endpoint accessible with user creds")
+
+            verify_rbac_exclusion_syntax(
+                self, rest, bucket_name, scope_name, allowed_col, excluded_col,
+                "fts", runtype=self._input.param("runtype", "default"),
+                service_validator=fts_service_validator)
+        finally:
+            if scope_created:
+                try:
+                    rest.delete_scope(bucket_name, scope_name)
+                except Exception:
+                    pass
 
     def test_index_docvalues_option(self):
         collection_index, type, index_scope, index_collections = self.define_index_parameters_collection_related()

@@ -6205,6 +6205,22 @@ class RestConnection(object):
             raise Exception(content)
         return json.loads(content)
 
+    def create_custom_role(self, role_name, display_name, permissions):
+        """PUT /settings/rbac/customRoles/<role_name> with JSON permissions map.
+        permissions: dict mapping permission key -> "all"|"none"
+        Returns (status, content) without raising."""
+        api = self.baseUrl + "settings/rbac/customRoles/" + role_name
+        body = json.dumps({"name": display_name, "permissions": permissions})
+        headers = self._create_headers_encoded_prepared()
+        status, content, _ = self._http_request(api, 'PUT', params=body, headers=headers)
+        return status, content
+
+    def delete_custom_role(self, role_name):
+        """DELETE /settings/rbac/customRoles/<role_name>. Returns (status, content)."""
+        api = self.baseUrl + "settings/rbac/customRoles/" + role_name
+        status, content, _ = self._http_request(api, 'DELETE')
+        return status, content
+
     '''
     Update user password
     '''
