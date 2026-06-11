@@ -3602,9 +3602,9 @@ class RestConnection(object):
         while time.time() < max_time and max_error_retries > 0:
             time.sleep(poll_interval)
             status, content, response = self._http_request(api, method='GET')
-            data = json.loads(content)
-            current_doc_count = int(data["basicStats"]["itemCount"])
-            if status:
+            if status and content:
+                data = json.loads(content)
+                current_doc_count = int(data["basicStats"]["itemCount"])
                 if current_doc_count == previous_doc_count:
                     is_bucket_loaded = True
                     break

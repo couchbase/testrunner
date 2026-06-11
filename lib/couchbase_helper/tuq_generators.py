@@ -362,7 +362,7 @@ class TuqGenerators(object):
         order_clause = order_clause.replace(',"', '"')
         diff = set(order_clause.split(',')) - set(re.compile('doc\["[\w\']+"\]').findall(select_clause))
         diff = [attr.replace(",",'"') for attr in diff if attr != '']
-        for k, v in self.aliases.items():
+        for k, v in list(self.aliases.items()):
             if k.endswith(','):
                 self.aliases[k[:-1]] = v
                 del self.aliases[k]
