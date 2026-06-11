@@ -301,9 +301,15 @@ class UpgradeTests(NewUpgradeBaseTest):
             if self.before_events:
                 self.event_threads += self.run_event(self.before_events)
 
+            if self.input.param("simulate_pre50_bucket", False):
+                self.simulate_pre50_missing_storage_mode()
+
             self.log.info("\n*** Start upgrade cluster ***")
             self.event_threads += self.upgrade_event()
             self.finish_events(self.event_threads)
+
+            if self.input.param("simulate_pre50_bucket", False):
+                self.verify_storage_mode_couchstore_after_upgrade()
 
             self.log.info("\nWill install upgrade version to any free nodes")
             out_nodes = self._get_free_nodes()

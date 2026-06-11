@@ -2321,6 +2321,76 @@ class NewUpgradeBaseTest(BaseTestCase):
         if operation_type:
             self.n1ql.run_async_index_operations(operation_type)
 
+    def simulate_pre50_missing_storage_mode(self):
+        """
+        Simulate buckets created before 5.0 (pre-spock/watson) by removing the
+        storage_mode key from every couchbase/membase bucket's Chronicle config.
+        Pre-5.0 buckets never had storage_mode written — no upgrade migration
+        ever backfilled it — so this reproduces the missing-key condition that
+        caused storage_mode to silently flip to magma on 8.0 enterprise clusters.
+        See MB-72097 / commit d21bc91.
+        """
+        rest = RestConnection(self.master)
+        for bucket in self.buckets:
+            if bucket.type not in ('membase', 'couchbase'):
+                continue
+            code = (
+                '{{ok, C}} = ns_bucket:get_bucket("{name}"), '
+                'ns_bucket:set_bucket_config("{name}", proplists:delete(storage_mode, C)).'
+            ).format(name=bucket.name)
+            status, content = rest.diag_eval(code)
+            self.log.info(
+                "simulate_pre50: stripped storage_mode from bucket '%s' — status=%s content=%s",
+                bucket.name, status, content
+            )
+            self.assertTrue(
+                status,
+                "simulate_pre50: diag_eval failed for bucket '{}': {}".format(bucket.name, content)
+            )
+
+    @staticmethod
+    def _is_mb72097_affected_version(version):
+        # 8.0.0.x and 8.0.1.x never had chronicle_upgrade_to_80 — storage_mode
+        # missing-key fallback returns magma on these builds (MB-72097 fixed in 8.0.2+)
+        import re
+        return bool(re.match(r'8\.0\.[01][.\-]', version))
+
+    def verify_storage_mode_couchstore_after_upgrade(self):
+        """
+        After upgrading to 8.0+, assert that every bucket whose storage_mode key
+        was missing still resolves to couchstore (not magma).
+        On 8.0.0/8.0.1 (known-buggy builds) the check is skipped — magma is the
+        known incorrect result and those builds are already superseded.
+        On 8.0.2+ the chronicle migration backfills the key so couchstore is asserted.
+        """
+        upgrade_version = self.upgrade_versions[0] if self.upgrade_versions else ""
+        known_buggy = self._is_mb72097_affected_version(upgrade_version)
+
+        rest = RestConnection(self.master)
+        for bucket in self.buckets:
+            if bucket.type not in ('membase', 'couchbase'):
+                continue
+            # Use REST API — diag/eval is localhost-only on fresh 8.0+ installs
+            bucket_info = rest.get_bucket(bucket.name)
+            storage_backend = bucket_info.bucket_storage if bucket_info else 'unknown'
+            self.log.info(
+                "verify_storage_mode: bucket '%s' storageBackend='%s'",
+                bucket.name, storage_backend
+            )
+            if known_buggy:
+                self.log.warning(
+                    "MB-72097: build '%s' is a known-affected version — "
+                    "storageBackend='%s' (expected on this build, fixed in 8.0.2+)",
+                    upgrade_version, storage_backend
+                )
+                continue
+            self.assertEqual(
+                storage_backend, 'couchstore',
+                "Bucket '{}' storageBackend='{}' after upgrade — "
+                "expected couchstore. Pre-5.0 bucket storage_mode migration "
+                "may have failed (MB-72097).".format(bucket.name, storage_backend)
+            )
+
     def during_upgrade(self, servers):
         self.ddocs_num = self.input.param("ddocs_num", 0)
         if int(self.ddocs_num) > 0:
