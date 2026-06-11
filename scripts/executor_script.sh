@@ -126,7 +126,11 @@ if [ "$os" = "windows" ]; then
 fi
 
 if [ "$component" = "xdcr" ]; then
-   installParameters='init_clusters=True'
+   if [ "$installParameters" = "None" ] || [ "$installParameters" = "" ]; then
+      installParameters='init_clusters=True'
+   else
+      installParameters="${installParameters},init_clusters=True"
+   fi
 fi
 
 if [ "$installParameters" = "None" ]; then
