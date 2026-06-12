@@ -5,6 +5,9 @@ import uuid
 import random
 import urllib.request, urllib.parse, urllib.error, datetime
 
+import boto3
+import botocore
+
 from basetestcase import BaseTestCase
 from couchbase_helper.data_analysis_helper import DataCollector
 from membase.helper.rebalance_helper import RebalanceHelper
@@ -434,6 +437,19 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.backupset.omit_credentials      = self.input.param("ear_omit_credentials", False)
         self.backupset.wrong_passphrase      = self.input.param("ear_wrong_passphrase", None)
 
+        # ---- EaR: AWS KMS auto-provisioning ----
+        # When using KMS protection with AWS, auto-provision a KMS key if no
+        # explicit key URL is provided (or it's a placeholder like "awskms://auto").
+        self._ear_kms_key_id = None
+        self._ear_kms_alias = None
+        self._ear_kms_client = None
+        if self.ear_enabled and self.backupset.protection == "kms":
+            km_url = self.backupset.km_key_url
+            if not km_url or km_url == "awskms://auto" or \
+                    (km_url and km_url.startswith("awskms://") and
+                     not self.backupset.km_access_key_id):
+                self._ear_provision_aws_kms_key()
+
     def clean_up(self, server, skip_eject_and_rebalance=False):
         """ Clean up files and directories left by backup testing.
 
@@ -508,6 +524,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         remote_client.disconnect()
 
     def tearDown(self):
+        # ---- EaR: AWS KMS teardown (before super().tearDown) ----
+        self._ear_teardown_aws_kms_key()
+
         super(EnterpriseBackupRestoreBase, self).tearDown()
         if not self.input.param("skip_cleanup", False):
             try:
@@ -3429,6 +3448,108 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if self.ear_enabled and self.backupset.disable_log_encryption:
             prefix += "export CB_DISABLE_LOG_ENCRYPTION=1; "
         return prefix
+
+    def _ear_provision_aws_kms_key(self):
+        """Create a temporary AWS KMS key for this test run.
+
+        Uses the same AWS credentials available in the environment
+        (BACKUP_RESTORE_AWS_ACCESS_KEY_ID / BACKUP_RESTORE_AWS_SECRET_ACCESS_KEY
+         or AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY) — the same env vars
+        already used by the S3 object-store provider.
+
+        Populates:
+          self.backupset.km_key_url           → awskms://<alias>
+          self.backupset.km_region            → resolved region
+          self.backupset.km_access_key_id     → from env
+          self.backupset.km_secret_access_key → from env
+          self._ear_kms_key_id               → for teardown
+          self._ear_kms_alias                → for teardown
+          self._ear_kms_client               → for teardown
+        """
+        region = self.backupset.km_region or "us-east-1"
+
+        # Resolve AWS credentials from environment (same source as S3 provider)
+        access_key = os.environ.get("BACKUP_RESTORE_AWS_ACCESS_KEY_ID",
+                                    os.environ.get("AWS_ACCESS_KEY_ID"))
+        secret_key = os.environ.get("BACKUP_RESTORE_AWS_SECRET_ACCESS_KEY",
+                                    os.environ.get("AWS_SECRET_ACCESS_KEY"))
+        if not access_key or not secret_key:
+            self.fail("AWS KMS tests require AWS credentials in environment "
+                      "(BACKUP_RESTORE_AWS_ACCESS_KEY_ID / BACKUP_RESTORE_AWS_SECRET_ACCESS_KEY "
+                      "or AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY)")
+
+        kms_client = boto3.client(
+            'kms',
+            region_name=region,
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key
+        )
+
+        # Create a symmetric encryption key for envelope encryption
+        try:
+            response = kms_client.create_key(
+                Description="cbbackupmgr EaR test key (auto-provisioned, safe to delete)",
+                KeyUsage='ENCRYPT_DECRYPT',
+                Origin='AWS_KMS',
+                Tags=[
+                    {'TagKey': 'Purpose', 'TagValue': 'cbbackupmgr-ear-test'},
+                    {'TagKey': 'AutoProvisioned', 'TagValue': 'true'},
+                ]
+            )
+        except botocore.exceptions.ClientError as e:
+            self.fail("AWS KMS: failed to create key in region %s: %s" % (region, e))
+
+        key_id = response['KeyMetadata']['KeyId']
+
+        # Create a human-readable alias (cbbackupmgr accepts awskms://alias/<name> URLs)
+        alias_suffix = uuid.uuid4().hex[:8]
+        alias_name = "alias/cbbackupmgr-ear-test-{0}".format(alias_suffix)
+        try:
+            kms_client.create_alias(AliasName=alias_name, TargetKeyId=key_id)
+        except botocore.exceptions.ClientError as e:
+            # Clean up the key if alias creation fails
+            kms_client.schedule_key_deletion(KeyId=key_id, PendingWindowInDays=7)
+            self.fail("AWS KMS: failed to create alias %s: %s" % (alias_name, e))
+
+        # Populate backupset fields for cbbackupmgr CLI
+        self.backupset.km_key_url = "awskms://{0}".format(alias_name)
+        self.backupset.km_region = region
+        self.backupset.km_access_key_id = access_key
+        self.backupset.km_secret_access_key = secret_key
+
+        # Store for teardown
+        self._ear_kms_key_id = key_id
+        self._ear_kms_alias = alias_name
+        self._ear_kms_client = kms_client
+        self.log.info("EaR KMS: provisioned AWS KMS key %s (alias %s) in %s"
+                      % (key_id, alias_name, region))
+
+    def _ear_teardown_aws_kms_key(self):
+        """Schedule deletion of the test-provisioned KMS key and remove alias.
+
+        Uses PendingWindowInDays=7 (AWS minimum). The key is disabled
+        immediately so it cannot be used between now and actual deletion.
+        No-ops safely if no key was provisioned.
+        """
+        if not getattr(self, '_ear_kms_client', None):
+            return
+        try:
+            self._ear_kms_client.delete_alias(AliasName=self._ear_kms_alias)
+            self.log.info("EaR KMS: deleted alias %s" % self._ear_kms_alias)
+        except Exception as e:
+            self.log.warning("EaR KMS: failed to delete alias %s: %s"
+                            % (self._ear_kms_alias, e))
+        try:
+            self._ear_kms_client.disable_key(KeyId=self._ear_kms_key_id)
+            self._ear_kms_client.schedule_key_deletion(
+                KeyId=self._ear_kms_key_id,
+                PendingWindowInDays=7
+            )
+            self.log.info("EaR KMS: disabled and scheduled deletion of key %s"
+                          % self._ear_kms_key_id)
+        except Exception as e:
+            self.log.warning("EaR KMS: teardown failed for key %s: %s"
+                            % (self._ear_kms_key_id, e))
 
     def use_cbbackupmgr_version(self, version, upgrade_cb=False):
         """Switch the cbbackupmgr CLI used by subsequent commands to `version`,
