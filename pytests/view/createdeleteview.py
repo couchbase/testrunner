@@ -4,6 +4,7 @@ from threading import Thread, Event
 from basetestcase import BaseTestCase
 from couchbase_helper.document import DesignDocument, View
 from couchbase_helper.documentgenerator import DocumentGenerator
+from lib.membase.helper.rbac_exclusion_helper import verify_rbac_exclusion_syntax
 from membase.api.rest_client import RestConnection
 from membase.helper.rebalance_helper import RebalanceHelper
 from membase.api.exception import ReadDocumentException
@@ -354,7 +355,64 @@ class CreateDeleteViewTests(BaseTestCase):
                 self.fail("Server allowed creation of invalid view")
 
 
+    def _verify_rbac_exclusion_views(self):
+        rest = RestConnection(self.master)
+        buckets = rest.get_buckets()
+        if not buckets:
+            self.log.warning("No buckets found for RBAC exclusion test; skipping")
+            return
+        bucket_name = buckets[0].name
+        scope_name = "rbac_excl_scope"
+        allowed_col = "coll_allowed"
+        excluded_col = "coll_excluded"
+        scope_created = False
+        try:
+            rest.create_scope(bucket_name, scope_name)
+            scope_created = True
+            rest.create_collection(bucket_name, scope_name, allowed_col)
+            rest.create_collection(bucket_name, scope_name, excluded_col)
+
+            def views_service_validator(u, p):
+                # Real service call: GET bucket root via capi (views) endpoint
+                api = rest.capiBaseUrl + bucket_name
+                status, _, _ = rest._http_request(
+                    api, 'GET',
+                    headers=rest._create_capi_headers_with_auth(u, p))
+                self.assertTrue(status,
+                    "Views: capi GET on bucket '%s' should succeed with user creds"
+                    % bucket_name)
+                self.log.info(
+                    "Views service validation passed: capi endpoint accessible "
+                    "with user creds")
+                # Verify exclusion via checkPermissions
+                perm_allowed = "cluster.collection[{b}:{s}:{c}].data.docs!read".format(
+                    b=bucket_name, s=scope_name, c=allowed_col)
+                perm_excluded = "cluster.collection[{b}:{s}:{c}].data.docs!read".format(
+                    b=bucket_name, s=scope_name, c=excluded_col)
+                result = rest.check_user_permission(
+                    u, "password", ",".join([perm_allowed, perm_excluded]))
+                self.assertTrue(result.get(perm_allowed, False),
+                    "Views: allowed collection '%s' should have data.docs!read, "
+                    "got: %s" % (allowed_col, result))
+                self.assertFalse(result.get(perm_excluded, True),
+                    "Views: excluded collection '%s' should be denied "
+                    "data.docs!read, got: %s" % (excluded_col, result))
+                self.log.info(
+                    "Views service validation passed: data.docs!read exclusion verified")
+
+            verify_rbac_exclusion_syntax(
+                self, rest, bucket_name, scope_name, allowed_col, excluded_col,
+                "views", runtype=self.input.param("runtype", "default"),
+                service_validator=views_service_validator)
+        finally:
+            if scope_created:
+                try:
+                    rest.delete_scope(bucket_name, scope_name)
+                except Exception:
+                    pass
+
     def test_view_ops(self):
+        self._verify_rbac_exclusion_views()
         self._load_doc_data_all_buckets()
         for bucket in self.buckets:
             self._execute_ddoc_ops("create", self.test_with_view, self.num_ddocs, self.num_views_per_ddoc, bucket=bucket)

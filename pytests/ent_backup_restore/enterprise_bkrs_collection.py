@@ -3,6 +3,7 @@ from random import randrange, choice
 
 from couchbase_helper.cluster import Cluster
 from ent_backup_restore.enterprise_bkrs_collection_base import EnterpriseBackupRestoreCollectionBase
+from lib.membase.helper.rbac_exclusion_helper import verify_rbac_exclusion_syntax
 from membase.api.rest_client import RestConnection
 from membase.helper.bucket_helper import BucketOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
@@ -58,12 +59,68 @@ class EnterpriseBackupRestoreCollectionTest(EnterpriseBackupRestoreCollectionBas
     def test_backup_create(self):
         self.backup_create_validate()
 
+    def _verify_rbac_exclusion_backup_restore(self):
+        rest = RestConnection(self.master)
+        buckets = rest.get_buckets()
+        if not buckets:
+            self.log.warning("No buckets found for RBAC exclusion test; skipping")
+            return
+        bucket_name = buckets[0].name
+        scope_name = "rbac_excl_scope"
+        allowed_col = "coll_allowed"
+        excluded_col = "coll_excluded"
+        scope_created = False
+        try:
+            rest.create_scope(bucket_name, scope_name)
+            scope_created = True
+            rest.create_collection(bucket_name, scope_name, allowed_col)
+            rest.create_collection(bucket_name, scope_name, excluded_col)
+
+            def backup_service_validator(u, p):
+                # Real service call: GET backup plans via backup service REST API
+                api = rest.baseUrl + "_p/backup/api/v1/plan"
+                status, _, _ = rest._http_request(
+                    api, 'GET',
+                    headers=rest._create_headers_with_auth(u, p))
+                self.assertTrue(status,
+                    "Backup: GET backup plans should succeed with user creds")
+                self.log.info(
+                    "Backup service validation passed: backup REST endpoint "
+                    "accessible with user creds")
+                # Verify exclusion via checkPermissions
+                perm_allowed = "cluster.collection[{b}:{s}:{c}].data.docs!read".format(
+                    b=bucket_name, s=scope_name, c=allowed_col)
+                perm_excluded = "cluster.collection[{b}:{s}:{c}].data.docs!read".format(
+                    b=bucket_name, s=scope_name, c=excluded_col)
+                result = rest.check_user_permission(
+                    u, "password", ",".join([perm_allowed, perm_excluded]))
+                self.assertTrue(result.get(perm_allowed, False),
+                    "Backup: allowed collection '%s' should have data.docs!read, "
+                    "got: %s" % (allowed_col, result))
+                self.assertFalse(result.get(perm_excluded, True),
+                    "Backup: excluded collection '%s' should be denied "
+                    "data.docs!read, got: %s" % (excluded_col, result))
+                self.log.info(
+                    "Backup service validation passed: data.docs!read exclusion verified")
+
+            verify_rbac_exclusion_syntax(
+                self, rest, bucket_name, scope_name, allowed_col, excluded_col,
+                "backup_restore", runtype=self.input.param("runtype", "default"),
+                service_validator=backup_service_validator)
+        finally:
+            if scope_created:
+                try:
+                    rest.delete_scope(bucket_name, scope_name)
+                except Exception:
+                    pass
+
     def test_backup_restore_collection_sanity(self):
         """
         1. Create default bucket on the cluster and loads it with given number of items
         2. Perform updates and create backups for specified number of times (test param number_of_backups)
         3. Perform restores for the same number of times with random start and end values
         """
+        self._verify_rbac_exclusion_backup_restore()
         if self.reset_backup_cluster:
             self.log.info("*** start to reset backup cluster")
             self._create_backup_cluster(self.backupset.backup_services_init)
