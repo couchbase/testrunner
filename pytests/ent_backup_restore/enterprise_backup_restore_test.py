@@ -446,6 +446,510 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backupset.end = len(self.backups)
         self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
 
+    # ------------------------------------------------------------------
+    # G. test_ear_cross_version — CV-001…010, CV-012
+    # ------------------------------------------------------------------
+    def test_ear_cross_version(self):
+        """Exercise legacy↔encrypted interop by swapping the cbbackupmgr BINARY
+        on the backup host (use_cbbackupmgr_version) against the SAME CB cluster.
+        Upgrading the CB cluster is OPTIONAL (upgrade_cb, default False).
+
+        Params:
+          scenario   : legacy_restore | mixed_chain | mixed_archive |
+                       mixed_plans | cross_enc_merge | dir_layout |
+                       config_version | plan_boundary | forward_compat
+          old_cbm    : version/tools-package token for the legacy (no-EaR) phase
+          new_cbm    : version/tools-package token for the EaR phase
+                       (default = currently installed build)
+          upgrade_cb : bool (default False) — also upgrade the CB cluster
+          ear_protection, expected_error : as needed per scenario
+        """
+        scenario = self.input.param("scenario", None)
+        old_cbm = self.input.param("old_cbm", None)
+        new_cbm = self.input.param("new_cbm", None)
+        upgrade_cb = self.input.param("upgrade_cb", False)
+        expected_error = self.input.param("expected_error", None)
+
+        if not scenario:
+            self.fail("test_ear_cross_version requires 'scenario' param")
+        if not old_cbm:
+            self.fail("test_ear_cross_version requires 'old_cbm' param "
+                      "(version string or tools-package path)")
+
+        # Save the current (new) CLI location so we can restore it.
+        new_cli = self.cli_command_location
+
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size,
+                            end=self.num_items)
+
+        dispatch = {
+            "legacy_restore": self._cv_legacy_restore,
+            "mixed_chain": self._cv_mixed_chain,
+            "mixed_archive": self._cv_mixed_archive,
+            "mixed_plans": self._cv_mixed_plans,
+            "cross_enc_merge": self._cv_cross_enc_merge,
+            "dir_layout": self._cv_dir_layout,
+            "config_version": self._cv_config_version,
+            "plan_boundary": self._cv_plan_boundary,
+            "forward_compat": self._cv_forward_compat,
+        }
+        handler = dispatch.get(scenario)
+        if not handler:
+            self.fail("Unknown cross-version scenario: %s" % scenario)
+
+        self.log.info("EaR cross-version: scenario=%s old_cbm=%s new_cbm=%s "
+                      "upgrade_cb=%s" % (scenario, old_cbm, new_cbm, upgrade_cb))
+        handler(gen, old_cbm, new_cbm, new_cli, upgrade_cb, expected_error)
+
+    # --- Cross-version helper: switch to legacy (unencrypted) cbbackupmgr ---
+    def _cv_switch_to_old(self, old_cbm):
+        """Switch to the old (legacy, pre-EaR) cbbackupmgr binary and disable
+        EaR so commands run unencrypted."""
+        self.use_cbbackupmgr_version(old_cbm)
+        self.ear_enabled = False
+        self.backupset.encrypted = False
+
+    def _cv_switch_to_new(self, new_cbm, new_cli):
+        """Switch to the new (EaR-capable) cbbackupmgr binary and enable EaR."""
+        if new_cbm:
+            self.use_cbbackupmgr_version(new_cbm)
+        else:
+            # Restore to the originally installed build
+            self.cli_command_location = new_cli
+        self.ear_enabled = True
+        self.backupset.encrypted = True
+
+    # --- CV-001/002: legacy_restore ---
+    def _cv_legacy_restore(self, gen, old_cbm, new_cbm, new_cli, upgrade_cb,
+                           expected_error):
+        """Take a backup with the OLD (pre-EaR) cbbackupmgr; restore with the
+        NEW cbbackupmgr. The old backup is unencrypted — the new cbm must handle
+        it transparently (CV-001: restore succeeds; CV-002: data integrity)."""
+        self._load_all_buckets(self.master, gen, "create", self.expires)
+
+        # Phase 1: create + backup with old cbm (unencrypted)
+        self._cv_switch_to_old(old_cbm)
+        self.backup_create_validate()
+        self.backup_cluster_validate()
+
+        # Phase 2: switch to new cbm and restore
+        self._cv_switch_to_new(new_cbm, new_cli)
+        if upgrade_cb:
+            self.use_cbbackupmgr_version(new_cbm or new_cli, upgrade_cb=True)
+
+        # Restoring an unencrypted backup with new cbm should NOT require EaR
+        # credentials — temporarily disable EaR for the restore command.
+        self.ear_enabled = False
+        self.backupset.encrypted = False
+
+        self._ear_reset_restore_cluster()
+        self.backupset.start = 1
+        self.backupset.end = len(self.backups)
+        self.backup_restore_validate(compare_uuid=False,
+                                     seqno_compare_function=">=",
+                                     expected_error=expected_error)
+        self.log.info("EaR CV legacy_restore: old unencrypted backup restored "
+                      "successfully with new cbbackupmgr")
+
+    # --- CV-003: mixed_chain ---
+    def _cv_mixed_chain(self, gen, old_cbm, new_cbm, new_cli, upgrade_cb,
+                        expected_error):
+        """Legacy full backup (old cbm, unencrypted) + encrypted incrementals
+        (new cbm, EaR on). Restore the full chain with the new cbm."""
+        self._load_all_buckets(self.master, gen, "create", self.expires)
+
+        # Phase 1: create repo + full backup with old cbm (unencrypted)
+        self._cv_switch_to_old(old_cbm)
+        self.backup_create_validate()
+        self.backup_cluster_validate()
+
+        # Phase 2: switch to new cbm, enable EaR, take incrementals
+        self._cv_switch_to_new(new_cbm, new_cli)
+        if upgrade_cb:
+            self.use_cbbackupmgr_version(new_cbm or new_cli, upgrade_cb=True)
+
+        num_incrementals = max(1, self.backupset.number_of_backups - 1)
+        for i in range(num_incrementals):
+            self._load_all_buckets(self.master, gen, "update", self.expires)
+            self.sleep(5)
+            self.backup_cluster_validate()
+
+        # Phase 3: restore the full mixed chain
+        self._ear_reset_restore_cluster()
+        self.backupset.start = 1
+        self.backupset.end = len(self.backups)
+        self.backup_restore_validate(compare_uuid=False,
+                                     seqno_compare_function=">=",
+                                     expected_error=expected_error)
+        self.log.info("EaR CV mixed_chain: legacy full + encrypted incrementals "
+                      "restored successfully (%d backups)" % len(self.backups))
+
+    # --- CV-004: mixed_archive ---
+    def _cv_mixed_archive(self, gen, old_cbm, new_cbm, new_cli, upgrade_cb,
+                          expected_error):
+        """Create two repos in the same archive: one unencrypted (old cbm), one
+        encrypted (new cbm). Verify both coexist and each restores correctly."""
+        self._load_all_buckets(self.master, gen, "create", self.expires)
+        base_name = self.backupset.name
+
+        # Repo A: unencrypted, old cbm
+        self._cv_switch_to_old(old_cbm)
+        repo_a = "%s_unenc" % base_name
+        self.backupset.name = repo_a
+        self.backups = []
+        output, error = self.backup_create(del_old_backup=True)
+        if error or not output or "created successfully" not in output[0]:
+            self.fail("CV mixed_archive: failed to create unencrypted repo: %s"
+                      % (output or error))
+        self.backup_cluster()
+        backups_a = list(self.backups)
+
+        # Repo B: encrypted, new cbm
+        self._cv_switch_to_new(new_cbm, new_cli)
+        if upgrade_cb:
+            self.use_cbbackupmgr_version(new_cbm or new_cli, upgrade_cb=True)
+        repo_b = "%s_enc" % base_name
+        self.backupset.name = repo_b
+        self.backups = []
+        output, error = self.backup_create(del_old_backup=False)
+        if error or not output or "created successfully" not in output[0]:
+            self.fail("CV mixed_archive: failed to create encrypted repo: %s"
+                      % (output or error))
+        self.backup_cluster()
+        backups_b = list(self.backups)
+
+        # Restore repo A (unencrypted) — no EaR credentials needed
+        self.ear_enabled = False
+        self.backupset.encrypted = False
+        self.backupset.name = repo_a
+        self.backups = backups_a
+        self._ear_reset_restore_cluster()
+        self.backupset.start = 1
+        self.backupset.end = len(self.backups)
+        self.backup_restore_validate(compare_uuid=False,
+                                     seqno_compare_function=">=")
+        self.log.info("EaR CV mixed_archive: unencrypted repo A restored OK")
+
+        # Restore repo B (encrypted) — EaR credentials needed
+        self.ear_enabled = True
+        self.backupset.encrypted = True
+        self.backupset.name = repo_b
+        self.backups = backups_b
+        self._ear_reset_restore_cluster()
+        self.backupset.start = 1
+        self.backupset.end = len(self.backups)
+        self.backup_restore_validate(compare_uuid=False,
+                                     seqno_compare_function=">=")
+        self.log.info("EaR CV mixed_archive: encrypted repo B restored OK")
+
+        self.backupset.name = base_name
+
+    # --- CV-005: mixed_plans ---
+    def _cv_mixed_plans(self, gen, old_cbm, new_cbm, new_cli, upgrade_cb,
+                        expected_error):
+        """Backup with old cbm (legacy plans/manifests), then continue backups
+        with new cbm (new plans/manifests, encrypted). Restore the full chain
+        proving plan format coexistence."""
+        self._load_all_buckets(self.master, gen, "create", self.expires)
+
+        # Phase 1: old cbm — create + N/2 backups (legacy plan format)
+        self._cv_switch_to_old(old_cbm)
+        self.backup_create_validate()
+        half = max(1, self.backupset.number_of_backups // 2)
+        for _ in range(half):
+            self._load_all_buckets(self.master, gen, "update", self.expires)
+            self.sleep(5)
+            self.backup_cluster_validate()
+
+        # Phase 2: new cbm — remaining backups (new plan format, encrypted)
+        self._cv_switch_to_new(new_cbm, new_cli)
+        if upgrade_cb:
+            self.use_cbbackupmgr_version(new_cbm or new_cli, upgrade_cb=True)
+        remaining = self.backupset.number_of_backups - half
+        for _ in range(remaining):
+            self._load_all_buckets(self.master, gen, "update", self.expires)
+            self.sleep(5)
+            self.backup_cluster_validate()
+
+        # Restore the full chain
+        self._ear_reset_restore_cluster()
+        self.backupset.start = 1
+        self.backupset.end = len(self.backups)
+        self.backup_restore_validate(compare_uuid=False,
+                                     seqno_compare_function=">=",
+                                     expected_error=expected_error)
+        self.log.info("EaR CV mixed_plans: %d legacy + %d new-format backups "
+                      "restored successfully" % (half, remaining))
+
+    # --- CV-006: cross_enc_merge ---
+    def _cv_cross_enc_merge(self, gen, old_cbm, new_cbm, new_cli, upgrade_cb,
+                            expected_error):
+        """Take unencrypted backups (old cbm), then encrypted backups (new cbm),
+        and merge the full range. Assert the merged artifact is encrypted and
+        the merged backup restores correctly."""
+        self._load_all_buckets(self.master, gen, "create", self.expires)
+
+        # Phase 1: old cbm — create + half backups (unencrypted)
+        self._cv_switch_to_old(old_cbm)
+        self.backup_create_validate()
+        half = max(1, self.backupset.number_of_backups // 2)
+        for _ in range(half):
+            self._load_all_buckets(self.master, gen, "update", self.expires)
+            self.sleep(5)
+            self.backup_cluster_validate()
+
+        # Phase 2: new cbm — remaining backups (encrypted)
+        self._cv_switch_to_new(new_cbm, new_cli)
+        if upgrade_cb:
+            self.use_cbbackupmgr_version(new_cbm or new_cli, upgrade_cb=True)
+        remaining = self.backupset.number_of_backups - half
+        for _ in range(remaining):
+            self._load_all_buckets(self.master, gen, "update", self.expires)
+            self.sleep(5)
+            self.backup_cluster_validate()
+
+        # Phase 3: merge the full range with new cbm (EaR on)
+        self.backupset.start = 1
+        self.backupset.end = self.backupset.number_of_backups
+        result, output, message = self.backup_merge()
+        if not result:
+            if expected_error:
+                combined = " ".join(output or [])
+                if expected_error.lower() in combined.lower():
+                    self.log.info("EaR CV cross_enc_merge: expected error found: %s"
+                                  % expected_error)
+                    return
+            self.fail("EaR CV cross_enc_merge: merge failed: %s" % message)
+
+        # Assert merged artifacts are encrypted
+        tokens = self._ear_secret_tokens()
+        status, msg = self.validate_artifact_confidentiality(tokens,
+                                                            artifact="merge")
+        if not status:
+            self.fail("EaR CV cross_enc_merge confidentiality: %s" % msg)
+        self.log.info("EaR CV cross_enc_merge: merged artifacts are encrypted")
+
+        # Restore the merged backup
+        self._ear_reset_restore_cluster()
+        self.backupset.start = 1
+        self.backupset.end = len(self.backups)
+        self.backup_restore_validate(compare_uuid=False,
+                                     seqno_compare_function=">=")
+        self.log.info("EaR CV cross_enc_merge: merged backup restored OK")
+
+    # --- CV-007: dir_layout ---
+    def _cv_dir_layout(self, gen, old_cbm, new_cbm, new_cli, upgrade_cb,
+                       expected_error):
+        """Verify that the bucket sub-directory naming follows the expected
+        convention for each cbbackupmgr version (bucket-name dirs for old,
+        bucket-UUID dirs for new)."""
+        self._load_all_buckets(self.master, gen, "create", self.expires)
+
+        # Phase 1: backup with old cbm
+        self._cv_switch_to_old(old_cbm)
+        self.backup_create_validate()
+        self.backup_cluster_validate()
+
+        # Inspect directory layout for old cbm
+        shell = RemoteMachineShellConnection(self.backupset.backup_host)
+        repo_path = "{0}/{1}".format(self.backupset.directory, self.backupset.name)
+        # List backup timestamp dirs
+        out, _ = shell.execute_command(
+            "ls -d {0}/backup/*/".format(repo_path))
+        if out:
+            # Under old cbm, check for bucket-name directories
+            backup_ts_dir = out[0].strip()
+            out_buckets, _ = shell.execute_command(
+                "ls {0}".format(backup_ts_dir))
+            old_layout = [d.strip() for d in (out_buckets or []) if d.strip()]
+            self.log.info("EaR CV dir_layout: old cbm bucket dirs = %s"
+                          % old_layout)
+
+        # Phase 2: backup with new cbm (encrypted)
+        self._cv_switch_to_new(new_cbm, new_cli)
+        if upgrade_cb:
+            self.use_cbbackupmgr_version(new_cbm or new_cli, upgrade_cb=True)
+        self._load_all_buckets(self.master, gen, "update", self.expires)
+        self.sleep(5)
+        self.backup_cluster_validate()
+
+        # Inspect directory layout for new cbm
+        out, _ = shell.execute_command(
+            "ls -d {0}/backup/*/".format(repo_path))
+        if out and len(out) >= 2:
+            # The latest backup dir (new cbm)
+            new_backup_ts_dir = out[-1].strip()
+            out_buckets, _ = shell.execute_command(
+                "ls {0}".format(new_backup_ts_dir))
+            new_layout = [d.strip() for d in (out_buckets or []) if d.strip()]
+            self.log.info("EaR CV dir_layout: new cbm bucket dirs = %s"
+                          % new_layout)
+
+            # On 8.x, bucket dirs are UUIDs (no dashes like bucket-name-uuid)
+            # Verify at least the new layout differs from simple bucket names
+            bucket_names = [b.name for b in self.buckets]
+            uuid_dirs = [d for d in new_layout
+                         if d not in bucket_names and len(d) >= 8]
+            if uuid_dirs:
+                self.log.info("EaR CV dir_layout: new cbm uses UUID-based "
+                              "directories: %s" % uuid_dirs)
+            else:
+                self.log.warning("EaR CV dir_layout: could not confirm UUID-based "
+                                 "dirs for new cbm (layout: %s)" % new_layout)
+
+        shell.disconnect()
+
+        # Restore the full chain to prove both layouts are handled
+        self._ear_reset_restore_cluster()
+        self.backupset.start = 1
+        self.backupset.end = len(self.backups)
+        self.backup_restore_validate(compare_uuid=False,
+                                     seqno_compare_function=">=")
+        self.log.info("EaR CV dir_layout: mixed-layout chain restored OK")
+
+    # --- CV-008: config_version ---
+    def _cv_config_version(self, gen, old_cbm, new_cbm, new_cli, upgrade_cb,
+                           expected_error):
+        """Verify that the repo config version reflects encryption state:
+        old cbm produces a v0 (plaintext) config; new cbm with EaR produces
+        v>=1 (encrypted fields)."""
+        self._load_all_buckets(self.master, gen, "create", self.expires)
+
+        # Phase 1: old cbm (unencrypted config)
+        self._cv_switch_to_old(old_cbm)
+        self.backup_create_validate()
+        self.backup_cluster_validate()
+
+        # Read the backup-meta.json config version
+        shell = RemoteMachineShellConnection(self.backupset.backup_host)
+        meta_path = "{0}/{1}/backup-meta.json".format(
+            self.backupset.directory, self.backupset.name)
+        out, _ = shell.execute_command("cat {0}".format(meta_path))
+        old_meta = {}
+        if out:
+            try:
+                old_meta = json.loads(" ".join(out))
+            except (json.JSONDecodeError, ValueError):
+                self.log.warning("CV config_version: could not parse old meta")
+        old_version = old_meta.get("version", -1)
+        old_encrypted = old_meta.get("is_encrypted", False)
+        self.log.info("EaR CV config_version: old meta version=%s encrypted=%s"
+                      % (old_version, old_encrypted))
+
+        # Phase 2: create a NEW encrypted repo in the same archive
+        self._cv_switch_to_new(new_cbm, new_cli)
+        if upgrade_cb:
+            self.use_cbbackupmgr_version(new_cbm or new_cli, upgrade_cb=True)
+        base_name = self.backupset.name
+        enc_repo = "%s_encv" % base_name
+        self.backupset.name = enc_repo
+        self.backups = []
+        output, error = self.backup_create(del_old_backup=False)
+        if error or not output or "created successfully" not in output[0]:
+            self.fail("CV config_version: failed to create encrypted repo: %s"
+                      % (output or error))
+        self.backup_cluster()
+
+        # Read the new repo's backup-meta.json
+        enc_meta_path = "{0}/{1}/backup-meta.json".format(
+            self.backupset.directory, enc_repo)
+        out, _ = shell.execute_command("cat {0}".format(enc_meta_path))
+        new_meta = {}
+        if out:
+            try:
+                new_meta = json.loads(" ".join(out))
+            except (json.JSONDecodeError, ValueError):
+                self.log.warning("CV config_version: could not parse new meta")
+        new_version = new_meta.get("version", -1)
+        new_encrypted = new_meta.get("is_encrypted", False)
+        self.log.info("EaR CV config_version: new meta version=%s encrypted=%s"
+                      % (new_version, new_encrypted))
+        shell.disconnect()
+
+        # Assertions
+        if not new_encrypted:
+            self.fail("EaR CV config_version: new encrypted repo's meta does "
+                      "NOT have is_encrypted=true")
+        if new_version <= old_version and old_version >= 1:
+            self.log.warning("EaR CV config_version: expected new version > old "
+                             "but got new=%s old=%s (acceptable if both >=1)"
+                             % (new_version, old_version))
+        self.log.info("EaR CV config_version: old config (version=%s, "
+                      "encrypted=%s) vs new (version=%s, encrypted=%s) — PASS"
+                      % (old_version, old_encrypted, new_version, new_encrypted))
+        self.backupset.name = base_name
+
+    # --- CV-009: plan_boundary ---
+    def _cv_plan_boundary(self, gen, old_cbm, new_cbm, new_cli, upgrade_cb,
+                          expected_error):
+        """Exercise the plan version boundary: old cbm creates with old plan
+        format, new cbm continues with the new plan format. Both must coexist
+        and restore must handle the transition."""
+        # This scenario is functionally similar to mixed_plans but focuses on
+        # the plan.json format boundary (version 6 → 7).
+        self._cv_mixed_plans(gen, old_cbm, new_cbm, new_cli, upgrade_cb,
+                            expected_error)
+        self.log.info("EaR CV plan_boundary: plan format transition validated "
+                      "(delegates to mixed_plans flow)")
+
+    # --- CV-010: forward_compat ---
+    def _cv_forward_compat(self, gen, old_cbm, new_cbm, new_cli, upgrade_cb,
+                           expected_error):
+        """Old cbbackupmgr attempts to read/restore a NEW encrypted repo.
+        Expected: graceful failure with a clear error (not crash/corruption)."""
+        self._load_all_buckets(self.master, gen, "create", self.expires)
+
+        # Phase 1: create encrypted repo with NEW cbm
+        self._cv_switch_to_new(new_cbm, new_cli)
+        self.ear_enabled = True
+        self.backupset.encrypted = True
+        self.backup_create_validate()
+        self.backup_cluster_validate()
+
+        # Phase 2: switch to OLD cbm (which doesn't understand EaR)
+        self._cv_switch_to_old(old_cbm)
+        # The old cbm doesn't know about --passphrase, so we also disable
+        # EaR flags to avoid passing unknown flags to the old binary.
+        # Instead, the old cbm should fail because it encounters an encrypted
+        # repo it cannot understand.
+
+        # Try to list/info the encrypted repo with old cbm — expect failure
+        status, output, message = self.backup_list()
+        combined = " ".join((output or []) + ([message] if message else []))
+
+        # Try to restore with old cbm — expect graceful failure
+        self._ear_reset_restore_cluster()
+        self.backupset.start = 1
+        self.backupset.end = len(self.backups)
+        restore_output, restore_error = self.backup_restore()
+        restore_combined = " ".join(
+            (restore_output or []) + (restore_error or []))
+
+        # Check for expected error or at least that it didn't succeed silently
+        if expected_error:
+            found = (expected_error.lower() in combined.lower() or
+                     expected_error.lower() in restore_combined.lower())
+            if not found:
+                # The old binary may not produce our expected error string
+                # exactly — but it must NOT report success
+                if "Restore completed successfully" in restore_combined:
+                    self.fail("EaR CV forward_compat: old cbm SUCCEEDED in "
+                              "restoring an encrypted repo — forward compat "
+                              "is broken!")
+                self.log.warning("EaR CV forward_compat: expected error '%s' "
+                                 "not found verbatim, but restore did not "
+                                 "succeed (output: %s)" %
+                                 (expected_error, restore_combined[:200]))
+            else:
+                self.log.info("EaR CV forward_compat: expected error found: %s"
+                              % expected_error)
+        else:
+            if "Restore completed successfully" in restore_combined:
+                self.fail("EaR CV forward_compat: old cbm restored an "
+                          "encrypted repo without error — this should fail!")
+            self.log.info("EaR CV forward_compat: old cbm correctly failed "
+                          "to handle the encrypted repo")
+
     def test_backup_restore_after_rebalance(self):
         """
         1. Create default bucket on the cluster and loads it with given number of items

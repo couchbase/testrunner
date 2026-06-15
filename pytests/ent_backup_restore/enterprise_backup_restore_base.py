@@ -3568,16 +3568,22 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         """
         if not hasattr(self, "previous_cli") or self.previous_cli is None:
             self.previous_cli = self.cli_command_location
+        # Save the original version upfront — NewUpgradeBaseTest._install()
+        # reads from self.initial_version, so we temporarily override it.
+        original_version = getattr(self, "initial_version", None)
         if isinstance(version, str) and "/" in version:
             # A tools-package bin directory was supplied — just repoint the CLI.
             self.cli_command_location = version
         else:
-            # Install the requested cbbackupmgr build on the backup host only;
-            # the binary lands at the existing cli_command_location path.
-            self._install([self.backupset.backup_host], version)
+            # Install the requested cbbackupmgr build on the backup host only.
+            self.initial_version = version
+            self._install([self.backupset.backup_host])
+            self.initial_version = original_version
         if upgrade_cb:
             self.log.info("upgrade_cb=True → upgrading CB cluster to {0}".format(version))
-            self._install(self.cluster_to_backup, version)
+            self.initial_version = version
+            self._install(self.cluster_to_backup)
+            self.initial_version = original_version
         self.backupset.current_bkrs_client_version = self._get_current_bkrs_client_version()
         self.log.info("cbbackupmgr now at {0} (cli: {1})".format(
             self.backupset.current_bkrs_client_version, self.cli_command_location))
