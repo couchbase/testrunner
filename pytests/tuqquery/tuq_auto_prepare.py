@@ -2290,9 +2290,11 @@ class QueryAutoPrepareTests(QueryTests):
 
     def _cleanup_plan_stability_state(self):
         self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "off"')
-        self.run_cbq_query(query='DELETE FROM system:prepareds')
-        self.run_cbq_query(query='DROP BUCKET IF EXISTS QUERY_METADATA')
         self.sleep(10)
+        self.run_cbq_query(query='DELETE FROM system:prepareds')
+        self.sleep(10)
+        self.run_cbq_query(query='DROP BUCKET IF EXISTS QUERY_METADATA')
+        self.sleep(30)
         self.with_retry(lambda: self.run_cbq_query(
             query='SELECT COUNT(*) AS keyspace_count FROM system:keyspaces WHERE name = "QUERY_METADATA"')[
             'results'][0]['keyspace_count'], eval=0, delay=1, tries=20)
@@ -2345,9 +2347,9 @@ class QueryAutoPrepareTests(QueryTests):
 
     def _drop_recreate_collection(self, scope, collection):
         self.run_cbq_query(query='DROP COLLECTION `{0}`.`{1}`.`{2}`'.format(self.default_bucket_name, scope, collection))
-        self.sleep(5)
+        self.sleep(30)
         self.run_cbq_query(query='CREATE COLLECTION `{0}`.`{1}`.`{2}`'.format(self.default_bucket_name, scope, collection))
-        self.sleep(5)
+        self.sleep(30)
 
     def _drop_recreate_bucket(self, bucket):
         self.ensure_bucket_does_not_exist(bucket, using_rest=True)
