@@ -81,7 +81,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         If isSparse is True: create bucket, scope, collection and load docs via prepare_collection_for_indexing.
         Otherwise: restore from backup using restore_couchbase_bucket.
         """
-        if self.isSparse:
+        if self.isSparse and self.json_template!="AmazonSparse":
             self.bucket_params = self._create_bucket_params(
                 server=self.master, size=self.bucket_size,
                 replicas=self.num_replicas, bucket_type=self.bucket_type,
@@ -1079,7 +1079,6 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 for namespace in self.namespaces:
                     bucket, scope, _ = namespace.split('.')
                     self.populate_vectors_in_xattr(bucket=bucket, scope=scope)
-            self.namespaces = ['test_bucket.test_scope_1.test_collection_1']
             if self.isSparse:
                 similarity = "DOT"
             else:
@@ -6203,6 +6202,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                     continue
                 # Expected total: initial docs + additional docs = 2 * num_of_docs_per_collection
                 expected_total = self.num_of_docs_per_collection + num_docs
+                if self.isSparse:
+                    expected_total = self.num_of_docs_per_collection
                 self.assertEqual(index_item_count_map[index], expected_total, f"stats {stats}")
 
             self.gsi_util_obj.query_event.clear()

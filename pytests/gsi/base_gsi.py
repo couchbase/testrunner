@@ -5951,16 +5951,27 @@ class BaseSecondaryIndexingTests(QueryTests):
                 # Extract similarity from WITH clause
                 if 'WITH' in definition:
                     # Initialize metadata dict for this index
-                    index_metadata[index_name] = {
-                        'similarity': None,
-                        'description': None,
-                        'train_list': None,
-                        'nprobes': None
-                    }
+                    if self.isSparse:
+                        index_metadata[index_name] = {
+                            'description': None,
+                            'train_list': None,
+                            'nprobes': None,
+                            'sparsejl_dim': None
+                        }
+                    else:
+                        index_metadata[index_name] = {
+                            'similarity': None,
+                            'description': None,
+                            'train_list': None,
+                            'nprobes': None
+                        }
                     with_clause = definition.split('WITH')[1].strip()
                     try:
                         with_dict = json.loads(with_clause)
-                        index_metadata[index_name]['similarity'] = with_dict.get('similarity')
+                        if self.isSparse:
+                            index_metadata[index_name]['sparsejl_dim'] = with_dict.get('sparsejl_dim')
+                        else:
+                            index_metadata[index_name]['similarity'] = with_dict.get('similarity')
                         index_metadata[index_name]['description'] = with_dict.get('description')
                         index_metadata[index_name]['train_list'] = with_dict.get('train_list')
                         index_metadata[index_name]['nprobes'] = with_dict.get('scan_nprobes')
@@ -5972,7 +5983,10 @@ class BaseSecondaryIndexingTests(QueryTests):
             self.log.error(f"Error getting index metadata: {str(e)}")
             raise
         # Validate that no fields are None
-        required_fields = ['similarity', 'description']
+        if self.isSparse:
+            required_fields = ['description']
+        else:
+            required_fields = ['similarity', 'description']
         for index_name, metadata in index_metadata.items():
             for field in required_fields:
                 if metadata.get(field) is None:
@@ -5984,12 +5998,20 @@ class BaseSecondaryIndexingTests(QueryTests):
         for definition in index_definitions:
             if "primary" in definition.index_name:
                 continue
-            metadata_dict[definition.index_name] = {
-                "similarity": definition.similarity,
-                "description": definition.description,
-                "train_list": definition.train_list,
-                "nprobes": definition.scan_nprobes
-            }
+            if getattr(definition, 'sparsejl_dim', None) is not None:
+                metadata_dict[definition.index_name] = {
+                    "description": definition.description,
+                    "train_list": definition.train_list,
+                    "nprobes": definition.scan_nprobes,
+                    "sparsejl_dim": definition.sparsejl_dim
+                }
+            else:
+                metadata_dict[definition.index_name] = {
+                    "similarity": definition.similarity,
+                    "description": definition.description,
+                    "train_list": definition.train_list,
+                    "nprobes": definition.scan_nprobes
+                }
         return metadata_dict
 
     def get_queries_with_inline_filters(self, select_queries):
