@@ -1159,7 +1159,17 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
             if "kv" in node_services and "fts" in node_services:
                 fts_node = node
                 break
-        NodeHelper.kill_erlang(fts_node, bucket_names)
+        if "kv" in fts_node.services:
+            NodeHelper.kill_erlang(fts_node, bucket_names)
+        else:
+            # fts-only node (e.g. D:D:D:F:F:F): kill_erlang waits for KV bucket
+            # warmup, which is "Not Supported" on a non-kv node. Kill erlang
+            # inline and wait for the couchbase service to restart instead.
+            shell = RemoteMachineShellConnection(fts_node)
+            shell.kill_erlang(shell.extract_remote_info())
+            shell.start_couchbase()
+            shell.disconnect()
+            NodeHelper.wait_service_started(fts_node)
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
 
@@ -1743,6 +1753,9 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
             queries_to_run.append(query)
 
         for count, query in enumerate(queries_to_run):
+            if count > 0 and count % 500 == 0:
+                self.log.info(f"Pausing for 5 seconds after {count} queries to avoid throttling...")
+                time.sleep(5)
             print("*" * 10 + f" Running Vector Query # {count} - on index {index.name} " + "*" * 10)
             if isinstance(query, str):
                 query = json.loads(query)
@@ -1854,7 +1867,10 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
             except Exception as e:
                 self.log.info("Expected exception : %s" % e)
         NodeHelper.start_couchbase(node)
-        NodeHelper.wait_warmup_completed([node])
+        # node is an fts node (get_random_fts_node), which in a D:D:D:F:F:F
+        # cluster has no kv service, so wait for the couchbase service to come
+        # back rather than for KV bucket warmup.
+        NodeHelper.wait_service_started(node)
 
         vector_query_failure = None
         for index in self._cb_cluster.get_indexes():
@@ -2104,7 +2120,18 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         # TESTED
         self.load_data_and_create_indexes(wait_for_index_complete=True, generate_queries=True)
         node = self._cb_cluster.get_random_fts_node()
-        NodeHelper.kill_erlang(node)
+        bucket_names = [bucket.name for bucket in self._cb_cluster.get_buckets()]
+        if "kv" in node.services:
+            NodeHelper.kill_erlang(node, bucket_names=bucket_names)
+        else:
+            # fts-only node (e.g. D:D:D:F:F:F): kill_erlang waits for KV bucket
+            # warmup, which is "Not Supported" on a non-kv node. Kill erlang
+            # inline and wait for the couchbase service to restart instead.
+            shell = RemoteMachineShellConnection(node)
+            shell.kill_erlang(shell.extract_remote_info())
+            shell.start_couchbase()
+            shell.disconnect()
+            NodeHelper.wait_service_started(node)
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
         tasks = []
@@ -2196,17 +2223,20 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         self.log.info(defn['indexDef'])
         fail_thread.join()
         update_index_thread.join()
-        hits, _, _, _ = index.execute_query(self.query)
-        self.log.info("Hits: %s" % hits)
+        is_vector_index = self.type_of_load == "separate" and "vector_" in index.name
+        if not is_vector_index:
+            hits, _, _, _ = index.execute_query(self.query)
+            self.log.info("Hits: %s" % hits)
         vector_query_failure = []
-        for index in self._cb_cluster.get_indexes():
-            self.is_index_partitioned_balanced(index)
+        for index_obj in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index_obj)
         self.wait_for_indexing_complete()
         self.validate_index_count(equal_bucket_doc_count=True)
-        hits, _, _, _ = index.execute_query(
-            self.query,
-            expected_hits=index.get_src_bucket_doc_count())
-        self.log.info("Hits: %s" % hits)
+        if not is_vector_index:
+            hits, _, _, _ = index.execute_query(
+                self.query,
+                expected_hits=index.get_src_bucket_doc_count())
+            self.log.info("Hits: %s" % hits)
         for index in self._cb_cluster.get_indexes():
             if self.type_of_load == "separate" and "vector_" in index.name:
                 vector_query_failure, query_matches = self.run_vector_queries_and_report(index, num_queries=2)
@@ -2334,7 +2364,10 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
             self._cb_cluster.get_nodes().remove(remove_node)
             node_services = remove_node.services.split(",")
 
-            if "kv" in node_services:
+            # get_kv_nodes() is recomputed live from the cluster's service map on
+            # every call, so an ejected node is already absent - only remove it if
+            # it is still present to avoid a ValueError.
+            if "kv" in node_services and remove_node in self._cb_cluster.get_kv_nodes():
                 self._cb_cluster.get_kv_nodes().remove(remove_node)
 
         self.create_fts_indexes_some_buckets(exempt_bucket_prefix="vector-bucket")

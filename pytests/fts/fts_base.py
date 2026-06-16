@@ -611,6 +611,8 @@ class NodeHelper:
 
     @staticmethod
     def wait_warmup_completed(warmupnodes, bucket_names=["default"]):
+        # NOTE: this polls the KV-engine 'ep_warmup_thread' stat, so it must only
+        # be used with nodes that run the 'kv' service
         if isinstance(bucket_names, str):
             bucket_names = [bucket_names]
         start = time.time()
@@ -5828,7 +5830,10 @@ class FTSBaseTest(unittest.TestCase):
             self.sleep(10, "giving sometime for index partition to be created")
             return True
 
-        rest = RestConnection(self.master)
+        # Use the cluster's current master rather than self.master: when a test
+        # rebalances out the original master node, self.master becomes stale (it
+        # points at the ejected node) and get_vbuckets() against it returns None.
+        rest = RestConnection(self._cb_cluster.get_master_node())
         self._num_vbuckets = len(rest.get_vbuckets(self._cb_cluster.get_bucket_by_name(index._source_name)))
 
         self.log.info("Validating index distribution for %s ..." % index.name)
@@ -5842,6 +5847,15 @@ class FTSBaseTest(unittest.TestCase):
             import math
             exp_num_pindexes = math.ceil(
                 self._num_vbuckets // partitions_per_pindex + 0.5)
+
+        # When a test explicitly requests indexPartitions (num_partitions param),
+        # cbft creates at least that many pindexes, regardless of the
+        # maxPartitionsPerPIndex-derived count. Honour that so the expected count
+        # matches the actual partitioning.
+        _, defn = index.get_index_defn()
+        index_partitions = defn['indexDef']['planParams'].get('indexPartitions', 0)
+        if index_partitions:
+            exp_num_pindexes = max(exp_num_pindexes, index_partitions)
 
         total_pindexes = 0
         for node in list(nodes_partitions.keys()):
