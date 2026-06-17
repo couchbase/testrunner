@@ -403,7 +403,8 @@ class CreateDeleteViewTests(BaseTestCase):
             verify_rbac_exclusion_syntax(
                 self, rest, bucket_name, scope_name, allowed_col, excluded_col,
                 "views", runtype=self.input.param("runtype", "default"),
-                service_validator=views_service_validator)
+                service_validator=views_service_validator,
+                extra_roles="data_reader[{b}]".format(b=bucket_name))
         finally:
             if scope_created:
                 try:
