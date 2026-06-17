@@ -426,25 +426,23 @@ class LoadVector(object):
         cb_coll = cb.scope(scope).collection(collection)
         if vector_type == 'cohere':
             documents = {}
-            for idx, x in enumerate(docs):
-                key = f"cohere_{idx+batch}"
-                documents[key] = {
-                    "id": idx + batch,
-                    "size": 8,
-                    "brand": "nike",
-                    vector_field: x.tolist()
-                }
-            try:
-                cb_coll.upsert_multi(documents)
-            except Exception as e:
-                print(e)
-            if is_xattr:
-                for key in documents:
-                    cb_coll.mutate_in(
-                        key,
-                        [SD.upsert(vector_field, documents[key][vector_field], xattr=True),
-                         SD.remove(vector_field)]
-                    )
+            for is1, size in enumerate(cfg["sizes"]):
+                for ib, brand in enumerate(cfg["brands"]):
+                    for idx, x in enumerate(docs):
+                        key = f"cohere_{brand}_{size}_{idx+batch}"
+                        documents[key] = {
+                            "id": idx + batch,
+                            "size": size,
+                            "sizeidx": is1,
+                            "brand": brand,
+                            "brandidx": ib,
+                            vector_field: x.tolist()
+                        }
+                    try:
+                        cb_coll.upsert_multi(documents)
+                    except Exception as e:
+                        print(e)
+                    documents = {}
             return
         documents = {}
         for is1, size in enumerate(cfg["sizes"]):
@@ -505,9 +503,15 @@ class IndexVector(object):
             vector_field = f"meta().xattrs.{vector_field}"
         if is_base64:
             vector_field = f"DECODE_VECTOR({vector_field}, {network_byte_order})"
+
+        # Keep test distance aliases stable while using a canonical
+        # similarity value for vector-index DDL.
+        similarity_for_index = similarity
+        if vector_type == 'dense' and similarity == 'L2':
+            similarity_for_index = 'EUCLIDEAN'
         
         if vector_type == 'dense':
-            vector_definition = {"dimension": dimension, "train_list": train, "description": description, "similarity": similarity, "scan_nprobes": nprobes}
+            vector_definition = {"dimension": dimension, "train_list": train, "description": description, "similarity": similarity_for_index, "scan_nprobes": nprobes}
         elif vector_type == 'sparse':
             vector_definition = {"similarity": "DOT", "train_list": train, "scan_nprobes": nprobes}
 
@@ -720,7 +724,18 @@ class QueryVector(object):
             )
             vectors.append(vectors_id)
             distances.append(vectors_distance)
-        return np.array(distances, dtype=np.float32), np.array(vectors, dtype=np.int32)
+
+        # ANN may return a variable number of rows per query. Pad results so
+        # callers can index consistently without ragged-array conversion errors.
+        max_len = max((len(v) for v in vectors), default=0)
+        padded_distances = np.full((len(distances), max_len), np.nan, dtype=np.float32)
+        padded_vectors = np.full((len(vectors), max_len), -1, dtype=np.int32)
+        for i, (dist_row, vec_row) in enumerate(zip(distances, vectors)):
+            if dist_row:
+                padded_distances[i, :len(dist_row)] = np.asarray(dist_row, dtype=np.float32)
+            if vec_row:
+                padded_vectors[i, :len(vec_row)] = np.asarray(vec_row, dtype=np.int32)
+        return padded_distances, padded_vectors
 
     def n1ql_search(self, cb_scope, qdoc, search_function, type, collection, vector_field, is_xattr, is_base64, is_bigendian, nprobes, vector_type='dense'):
         if type == 'KNN':

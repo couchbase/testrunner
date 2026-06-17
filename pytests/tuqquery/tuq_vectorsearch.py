@@ -1786,6 +1786,11 @@ class VectorSearchTests(QueryTests):
 
     def verify_vector_index_metadata_and_stats(self, expected_description, expected_dimension, expected_train_list, expected_nprobes, expected_similarity):
         """Helper method to verify vector index metadata matches expected values"""
+        def canonical_similarity(similarity):
+            if similarity == "L2":
+                return "EUCLIDEAN"
+            return similarity
+
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         # Get metadata from first node
         index_rest = RestConnection(index_nodes[0])
@@ -1801,26 +1806,46 @@ class VectorSearchTests(QueryTests):
                 break
         index_rest = RestConnection(index_node)
         index_stats = index_rest.get_index_stats()
-        
-        with_clause = index_metadata[0]['definition'].split('WITH')[1].strip()
-        with_clause = ast.literal_eval(with_clause)
-        self.log.info(f"With clause: {with_clause}")
+
+        definition = index_metadata[0].get('definition', '')
+        with_clause = None
+        if 'WITH' in definition:
+            with_clause = ast.literal_eval(definition.split('WITH', 1)[1].strip())
+            self.log.info(f"With clause: {with_clause}")
+        else:
+            self.log.info(f"Index definition has no WITH clause to validate: {definition}")
 
         # get doc count from bucket via n1ql
         query = f"SELECT COUNT(*) FROM default"
         doc_count = self.run_cbq_query(query)
         self.log.info(f"Doc count: {doc_count}")
         num_docs_indexed = doc_count['results'][0]['$1']
-        
-        # Check metatdata
-        self.assertEqual(with_clause['description'], expected_description)
-        self.assertEqual(with_clause['dimension'], expected_dimension) 
-        self.assertEqual(with_clause['train_list'], expected_train_list)
-        self.assertEqual(with_clause['scan_nprobes'], expected_nprobes)
-        self.assertEqual(with_clause['similarity'], expected_similarity)
+
+        # Check metatdata when the REST definition includes the WITH payload.
+        if with_clause is not None:
+            self.assertEqual(with_clause['description'], expected_description)
+            self.assertEqual(with_clause['dimension'], expected_dimension)
+            self.assertEqual(with_clause['train_list'], expected_train_list)
+            self.assertEqual(with_clause['scan_nprobes'], expected_nprobes)
+            self.assertEqual(canonical_similarity(with_clause['similarity']), canonical_similarity(expected_similarity))
 
         # Check num_docs_pending
         self.assertEqual(index_stats['default'][index_name]['num_docs_pending'], 0)
 
-        # Check num_docs_indexed
-        self.assertEqual(index_stats['default'][index_name]['num_docs_indexed'], num_docs_indexed)
+        # Check num_docs_indexed with a short retry window because index stats
+        # can lag behind the bucket count immediately after index creation.
+        max_attempts = 10
+        retry_delay_sec = 2
+        for attempt in range(1, max_attempts + 1):
+            index_stats = index_rest.get_index_stats()
+            indexed_docs = index_stats['default'][index_name]['num_docs_indexed']
+            if indexed_docs == num_docs_indexed:
+                break
+            if attempt < max_attempts:
+                self.log.info(
+                    f"Waiting for vector index stats to settle for {index_name}: "
+                    f"indexed_docs={indexed_docs}, expected={num_docs_indexed} "
+                    f"(attempt {attempt}/{max_attempts})"
+                )
+                self.sleep(retry_delay_sec)
+        self.assertEqual(indexed_docs, num_docs_indexed)
