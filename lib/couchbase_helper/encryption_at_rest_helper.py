@@ -64,14 +64,18 @@ class EncryptionAtRestHelper:
         """
         search_patterns = search_patterns or ["password", "username", "bucket", "secret"]
         shell = RemoteMachineShellConnection(node)
-        cmd = f"strings {file_path} 2>/dev/null | head -100"
-        output, _ = shell.execute_command(cmd)
-        shell.disconnect()
-        
-        output_str = ' '.join(output).lower() if output else ''
-        for pattern in search_patterns:
-            if pattern.lower() in output_str:
-                return False, pattern
+        try:
+            # Use `grep -a` per pattern rather than `strings` -- `strings` (binutils) is
+            # not installed on the minimal Couchbase server images; see the note on
+            # find_plaintext_terms_in_file.
+            for pattern in search_patterns:
+                safe = str(pattern).replace("'", "'\\''")
+                cmd = f"grep -aioF -m1 -- '{safe}' {file_path} 2>/dev/null"
+                output, _ = shell.execute_command(cmd)
+                if output and any(line.strip() for line in output):
+                    return False, pattern
+        finally:
+            shell.disconnect()
         return True, None
     
     def get_files_in_directory(self, node, directory, file_pattern="*"):
@@ -805,9 +809,20 @@ class EncryptionAtRestHelper:
 
     def find_plaintext_terms_in_file(self, node, file_path, terms, max_terms=50):
         """
-        Search a file's printable strings for any of the given sensitive terms.
+        Search a file's raw bytes for any of the given sensitive terms in plaintext.
 
         Used to detect plaintext leakage of user data inside encrypted FTS files.
+
+        IMPORTANT: this uses `grep -a` (treat binary as text) directly on the file --
+        NOT `strings | grep`. The `strings` binary ships with binutils, which is NOT
+        installed on the minimal Couchbase server images (e.g. the Debian 10 image has
+        no `strings`). When `strings` is absent the old pipeline produced empty output
+        for every file, so this check ALWAYS reported "clean" -- silently passing the
+        positive encryption checks even on plaintext data, and failing the negative
+        (post-disable) checks with "no plaintext found -- still encrypted?". `grep -a`
+        relies only on coreutils grep (always present) and finds the plaintext field
+        names / indexed terms that are stored uncompressed in a .zap. Do NOT revert to
+        `strings`.
 
         Args:
             node: Server object
@@ -829,7 +844,10 @@ class EncryptionAtRestHelper:
         try:
             for term in terms:
                 safe = term.replace("'", "'\\''")
-                cmd = f"strings {file_path} 2>/dev/null | grep -iF -m1 -- '{safe}'"
+                # -a: treat binary as text, -i: case-insensitive, -o: print only the
+                # match (bounds output for binary files with few newlines), -F: fixed
+                # string, -m1: stop at first match.
+                cmd = f"grep -aioF -m1 -- '{safe}' {file_path} 2>/dev/null"
                 output, _ = shell.execute_command(cmd)
                 if output and any(line.strip() for line in output):
                     return False, term
@@ -842,8 +860,12 @@ class EncryptionAtRestHelper:
         Best-effort: does the whole file contain any of the given values?
 
         Unlike verify_file_header_contains_any (header only) this scans the entire
-        file's printable strings -- used for the internal Key Id which is embedded
-        somewhere inside .zap / bolt rather than in a fixed header.
+        file's raw bytes -- used for the internal Key Id which is embedded somewhere
+        inside .zap / bolt rather than in a fixed header.
+
+        Uses `grep -a` rather than `strings | grep` because `strings` (binutils) is not
+        installed on the minimal Couchbase server images -- see the note on
+        find_plaintext_terms_in_file. Do NOT revert to `strings`.
 
         Returns:
             tuple: (found: bool, matched_value: str or None)
@@ -855,7 +877,7 @@ class EncryptionAtRestHelper:
                 if not value:
                     continue
                 safe = value.replace("'", "'\\''")
-                cmd = f"strings {file_path} 2>/dev/null | grep -iF -m1 -- '{safe}'"
+                cmd = f"grep -aioF -m1 -- '{safe}' {file_path} 2>/dev/null"
                 output, _ = shell.execute_command(cmd)
                 if output and any(line.strip() for line in output):
                     return True, value

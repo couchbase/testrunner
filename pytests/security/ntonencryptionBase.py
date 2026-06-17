@@ -144,9 +144,22 @@ class ntonencryptionBase:
         Main function to disable node to node encryption
         """
         log.info ('Disable up node to node encryption - status = disable and clusterEncryptionLevel = control')
-        self.disable_autofailover(servers)
-        self.change_cluster_encryption_cli(servers,'control',update_to_all=True)
-        self.ntonencryption_cli(servers,'disable',update_to_all=True)
+        # During teardown a node may have been rebalanced/failed out (and its server
+        # stopped), so it is no longer reachable. Disabling settings on it is both
+        # impossible and unnecessary. Probe reachability and skip unreachable nodes so
+        # this best-effort cleanup doesn't abort the whole teardown with
+        # ServerUnavailableException. Reachable nodes behave exactly as before.
+        reachable = []
+        for server in servers:
+            try:
+                RestConnection(server)
+                reachable.append(server)
+            except Exception as e:
+                log.warning("Skipping unreachable node {0} during nton disable "
+                            "(rebalanced/failed out?): {1}".format(getattr(server, 'ip', server), e))
+        self.disable_autofailover(reachable)
+        self.change_cluster_encryption_cli(reachable,'control',update_to_all=True)
+        self.ntonencryption_cli(reachable,'disable',update_to_all=True)
 
     '''def get_ntonencryption_status(self,servers):'''
 

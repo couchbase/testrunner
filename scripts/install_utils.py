@@ -193,29 +193,49 @@ class NodeHelper:
             self.shell = RemoteMachineShellConnection(self.node, exit_on_failure=False)
 
     def disable_unattended_upgrades(self, grace=120):
-        """Stop and disable apt-daily timers + unattended-upgrades on deb hosts
-        so they don't race with our install. Waits up to `grace` seconds for any
-        in-flight upgrade to exit on its own; SIGKILLs it after that and recovers
-        dpkg state via `dpkg --configure -a`. No-op on non-deb."""
+        """Neutralize Ubuntu's apt-daily / unattended-upgrades on deb hosts so they
+        don't hold the dpkg lock while we install.
+
+        We MASK (not just stop/disable) the timers AND the service units -- crucially
+        including apt-daily.service and apt-daily-upgrade.service, which are what run
+        `apt.systemd.daily` -> `unattended-upgrade` and actually hold the lock. The old
+        code only stopped the timers + unattended-upgrades.service and used `disable`;
+        `disable` merely blocks future timer starts, so an already-activated
+        apt-daily.service kept running and re-grabbed the dpkg lock seconds after we
+        cleared it (observed in logs: "exited cleanly" then "apt/dpkg busy" 1s later).
+        `mask --now` stops the running unit AND makes it impossible to re-activate.
+
+        Then we wait out any in-flight run, SIGKILL leftovers (matching both
+        `unattended-upgrade` and the `apt.systemd.daily` wrapper), and recover dpkg
+        state via `dpkg --configure -a`. No-op on non-deb.
+
+        NOTE: the units stay masked on the node afterward -- intended on ephemeral test
+        nodes, which should never run background apt activity.
+        """
         if self.info.deliverable_type != "deb":
             return
         log.info("Disabling unattended-upgrades on {0}".format(self.ip))
-        stop_cmd = (
-            "systemctl stop apt-daily.timer apt-daily-upgrade.timer "
-            "unattended-upgrades.service 2>/dev/null; "
-            "systemctl disable apt-daily.timer apt-daily-upgrade.timer "
-            "unattended-upgrades.service 2>/dev/null; "
-            "true"
+        units = (
+            "apt-daily.timer apt-daily-upgrade.timer "
+            "apt-daily.service apt-daily-upgrade.service "
+            "unattended-upgrades.service"
         )
+        # mask --now: stop the running units AND prevent any re-activation (disable
+        # alone does not stop a running service nor block dependency/socket starts).
+        stop_cmd = (
+            "systemctl mask --now {0} 2>/dev/null; true"
+        ).format(units)
         try:
             self.shell.execute_command(stop_cmd, debug=self.params["debug_logs"])
         except Exception as e:
-            log.warning("disable_unattended_upgrades(stop): {0} on {1}".format(e, self.ip))
+            log.warning("disable_unattended_upgrades(mask): {0} on {1}".format(e, self.ip))
 
         iters = max(1, grace // 5)
+        # apt.systemd.daily is the wrapper script apt-daily*.service runs; unattended-upgrade
+        # is the upgrader it invokes. Wait for either to drain on its own first.
         wait_cmd = (
             "for i in $(seq 1 {0}); do "
-            "  pgrep -f unattended-upgr >/dev/null 2>&1 || exit 0; "
+            "  pgrep -f 'unattended-upgrade|apt.systemd.daily' >/dev/null 2>&1 || exit 0; "
             "  sleep 5; "
             "done; exit 1"
         ).format(iters)
@@ -226,8 +246,8 @@ class NodeHelper:
 
         recover_cmd = (
             "flag=clean; "
-            "if pgrep -f unattended-upgr >/dev/null 2>&1; then "
-            "  pkill -9 -f unattended-upgr 2>/dev/null; "
+            "if pgrep -f 'unattended-upgrade|apt.systemd.daily' >/dev/null 2>&1; then "
+            "  pkill -9 -f 'unattended-upgrade|apt.systemd.daily' 2>/dev/null; "
             "  sleep 2; flag=killed; "
             "fi; "
             "if fuser /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock >/dev/null 2>&1 "
@@ -245,9 +265,9 @@ class NodeHelper:
             log.warning("disable_unattended_upgrades(recover): {0} on {1}".format(e, self.ip))
             return
         if any("killed" in line for line in (o or [])):
-            log.warning("Force-killed unattended-upgr on {0} and recovered dpkg state".format(self.ip))
+            log.warning("Force-killed apt-daily/unattended-upgrade on {0} and recovered dpkg state".format(self.ip))
         else:
-            log.info("unattended-upgr exited cleanly on {0}".format(self.ip))
+            log.info("apt-daily/unattended-upgrade neutralized cleanly on {0}".format(self.ip))
 
     def pre_install_cb(self):
         self.disable_unattended_upgrades()

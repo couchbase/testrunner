@@ -622,6 +622,10 @@ class BQVectorSearch(VectorSearch):
     def test_bq_basic_knn_search(self):
         all_vectors, query_vectors = self._setup_bq_test_data()
 
+        # Turn on bucket encryption after restore and before the BQ FTS index is built,
+        # so the vector segments are written encrypted (no-op unless
+        # enable_encryption_at_rest=True).
+        self._enable_bucket_encryption_if_requested()
         index_obj = self._create_bq_fts_index_on_bucket("bq_knn")
         self._validate_bq_index_definition(index_obj)
 

@@ -9,13 +9,14 @@ __author__ = "Dananjay S"
 __created_on__ = "02/06/26"
 """
 
+import copy
 import json
 import os
 import random
 import time
 
-from .fts_base import FTSBaseTest
-from couchbase_helper.documentgenerator import SDKDataLoader
+from .fts_base import FTSBaseTest, OPS
+from couchbase_helper.documentgenerator import JsonDocGenerator, SDKDataLoader
 from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection
 from lib.membase.helper.encryption_at_rest_helper import EncryptionUtil
@@ -321,9 +322,13 @@ class FTSEncryptionBaseTest(FTSBaseTest):
         self.log.info(f"{step}PASSED - active fts.log encrypted")
 
     def _validate_segments_encrypted(self, fts_nodes, label="segments"):
+        # The real on-disk proof is "no sensitive user data in plaintext". We do NOT
+        # pass a key-id here: encryption_at_rest_id is the KEK/secret id (a short
+        # integer) which grep-matches random bytes in a large .zap (false positive).
+        # The meaningful DEK-UUID-in-segment check is _check_dek_in_segments(), which
+        # uses the actual DEK UUIDs from GetInUseKeys.
         results = self.encryption_helper.verify_fts_segment_files_encrypted(
             fts_nodes, sensitive_terms=self.sensitive_terms,
-            expected_key_ids=[self.encryption_at_rest_id],
         )
         self._assert_encryption_results(results, label)
 
@@ -339,18 +344,53 @@ class FTSEncryptionBaseTest(FTSBaseTest):
         return index
 
     def _run_emp_data_op(self, num_ops, op_type, start=0, end=0):
-        """Run a create/update/delete op against the default bucket's emp data."""
-        gen = SDKDataLoader(
-            num_ops=num_ops,
-            percent_create=100 if op_type == "create" else 0,
-            percent_update=100 if op_type == "update" else 0,
-            percent_delete=100 if op_type == "delete" else 0,
-            scope="_default", collection="_default", json_template="emp",
-            op_type=op_type, start=start, end=end,
-            username=self._input.membase_settings.rest_username,
-            password=self._input.membase_settings.rest_password,
-        )
-        tasks = self._cb_cluster.async_load_bucket_from_generator(self._default_bucket(), gen)
+        """Run a create/update/delete op against the default bucket's data.
+
+        MUST hit the SAME keyspace the FTS framework's load_data() created, otherwise
+        the op silently no-ops (the keys don't exist) and indexed/doc counts never move.
+
+        Earlier this built an SDKDataLoader with key_prefix="<dataset>_", producing keys
+        like "emp_0..emp_N". But for the default container_type='bucket' path, load_data()
+        loads via a JsonDocGenerator whose keys are "<name><10000000 + n>" (e.g.
+        "emp10000001") -- see JsonDocGenerator.__next__. Those two keyspaces are disjoint,
+        so every update/delete missed and became a no-op. We now reuse the loader's own
+        stored create generator (_kv_gen[OPS.CREATE]) and mirror CouchbaseCluster's own
+        async_update_delete() construction, so the keyspace always matches -- whether the
+        create gen is a bucket JsonDocGenerator or a collection SDKDataLoader.
+        """
+        end = end if end > start else start + num_ops
+        create_gen = self._cb_cluster._kv_gen.get(OPS.CREATE)
+        if create_gen is None:
+            raise Exception("no create generator found -- load_data() must run before _run_emp_data_op")
+
+        if isinstance(create_gen, JsonDocGenerator):
+            if op_type == OPS.DELETE:
+                gen = JsonDocGenerator(create_gen.name, op_type=OPS.DELETE,
+                                       encoding="utf-8", start=start, end=end)
+            elif op_type == OPS.UPDATE:
+                gen = copy.deepcopy(create_gen)
+                gen.start, gen.itr, gen.end = start, start, end
+                gen.update()
+            else:  # create
+                gen = JsonDocGenerator(create_gen.name, encoding="utf-8", start=start, end=end)
+        else:
+            # Collection path (SDKDataLoader): reuse the loader's own prefix/scope/
+            # collection so keys match; just retarget the op_type and range.
+            gen = copy.deepcopy(create_gen)
+            gen.op_type = op_type
+            gen.percent_create = 100 if op_type == OPS.CREATE else 0
+            gen.percent_update = 100 if op_type == OPS.UPDATE else 0
+            gen.percent_delete = 100 if op_type == OPS.DELETE else 0
+            gen.start, gen.end, gen.num_ops = start, end, end - start
+
+        # Use the cluster's TRACKED bucket object -- the one the loader populated -- NOT
+        # _default_bucket()/get_bucket_by_name(), which builds a FRESH Bucket with an empty
+        # kv_store (kvs) model. The update path validates each key against bucket.kvs via
+        # partition.get_valid(); against a fresh, empty model every key looks absent, so it
+        # gets dropped from the batch and _populate_kvstore then KeyErrors on it.
+        bucket = next((b for b in self._cb_cluster.get_buckets()
+                       if b.name == self.default_bucket_name), None) or self._default_bucket()
+        tasks = self._cb_cluster.async_load_bucket_from_generator(bucket, gen, ops=op_type)
         for task in tasks:
             task.result()
 
@@ -358,13 +398,22 @@ class FTSEncryptionBaseTest(FTSBaseTest):
         hits, _, _, _ = index.execute_query({"match_all": {}}, zero_results_ok=zero_ok)
         return hits
 
+    def _fts_rest(self):
+        """RestConnection to an FTS node.
+
+        FTS REST endpoints live on :8094, which only FTS nodes serve. self.master is
+        the KV/orchestrator node (no FTS), so FTS calls (compaction, doc count, query)
+        MUST go to an FTS node -- using self.master gives 'Connection refused' on :8094.
+        """
+        return RestConnection(self._cb_cluster.get_random_fts_node())
+
     def _force_merge_and_wait(self, index_name, timeout=180):
         """Trigger an FTS segment merge (compaction) and wait until it completes.
 
         Disabling encryption / dropping DEKs only rewrites segments on a merge or flush,
         so tests force a merge rather than assume the rewrite is instant.
         """
-        rest = RestConnection(self.master)
+        rest = self._fts_rest()
         status, resp = rest.start_fts_index_compaction(index_name)
         self.log.info(f"Triggered merge on '{index_name}': status={status}, resp={resp}")
         deadline = time.time() + timeout
@@ -378,7 +427,7 @@ class FTSEncryptionBaseTest(FTSBaseTest):
 
     def _wait_merge_complete(self, index_name, timeout=180):
         """Wait for an already-triggered FTS merge/compaction to finish (does NOT trigger)."""
-        rest = RestConnection(self.master)
+        rest = self._fts_rest()
         deadline = time.time() + timeout
         while time.time() < deadline:
             status, tasks = rest.get_fts_index_compactions(index_name)

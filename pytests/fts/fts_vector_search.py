@@ -841,12 +841,16 @@ class VectorSearch(FTSBaseTest):
                 if str(hd.__class__).find('FileHandler') != -1:
                     hd.setLevel(level=logging.DEBUG)
                 else:
+                    # logging level constants are UPPERCASE (logging.INFO == 20);
+                    # getattr(logging, "info") would return the logging.info() FUNCTION,
+                    # not a level, and setLevel() then raises "Level not an integer or a
+                    # valid string". Uppercase the param and fall back to INFO if it isn't
+                    # a recognized level name.
                     hd.setLevel(
                         level=getattr(
                             logging,
-                            self.input.param(
-                                "log_level",
-                                None)))
+                            str(self.input.param("log_level", "INFO")).upper(),
+                            logging.INFO))
 
     def get_host_ip(self):
         ip = None
@@ -1192,6 +1196,9 @@ class VectorSearch(FTSBaseTest):
     # Indexing
     def test_basic_vector_search(self):
         containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client)
+        # Encrypt the bucket before any vector data is loaded so segments are encrypted
+        # from the first flush (no-op unless enable_encryption_at_rest=True).
+        self._enable_bucket_encryption_if_requested()
         bucketvsdataset = self.load_vector_data(containers, dataset=self.vector_dataset)
         indexes = []
 

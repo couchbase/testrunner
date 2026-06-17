@@ -666,25 +666,43 @@ class FTSEncryptionAtRest(FTSEncryptionBaseTest):
         self._post_topology_validation("segments(after-full-recovery)", baseline_hits, index)
         self.log.info("TEST PASSED: test_fts_ear_hard_failover_full_recovery")
 
-    def test_fts_ear_graceful_failover_delta_recovery(self):
-        """Graceful failover an FTS node, add back with DELTA recovery; data encrypted, no loss."""
+    def test_fts_ear_hard_failover_delta_recovery(self):
+        """Hard failover a DATA (KV) node, add it back with DELTA recovery; FTS data
+        stays encrypted and no data is lost.
+
+        Delta recovery replays only the delta accumulated since failover and therefore
+        REQUIRES a node with persisted vbucket data -- i.e. a KV/data node. An FTS-only
+        node holds no vbuckets, so ns_server rejects it for delta recovery ("invalid node
+        name or node can't be used for delta recovery"). We therefore fail over a
+        non-master DATA node (which needs >=2 data nodes so the bucket survives the
+        failover), delta-recover it, then validate FTS segments stay encrypted and the
+        hit count is unchanged.
+
+        Run with a 2-data-node topology, e.g. cluster=D,D,F.
+        """
         self._require_encryption_enabled()
         self.load_data(num_items=self._num_items)
         index = self._create_default_index("fts_ear_failover_delta_idx")
         fts_nodes = self._cb_cluster.get_fts_nodes()
-        self.assertGreaterEqual(len(fts_nodes), 2, "need >=2 FTS nodes for failover")
+        self.assertGreaterEqual(len(fts_nodes), 1, "need >=1 FTS node")
+        kv_nodes = self._cb_cluster.get_kv_nodes()
+        self.assertGreaterEqual(
+            len(kv_nodes), 2,
+            "delta recovery needs a data node to fail over while the bucket stays up -- "
+            "run with >=2 data nodes (e.g. cluster=D,D,F)")
         baseline_hits = self._match_all_hits(index)
-        self._validate_segments_encrypted(fts_nodes, "segments(before-graceful-failover)")
+        self._validate_segments_encrypted(fts_nodes, "segments(before-failover)")
 
-        fo_node = fts_nodes[-1]
-        self.log.info(f"Graceful failover of FTS node {fo_node.ip}")
-        task = self._cb_cluster.async_failover(node=fo_node, graceful=True)
+        # Fail over a NON-master data node (self.master is the orchestrator).
+        fo_node = next((n for n in kv_nodes if n.ip != self.master.ip), kv_nodes[-1])
+        self.log.info(f"Hard failover of DATA node {fo_node.ip}")
+        task = self._cb_cluster.async_failover(node=fo_node, graceful=False)
         task.result()
         self.log.info("Adding node back with DELTA recovery")
-        self._cb_cluster.add_back_node(recovery_type='delta', services=["fts"])
+        self._cb_cluster.add_back_node(recovery_type='delta', services=["kv"])
 
         self._post_topology_validation("segments(after-delta-recovery)", baseline_hits, index)
-        self.log.info("TEST PASSED: test_fts_ear_graceful_failover_delta_recovery")
+        self.log.info("TEST PASSED: test_fts_ear_hard_failover_delta_recovery")
 
     # ==================================================================
     # R-C: rebalance / failover concurrent with active key rotation (test plan 10c).
@@ -791,6 +809,99 @@ class FTSEncryptionAtRest(FTSEncryptionBaseTest):
         self._check_dek_in_segments(self._cb_cluster.get_fts_nodes(), new_deks, label="[failover+rot] ")
         self.log.info("TEST PASSED: test_fts_ear_failover_during_rotation")
 
+    def test_fts_ear_enable_encryption_during_rebalance(self):
+        """Enable bucket encryption WHILE an FTS node rebalances IN; data ends up encrypted.
+
+        Start from an UNENCRYPTED baseline, kick off rebalance-in async, flip bucket
+        encryption ON mid-rebalance, then confirm the moved/rewritten segments are
+        encrypted, a DEK is in use (no '' marker), and no data is lost.
+        """
+        self._require_encryption_enabled()
+        bucket_name = self.default_bucket_name
+        fts_nodes = self._cb_cluster.get_fts_nodes()
+        rest = RestConnection(self.master)
+
+        # Baseline: turn encryption OFF and rewrite segments to plaintext.
+        self.load_data(num_items=self._num_items)
+        index = self._create_default_index("fts_ear_enable_reb_idx")
+        baseline_hits = self._match_all_hits(index)
+        self.assertGreater(baseline_hits, 0, "no hits before enable-during-rebalance")
+        status, resp = rest.disable_bucket_encryption(bucket_name)
+        self.assertTrue(status, f"disable_bucket_encryption failed: {resp}")
+        self._run_emp_data_op(max(1000, self._num_items // 10), "update", start=0, end=max(1000, self._num_items // 10))
+        self._force_merge_and_wait(index.name)
+        self.wait_for_indexing_complete()
+        self.sleep(30, "letting segments rewrite as plaintext")
+        dec = self.encryption_helper.verify_fts_segment_files_not_encrypted(
+            fts_nodes, sensitive_terms=self.sensitive_terms)
+        self._assert_encryption_results(dec, "segments(baseline-plaintext)")
+
+        spare = self._free_server()
+        self.assertIsNotNone(spare, "no free server available to rebalance in")
+
+        # Concurrent: rebalance-in async, then enable encryption mid-flight.
+        self.log.info(f"Concurrent: rebalance-in {spare.ip} + ENABLE bucket encryption")
+        reb_task = self._cb_cluster.async_rebalance_in_node(nodes_in=[spare], services=["fts"])
+        self._enable_encryption_on_buckets([bucket_name])
+        reb_task.result()
+
+        # Write under the new DEK + merge so segments reflect encryption, then validate.
+        self._run_emp_data_op(max(1000, self._num_items // 10), "update", start=0, end=max(1000, self._num_items // 10))
+        self._force_merge_and_wait(index.name)
+        self._post_topology_validation("segments(enable-during-rebalance)", baseline_hits, index)
+        merged_on, deks_on = self._fts_in_use_deks(bucket_name)
+        self.assertTrue(deks_on, "no in-use DEK after enabling encryption during rebalance")
+        self.assertFalse(
+            self.encryption_helper.fts_has_unencrypted_marker(
+                merged_on, f"service_bucket {self._bucket_uuid(bucket_name)}"),
+            "unencrypted ('') marker still present after enabling encryption during rebalance",
+        )
+        self.log.info("TEST PASSED: test_fts_ear_enable_encryption_during_rebalance")
+
+    def test_fts_ear_disable_encryption_during_rebalance(self):
+        """Disable bucket encryption WHILE an FTS node rebalances OUT; data ends up plaintext.
+
+        Start encrypted, kick off rebalance-out async, flip bucket encryption OFF
+        mid-rebalance, then confirm segments are rewritten as plaintext, GetInUseKeys
+        reports the unencrypted ('') marker, and no data is lost.
+        """
+        self._require_encryption_enabled()
+        bucket_name = self.default_bucket_name
+        self.load_data(num_items=self._num_items)
+        index = self._create_default_index("fts_ear_disable_reb_idx")
+        baseline_hits = self._match_all_hits(index)
+        fts_nodes = self._cb_cluster.get_fts_nodes()
+        self.assertGreaterEqual(len(fts_nodes), 2, "need >=2 FTS nodes to rebalance one out")
+        self._validate_segments_encrypted(fts_nodes, "segments(before-disable-during-rebalance)")
+
+        out_node = fts_nodes[-1]
+        rest = RestConnection(self.master)
+        # Concurrent: rebalance-out async, then disable encryption mid-flight.
+        self.log.info(f"Concurrent: rebalance-out {out_node.ip} + DISABLE bucket encryption")
+        reb_task = self._cb_cluster.async_rebalance_out_node(node=out_node)
+        status, resp = rest.disable_bucket_encryption(bucket_name)
+        self.assertTrue(status, f"disable_bucket_encryption failed: {resp}")
+        reb_task.result()
+
+        # Rewrite segments to plaintext + merge, then validate no loss and plaintext on disk.
+        self._run_emp_data_op(max(1000, self._num_items // 10), "update", start=0, end=max(1000, self._num_items // 10))
+        self._force_merge_and_wait(index.name)
+        self.wait_for_indexing_complete()
+        self.sleep(30, "letting segments rewrite as plaintext")
+        self.assertEqual(self._match_all_hits(index), baseline_hits,
+                         "doc count changed after disable-during-rebalance")
+        remaining = self._cb_cluster.get_fts_nodes()
+        dec = self.encryption_helper.verify_fts_segment_files_not_encrypted(
+            remaining, sensitive_terms=self.sensitive_terms)
+        self._assert_encryption_results(dec, "segments(after-disable-during-rebalance-plaintext)")
+        merged_off, _ = self._fts_in_use_deks(bucket_name)
+        self.assertTrue(
+            self.encryption_helper.fts_has_unencrypted_marker(
+                merged_off, f"service_bucket {self._bucket_uuid(bucket_name)}"),
+            "expected an unencrypted ('') marker in GetInUseKeys after disabling encryption during rebalance",
+        )
+        self.log.info("TEST PASSED: test_fts_ear_disable_encryption_during_rebalance")
+
     # ==================================================================
     # Index-ops breadth under encryption (test plan section 3)
     # ==================================================================
@@ -878,10 +989,11 @@ class FTSEncryptionAtRest(FTSEncryptionBaseTest):
         baseline_hits = self._match_all_hits(index)
 
         # Kick off a merge AND a DEK rotation so they overlap.
+        # Compaction is an FTS (:8094) endpoint -> use an FTS node; re-encryption is an
+        # ns_server (:8091) endpoint -> use master.
         self.log.info("Concurrent: segment merge + DEK rotation (drop DEKs)")
-        rest = RestConnection(self.master)
-        rest.start_fts_index_compaction(index.name)
-        status, resp = rest.trigger_data_reencryption(bucket_name)
+        self._fts_rest().start_fts_index_compaction(index.name)
+        status, resp = RestConnection(self.master).trigger_data_reencryption(bucket_name)
         self.assertTrue(status, f"trigger_data_reencryption failed: {resp}")
 
         self._wait_merge_complete(index.name)
@@ -987,9 +1099,26 @@ class FTSEncryptionAtRest(FTSEncryptionBaseTest):
                     break
             if not tool:
                 self.skipTest("no bleve/zap CLI binary found on the node")
-            out, err = shell.execute_command(f"{tool} zap explore {zap} 2>&1", use_channel=True)
-            combined = " ".join((out or []) + (err or [])).lower()
-            self.log.info(f"bleve/zap CLI output on encrypted segment: {combined[:300]}")
+            # The exact zap subcommand syntax varies by build (e.g. `zap <version> explore`,
+            # `zap explore`, or just passing the file). Try a few forms; the first one that
+            # actually reads the segment (rather than printing usage/help) is the real attempt.
+            invocations = (
+                f"{tool} zap explore {zap}",
+                f"{tool} zap {zap}",
+                f"{tool} explore {zap}",
+                f"{tool} {zap}",
+            )
+            combined = ""
+            for cmd in invocations:
+                out, err = shell.execute_command(f"{cmd} 2>&1", use_channel=True)
+                combined = " ".join((out or []) + (err or [])).lower()
+                self.log.info(f"bleve/zap CLI [{cmd}] -> {combined[:300]}")
+                # usage/help means we picked the wrong subcommand form; try the next one.
+                if not any(h in combined for h in ("usage:", "available commands", "flags:", "--help")):
+                    break
+            else:
+                self.skipTest("could not find a working bleve/zap read invocation "
+                              "(all forms printed usage/help; exact CLI syntax needs dev confirmation)")
             self.assertTrue(
                 any(k in combined for k in ("error", "encrypt", "cannot", "fail", "unable", "invalid")),
                 f"bleve/zap CLI did not error on encrypted segment (expected an error): {combined[:300]}",
@@ -1103,7 +1232,8 @@ class FTSEncryptionAtRest(FTSEncryptionBaseTest):
         self.assertTrue(restored_ok, "FTS index restore failed")
 
         # Restore recreates indexes server-side (no FTSIndex object), so poll by name.
-        rest = RestConnection(self.master)
+        # get_fts_index_doc_count is an FTS (:8094) endpoint -> use an FTS node.
+        rest = self._fts_rest()
         deadline = time.time() + 600
         count = 0
         while time.time() < deadline:

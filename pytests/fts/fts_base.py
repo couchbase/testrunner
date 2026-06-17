@@ -7782,6 +7782,33 @@ class FTSBaseTest(unittest.TestCase):
             else:
                 self.log.info(f"Mutation process PID {proc.pid} already exited with code {proc.returncode}")
 
+    def _enable_bucket_encryption_if_requested(self):
+        """Enable encryption-at-rest on all current buckets when the test was launched
+        with enable_encryption_at_rest=True. No-op otherwise, so it is safe to call
+        unconditionally.
+
+        basetestcase.setUp() creates the encryption KEK (encryption_at_rest_id) when
+        enable_encryption_at_rest=True, but the vector suites (VectorSearch /
+        BQVectorSearch) create their buckets per-test -- via _setup_bucket_structure or a
+        cbbackupmgr restore -- so nothing turns encryption ON for those buckets. Call this
+        right AFTER the bucket(s) exist and BEFORE the FTS index is built so the vector
+        segments are written encrypted from the start. We query buckets live (REST) so it
+        works for both freshly-created and restored buckets.
+        """
+        if not getattr(self, "enable_encryption_at_rest", False):
+            return
+        key_id = getattr(self, "encryption_at_rest_id", None)
+        if not key_id:
+            self.log.warning("enable_encryption_at_rest=True but no encryption_at_rest_id "
+                             "(KEK) was created; skipping bucket-encryption enable")
+            return
+        rest = RestConnection(self.master)
+        for bucket in rest.get_buckets():
+            status, response = rest.enable_bucket_encryption(bucket.name, key_id)
+            if not status:
+                raise Exception(f"Failed to enable bucket encryption on {bucket.name}: {response}")
+            self.log.info(f"Enabled bucket encryption-at-rest on '{bucket.name}' (key {key_id})")
+
     def load_data(self, generator=None, data_loader_output=False, num_items=20000, exempt_bucket_prefix=None):
         """
          Blocking call to load data to Couchbase and ES
