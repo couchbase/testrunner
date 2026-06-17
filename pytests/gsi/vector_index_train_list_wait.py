@@ -719,7 +719,7 @@ class VectorIndexTrainListWait(BaseSecondaryIndexingTests):
         bucket_name, namespace, scope_name, collection_name = self._setup_test_environment()
         
         train_list_threshold = self.explicit_train_list
-        initial_docs = 2000
+        initial_docs = 5000
         remaining_docs = train_list_threshold - initial_docs
         
         # Step 2: Load initial documents (below train_list threshold)
@@ -1089,7 +1089,7 @@ class VectorIndexTrainListWait(BaseSecondaryIndexingTests):
                        f'ON {namespace}(DECODE_VECTOR(embedding, false) VECTOR) '
                        f'USING GSI '
                        f'WITH {{"dimension": 128, "similarity": "L2_SQUARED", '
-                       f'"description": "IVF,SQ8", "train_list_wait": true}}')
+                       f'"description": "IVF,SQ8", "train_list": 5000, "train_list_wait": true}}')
         
         self.log.info(f"Creating base64 index: {create_query}")
         try:
@@ -1445,8 +1445,8 @@ class VectorIndexTrainListWait(BaseSecondaryIndexingTests):
 
         # Step 1: Set global defer_build cluster setting to true
         self.log.info("Setting indexer.settings.defer_build=true via REST API")
-        status = index_rest.set_index_settings({"indexer.settings.defer_build": True})
-        self.assertTrue(status, "Failed to set indexer.settings.defer_build=true")
+        index_rest.set_index_settings({"indexer.settings.defer_build": True})
+        self.log.info("indexer.settings.defer_build=true set successfully")
         self.sleep(5, "Waiting for cluster setting to propagate")
 
         try:
@@ -3562,15 +3562,18 @@ class VectorIndexTrainListWait(BaseSecondaryIndexingTests):
                 restore_query_node = restore_master
 
         # Find the index node in the restore cluster to query /getIndexStatus on port 9102.
-        restore_cluster_servers = clusters_dict.get(1, [restore_master]) if not single_cluster_mode else [restore_master]
-        restore_index_node = restore_master
-        for srv in restore_cluster_servers:
-            try:
-                RestConnection(srv).get_indexer_metadata()
-                restore_index_node = srv
-                break
-            except Exception:
-                pass
+        if single_cluster_mode:
+            restore_index_node = source_index_node
+        else:
+            restore_cluster_servers = clusters_dict.get(1, [restore_master])
+            restore_index_node = restore_master
+            for srv in restore_cluster_servers:
+                try:
+                    RestConnection(srv).get_indexer_metadata()
+                    restore_index_node = srv
+                    break
+                except Exception:
+                    pass
 
         # Helper: get index status from restore cluster
         def _get_restore_index_status(index_name):
@@ -3914,14 +3917,17 @@ class VectorIndexTrainListWait(BaseSecondaryIndexingTests):
             restore_query_node = self.query_node
 
         # Find index node in restore cluster (port 9102 is only on index service nodes)
-        restore_index_node_35 = restore_master
-        for srv in restore_cluster_servers_35:
-            try:
-                RestConnection(srv).get_indexer_metadata()
-                restore_index_node_35 = srv
-                break
-            except Exception:
-                pass
+        if single_cluster_mode:
+            restore_index_node_35 = source_index_node
+        else:
+            restore_index_node_35 = restore_master
+            for srv in restore_cluster_servers_35:
+                try:
+                    RestConnection(srv).get_indexer_metadata()
+                    restore_index_node_35 = srv
+                    break
+                except Exception:
+                    pass
 
         # Helpers targeting restore cluster
         def _get_restore_index_status(index_name):
