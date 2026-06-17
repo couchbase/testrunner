@@ -1,11 +1,12 @@
 import time
 
+from couchbase_helper.documentgenerator import BlobGenerator
 from lib.membase.api.exception import XDCRException
 from lib.membase.api.rest_client import RestConnection, RestHelper
 from lib.remote.remote_util import RemoteMachineShellConnection
 from testconstants import CB_REPO, CB_VERSION_NAME
 
-from .xdcrnewbasetests import XDCRNewBaseTest
+from .xdcrnewbasetests import NodeHelper, XDCRNewBaseTest
 
 
 class CEEnforcementXDCRTests(XDCRNewBaseTest):
@@ -420,6 +421,79 @@ class CEEnforcementXDCRTests(XDCRNewBaseTest):
         self.perform_update_delete()
         self.verify_results()
 
+    def test_forced_ce_to_ce_replication_autopauses_with_ce_error(self):
+        """T11 [CBQE-8974]: forced CE->CE autopauses with CE-mentioning error.
+        """
+        self._require_both_ce()
+
+        self._toggle_ce_backdoor(self.src_cluster, enable=True)
+        self.setup_xdcr_and_load()
+
+        self._toggle_ce_backdoor(self.src_cluster, enable=False)
+
+        # (a): poll until status=paused on at least one replication.
+        deadline = time.time() + 120
+        paused_repl = None
+        last_statuses = []
+        while time.time() < deadline:
+            replications = self.src_rest.get_replications()
+            last_statuses = [(r.get("id"), r.get("status"))
+                             for r in replications]
+            for repl in replications:
+                if (repl.get("status") or "").lower() == "paused":
+                    paused_repl = repl
+                    break
+            if paused_repl:
+                break
+            time.sleep(5)
+
+        self.assertIsNotNone(
+            paused_repl,
+            "No replication reached status=paused within 120s after "
+            "backdoor disable. Last (id, status) seen: %s" % last_statuses)
+        self.log.info(
+            "[T11.a] replication %s reached status=paused",
+            paused_repl.get("id"))
+
+        expected_log = (
+            "Cannot create XDCR between two Community Edition clusters")
+        scan = NodeHelper.scan_goxdcr_log(
+            self.src_cluster, "T11", patterns=[expected_log])
+        hits = [(ip, count) for ip, count in scan.get(expected_log, [])
+                if count]
+        self.assertTrue(
+            hits,
+            "goxdcr.log message %r not found on any src node "
+            "(scan results: %s)" % (expected_log, scan))
+
+        # (c): data plane is actually stopped, not just cosmetically
+        # paused. Snapshot dest itemCount AFTER autopause (items loaded
+        # during the backdoor-on phase have already replicated), load
+        # more to src, sleep, verify dest didn't grow.
+        baseline_dest_items = self.dest_rest.get_bucket(
+            'default').stats.itemCount
+        self.log.info(
+            "[T11.c] dest baseline itemCount after pause=%d",
+            baseline_dest_items)
+
+        extra_items = self._input.param("post_pause_items", 1000)
+        gen = BlobGenerator(
+            't11-post', 't11-post-', value_size=128, end=extra_items)
+        self.src_cluster.load_all_buckets_from_generator(kv_gen=gen)
+        self.sleep(30,
+                   "[T11.c] giving any rogue replication time to drain")
+
+        final_dest_items = self.dest_rest.get_bucket(
+            'default').stats.itemCount
+        self.assertEqual(
+            final_dest_items, baseline_dest_items,
+            "Dest itemCount grew from %d to %d while replication was "
+            "paused -- the data plane did not stop."
+            % (baseline_dest_items, final_dest_items))
+        self.log.info(
+            "[T11.c] dest still at %d items after src load -- no leak",
+            final_dest_items)
+
     def test_backdoor_persists_across_goxdcr_kill(self):
         """Backdoor flag in ns_config survives goxdcr being killed mid-life.
 
@@ -455,6 +529,75 @@ class CEEnforcementXDCRTests(XDCRNewBaseTest):
         self.verify_results()
 
     # --- Tests -- Group C: EE-side (mutates one cluster) ------------------
+
+    def test_dest_only_ce_to_ee_upgrade_resumes_paused_replication(self):
+        """T12 [CBQE-8974]: dest-only CE->EE upgrade auto-resumes paused replication.
+
+        Must run FIRST in Group C -- requires both clusters CE at
+        start (the existing Group C tests upgrade one side and rely on
+        `_select_ce_ee` routing; this test bypasses that path and
+        upgrades dest specifically).
+
+        Flow:
+          1. Same setup as T11: backdoor on -> setup_xdcr_and_load ->
+             backdoor off -> autopause confirmed via status=paused.
+          2. `_ensure_cluster_is_ee(dest_cluster)` -- dpkg/rpm swap on
+             every dest node. The helper wipes dest cluster state and
+             recreates the `default` bucket (empty).
+          3. Poll: src-side replication should leave paused on its own
+             once goxdcr observes dest's new edition via the
+             remote-cluster-ref refresh.
+          4. verify_results() -- items from step 1 drain into the
+             freshly recreated dest bucket.
+        """
+        self._require_both_ce()
+
+        self._toggle_ce_backdoor(self.src_cluster, enable=True)
+        self.setup_xdcr_and_load()
+        self._toggle_ce_backdoor(self.src_cluster, enable=False)
+
+        deadline = time.time() + 120
+        paused_repl = None
+        while time.time() < deadline:
+            for repl in self.src_rest.get_replications():
+                if (repl.get("status") or "").lower() == "paused":
+                    paused_repl = repl
+                    break
+            if paused_repl:
+                break
+            time.sleep(5)
+        self.assertIsNotNone(
+            paused_repl,
+            "[T12 setup] replication never reached status=paused before "
+            "the dest upgrade step.")
+        self.log.info(
+            "[T12] replication %s paused; upgrading dest CE -> EE",
+            paused_repl.get("id"))
+
+        self._ensure_cluster_is_ee(self.dest_cluster)
+
+        # Generous window: goxdcr's remote-cluster-ref refresh can take
+        # a while to observe the new EE edition on dest.
+        deadline = time.time() + 240
+        resumed = False
+        last_statuses = []
+        while time.time() < deadline:
+            replications = self.src_rest.get_replications()
+            last_statuses = [(r.get("id"), r.get("status"))
+                             for r in replications]
+            if any((r.get("status") or "").lower() == "running"
+                   for r in replications):
+                resumed = True
+                break
+            time.sleep(10)
+        self.assertTrue(
+            resumed,
+            "Replication did not auto-resume to status=running within "
+            "240s after dest CE->EE upgrade. Last (id, status) seen: %s"
+            % last_statuses)
+        self.log.info("[T12] replication auto-resumed after dest upgrade")
+
+        self.verify_results()
 
     def test_ce_to_ee_replication_succeeds(self):
         """T1: CE -> EE. Upgrades C2 if needed via _select_ce_ee."""
