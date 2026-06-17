@@ -2600,6 +2600,10 @@ class CouchbaseCluster:
                 print(f"index ::{index}:: node_service ::{node_service}::")
                 print(f"cluster_services ::{cluster_services}::")
                 if index == 0 and node_service == "kv":
+                    # master is already kv; record its services so that later
+                    # node-list bookkeeping (e.g. swap/rebalance-out) can tell
+                    # it is a kv node instead of seeing an empty services string
+                    self.__master_node.services = node_service
                     continue
                 print(f"available nodes ::{available_nodes}::")
                 print(f"node_num {node_num}")
@@ -4233,6 +4237,14 @@ class CouchbaseCluster:
         else:
             to_remove_node = self.__nodes[len(self.__nodes) - num_nodes:]
 
+        # the rebalance must be orchestrated through a node that will still be
+        # in the cluster afterwards - using a node that is being ejected (e.g.
+        # the master during a master swap) makes every progress/monitor REST
+        # call fail with "unknown pool" once that node leaves the cluster
+        orchestrator = next(
+            (node for node in self.__nodes if node not in to_remove_node),
+            self.__master_node)
+
         raise_if(
             len(FloatingServers._serverlist) < num_nodes,
             FTSException(
@@ -4254,13 +4266,15 @@ class CouchbaseCluster:
             self.__nodes,
             to_add_node,
             to_remove_node,
-            services=services)
+            services=services,
+            master=orchestrator)
 
         for remove_node in to_remove_node:
             self.__nodes.remove(remove_node)
-            node_services = remove_node.services.split(",")
-
-            if "kv" in node_services:
+            # remove from the kv node list by identity rather than relying on
+            # the node's services attribute, which can be unset (e.g. for the
+            # master node that was skipped during init_cluster)
+            if remove_node in self.__kv_nodes:
                 self.__kv_nodes.remove(remove_node)
 
         self.__nodes.extend(to_add_node)
@@ -4285,6 +4299,10 @@ class CouchbaseCluster:
         """
         task = self.__async_swap_rebalance(master=True, services=services)
         task.result()
+        # the master node changed; re-derive the service node lists (kv/fts/
+        # n1ql) from the new master so stale references to the ejected node are
+        # not used by subsequent operations
+        self.__separate_nodes_on_services()
 
     def swap_rebalance(self, services=None, num_nodes=1):
         """Swap rebalance non-master node
