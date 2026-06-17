@@ -201,8 +201,9 @@ class GSIAutofailover(AutoFailoverBaseTest, BaseSecondaryIndexingTests):
                                                        per_node=True, skip_array_index_item_count=False)
         self.item_count_related_validations()
 
+        expected_title, use_brute_force = self.get_sparse_recall_params(definitions, select_queries)
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
-                                               message="results after adding node in post autofailover of a node", similarity=self.similarity)
+                                               message="results after adding node in post autofailover of a node", similarity=self.similarity, expected_title=expected_title, use_brute_force=use_brute_force)
         self.drop_index_node_resources_utilization_validations()
 
     def test_failed_rebalance_with_gsi_autofailover(self):

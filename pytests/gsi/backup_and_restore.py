@@ -2451,6 +2451,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                                                      query_node=query_node)
             self.wait_until_indexes_online()
             self.item_count_related_validations()
+            expected_title, use_brute_force = self.get_sparse_recall_params(query_definitions, select_queries)
 
             for bucket in self.buckets:
                 backup_client = IndexBackupClient(self.master,
@@ -2541,7 +2542,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                 self._build_indexes(indexes_after_restore)
                 self.sleep(10)
                 self.wait_until_indexes_online()
-                self.display_recall_and_accuracy_stats(select_queries=select_queries, message="recall and accuracy stats after adding back a node and post replica repair", similarity=self.similarity)
+                self.display_recall_and_accuracy_stats(select_queries=select_queries, message="recall and accuracy stats after adding back a node and post replica repair", similarity=self.similarity, expected_title=expected_title, use_brute_force=use_brute_force)
 
 
             self.wait_until_indexes_online()

@@ -2472,6 +2472,8 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
         self.assertTrue(reached, "Rebalance failed, stuck or did not complete")
         rebalance.result()
 
+        self.update_master_node()
+
         # Check if shard-based rebalance was used
         shard_affinity = self.is_shard_based_rebalance_enabled()
         self.log.info(f"Shard-based rebalance enabled: {shard_affinity}")

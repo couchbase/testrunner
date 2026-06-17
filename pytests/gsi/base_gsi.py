@@ -4534,19 +4534,18 @@ class BaseSecondaryIndexingTests(QueryTests):
         return rr
 
     def display_recall_and_accuracy_stats(self, select_queries, message="query stats", stats_assertion=True,
-                                          similarity="L2_SQUARED", query_expected_title_map=None,
+                                          similarity="L2_SQUARED", expected_title=None,
                                           use_brute_force=False):
         """
         Display and validate recall/accuracy stats for vector queries.
-        
+
         Args:
             select_queries: Set or list of SELECT queries to validate
             message: Message to display in table header
             stats_assertion: Whether to assert on recall/accuracy thresholds
             similarity: Similarity metric for dense vectors (L2_SQUARED, COSINE, DOT)
-            query_expected_title_map: Dict mapping query -> expected_title for AmazonSparse binary recall.
-                                      For sparse queries without mutations, this provides the 1:1 mapping
-                                      between query vectors and their expected documents.
+            expected_title: Expected document title for AmazonSparse binary recall.
+                           All sparse queries are checked against this single title.
             use_brute_force: If True, use brute-force ground truth comparison for MsMARCO dataset.
                             For sparse queries with mutations (MsMARCO), this computes recall by
                             comparing GSI results against brute-force dot product ranking.
@@ -4560,29 +4559,24 @@ class BaseSecondaryIndexingTests(QueryTests):
                 continue
             if "embVector" in query:
                 query = query.replace("embVector", str(self.bhive_sample_vector))
-            
+
             # Determine recall calculation method for sparse queries
-            expected_title = None
+            query_expected_title = None
             query_use_brute_force = use_brute_force
-            
+
             if "SPARSE_VECTOR_DISTANCE" in query:
-                # For sparse queries, determine which recall method to use
-                if query_expected_title_map and query in query_expected_title_map:
-                    # AmazonSparse: Use binary recall with expected_title
-                    expected_title = query_expected_title_map[query]
-                elif use_brute_force:
+                if use_brute_force:
                     # MsMARCO: Use brute-force ground truth comparison
                     query_use_brute_force = True
                 else:
-                    # Default: Use brute-force if no expected_title provided
-                    # This handles tests that use display_recall_and_accuracy_stats
-                    # without providing query_expected_title_map
-                    query_use_brute_force = True
-            
+                    # AmazonSparse: Use binary recall with the expected_title from definitions
+                    self.log.info(f"Expected title is {expected_title}")
+                    query_expected_title = expected_title
+
             redacted_query, recall, accuracy = self.validate_scans_for_recall_and_accuracy(
                 select_query=query,
                 similarity=similarity,
-                expected_title=expected_title,
+                expected_title=query_expected_title,
                 use_brute_force=query_use_brute_force
             )
             query_stats_map[redacted_query] = [recall, accuracy]
@@ -4616,62 +4610,33 @@ class BaseSecondaryIndexingTests(QueryTests):
                 #     self.assertGreaterEqual(accuracy * 100, 70,
                 #                             f"accuracy for query {query} is less than threshold 70")
 
-    def build_query_expected_title_map(self, definitions, select_queries):
-        """
-        Build a mapping of select queries to their expected titles for AmazonSparse recall validation.
-        
-        For AmazonSparse dataset, each query vector has exactly ONE expected document (identified by title).
-        This method creates a dict mapping each select query to its expected_title from the definition.
-        
-        Args:
-            definitions: List of QueryDefinition objects (with expected_title attribute for sparse)
-            select_queries: Set or list of SELECT queries
-            
-        Returns:
-            dict: Mapping of query string -> expected_title (only for queries with expected_title)
-        """
-        query_expected_title_map = {}
-        
-        for defn in definitions:
-            if hasattr(defn, 'expected_title') and defn.expected_title:
-                # Find the matching query for this definition
-                for query in select_queries:
-                    # Match by index name in the query
-                    if defn.index_name in query:
-                        query_expected_title_map[query] = defn.expected_title
-                        break
-        
-        return query_expected_title_map
-
     def get_sparse_recall_params(self, definitions=None, select_queries=None):
         """
         Get the appropriate parameters for sparse recall validation based on dataset type.
-        
+
         Args:
             definitions: List of QueryDefinition objects (optional, needed for AmazonSparse)
-            select_queries: Set or list of SELECT queries (optional, needed for AmazonSparse)
-            
+            select_queries: Unused — kept for backwards-compatible call signatures
+
         Returns:
-            tuple: (query_expected_title_map, use_brute_force)
-                - For AmazonSparse: (dict mapping queries to expected_titles, False)
+            tuple: (expected_title, use_brute_force)
+                - For AmazonSparse: (expected_title str from first matching definition, False)
                 - For MsMARCO: (None, True)
                 - For dense datasets: (None, False)
         """
         if not self.isSparse:
             return None, False
-        
+
         if self.json_template == 'MsMARCO':
-            # MsMARCO: Use brute-force ground truth comparison
             return None, True
         elif self.json_template == 'AmazonSparse':
-            # AmazonSparse: Use binary recall with expected_title
-            if definitions and select_queries:
-                query_map = self.build_query_expected_title_map(definitions, select_queries)
-                return query_map, False
-            else:
-                # Fallback to brute-force if no definitions provided
-                self.log.warning("AmazonSparse dataset but no definitions provided - falling back to brute-force")
-                return None, True
+            if definitions:
+                for defn in definitions:
+                    if hasattr(defn, 'expected_title') and defn.expected_title:
+                        self.log.info(f"Expected title: {defn.expected_title}")
+                        return defn.expected_title, False
+            self.log.warning("AmazonSparse dataset but no expected_title found in definitions - falling back to brute-force")
+            return None, True
         else:
             # Unknown sparse dataset - default to brute-force
             return None, True

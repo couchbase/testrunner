@@ -1014,7 +1014,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.run_cbq_query(query=query, server=self.n1ql_node)
         except Exception as err:
             # Expecting an error since there's no SPARSE VECTOR field
-            err_msg = 'Vector index requires at least one vector index key'
+            err_msg = 'is created with no vector index key'
             self.assertTrue(err_msg in str(err), f"Index without SPARSE VECTOR field should fail: {err}")
 
         # Scenario 2: Try to create a sparse index on multiple scalar fields (no SPARSE VECTOR)
@@ -3276,12 +3276,12 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.item_count_related_validations()
 
         # Get sparse recall parameters based on dataset type
-        query_expected_title_map, use_brute_force = self.get_sparse_recall_params(all_definitions, select_queries)
+        expected_title, use_brute_force = self.get_sparse_recall_params(all_definitions, select_queries)
 
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message="results before reducing num replica count",
                                                stats_assertion=False, similarity=self.similarity,
-                                               query_expected_title_map=query_expected_title_map,
+                                               expected_title=expected_title,
                                                use_brute_force=use_brute_force)
         # Calculate MRR for sparse vectors
         if self.isSparse and all_definitions:
@@ -3316,7 +3316,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message="results after reducing num replica count",
                                                similarity=self.similarity,
-                                               query_expected_title_map=query_expected_title_map,
+                                               expected_title=expected_title,
                                                use_brute_force=use_brute_force)
         # Calculate MRR for sparse vectors
         if self.isSparse and all_definitions:
@@ -3348,7 +3348,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message="results after increasing num replica count",
                                                similarity=self.similarity,
-                                               query_expected_title_map=query_expected_title_map,
+                                               expected_title=expected_title,
                                                use_brute_force=use_brute_force)
         # Calculate MRR for sparse vectors
         if self.isSparse and all_definitions:
@@ -3398,12 +3398,12 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.item_count_related_validations()
 
         # Get sparse recall parameters based on dataset type
-        query_expected_title_map, use_brute_force = self.get_sparse_recall_params(all_definitions, select_queries)
+        expected_title, use_brute_force = self.get_sparse_recall_params(all_definitions, select_queries)
 
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message="results before moving indexes to specifc node",
                                                stats_assertion=False, similarity=self.similarity,
-                                               query_expected_title_map=query_expected_title_map,
+                                               expected_title=expected_title,
                                                use_brute_force=use_brute_force)
         # Calculate MRR for sparse vectors
         if self.isSparse and all_definitions:
@@ -3445,7 +3445,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message="results after moving indexes to specifc node",
                                                similarity=self.similarity,
-                                               query_expected_title_map=query_expected_title_map,
+                                               expected_title=expected_title,
                                                use_brute_force=use_brute_force)
         # Calculate MRR for sparse vectors
         if self.isSparse and all_definitions:
@@ -3494,12 +3494,12 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.item_count_related_validations()
 
         # Get sparse recall parameters based on dataset type
-        query_expected_title_map, use_brute_force = self.get_sparse_recall_params(all_definitions, select_queries)
+        expected_title, use_brute_force = self.get_sparse_recall_params(all_definitions, select_queries)
 
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message="results before dropping replica id", stats_assertion=False,
                                                similarity=self.similarity,
-                                               query_expected_title_map=query_expected_title_map,
+                                               expected_title=expected_title,
                                                use_brute_force=use_brute_force)
         # Calculate MRR for sparse vectors
         if self.isSparse and all_definitions:
@@ -3545,7 +3545,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message="results before after replica id", similarity=self.similarity,
-                                               query_expected_title_map=query_expected_title_map,
+                                               expected_title=expected_title,
                                                use_brute_force=use_brute_force)
         # Calculate MRR for sparse vectors
         if self.isSparse and all_definitions:
@@ -3597,12 +3597,12 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.item_count_related_validations()
 
         # Get sparse recall parameters based on dataset type
-        query_expected_title_map, use_brute_force = self.get_sparse_recall_params(all_definitions, select_queries)
+        expected_title, use_brute_force = self.get_sparse_recall_params(all_definitions, select_queries)
 
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message="results before move index via alter query",
                                                stats_assertion=False, similarity=self.similarity,
-                                               query_expected_title_map=query_expected_title_map,
+                                               expected_title=expected_title,
                                                use_brute_force=use_brute_force)
         # Calculate MRR for sparse vectors
         if self.isSparse and all_definitions:
@@ -3646,7 +3646,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message="results after move index via alter query",
                                                similarity=self.similarity,
-                                               query_expected_title_map=query_expected_title_map,
+                                               expected_title=expected_title,
                                                use_brute_force=use_brute_force)
         # Calculate MRR for sparse vectors
         if self.isSparse and all_definitions:
@@ -4091,11 +4091,11 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.log.info("=" * 100)
 
         # Get sparse recall parameters - for this test we have explicit expected_title from index definitions
-        query_expected_title_map, use_brute_force = self.get_sparse_recall_params(index_list, select_queries)
+        expected_title, use_brute_force = self.get_sparse_recall_params(index_list, select_queries)
 
         self.display_recall_and_accuracy_stats(select_queries=select_queries, message=message,
                                                similarity="DOT" if self.isSparse else self.similarity,
-                                               query_expected_title_map=query_expected_title_map,
+                                               expected_title=expected_title,
                                                use_brute_force=use_brute_force)
         self.drop_index_node_resources_utilization_validations()
 
@@ -4493,11 +4493,11 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.sleep(60, "Waiting for cluster to stabilize after rollback")
         self.wait_until_indexes_online(timeout=300)
         # Get sparse recall parameters - use brute-force since this test has mutations
-        query_expected_title_map, use_brute_force = self.get_sparse_recall_params()
+        expected_title, use_brute_force = self.get_sparse_recall_params()
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message="results after doing a partial roll back from kv side",
                                                similarity=self.similarity,
-                                               query_expected_title_map=query_expected_title_map,
+                                               expected_title=expected_title,
                                                use_brute_force=use_brute_force)
         self.drop_index_node_resources_utilization_validations()
 
@@ -5243,7 +5243,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         # Kill memcached during index training phase
         with ThreadPoolExecutor() as executor:
-            executor.submit(self.run_cbq_query, query=build_query)
+            executor.submit(self.run_cbq_query, query=build_query, server=query_node)
             self.sleep(5)
             remote_machine.stop_memcached()
             self.sleep(60)
@@ -5898,11 +5898,11 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         self.index_creation_till_rr(rr=self.desired_rr, timeout=7200)
         # Get sparse recall parameters - use brute-force since this test may have mutations during dgm
-        query_expected_title_map, use_brute_force = self.get_sparse_recall_params()
+        expected_title, use_brute_force = self.get_sparse_recall_params()
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message=f"results getting rr less than {self.desired_rr}%",
                                                similarity=self.similarity,
-                                               query_expected_title_map=query_expected_title_map,
+                                               expected_title=expected_title,
                                                use_brute_force=use_brute_force)
         # Calculate MRR for sparse vectors
         if self.isSparse and all_definitions:
@@ -6365,12 +6365,12 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         for node in index_nodes:
             self._kill_all_processes_index(server=node)
         self.sleep(30)
+        self.wait_until_indexes_online()
         # compare the code book memory stats post indexer restart
         code_book_memory_map_after_rebalance, aggregated_code_book_memory_after_rebalance = self.get_per_index_codebook_memory_usage()
-        index_names = self.get_all_indexes_in_the_cluster()
-        for index in index_names:
-            if "primary" in index:
-                continue
+        for index in code_book_memory_map_before_rebalance:
+            self.assertIn(index, code_book_memory_map_after_rebalance,
+                          f"Index {index} missing from codebook memory stats after indexer restart")
             self.assertEqual(code_book_memory_map_before_rebalance[index], code_book_memory_map_after_rebalance[index],
                              f"Codebook memory has changed for index {index}")
         self.drop_index_node_resources_utilization_validations()
@@ -6826,11 +6826,11 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         # validating recall
         similarity = "DOT" if self.isSparse else self.similarity
-        query_expected_title_map, use_brute_force = self.get_sparse_recall_params(all_definitions, select_queries)
+        expected_title, use_brute_force = self.get_sparse_recall_params(all_definitions, select_queries)
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message=f"results of skewed towards bhive {self.bhive_index}",
                                                similarity=similarity, stats_assertion=False,
-                                               query_expected_title_map=query_expected_title_map,
+                                               expected_title=expected_title,
                                                use_brute_force=use_brute_force)
         # Calculate MRR for sparse vectors
         if self.isSparse and all_definitions:
@@ -6953,11 +6953,11 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         # validating recall
         similarity = "DOT" if self.isSparse else self.similarity
-        query_expected_title_map, use_brute_force = self.get_sparse_recall_params(all_definitions, select_queries)
+        expected_title, use_brute_force = self.get_sparse_recall_params(all_definitions, select_queries)
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message=f"results of skewed towards bhive {self.bhive_index}",
                                                 similarity=similarity, stats_assertion=False,
-                                               query_expected_title_map=query_expected_title_map,
+                                               expected_title=expected_title,
                                                use_brute_force=use_brute_force)
         # Calculate MRR for sparse vectors
         if self.isSparse and all_definitions:
