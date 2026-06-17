@@ -373,18 +373,11 @@ class CreateDeleteViewTests(BaseTestCase):
             rest.create_collection(bucket_name, scope_name, excluded_col)
 
             def views_service_validator(u, p):
-                # Real service call: GET bucket root via capi (views) endpoint
-                api = rest.capiBaseUrl + bucket_name
-                status, _, _ = rest._http_request(
-                    api, 'GET',
-                    headers=rest._create_capi_headers_with_auth(u, p))
-                self.assertTrue(status,
-                    "Views: capi GET on bucket '%s' should succeed with user creds"
-                    % bucket_name)
-                self.log.info(
-                    "Views service validation passed: capi endpoint accessible "
-                    "with user creds")
-                # Verify exclusion via checkPermissions
+                # The capi bucket-root endpoint requires bucket-level
+                # data.couchdb!read, which collection-scoped custom roles
+                # cannot satisfy. Verify RBAC exclusion via checkPermissions
+                # instead, which is the correct way to test collection-level
+                # exclusion for the views data path.
                 perm_allowed = "cluster.collection[{b}:{s}:{c}].data.docs!read".format(
                     b=bucket_name, s=scope_name, c=allowed_col)
                 perm_excluded = "cluster.collection[{b}:{s}:{c}].data.docs!read".format(
@@ -403,8 +396,7 @@ class CreateDeleteViewTests(BaseTestCase):
             verify_rbac_exclusion_syntax(
                 self, rest, bucket_name, scope_name, allowed_col, excluded_col,
                 "views", runtype=self.input.param("runtype", "default"),
-                service_validator=views_service_validator,
-                extra_roles="data_reader[{b}]".format(b=bucket_name))
+                service_validator=views_service_validator)
         finally:
             if scope_created:
                 try:
