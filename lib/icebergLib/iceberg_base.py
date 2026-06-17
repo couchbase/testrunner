@@ -15,15 +15,13 @@ class IcebergBase:
     def __init__(self, aws_access_key=None, aws_secret_key=None, aws_session_token=None,
                  gcs_credentials=None, catalog_type=None, aws_region=None, database_name=None,
                  table_name=None, iceberg_bucket=None, gcs_project_id=None, gcs_bucket_location=None,
-                 nessie_server=None, nessie_uri=None):
+                 nessie_server=None, nessie_uri=None, aws_role_arn=None):
         # Common
         self.database_name = database_name or "icebergdb"
         self.table_name = table_name or "hotel"
         self.iceberg_bucket = iceberg_bucket or f"tuqquery-iceberg-{str(int(time.time()))}-{uuid.uuid4().hex[:8]}"
         self.catalog_type = catalog_type
-        # TODO: aws_account_id is only needed for S3_TABLES catalog type (not AWS_GLUE)
-        # Set AWS_ACCOUNT_ID env var if using S3_TABLES
-        self.aws_account_id = os.environ.get("AWS_ACCOUNT_ID")
+        self.aws_account_id = os.environ.get("AWS_ACCOUNT_ID") or self._get_aws_account_id()
 
         # AWS Glue / S3 Tables
         self.s3_warehouse_path = f"s3://{self.iceberg_bucket}"
@@ -31,6 +29,7 @@ class IcebergBase:
         self.aws_access_key = aws_access_key
         self.aws_secret_key = aws_secret_key
         self.aws_session_token = aws_session_token
+        self.aws_role_arn = aws_role_arn
 
         # S3 Tables
         self.s3_table_bucket_arn = None
@@ -70,11 +69,13 @@ class IcebergBase:
 
             self.glue_boto3_client = boto3.client('glue', region_name=self.iceberg_region)
             self.s3tables_boto3_client = boto3.client('s3tables', region_name=self.iceberg_region)
+            self.lakeformation_boto3_client = boto3.client('lakeformation', region_name=self.iceberg_region)
             self.s3_resource = boto3.resource('s3', region_name=self.iceberg_region)
             self.s3_client = boto3.client('s3', region_name=self.iceberg_region)
         else:
             self.glue_boto3_client = None
             self.s3tables_boto3_client = None
+            self.lakeformation_boto3_client = None
             self.s3_resource = None
             self.s3_client = None
 
@@ -84,6 +85,32 @@ class IcebergBase:
             scopes=["https://www.googleapis.com/auth/cloud-platform"])
         credentials.refresh(Request())
         return credentials.token
+
+    def _get_aws_account_id(self):
+        try:
+            import boto3
+            return boto3.client('sts').get_caller_identity()['Account']
+        except Exception:
+            return None
+
+    def _normalize_iam_principal_arn(self, arn):
+        if not arn:
+            return None
+        if arn.startswith("arn:aws:sts::") and ":assumed-role/" in arn:
+            account_id = arn.split(":")[4]
+            role_name = arn.split(":assumed-role/")[1].split("/")[0]
+            return f"arn:aws:iam::{account_id}:role/{role_name}"
+        return arn
+
+    def get_lakeformation_principal_arn(self):
+        if self.aws_role_arn:
+            return self.aws_role_arn
+        try:
+            import boto3
+            caller_arn = boto3.client('sts').get_caller_identity()['Arn']
+            return self._normalize_iam_principal_arn(caller_arn)
+        except Exception:
+            return None
 
     def create_s3_bucket(self):
         """Create S3 bucket if it doesn't exist."""

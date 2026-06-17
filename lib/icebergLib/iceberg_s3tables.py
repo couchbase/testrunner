@@ -1,5 +1,6 @@
 from icebergLib.iceberg_base import IcebergBase
 from botocore.exceptions import ClientError
+import time
 
 
 class S3TablesCatalog:
@@ -84,5 +85,101 @@ class S3TablesCatalog:
         except ClientError as e:
             if e.response['Error']['Code'] == 'ConflictException':
                 print(f"Table {self.state.table_name} already exists.")
+            else:
+                raise e
+
+        self.grant_lakeformation_permissions()
+
+    def grant_lakeformation_permissions(self):
+        """Grant Lake Formation permissions so the active principal can read the S3 Tables catalog."""
+        principal_arn = self.state.get_lakeformation_principal_arn()
+        if not principal_arn or not self.state.lakeformation_boto3_client:
+            print("Lake Formation client or principal ARN unavailable, skipping permission grant.")
+            return
+
+        database_resource = {
+            'Database': {
+                'CatalogId': self.state.aws_account_id,
+                'Name': self.state.database_name
+            }
+        }
+        table_resource = {
+            'Table': {
+                'CatalogId': self.state.aws_account_id,
+                'DatabaseName': self.state.database_name,
+                'Name': self.state.table_name
+            }
+        }
+        table_wildcard_resource = {
+            'Table': {
+                'CatalogId': self.state.aws_account_id,
+                'DatabaseName': self.state.database_name,
+                'TableWildcard': {}
+            }
+        }
+
+        try:
+            self.state.lakeformation_boto3_client.grant_permissions(
+                Principal={'DataLakePrincipalIdentifier': principal_arn},
+                Resource=database_resource,
+                Permissions=['DESCRIBE'],
+                PermissionsWithGrantOption=[]
+            )
+            print(f"Granted Lake Formation permissions ['DESCRIBE'] on {database_resource} to {principal_arn}.")
+        except ClientError as e:
+            if e.response['Error']['Code'] == 'AlreadyExistsException':
+                print(f"Lake Formation permissions ['DESCRIBE'] on {database_resource} already exist for {principal_arn}.")
+            else:
+                raise e
+
+        # LF metadata for newly created S3 Tables can take a few seconds to become visible.
+        # Retry table-level grant to avoid failing suite_setUp on propagation races.
+        max_attempts = 8
+        retry_delay_sec = 2
+        for attempt in range(1, max_attempts + 1):
+            try:
+                self.state.lakeformation_boto3_client.grant_permissions(
+                    Principal={'DataLakePrincipalIdentifier': principal_arn},
+                    Resource=table_resource,
+                    Permissions=['DESCRIBE', 'SELECT'],
+                    PermissionsWithGrantOption=[]
+                )
+                print(f"Granted Lake Formation permissions ['DESCRIBE', 'SELECT'] on {table_resource} to {principal_arn}.")
+                return
+            except ClientError as e:
+                error_code = e.response['Error']['Code']
+                error_message = e.response['Error'].get('Message', '')
+                if error_code == 'AlreadyExistsException':
+                    print(f"Lake Formation permissions ['DESCRIBE', 'SELECT'] on {table_resource} already exist for {principal_arn}.")
+                    return
+                if error_code == 'InvalidInputException' and 'Table not found' in error_message and attempt < max_attempts:
+                    print(
+                        f"Lake Formation table metadata not ready yet for {self.state.database_name}.{self.state.table_name} "
+                        f"(attempt {attempt}/{max_attempts}); retrying in {retry_delay_sec}s..."
+                    )
+                    time.sleep(retry_delay_sec)
+                    continue
+                if error_code == 'InvalidInputException' and 'Table not found' in error_message:
+                    break
+                raise e
+
+        # Fallback: grant table wildcard permissions so newly visible tables in the namespace are still accessible.
+        try:
+            self.state.lakeformation_boto3_client.grant_permissions(
+                Principal={'DataLakePrincipalIdentifier': principal_arn},
+                Resource=table_wildcard_resource,
+                Permissions=['DESCRIBE', 'SELECT'],
+                PermissionsWithGrantOption=[]
+            )
+            print(
+                f"Granted Lake Formation fallback permissions ['DESCRIBE', 'SELECT'] on "
+                f"{table_wildcard_resource} to {principal_arn}."
+            )
+        except ClientError as e:
+            if e.response['Error']['Code'] == 'AlreadyExistsException':
+                print(
+                    f"Lake Formation fallback permissions ['DESCRIBE', 'SELECT'] on "
+                    f"{table_wildcard_resource} already exist for {principal_arn}."
+                )
             else:
                 raise e
