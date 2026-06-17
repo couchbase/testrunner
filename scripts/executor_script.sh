@@ -59,14 +59,14 @@ if [ -f /etc/redhat-release ]; then
   else
     service docker start
   fi
-  docker pull docker.io/jamesdbloom/mockserver
+  docker pull docker.io/mockserver/mockserver:5.15.0
 fi
 
 if [ -f /etc/lsb-release ]; then
   echo 'ubuntu'
   apt-install docker
   service docker start
-  docker pull docker.io/jamesdbloom/mockserver
+  docker pull docker.io/mockserver/mockserver:5.15.0
 fi
 
 UPDATE_INI_VALUES=""

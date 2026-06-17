@@ -31,7 +31,7 @@ function OnUpdate(doc, meta) {
 
 // Helper function to run a query and return matching doc IDs
 function runQuery(query, options) {
-    var it = couchbase.searchQuery("travel-sample._default.travel_sample_test", query, options);
+    var it = couchbase.searchQuery("travel_sample_test", query, options);
     var ids = [];
     for (let row of it) {
         ids.push(row.id);

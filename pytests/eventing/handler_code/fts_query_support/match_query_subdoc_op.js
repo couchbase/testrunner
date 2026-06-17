@@ -17,7 +17,7 @@ function OnUpdate(doc, meta) {
             .field("reviews.content");
 
         var it = couchbase.searchQuery(
-            "travel-sample._default.travel_sample_test",
+            "travel_sample_test",
             q,
             { size: 10 }
         );

@@ -23,7 +23,7 @@ def start_image(client, name):
        reset()
 
 def stop_containar(client, name):
-    for container in client.containers.list(filters={"ancestor":"jamesdbloom/mockserver:latest","status":"running"}):
+    for container in client.containers.list(filters={"ancestor":"mockserver/mockserver:5.15.0","status":"running"}):
         container.stop()
 
 def setup():
@@ -54,9 +54,9 @@ if __name__ == "__main__":
    client = docker.from_env()
    operation = sys.argv[1]
    if operation == 'start':
-    start_image(client, 'jamesdbloom/mockserver:latest')
+    start_image(client, 'mockserver/mockserver:5.15.0')
    elif operation == 'stop':
-    stop_containar(client, 'jamesdbloom/mockserver:latest')
+    stop_containar(client, 'mockserver/mockserver:5.15.0')
    elif operation == 'setup':
        setup()
    elif operation == 'reset':

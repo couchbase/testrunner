@@ -26,7 +26,7 @@ class EventingCancelTimers(EventingBaseTest):
         self.sleep(5)
         self.resume_function(body)
         # Wait for eventing to catch up with all the expiry mutations and verify results
-        self.verify_eventing_results(self.function_name, 2016, on_delete=True,skip_stats_validation=True)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * self.num_docs, on_delete=True, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
     def test_cancel_timers_negative(self):
@@ -37,7 +37,7 @@ class EventingCancelTimers(EventingBaseTest):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
         # Wait for eventing to catch up with all the delete mutations and verify results
-        self.verify_eventing_results(self.function_name, 2016, skip_stats_validation=True)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * self.num_docs, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
     def test_cancel_already_fired_timers(self):
@@ -45,7 +45,7 @@ class EventingCancelTimers(EventingBaseTest):
                   batch_size=self.batch_size)
         body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
-        self.verify_eventing_results(self.function_name, 2016, skip_stats_validation=True)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * self.num_docs, skip_stats_validation=True)
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
         # Wait for eventing to catch up with all the delete mutations and verify results
