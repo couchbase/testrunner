@@ -405,7 +405,9 @@ class NodeHelper:
                     log.warning("install_cb: Exception {0} occurred on {1}, retrying..".format(e,
                                                                                          self.ip))
                     self.wait_for_completion(duration, event)
-            if not installed:
+            # msi (Windows) install command never prints '1'; its success is
+            # verified separately in post_install_cb(), so skip this gate for msi.
+            if not installed and self.info.deliverable_type != "msi":
                 log.error("install_cb: install command never returned success on {0} after {1}s. Marking node as install-failed.".format(self.ip, timeout))
                 self.install_success = False
             if cmd_debug is not None and self.build.debug_build_present:
