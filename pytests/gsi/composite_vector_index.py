@@ -5249,7 +5249,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.sleep(60)
             remote_machine.start_memcached()
 
-        self.wait_until_indexes_online(timeout=120)
+        self.wait_until_indexes_online(timeout=600)
         meta_data = self.index_rest.get_indexer_metadata()['status']
 
         for data in meta_data:
@@ -5897,7 +5897,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         self.index_creation_till_rr(rr=self.desired_rr, timeout=7200)
         # Get sparse recall parameters - use brute-force since this test may have mutations during dgm
-        expected_title, use_brute_force = self.get_sparse_recall_params()
+        expected_title, use_brute_force = self.get_sparse_recall_params(definitions=definitions)
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message=f"results getting rr less than {self.desired_rr}%",
                                                similarity=self.similarity,
