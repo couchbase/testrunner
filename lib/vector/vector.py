@@ -550,10 +550,20 @@ class IndexVector(object):
         if use_partition:
             index_query = index_query.split("WITH")[0] + f" PARTITION BY HASH(meta().id) WITH " + index_query.split("WITH")[1]
         print(index_query)
-        result = cb_scope.query(index_query, metrics=True, timeout=timedelta(seconds=360))
-        for row in result:
-            print(f"Result: {row}")
-        print(f"Execution time: {result.metadata().metrics().execution_time()}")
+        import time as _time
+        max_retries = 3
+        for attempt in range(1, max_retries + 1):
+            try:
+                result = cb_scope.query(index_query, metrics=True, timeout=timedelta(seconds=360))
+                for row in result:
+                    print(f"Result: {row}")
+                print(f"Execution time: {result.metadata().metrics().execution_time()}")
+                break
+            except Exception as e:
+                print(f"create_index attempt {attempt}/{max_retries} failed: {e}")
+                if attempt == max_retries:
+                    raise
+                _time.sleep(10)
     def create_cover_index(self, cluster, bucket='default', scope='_default', collection='_default', index_order='tail', vector_field='vec', is_xattr=False, is_base64=False, network_byte_order=False, dimension=128, train=10000, description='IVF,PQ32x8', similarity='L2_SQUARED', nprobes=3, use_bhive=False):
         cb = cluster.bucket(bucket)
         cb_scope = cb.scope(scope)

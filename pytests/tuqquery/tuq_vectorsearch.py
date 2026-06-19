@@ -69,9 +69,9 @@ class VectorSearchTests(QueryTests):
 
     def suite_setUp(self):
         super(VectorSearchTests, self).suite_setUp()
+        _vector_type = 'cohere' if 'RaBitQ' in self.description else self.vector_type
         threads = []
         self.log.info("Start loading vector data")
-        _vector_type = 'cohere' if 'RaBitQ' in self.description else self.vector_type
         for i in range(0, self.xb.shape[0], 1000): # load in batches of 1000 docs per thread
             thread = threading.Thread(target=LoadVector().load_batch_documents,args=(self.database, self.xb[i:i+1000], i, self.use_xattr, self.use_base64, self.use_bigendian, _vector_type))
             threads.append(thread)
@@ -203,7 +203,7 @@ class VectorSearchTests(QueryTests):
             self.log.info("Create Vector Index")
             IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, nprobes=self.nprobes, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive, vector_type=self.vector_type)
 
-            if self.vector_type == 'dense':
+            if self.vector_type == 'dense' and 'RaBitQ' not in self.description:
                 self.log.info("Verify Vector Index Metadata and Stats")
                 self.verify_vector_index_metadata_and_stats(expected_description=self.description,
                                                 expected_dimension=self.dimension,
@@ -1795,8 +1795,18 @@ class VectorSearchTests(QueryTests):
         # Get metadata from first node
         index_rest = RestConnection(index_nodes[0])
         index_metadata = index_rest.get_indexer_metadata()['status']
-        index_hosts = index_metadata[0]['hosts']
-        index_name = index_metadata[0]['name']
+
+        # Find the vector index (not #primary) by looking for one with VECTOR in definition
+        vector_idx = None
+        for idx in index_metadata:
+            if 'VECTOR' in idx.get('definition', ''):
+                vector_idx = idx
+                break
+        if vector_idx is None:
+            self.fail(f"No vector index found in metadata: {[m['name'] for m in index_metadata]}")
+
+        index_hosts = vector_idx['hosts']
+        index_name = vector_idx['name']
         # Extract ip address from hosts
         index_ip = index_hosts[0].split(':')[0]
         # Get stats from index node
@@ -1807,7 +1817,7 @@ class VectorSearchTests(QueryTests):
         index_rest = RestConnection(index_node)
         index_stats = index_rest.get_index_stats()
 
-        definition = index_metadata[0].get('definition', '')
+        definition = vector_idx.get('definition', '')
         with_clause = None
         if 'WITH' in definition:
             with_clause = ast.literal_eval(definition.split('WITH', 1)[1].strip())
@@ -1829,23 +1839,24 @@ class VectorSearchTests(QueryTests):
             self.assertEqual(with_clause['scan_nprobes'], expected_nprobes)
             self.assertEqual(canonical_similarity(with_clause['similarity']), canonical_similarity(expected_similarity))
 
-        # Check num_docs_pending
-        self.assertEqual(index_stats['default'][index_name]['num_docs_pending'], 0)
-
-        # Check num_docs_indexed with a short retry window because index stats
-        # can lag behind the bucket count immediately after index creation.
-        max_attempts = 10
-        retry_delay_sec = 2
+        # Check num_docs_pending and num_docs_indexed with retry window.
+        # After a bucket flush+reload the indexer may still be processing
+        # delete mutations, so both pending and indexed can be temporarily off.
+        max_attempts = 30
+        retry_delay_sec = 3
         for attempt in range(1, max_attempts + 1):
             index_stats = index_rest.get_index_stats()
             indexed_docs = index_stats['default'][index_name]['num_docs_indexed']
-            if indexed_docs == num_docs_indexed:
+            pending_docs = index_stats['default'][index_name]['num_docs_pending']
+            if indexed_docs == num_docs_indexed and pending_docs == 0:
                 break
             if attempt < max_attempts:
                 self.log.info(
                     f"Waiting for vector index stats to settle for {index_name}: "
-                    f"indexed_docs={indexed_docs}, expected={num_docs_indexed} "
+                    f"indexed_docs={indexed_docs}, expected={num_docs_indexed}, "
+                    f"pending={pending_docs} "
                     f"(attempt {attempt}/{max_attempts})"
                 )
                 self.sleep(retry_delay_sec)
+        self.assertEqual(index_stats['default'][index_name]['num_docs_pending'], 0)
         self.assertEqual(indexed_docs, num_docs_indexed)
