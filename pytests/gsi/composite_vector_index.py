@@ -35,6 +35,7 @@ from threading import Thread
 import random
 import os
 import re
+import time
 import numpy as np
 import faiss
 from lib.sdk_client3 import SDKClient
@@ -7205,6 +7206,138 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
             # Drop indexes
             self.drop_index_node_resources_utilization_validations()
+
+    def test_rebalance_rejected_during_bhive_graph_build(self):
+        """
+        MB-65985: Reject rebalance if BHIVE graph building is in progress.
+
+        When graph building is in progress it must be treated as DDL in progress,
+        and any rebalance attempt during that window must be rejected with:
+        "Rebalance failed. See logs for detailed reason. You can try again"
+
+        Steps:
+            1. Restore bucket with a large dataset so graph build takes meaningful time
+            2. Create a BHIVE vector index with IVF,SQ8 description to trigger graph build
+            3. Poll /getIndexStatus until graphProgress > 0 (graph build has started)
+            4. Trigger async rebalance (rebalance-out of an index node)
+            5. Assert rebalance is rejected with the expected error string
+            6. Wait for the index to come fully Online
+            7. Verify rebalance succeeds after graph build completes
+        """
+        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
+                                      skip_default_scope=self.skip_default)
+
+        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+
+        if len(index_nodes) < 2:
+            self.skipTest("Need at least 2 index nodes to perform a rebalance")
+
+        collection_namespace = self.namespaces[0]
+
+        # Step 2: Create BHIVE vector index with IVF,SQ8 — this produces a graph build phase
+        # after training completes. Large train_list ensures graph build takes enough time
+        # to create a reliable race window for the rebalance attempt.
+        index_name = "idx_graph_build_rebalance_test"
+        create_query = (
+            f"CREATE VECTOR INDEX {index_name} ON {collection_namespace} "
+            f"(descriptionVector VECTOR) USING GSI WITH {{"
+            f'"dimension": {self.dimension}, '
+            f'"similarity": "L2_SQUARED", '
+            f'"description": "IVF,SQ8", '
+            f'"train_list": 50000'
+            f"}}"
+        )
+
+        self.log.info(f"Creating BHIVE vector index: {create_query}")
+        with ThreadPoolExecutor() as executor:
+            create_future = executor.submit(self.run_cbq_query, query=create_query,
+                                            server=query_node)
+
+            # Step 3: Poll until graph build is detected
+            self.log.info("Polling for graph build phase (graphProgress > 0)")
+            graph_build_detected = False
+            start_time = time.time()
+            max_wait = 600
+
+            while time.time() - start_time < max_wait:
+                try:
+                    index_metadata = self.index_rest.get_indexer_metadata().get('status', [])
+                    for idx_info in index_metadata:
+                        if index_name not in idx_info.get('name', ''):
+                            continue
+                        status = idx_info.get('status', '')
+                        graph_progress = idx_info.get('graphProgress', 0)
+                        self.log.info(
+                            f"Index '{index_name}' status={status}, graphProgress={graph_progress}"
+                        )
+                        if graph_progress > 0 or 'graph build' in status.lower():
+                            graph_build_detected = True
+                            break
+                except Exception as ex:
+                    self.log.warning(f"Error polling index metadata: {ex}")
+
+                if graph_build_detected:
+                    break
+                self.sleep(2, "Waiting for graph build phase")
+
+            if not graph_build_detected:
+                self.log.warning(
+                    "Graph build phase not detected within timeout — dataset may be too small "
+                    "or graph build completed too quickly. Proceeding with rebalance attempt."
+                )
+
+            # Step 4: Trigger rebalance while graph build is (expected to be) in progress
+            self.log.info("Triggering rebalance during graph build phase")
+            try:
+                rebalance = self.cluster.async_rebalance(
+                    servers=self.servers[:self.nodes_init],
+                    to_add=[],
+                    to_remove=[index_nodes[-1]]
+                )
+
+                # Step 5: Assert rebalance is rejected
+                rebalance_result = RestHelper(self.rest).rebalance_reached()
+                if rebalance_result:
+                    rebalance.result()
+                    self.fail(
+                        "Rebalance succeeded when it should have been rejected — "
+                        "graph build in progress must be treated as DDL in progress (MB-65985)"
+                    )
+
+            except Exception as ex:
+                expected_error = "Rebalance failed. See logs for detailed reason. You can try again"
+                if expected_error not in str(ex):
+                    self.fail(
+                        f"Rebalance failed with unexpected error: {ex}. "
+                        f"Expected: '{expected_error}'"
+                    )
+                self.log.info(
+                    f"Rebalance correctly rejected during graph build with error: {ex}"
+                )
+
+            # Step 6: Wait for create to finish and index to come online
+            try:
+                create_future.result(timeout=600)
+            except Exception as ex:
+                self.log.info(f"Index create completed/failed: {ex}")
+
+        self.wait_until_indexes_online(timeout=600)
+        self.log.info("Index is online after graph build completed")
+
+        # Step 7: Retry rebalance — must succeed now that graph build is done
+        self.log.info("Retrying rebalance after graph build completed — should succeed")
+        retry_rebalance = self.cluster.async_rebalance(
+            servers=self.servers[:self.nodes_init],
+            to_add=[],
+            to_remove=[index_nodes[-1]]
+        )
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "Post-graph-build rebalance failed, stuck or did not complete")
+        retry_rebalance.result()
+        self.log.info("Post-graph-build rebalance completed successfully")
+
+        self.drop_index_node_resources_utilization_validations()
 
     def _execute_sparse_mutation_scenario(self, scenario, sdk_client, scope, collection, sparse_vec_size, namespace):
         """

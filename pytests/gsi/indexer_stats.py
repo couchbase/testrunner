@@ -9,11 +9,14 @@ __created_on__ = "29/10/20 3:19 pm"
 
 """
 import json
+from concurrent.futures import ThreadPoolExecutor
 
 from .base_gsi import BaseSecondaryIndexingTests
 from lib.couchbase_helper.query_definitions import QueryDefinition
 from couchbase_helper.documentgenerator import SDKDataLoader
 from membase.api.rest_client import RestConnection, RestHelper
+from lib.remote.remote_util import RemoteMachineShellConnection
+from lib.testconstants import LINUX_COUCHBASE_LOGS_PATH
 from functools import reduce
 
 
@@ -163,6 +166,25 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
 
     def tearDown(self):
         super(IndexerStatsTests, self).tearDown()
+
+    def _get_stats_log_line_count(self, node):
+        stats_log = f"{LINUX_COUCHBASE_LOGS_PATH}/indexer_stats.log"
+        shell = RemoteMachineShellConnection(node)
+        output, _ = shell.execute_command(f"wc -l {stats_log} 2>/dev/null | awk '{{print $1}}'")
+        shell.disconnect()
+        if output:
+            try:
+                return int(output[0].strip())
+            except (ValueError, IndexError):
+                return 0
+        return 0
+
+    def _get_stats_log_tail(self, node, lines=30):
+        stats_log = f"{LINUX_COUCHBASE_LOGS_PATH}/indexer_stats.log"
+        shell = RemoteMachineShellConnection(node)
+        output, _ = shell.execute_command(f"tail -{lines} {stats_log} 2>/dev/null")
+        shell.disconnect()
+        return output or []
 
     def test_redundant_keys(self):
         """
@@ -1046,3 +1068,117 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
                             if stat.split(":")[0].isdigit()])
         node_inst_ids -= system_scope_instance_ids
         self.assertEqual(set(instance_ids), node_inst_ids)
+
+    def test_stats_logging_with_stuck_indexer_main_loop(self):
+        """
+        MB-70307: Verify indexer_stats.log keeps being updated even when the indexer
+        main loop is stuck due to heavy DGM load (256MB quota + large index data).
+
+        Steps:
+          1. Set memory quota to 256MB and load data until avg_resident_percent <=
+             resident_ratio_threshold, simulating the stuck main loop scenario
+          2. Issue DROP INDEX in a background thread - it will be enqueued on the
+             indexer main loop message channel but will not complete quickly under load
+          3. Confirm the index still exists (main loop is occupied, not processing DDL)
+          4. Wait for 2x the stats dump interval
+          5. Assert indexer_stats.log has grown with new entries
+          6. Assert recent entries contain key stats (memory_used, cpu_utilization)
+        """
+        index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
+        index_rest = RestConnection(index_node)
+        indexMemQuota = self.input.param("indexMemQuota", 256)
+        stats_log_interval = self.input.param("stats_log_interval", 60)
+        resident_ratio_threshold = self.input.param("resident_ratio_threshold", 18)
+
+        self.log.info(f"Setting indexer memory quota to {indexMemQuota} MB")
+        self.rest.set_service_memoryQuota(service='indexMemoryQuota', memoryQuota=indexMemQuota)
+        index_rest.set_index_settings({"indexer.settings.statsLogDumpInterval": stats_log_interval})
+        self.sleep(10, "Waiting for settings to take effect")
+
+        # Build namespace list from indexes already created in setUp (skip _system scope)
+        user_indexes = [idx for idx in self.index_status['status']
+                        if idx['scope'] != '_system' and idx['collection'] != '_query']
+        namespaces = list({
+            f"default:{idx['bucket']}.{idx['scope']}.{idx['collection']}"
+            for idx in user_indexes
+        })
+
+        # Step 1: Load data until severe DGM
+        self.log.info(f"Loading data to push indexer into DGM "
+                      f"(target avg_resident_percent <= {resident_ratio_threshold}%)...")
+        self.dataload_till_rr(namespaces=namespaces,
+                              rr=resident_ratio_threshold,
+                              json_template="Hotel",
+                              timeout=7200)
+
+        avg_rr = self.compute_cluster_avg_rr_index()
+        self.log.info(f"avg_resident_percent after data load: {avg_rr:.2f}%")
+        self.assertLessEqual(
+            avg_rr, resident_ratio_threshold,
+            f"avg_resident_percent {avg_rr:.2f}% is not <= {resident_ratio_threshold}%. "
+            f"Indexer main loop may not be under sufficient pressure. "
+            f"Try lowering resident_ratio_threshold or loading more data.")
+
+        # Record baseline line count before issuing drop
+        line_count_before = self._get_stats_log_line_count(index_node)
+        self.log.info(f"indexer_stats.log baseline line count: {line_count_before}")
+
+        # Step 2: Issue DROP INDEX in a background thread.
+        # Under severe DGM the indexer main loop is busy with mutation I/O; the drop
+        # message is enqueued on the channel but will not be serviced quickly.
+        target_index = user_indexes[0]
+        idx_def = QueryDefinition(index_name=target_index['name'])
+        drop_namespace = f"{target_index['bucket']}.{target_index['scope']}.{target_index['collection']}"
+        drop_query = idx_def.generate_index_drop_query(namespace=drop_namespace)
+        self.log.info(f"Submitting DROP INDEX in background thread: {drop_query}")
+        executor = ThreadPoolExecutor(max_workers=1)
+        executor.submit(self.run_cbq_query, drop_query)
+        # Don't wait for the DROP to complete — the whole point is it may never finish
+        # while the main loop is stuck. We let it run in the background and move on.
+        executor.shutdown(wait=False)
+
+        self.sleep(5, "Waiting for DROP INDEX to be enqueued in indexer message channel")
+
+        # Step 3: Check whether the index still exists
+        current_metadata = self.rest.get_indexer_metadata()['status']
+        index_still_exists = any(idx['name'] == target_index['name'] for idx in current_metadata)
+        if index_still_exists:
+            self.log.info(f"Confirmed: index '{target_index['name']}' still exists - "
+                          "main loop has not yet processed the drop request")
+        else:
+            self.log.warning(f"Index '{target_index['name']}' was already dropped - "
+                             "main loop processed the drop faster than expected. "
+                             "Consider lowering resident_ratio_threshold. "
+                             "Stats logging verification will still proceed.")
+
+        # Step 4: Wait for at least 2 complete stats dump cycles
+        wait_time = (stats_log_interval * 2) + 30
+        self.log.info(f"Waiting {wait_time}s for stats dump cycles "
+                      f"(statsLogDumpInterval={stats_log_interval}s)...")
+        self.sleep(wait_time)
+
+        # Step 5: Assert stats log has grown
+        line_count_after = self._get_stats_log_line_count(index_node)
+        self.log.info(f"indexer_stats.log line count after wait: "
+                      f"{line_count_after} (was {line_count_before})")
+        self.assertGreater(
+            line_count_after, line_count_before,
+            f"indexer_stats.log did not grow while indexer main loop was under heavy DGM load: "
+            f"before={line_count_before}, after={line_count_after}. "
+            f"Stats logging appears stuck - verify MB-70307 fix is present.")
+
+        # Step 6: Verify recent entries contain key stats
+        tail_lines = self._get_stats_log_tail(index_node)
+        tail_text = "\n".join(tail_lines)
+        self.log.info(f"Recent indexer_stats.log entries:\n{tail_text}")
+        self.assertIn(
+            "memory_used", tail_text,
+            "'memory_used' not found in recent indexer_stats.log entries. "
+            "Expected key memory stats to be logged even under heavy load.")
+        self.assertIn(
+            "cpu_utilization", tail_text,
+            "'cpu_utilization' not found in recent indexer_stats.log entries. "
+            "Expected CPU stats to be logged even under heavy load.")
+
+        self.log.info("PASS: indexer_stats.log kept receiving new entries while "
+                      "indexer main loop was under heavy DGM load (MB-70307 verified)")

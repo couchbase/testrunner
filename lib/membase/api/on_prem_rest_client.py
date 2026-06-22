@@ -2518,6 +2518,13 @@ class RestConnection(object):
             json_resp = json.loads(content)
             return json_resp
 
+    def get_indexer_lost_replicas(self):
+        api = self.index_baseUrl + 'stats/getLostReplica'
+        status, content, header = self.urllib_request(api)
+        if status:
+            return json.loads(content)
+        return {}
+
     def get_indexer_internal_stats(self, timeout=120, index_map=None):
         api = self.index_baseUrl + 'settings?internal=ok'
         index_map = {}

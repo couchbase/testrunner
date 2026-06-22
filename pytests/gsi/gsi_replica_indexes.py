@@ -1359,6 +1359,108 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
             else:
                 self.log.info(str(ex))
 
+    # This test is for MB-65821 : Ignore resource constraints when an empty node is added
+    # back for replica repair (numDeletedNode==0, numNewNode==1, redistributeIndexes==False,
+    # all eligible indexes are optional/replica indexes)
+    def test_replica_repair_ignore_resource_constraint_on_empty_node(self):
+        nodes = self._get_node_list()
+        self.log.info(nodes)
+        index_name_prefix = "random_index_" + str(
+            random.randint(100000, 999999))
+        create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) USING GSI  WITH {{'nodes': {0}}};".format(
+            nodes)
+        self.log.info(create_index_query)
+        try:
+            self.n1ql_helper.run_cbq_query(query=create_index_query,
+                                           server=self.n1ql_node)
+        except Exception as ex:
+            self.log.info(str(ex))
+            self.fail("Index creation Failed : %s", str(ex))
+
+        self.sleep(30)
+        index_map_before_rebalance = self.get_index_map()
+        stats_map_before_rebalance = self.get_index_stats(perNode=False)
+
+        self.log.info(index_map_before_rebalance)
+        self.n1ql_helper.verify_replica_indexes([index_name_prefix],
+                                                index_map_before_rebalance,
+                                                len(nodes) - 1, nodes)
+
+        # Ensure this is a pure replica-repair rebalance, not a redistribution
+        self.disable_redistribute_indexes()
+
+        # Force genuine indexer memory resource pressure so the planner would
+        # normally refuse to place any indexes on the incoming node
+        self.get_dgm_for_plasma()
+
+        index_map_before_rebalance = self.get_index_map()
+        stats_map_before_rebalance = self.get_index_stats(perNode=False)
+
+        node_out = self.servers[self.node_out]
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                 [], [node_out])
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        self.sleep(30)
+
+        index_map_after_rebalance1 = self.get_index_map()
+        stats_map_after_rebalance1 = self.get_index_stats(perNode=False)
+
+        try:
+            self.n1ql_helper.verify_indexes_redistributed(
+                index_map_before_rebalance,
+                index_map_after_rebalance1,
+                stats_map_before_rebalance,
+                stats_map_after_rebalance1,
+                [],
+                [node_out], indexes_changed=True)
+        except Exception as ex:
+            self.log.info(str(ex))
+            if "some indexes are missing after rebalance" not in str(ex):
+                self.fail(
+                    "Error in index distribution post rebalance : ".format(
+                        str(ex)))
+            else:
+                self.log.info(str(ex))
+
+        # Add the node back in empty : numDeletedNode==0, numNewNode==1 for this
+        # rebalance, so the planner should bypass resource constraints and
+        # repair the missing replicas onto the incoming node.
+        node_in = self.servers[self.node_out]
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                 [node_in], [],
+                                                 services=["index"])
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        self.sleep(30)
+
+        index_map_after_rebalance2 = self.get_index_map()
+        stats_map_after_rebalance2 = self.get_index_stats(perNode=False)
+
+        # Unlike the pre-fix behaviour, replica repair must succeed on the
+        # empty node despite the resource constraint, so no missing-index
+        # exception should be tolerated here.
+        self.n1ql_helper.verify_indexes_redistributed(
+            index_map_before_rebalance,
+            index_map_after_rebalance2,
+            stats_map_before_rebalance,
+            stats_map_after_rebalance2,
+            [node_in],
+            [])
+
+        indexer_metadata = self.rest.get_indexer_metadata()['status']
+        node_in_ip = node_in.ip
+        indexes_on_node_in = [idx for idx in indexer_metadata
+                             if any(node_in_ip in host for host in idx.get('hosts', []))]
+        self.assertTrue(len(indexes_on_node_in) > 0,
+                        "Replica repair did not build any indexes on the "
+                        "empty incoming node {0} despite resource constraint "
+                        "bypass being expected".format(node_in_ip))
+
+        self.enable_redistribute_indexes()
+
     # This test is for MB-25609 : Fix wait for index build in rebalancer for replica repair
     def test_rebalance_in_out_same_node_with_deferred_and_non_deferred_indexes(self):
         nodes = self._get_node_list()
@@ -3670,6 +3772,109 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                 self.log.info(str(ex))
                 raise Exception("query with USE INDEX failed")
             self.sleep(1)
+
+    def test_rstate_update_propagated_to_storage_mgr_after_rebalance(self):
+        """
+        MB-70454 / MB-70692: After rebalance moves an index, handleUpdateIndexRState
+        must call distributeIndexMapsToWorkers so the storage manager's copy reflects
+        REBAL_ACTIVE. Without the fix, checkForLostReplicas sees the moved instance as
+        REBAL_PENDING in timestampedCounts and produces false "lost replica" reports.
+
+        Steps:
+            1. Enable index redistribution on rebalance and set a fast item-count
+               monitor interval so checkForLostReplicas runs frequently
+            2. Create a bucket and collection loaded with documents
+            3. Create multiple single-field indexes, each with one replica, concurrently
+            4. Wait for all indexes online and record their host placement before rebalance
+            5. Rebalance in a new index node so instances get redistributed
+            6. Record host placement after rebalance and assert at least one instance
+               moved (otherwise INDEXER_UPDATE_RSTATE was never sent and the fix is untested)
+            7. Wait for the monitorItemsCount goroutine to run checkForLostReplicas
+               across 2+ cycles
+            8. Assert no index node falsely reports lost replicas
+        """
+        self.index_rest.set_index_settings({
+            "indexer.settings.rebalance.redistribute_indexes": True,
+            "indexer.monitor_items_count_interval": 1
+        })
+
+        self.bucket_params = self._create_bucket_params(server=self.master, size=256,
+                                                        replicas=self.num_replicas,
+                                                        bucket_type=self.bucket_type,
+                                                        enable_replica_index=self.enable_replica_index,
+                                                        eviction_policy=self.eviction_policy, lww=self.lww)
+        self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
+                                            bucket_params=self.bucket_params)
+        self.buckets = [b for b in self.rest.get_buckets() if b.name == self.test_bucket]
+        self.prepare_collection_for_indexing(num_of_docs_per_collection=self.num_of_docs_per_collection)
+        collection_namespace = self.namespaces[0]
+
+        idx_prefix = 'idx_rstate'
+        index_field_list = ['age', 'city', 'country', 'title', 'firstName']
+        index_gen_query_list = []
+        for index_fields, idx_num in zip(index_field_list, range(len(index_field_list))):
+            index_name = f'{idx_prefix}_{idx_num}'
+            index_gen = QueryDefinition(index_name=index_name, index_fields=[index_fields])
+            query = index_gen.generate_index_create_query(namespace=collection_namespace,
+                                                          defer_build=False, num_replica=1)
+            index_gen_query_list.append(query)
+
+        tasks = []
+        err_msg1 = 'Create index or Alter replica cannot proceed due to another concurrent create index request'
+        err_msg2 = 'will retry building in the background'
+        err_msg3 = 'Encountered transient error'
+        regex_pattern = re.compile('.*?Index creation for index (.*?),.*')
+
+        with ThreadPoolExecutor() as executor:
+            for query in index_gen_query_list:
+                task = executor.submit(self.run_cbq_query, query=query)
+                tasks.append(task)
+            for task in tasks:
+                try:
+                    task.result()
+                except Exception as err:
+                    if err_msg1 in str(err):
+                        out = re.search(regex_pattern, str(err))
+                        index_name = out.groups()[0]
+                        self.log.info(f"{index_name} is scheduled for background")
+                    elif err_msg2 in str(err) or err_msg3 in str(err):
+                        continue
+                    else:
+                        self.fail(err)
+
+        self.wait_until_indexes_online(timeout=600)
+        index_meta_before = [idx for idx in self.index_rest.get_indexer_metadata()['status']
+                             if idx['indexName'].startswith(idx_prefix)]
+        self.assertEqual(len(index_meta_before), len(index_field_list) * 2,
+                         f"Expected {len(index_field_list) * 2} index instances before rebalance, "
+                         f"got {len(index_meta_before)}")
+        hosts_before = {(idx['indexName'], idx.get('replicaId', 0)): set(idx['hosts'])
+                        for idx in index_meta_before}
+
+        new_node = self.servers[self.nodes_init]
+        rebalance = self.cluster.async_rebalance(
+            self.servers[:self.nodes_init], [new_node], [], services=["index"])
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "Rebalance failed, stuck or did not complete")
+        self.sleep(60, "Waiting for index instances to stabilize after rebalance")
+
+        index_meta_after = [idx for idx in self.index_rest.get_indexer_metadata()['status']
+                            if idx['indexName'].startswith(idx_prefix)]
+        hosts_after = {(idx['indexName'], idx.get('replicaId', 0)): set(idx['hosts'])
+                       for idx in index_meta_after}
+        moved = any(hosts_before.get(key) != hosts_after.get(key) for key in hosts_after)
+        self.assertTrue(moved, "No indexes redistributed during rebalance; "
+                                "INDEXER_UPDATE_RSTATE was never sent — test did not exercise the fix")
+
+        self.wait_until_indexes_online(timeout=600)
+        self.sleep(150, "Waiting for monitorItemsCount goroutine to run checkForLostReplicas (2+ cycles)")
+
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        for node in index_nodes:
+            node_rest = RestConnection(node)
+            lost = node_rest.get_indexer_lost_replicas()
+            self.assertFalse(lost.get('results'),
+                             f"Node {node.ip} falsely reported lost replicas after rebalance: {lost}")
 
     def _run_prepare_statement(self, prepare_statement, count=10):
         prepared_query = "EXECUTE " + prepare_statement
