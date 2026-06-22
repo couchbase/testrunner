@@ -124,7 +124,7 @@ class CollectionsIndexScanConsistency(BaseSecondaryIndexingTests):
         self.sleep(15, "Waiting some time before checking for mutation vectors")
         scan_vectors_after_mutations = self.get_mutation_vectors()
         new_scan_vectors = scan_vectors_after_mutations - scan_vectors_before_mutations
-        scan_vector = self.convert_mutation_vector_to_scan_vector(new_scan_vectors)
+        scan_vectors = {bucket: self.convert_mutation_vector_to_scan_vector(new_scan_vectors)}
 
         result = self.run_cbq_query(query=count_query)['results'][0]['$1']
         self.assertEqual(result, num_of_docs + new_insert_docs_num)
@@ -133,9 +133,9 @@ class CollectionsIndexScanConsistency(BaseSecondaryIndexingTests):
             # Test with inserts on named collection
             with ThreadPoolExecutor() as executor:
                 select_task = executor.submit(self.run_cbq_query, query=select_query, scan_consistency='at_plus',
-                                              scan_vector=scan_vector)
+                                              scan_vectors=scan_vectors)
                 meta_task = executor.submit(self.run_cbq_query, query=select_meta_id_query, scan_consistency='at_plus',
-                                            scan_vector=scan_vector, query_context=named_collection_query_context)
+                                            scan_vectors=scan_vectors, query_context=named_collection_query_context)
                 result = select_task.result()['results']
                 meta_id_result_after_new_inserts = meta_task.result()['results']
             self.assertTrue(len(result) > 0,
@@ -163,13 +163,13 @@ class CollectionsIndexScanConsistency(BaseSecondaryIndexingTests):
             self.sleep(15, "Waiting some time before checking for mutation vectors")
             scan_vectors_after_mutations = self.get_mutation_vectors()
             new_scan_vectors = scan_vectors_after_mutations - scan_vectors_before_mutations
-            scan_vector = self.convert_mutation_vector_to_scan_vector(new_scan_vectors)
+            scan_vectors = {bucket: self.convert_mutation_vector_to_scan_vector(new_scan_vectors)}
 
             with ThreadPoolExecutor() as executor:
                 select_task = executor.submit(self.run_cbq_query, query=select_query, scan_consistency='at_plus',
-                                              scan_vector=scan_vector)
+                                              scan_vectors=scan_vectors)
                 meta_task = executor.submit(self.run_cbq_query, query=select_meta_id_query, scan_consistency='at_plus',
-                                            scan_vector=scan_vector, query_context=named_collection_query_context)
+                                            scan_vectors=scan_vectors, query_context=named_collection_query_context)
                 result = select_task.result()['results']
                 meta_id_result_after_new_inserts = meta_task.result()['results']
                 result3 = \
@@ -215,13 +215,13 @@ class CollectionsIndexScanConsistency(BaseSecondaryIndexingTests):
             self.sleep(30, "Waiting some time before checking for mutation vectors")
             scan_vectors_after_mutations = self.get_mutation_vectors()
             new_scan_vectors = scan_vectors_after_mutations - scan_vectors_before_mutations
-            scan_vector = self.convert_mutation_vector_to_scan_vector(new_scan_vectors)
+            scan_vectors = {bucket: self.convert_mutation_vector_to_scan_vector(new_scan_vectors)}
 
             with ThreadPoolExecutor() as executor:
                 select_task = executor.submit(self.run_cbq_query, query=select_query, scan_consistency='at_plus',
-                                              scan_vector=scan_vector)
+                                              scan_vectors=scan_vectors)
                 meta_task = executor.submit(self.run_cbq_query, query=select_meta_id_query, scan_consistency='at_plus',
-                                            scan_vector=scan_vector, query_context=named_collection_query_context)
+                                            scan_vectors=scan_vectors, query_context=named_collection_query_context)
                 count_task = executor.submit(self.run_cbq_query, query=count_query)
                 result = select_task.result()['results']
                 meta_id_result_after_new_inserts = meta_task.result()['results']
@@ -249,8 +249,8 @@ class CollectionsIndexScanConsistency(BaseSecondaryIndexingTests):
 
             scan_vectors_after_mutations = self.get_mutation_vectors()
             new_scan_vectors = scan_vectors_after_mutations - scan_vectors_before_mutations
-            scan_vector = self.convert_mutation_vector_to_scan_vector(new_scan_vectors)
-            self.log.info(f"Scan vector: {scan_vector}")
+            scan_vectors = {bucket: self.convert_mutation_vector_to_scan_vector(new_scan_vectors)}
+            self.log.info(f"Scan vectors: {scan_vectors}")
             default_index_gen = QueryDefinition(index_name='default_idx', index_fields=['price', 'country', 'city'])
             default_meta_index_gen = QueryDefinition(index_name='default_meta_idx', index_fields=['meta().id'])
             query = default_index_gen.generate_index_create_query(namespace=bucket)
@@ -260,9 +260,9 @@ class CollectionsIndexScanConsistency(BaseSecondaryIndexingTests):
 
             with ThreadPoolExecutor() as executor:
                 select_task = executor.submit(self.run_cbq_query, query=select_query, scan_consistency='at_plus',
-                                              scan_vector=scan_vector)
+                                              scan_vectors=scan_vectors)
                 meta_task = executor.submit(self.run_cbq_query, query=select_meta_id_query, scan_consistency='at_plus',
-                                            scan_vector=scan_vector, query_context=named_collection_query_context)
+                                            scan_vectors=scan_vectors, query_context=named_collection_query_context)
                 count_task = executor.submit(self.run_cbq_query, query=count_query)
                 result = select_task.result()['results']
                 meta_id_result_after_new_inserts = meta_task.result()['results']
