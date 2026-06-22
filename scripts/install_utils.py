@@ -1167,6 +1167,29 @@ def _copy_to_nodes(node_helpers, debug=False):
         thread.join()
 
 
+def _remove_local_build(node):
+    """Delete the dispatcher-side build(s) downloaded for the local-copy path.
+
+    The file under $WORKSPACE (or /tmp when $WORKSPACE is unset) is only needed
+    as the SCP source for _copy_to_nodes(). Once every node has its own copy in
+    /tmp, the dispatcher/slave copy is dead weight, so we remove it here to keep
+    the workspace from accumulating build binaries across runs. Missing files
+    are ignored; other errors are logged but not fatal.
+    """
+    local_dir = _get_local_download_dir()
+    paths = [local_dir + node.build.name]
+    if node.build.debug_build_present:
+        paths.append(local_dir + node.build.debug_name)
+    for path in paths:
+        try:
+            os.remove(path)
+            log.info("Removed local build from dispatcher: {0}".format(path))
+        except FileNotFoundError:
+            pass
+        except OSError as e:
+            log.warning("Unable to remove local build {0}: {1}".format(path, e))
+
+
 def __get_build_url(node, build_binary):
     cb_version = node.cb_version or params["version"]
     if params["bkrs_client"]:
@@ -1243,34 +1266,56 @@ def download_build(node_helpers):
     log.debug("Downloading the builds now for {0} nodes that need a build".format(len(nodes_needing_build)))
     all_nodes_same_version = len(set([node.build.url
                                       for node in nodes_needing_build])) == 1
-    if params["all_nodes_same_os"] and all_nodes_same_version \
-            and not params["skip_local_download"]:
-        check_and_retry_download_binary_local(nodes_needing_build[0])
-        _copy_to_nodes(nodes_needing_build, debug=False)
-        if nodes_needing_build[0].build.debug_build_present:
-            _copy_to_nodes(nodes_needing_build, debug=True)
-        ok = True
-        for node_helper in nodes_needing_build:
-            if not check_file_exists(node_helper, node_helper.build.path) \
-                    or not check_file_size(node_helper):
-                node_helper.install_success = False
-                ok = False
-                log.error("Unable to copy build to {} at {}, exiting"
-                          .format(node_helper.ip, node_helper.build.path))
-        if not ok:
-            print_result_and_exit()
-        for node_helper in nodes_needing_build:
-            if node_helper.build.debug_build_present:
-                if not check_file_exists(node_helper,
-                                         node_helper.build.debug_path) \
-                        or not check_file_size(node_helper, debug_build=True):
+    # When $WORKSPACE is set (Jenkins), always download once on the dispatcher
+    # into $WORKSPACE and SCP to the nodes, regardless of skip_local_download.
+    # $WORKSPACE only exists on the dispatcher, so this is the only path where
+    # it is a valid destination. When $WORKSPACE is unset (CLI/dev runs), keep
+    # the existing behavior: local download only when skip_local_download=False.
+    #
+    # The single-binary local download is safe whenever every node resolves to
+    # the same build URL (all_nodes_same_version) -- the same file is copied to
+    # all of them. For unified Linux builds this holds even across distro
+    # versions (e.g. debian 10 + debian 12 share one linux_amd64.deb), so the
+    # $WORKSPACE path does not require all_nodes_same_os. The legacy /tmp local
+    # path keeps requiring all_nodes_same_os to preserve prior behavior.
+    workspace_set = bool(os.environ.get('WORKSPACE'))
+    if all_nodes_same_version \
+            and (workspace_set
+                 or (params["all_nodes_same_os"]
+                     and not params["skip_local_download"])):
+        try:
+            check_and_retry_download_binary_local(nodes_needing_build[0])
+            _copy_to_nodes(nodes_needing_build, debug=False)
+            if nodes_needing_build[0].build.debug_build_present:
+                _copy_to_nodes(nodes_needing_build, debug=True)
+            ok = True
+            for node_helper in nodes_needing_build:
+                if not check_file_exists(node_helper, node_helper.build.path) \
+                        or not check_file_size(node_helper):
                     node_helper.install_success = False
                     ok = False
-                    log.error("Unable to copy debug build to {} at {}, exiting"
-                              .format(node_helper.ip,
-                                      node_helper.build.debug_path))
-        if not ok:
-            print_result_and_exit()
+                    log.error("Unable to copy build to {} at {}, exiting"
+                              .format(node_helper.ip, node_helper.build.path))
+            if not ok:
+                print_result_and_exit()
+            for node_helper in nodes_needing_build:
+                if node_helper.build.debug_build_present:
+                    if not check_file_exists(node_helper,
+                                             node_helper.build.debug_path) \
+                            or not check_file_size(node_helper, debug_build=True):
+                        node_helper.install_success = False
+                        ok = False
+                        log.error("Unable to copy debug build to {} at {}, exiting"
+                                  .format(node_helper.ip,
+                                          node_helper.build.debug_path))
+            if not ok:
+                print_result_and_exit()
+        finally:
+            # The dispatcher copy under $WORKSPACE (or /tmp) is only ever used as
+            # the SCP source for the nodes. Remove it on every path -- success,
+            # copy/verify failure, or download failure -- so the slave workspace
+            # is never left holding build binaries after the run.
+            _remove_local_build(nodes_needing_build[0])
     else:
         for node_helper in nodes_needing_build:
             build_url = node_helper.build.url

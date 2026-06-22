@@ -174,7 +174,7 @@ CMDS = {
                        "kill -9 `lsof -ti:21150`;" +
                        "kill -9 `lsof -ti:21250`;" +
                        "kill -9 `lsof -ti:21350`;",
-        "install": "DEBIAN_FRONTEND='noninteractive' apt-get -y -f install buildpath > /dev/null && echo 1 || echo 0",
+        "install": "DEBIAN_FRONTEND='noninteractive' apt-get -y -f install --allow-downgrades buildpath > /dev/null && echo 1 || echo 0",
         "post_install": "usermod -aG adm couchbase && systemctl -q is-active couchbase-server.service && echo 1" +
         " || systemctl -q is-active " + CB_ENTERPRISE_ANALYTICS + " && echo 1" +
         " || echo 0",
