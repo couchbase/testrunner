@@ -308,17 +308,23 @@ class QueryTests(BaseTestCase):
         """ Checks for panics/other errors in indexer and projector logs
         """
         self.generate_map_nodes_out_dist()
-        panic_str, fail_test, vbs_out_of_range_str = "panic", False, "NumVbs out of valid range"
+        fail_test = False
+        panic_str, vbs_out_of_range_str = "panic", "NumVbs out of valid range"
         indexers = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         strings_to_monitor = [panic_str, vbs_out_of_range_str]
         if not indexers:
             return None
         for server in indexers:
-            if server not in self.nodes_out_list:
-                shell = RemoteMachineShellConnection(server)
-                _, dir = RestConnection(server).diag_eval(
+            if server in self.nodes_out_list:
+                continue
+            shell = RemoteMachineShellConnection(server)
+            try:
+                status, log_dir = RestConnection(server).diag_eval(
                     'filename:absname(element(2, application:get_env(ns_server,error_logger_mf_dir))).')
-                indexer_log = str(dir) + '/indexer.log*'
+                if not status:
+                    self.log.warning(f'diag_eval failed on {server.ip}: {log_dir}')
+                    continue
+                indexer_log = str(log_dir) + '/indexer.log*'
                 for string in strings_to_monitor:
                     count, err = shell.execute_command("zgrep \"{0}\" {1} | wc -l".
                                                        format(string, indexer_log))
@@ -332,26 +338,36 @@ class QueryTests(BaseTestCase):
                         matched_lines, _ = shell.execute_command(match_cmd)
                         self.log.info("Matched lines: {0}".format(matched_lines))
                         fail_test = True
+            finally:
                 shell.disconnect()
         projectors = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
         if not projectors:
             return None
         for server in projectors:
-            if server not in self.nodes_out_list:
-                shell = RemoteMachineShellConnection(server)
-                _, dir = RestConnection(server).diag_eval(
+            if server in self.nodes_out_list:
+                continue
+            shell = RemoteMachineShellConnection(server)
+            try:
+                status, log_dir = RestConnection(server).diag_eval(
                     'filename:absname(element(2, application:get_env(ns_server,error_logger_mf_dir))).')
-                projector_log = str(dir) + '/projector.log*'
+                if not status:
+                    self.log.warning(f'diag_eval failed on {server.ip}: {log_dir}')
+                    continue
+                projector_log = str(log_dir) + '/projector.log*'
                 count, err = shell.execute_command("zgrep \"{0}\" {1} | wc -l".
                                                    format(panic_str, projector_log))
                 if isinstance(count, list):
                     count = int(count[0])
                 else:
                     count = int(count)
-                shell.disconnect()
                 if count > 0:
                     self.log.info("===== PANIC OBSERVED IN PROJECTOR LOGS ON SERVER {0}=====".format(server.ip))
+                    match_cmd = "zgrep -i \"{0}\" {1} | head -5".format(panic_str, projector_log)
+                    matched_lines, _ = shell.execute_command(match_cmd)
+                    self.log.info("Matched lines: {0}".format(matched_lines))
                     fail_test = True
+            finally:
+                shell.disconnect()
         if fail_test:
             raise Exception("Panic seen in projector/indexer")
 
