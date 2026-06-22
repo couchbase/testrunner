@@ -628,6 +628,43 @@ class QueryUDFTests(QueryTests):
             self.log.error(str(e))
             self.fail()
 
+    def test_system_functions_after_drop_no_key_not_found(self):
+        """MB-72184: Verify dropped UDFs are not returned in system:functions and
+        do not cause key-not-found errors after deletion."""
+        function_names = [
+            "func_global_mb72184",
+            "func_scope_a_mb72184",
+            "func_scope_b_mb72184",
+        ]
+        try:
+            self.run_cbq_query("CREATE FUNCTION `default`:`{0}`() {{ 0 }}".format(function_names[0]))
+            self.run_cbq_query("CREATE FUNCTION `default`:`default`.`_default`.`{0}`() {{ 0 }}".format(function_names[1]))
+            self.run_cbq_query("CREATE FUNCTION `default`:`default`.`_default`.`{0}`() {{ 0 }}".format(function_names[2]))
+
+            self.run_cbq_query("DROP FUNCTION `default`:`{0}`".format(function_names[0]))
+            self.run_cbq_query("DROP FUNCTION `default`:`default`.`_default`.`{0}`".format(function_names[1]))
+            self.run_cbq_query("DROP FUNCTION `default`:`default`.`_default`.`{0}`".format(function_names[2]))
+
+            for _ in range(5):
+                result = self.run_cbq_query("SELECT f.identity.name FROM system:functions AS f ORDER BY f.identity.name")
+                returned_names = [row.get("name") for row in result.get("results", []) if isinstance(row, dict)]
+                for fn in function_names:
+                    self.assertTrue(fn not in returned_names, "{0} still present in system:functions".format(fn))
+        except Exception as e:
+            self.log.error(str(e))
+            self.fail()
+        finally:
+            drop_queries = [
+                "DROP FUNCTION `default`:`{0}` IF EXISTS".format(function_names[0]),
+                "DROP FUNCTION `default`:`default`.`_default`.`{0}` IF EXISTS".format(function_names[1]),
+                "DROP FUNCTION `default`:`default`.`_default`.`{0}` IF EXISTS".format(function_names[2]),
+            ]
+            for query in drop_queries:
+                try:
+                    self.run_cbq_query(query)
+                except Exception as e:
+                    self.log.error(str(e))
+
     def test_inline_query_function(self):
         try:
             self.run_cbq_query("CREATE OR REPLACE FUNCTION func1(nameval) {{ (select * from default:default.{0}.{1} where name = nameval) }}".format(self.scope,self.collections[0]))

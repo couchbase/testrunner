@@ -1003,3 +1003,75 @@ class QueryEarlyFilterTests(QueryTests):
         self.assertEqual(result['results'], expected)
         self.assertTrue('index_keys' not in str(plan), "We expect early filter order not to occur please check plan: {plan}")
         self.assertTrue(operator1 == 'IndexScan3' and operator2 != 'Order')
+
+    def test_early_filter_applied_on_indexscan_for_join_predicates(self):
+        """MB-70928: Verify early filter is applied on index scan for join predicates."""
+        idx1 = "idx_mb70928_ix1"
+        idx3 = "idx_mb70928_ix3"
+        doc_m = "mb70928_m"
+        doc_cfl = "mb70928_cfl"
+
+        def _find_m_index_scan(plan_node):
+            if isinstance(plan_node, dict):
+                if (plan_node.get("#operator") == "IndexScan3" and
+                        plan_node.get("as") == "m" and
+                        plan_node.get("index") == idx1):
+                    return plan_node
+                for key in ("~children", "scans"):
+                    child_nodes = plan_node.get(key, [])
+                    if isinstance(child_nodes, list):
+                        for child in child_nodes:
+                            found = _find_m_index_scan(child)
+                            if found:
+                                return found
+                if "~child" in plan_node:
+                    found = _find_m_index_scan(plan_node["~child"])
+                    if found:
+                        return found
+            elif isinstance(plan_node, list):
+                for child in plan_node:
+                    found = _find_m_index_scan(child)
+                    if found:
+                        return found
+            return None
+
+        try:
+            self.run_cbq_query(
+                "UPSERT INTO default VALUES "
+                "('{0}', {{'c1':'Customer','c2':'US_KEY','a1':[{{'RteID':'USF2OP','EffDtRnge':{{'StrtDt':'1000-01-01','EndDt':'9999-12-31'}}}}]}}), "
+                "('{1}', {{'c3':'US_KEY'}})".format(doc_m, doc_cfl)
+            )
+            self.run_cbq_query("CREATE INDEX {0} ON default(c1,a1,c2)".format(idx1))
+            self.run_cbq_query("CREATE INDEX {0} ON default(c3)".format(idx3))
+            self.wait_for_all_indexes_online()
+
+            explain_query = (
+                "EXPLAIN SELECT COUNT(1) "
+                "FROM default AS m "
+                "LEFT JOIN default cfl ON m.c2 = cfl.c3 "
+                "WHERE m.c1 = 'Customer' "
+                "AND (ANY c IN m.a1 SATISFIES c.RteID = 'USF2OP' "
+                "AND NOW_LOCAL('1111-11-11') BETWEEN c.EffDtRnge.StrtDt AND c.EffDtRnge.EndDt END)"
+            )
+            explain = self.run_cbq_query(explain_query)
+            plan = explain['results'][0]['plan']
+            m_scan = _find_m_index_scan(plan)
+            self.assertIsNotNone(m_scan, f"Expected IndexScan3 for alias m on {idx1}, plan: {plan}")
+            self.assertTrue("filter" in m_scan, f"Expected early filter in IndexScan3, scan: {m_scan}")
+            scan_filter = m_scan["filter"]
+            self.assertTrue("Customer" in scan_filter, f"Expected c1 predicate in scan filter: {scan_filter}")
+            self.assertTrue("RteID" in scan_filter and "any" in scan_filter.lower(),
+                            f"Expected ANY predicate in scan filter: {scan_filter}")
+        finally:
+            try:
+                self.run_cbq_query("DROP INDEX default.{0}".format(idx1))
+            except Exception:
+                pass
+            try:
+                self.run_cbq_query("DROP INDEX default.{0}".format(idx3))
+            except Exception:
+                pass
+            try:
+                self.run_cbq_query("DELETE FROM default USE KEYS ['{0}','{1}']".format(doc_m, doc_cfl))
+            except Exception:
+                pass

@@ -3094,6 +3094,49 @@ class QuerySanityTests(QueryTests):
             else:
                 self.log.info("Query is not using specified index")
 
+    def test_MB70834_union_scan_for_or_predicate_with_partial_indexes(self):
+        """MB-70834: Verify union scan is correctly applied for OR predicates
+        with partial indexes."""
+        self.fail_if_no_buckets()
+        bucket = self.query_buckets[0]
+        idx_us = "idx_mb70834_us"
+        idx_uk = "idx_mb70834_uk"
+        doc_us = "mb70834_doc_us"
+        doc_uk = "mb70834_doc_uk"
+        try:
+            self.run_cbq_query(
+                "UPSERT INTO {0} (KEY, VALUE) VALUES ('{1}', {{'country':'US'}}), ('{2}', {{'country':'UK'}})".format(
+                    bucket, doc_us, doc_uk
+                )
+            )
+            self.run_cbq_query("CREATE INDEX {0} ON {1}(country) WHERE country = 'US'".format(idx_us, bucket))
+            self.run_cbq_query("CREATE INDEX {0} ON {1}(country) WHERE country = 'UK'".format(idx_uk, bucket))
+            self.wait_for_all_indexes_online()
+
+            explain = self.run_cbq_query(
+                "EXPLAIN SELECT META().id FROM {0} WHERE country = 'US' OR country = 'UK'".format(bucket)
+            )
+            explain_str = str(explain)
+            self.assertTrue("UnionScan" in explain_str, "UnionScan is not used in explain plan")
+            self.assertTrue(idx_us in explain_str and idx_uk in explain_str,
+                            "Expected partial indexes are not present in explain plan")
+        except Exception as e:
+            self.log.error(str(e))
+            self.fail()
+        finally:
+            try:
+                self.run_cbq_query("DROP INDEX {0} ON {1}".format(idx_us, bucket))
+            except Exception:
+                pass
+            try:
+                self.run_cbq_query("DROP INDEX {0} ON {1}".format(idx_uk, bucket))
+            except Exception:
+                pass
+            try:
+                self.run_cbq_query("DELETE FROM {0} USE KEYS ['{1}','{2}']".format(bucket, doc_us, doc_uk))
+            except Exception:
+                pass
+
     ##############################################################################################
     #
     #   DATETIME
