@@ -2977,6 +2977,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                         else:
                             index_item_count_map[index] += stats[node][namespace][index]["items_count"]
             additional_docs = 1
+            if self.post_rebalance_action is None:
+                additional_docs = 0
             self.log.info(f"item count map : {index_item_count_map}")
             if self.post_rebalance_action == "data_load":
                 additional_docs = 10000
@@ -4369,6 +4371,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                         for index, stats in indexes.items()
                         for key, val in stats.items() if 'num_docs_pending' in key]
         self.log.info(f"Docs Pending after indexer kill: {docs_pending}")
+        self.wait_for_mutation_processing()
         for namespace in self.namespaces:
             if self.isSparse:
                 count_query = f"select count(size) from {namespace} where size > 0;"

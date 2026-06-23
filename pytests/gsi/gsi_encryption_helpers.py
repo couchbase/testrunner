@@ -2597,3 +2597,45 @@ class GSIEncryptionHelpers:
                     f"(showing up to 5): {violations[:5]}"
                 )
         return results
+
+    def _install_tools(self):
+        """
+        Ensure xxd is installed on every cluster node. Called once from suite_setUp.
+
+        xxd ships in vim-common on Debian/Ubuntu and in vim-common (or vim-enhanced)
+        on RHEL/CentOS/Fedora. The check is skipped for nodes where xxd is already
+        present so repeated suite runs are fast.
+        """
+        for node in self.servers:
+            shell = RemoteMachineShellConnection(node, verbose=False)
+            try:
+                info = shell.extract_remote_info()
+                distro = (info.distribution_type or "").lower()
+
+                out, _ = shell.execute_command("which xxd 2>/dev/null")
+                if out and out[0].strip():
+                    self.log.info(f"xxd already present on {node.ip}: {out[0].strip()}")
+                    continue
+
+                self.log.info(f"Installing xxd on {node.ip} (distro={distro})")
+                if "ubuntu" in distro or "debian" in distro:
+                    install_out, _ = shell.execute_command(
+                        "apt-get install -y xxd 2>&1"
+                    )
+                elif any(d in distro for d in ("centos", "rhel", "fedora", "amazon")):
+                    install_out, _ = shell.execute_command(
+                        "yum install -y vim-common 2>&1 || dnf install -y vim-common 2>&1"
+                    )
+                else:
+                    install_out, _ = shell.execute_command(
+                        "apt-get install -y xxd 2>&1 || yum install -y vim-common 2>&1"
+                    )
+                self.log.info(f"Install output on {node.ip}: {' '.join(install_out or [])}")
+
+                verify_out, _ = shell.execute_command("which xxd 2>/dev/null")
+                if verify_out and verify_out[0].strip():
+                    self.log.info(f"xxd installed successfully on {node.ip}: {verify_out[0].strip()}")
+                else:
+                    self.log.warning(f"xxd installation may have failed on {node.ip}")
+            finally:
+                shell.disconnect()

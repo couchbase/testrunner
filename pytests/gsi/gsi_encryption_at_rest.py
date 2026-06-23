@@ -29,6 +29,7 @@ from couchbase_helper.query_definitions import QueryDefinition, RANGE_SCAN_TEMPL
 from .base_gsi import BaseSecondaryIndexingTests
 from membase.api.rest_client import RestConnection, RestHelper
 from lib.membase.helper.encryption_at_rest_helper import EncryptionUtil
+from pytests.gsi.gsi_encryption_helpers import GSIEncryptionHelpers
 
 
 # Maps self.gsi_type strings to the three canonical engine names accepted by
@@ -97,6 +98,7 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
     def suite_setUp(self):
         self.log.info("==============  GSIEncryptionAtRest suite_setUp has started ==============")
         super(GSIEncryptionAtRest, self).suite_setUp()
+        GSIEncryptionHelpers._install_tools()
         self.log.info("==============  GSIEncryptionAtRest suite_setUp has completed ==============")
 
     def _create_encrypted_bucket(self):
