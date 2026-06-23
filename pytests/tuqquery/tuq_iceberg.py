@@ -1113,6 +1113,53 @@ class IcebergQueryTests(QueryTests):
         self.log.info(f"Creating external collection: {self.external_collection_name}")
         result = self.run_cbq_query(query)
         self.log.info(f"External collection creation result: {result}")
+        self._wait_for_external_collection_ready()
+
+    def _wait_for_external_collection_ready(self, timeout_sec=60, retry_interval_sec=3):
+        """Wait until external collection can read the backing Iceberg table."""
+        keyspace_probe_query = (
+            f"SELECT RAW 1 FROM system:keyspaces WHERE `bucket` = '{self.couchbase_bucket_name}' "
+            f"AND `scope` = '{self.iceberg_scope_name}' AND name = '{self.iceberg_collection_name}' LIMIT 1"
+        )
+        probe_query = f"SELECT RAW COUNT(*) FROM {self.external_collection_name}"
+        deadline = time.time() + timeout_sec
+        last_error = None
+        while time.time() < deadline:
+            try:
+                keyspace_result = self.run_cbq_query(keyspace_probe_query, query_params={"timeout": "300s"})
+                if not keyspace_result.get("results"):
+                    self.log.info(
+                        f"External collection keyspace not visible yet, retrying in {retry_interval_sec}s"
+                    )
+                    time.sleep(retry_interval_sec)
+                    continue
+                result = self.run_cbq_query(probe_query, query_params={"timeout": "300s"})
+                if result.get("status") == "success":
+                    self.log.info("External collection is ready")
+                    return
+            except Exception as e:
+                last_error = e
+                err = str(e)
+                retryable = (
+                    "12057" in err
+                    or "12003" in err
+                    or "12021" in err
+                    or "table does not exist" in err
+                    or "Keyspace not found" in err
+                    or "Scope not found" in err
+                )
+                if retryable:
+                    self.log.info(
+                        f"External collection not ready yet; retrying in {retry_interval_sec}s: {err}"
+                    )
+                    time.sleep(retry_interval_sec)
+                    continue
+                raise
+            time.sleep(retry_interval_sec)
+
+        if last_error:
+            raise last_error
+        raise RuntimeError(f"Timed out waiting for external collection readiness: {self.external_collection_name}")
 
     def _generate_sample_data(self, count):
         """
@@ -2714,7 +2761,7 @@ class IcebergQueryTests(QueryTests):
 
         query = f"SELECT id, name, loyalty_points, membership_tier FROM {self.external_collection_name} WHERE id < 5 ORDER BY id"
         self.log.info(f"Query old data with new columns: {query}")
-        result = self.run_cbq_query(query, query_params={"timeout": "300s"})
+        result = self._run_cbq_query_retry_iceberg_table_not_found(query, query_params={"timeout": "300s"})
         self.assertEqual(result['status'], 'success', f"Query failed: {result}")
         
         for row in result['results']:
@@ -2781,7 +2828,7 @@ class IcebergQueryTests(QueryTests):
         # Query new data - new columns should have values
         query = f"SELECT id, name, loyalty_points, membership_tier, last_visit_date FROM {self.external_collection_name} WHERE id >= {base_id} ORDER BY id"
         self.log.info(f"Query new data: {query}")
-        result = self.run_cbq_query(query, query_params={"timeout": "300s"})
+        result = self._run_cbq_query_retry_iceberg_table_not_found(query, query_params={"timeout": "300s"})
         self.assertEqual(result['status'], 'success', f"Query failed: {result}")
         self.assertEqual(len(result['results']), len(new_data), 
                          f"Expected {len(new_data)} new rows, got {len(result['results'])}")
@@ -2797,7 +2844,7 @@ class IcebergQueryTests(QueryTests):
         # Query mixing old and new data
         query = f"SELECT id, name, loyalty_points FROM {self.external_collection_name} WHERE id IN [0, 1, {base_id}, {base_id + 1}] ORDER BY id"
         self.log.info(f"Query mixing old and new data: {query}")
-        result = self.run_cbq_query(query, query_params={"timeout": "300s"})
+        result = self._run_cbq_query_retry_iceberg_table_not_found(query, query_params={"timeout": "300s"})
         self.assertEqual(result['status'], 'success', f"Query failed: {result}")
         self.assertEqual(len(result['results']), 4, "Expected 4 rows")
         
@@ -2812,7 +2859,7 @@ class IcebergQueryTests(QueryTests):
         self.log.info("Test 5: Filter on new column")
         query = f"SELECT id, name, membership_tier FROM {self.external_collection_name} WHERE membership_tier = 'Gold' ORDER BY id"
         self.log.info(f"Filter on new column: {query}")
-        result = self.run_cbq_query(query, query_params={"timeout": "300s"})
+        result = self._run_cbq_query_retry_iceberg_table_not_found(query, query_params={"timeout": "300s"})
         self.assertEqual(result['status'], 'success', f"Query failed: {result}")
         
         for row in result['results']:
@@ -2826,7 +2873,7 @@ class IcebergQueryTests(QueryTests):
         self.log.info("Test 6: Aggregation on new column")
         query = f"SELECT AVG(loyalty_points) as avg_points FROM {self.external_collection_name} WHERE loyalty_points IS NOT NULL"
         self.log.info(f"Aggregation on new column: {query}")
-        result = self.run_cbq_query(query, query_params={"timeout": "300s"})
+        result = self._run_cbq_query_retry_iceberg_table_not_found(query, query_params={"timeout": "300s"})
         self.assertEqual(result['status'], 'success', f"Query failed: {result}")
         
         avg_points = result['results'][0]['avg_points']
@@ -2851,8 +2898,26 @@ class IcebergQueryTests(QueryTests):
         # Recreate external collection
         time.sleep(2)
         self._create_external_collection()
-        time.sleep(5)
+        time.sleep(2)
         self.log.info("External collection recreated to pick up schema changes")
+
+    def _run_cbq_query_retry_iceberg_table_not_found(self, query, query_params=None, retries=3, retry_interval_sec=3):
+        """Retry N1QL query when ICEBERG table metadata is temporarily unavailable."""
+        for attempt in range(1, retries + 1):
+            try:
+                return self.run_cbq_query(query, query_params=query_params)
+            except Exception as e:
+                err = str(e)
+                is_retryable = "12057" in err or "table does not exist" in err
+                if is_retryable and attempt < retries:
+                    self.log.warning(
+                        f"Transient Iceberg table-not-found on attempt {attempt}/{retries}, retrying in "
+                        f"{retry_interval_sec}s: {err}"
+                    )
+                    self._wait_for_external_collection_ready(timeout_sec=30, retry_interval_sec=retry_interval_sec)
+                    time.sleep(retry_interval_sec)
+                    continue
+                raise
 
     def test_iceberg_mixed_types(self):
         """
