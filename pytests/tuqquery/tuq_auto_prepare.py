@@ -1076,7 +1076,7 @@ class QueryAutoPrepareTests(QueryTests):
             ad_hoc_before = self._query_metadata_doc_count(where_clause='ad_hoc = true')
             for _ in range(3):
                 self.run_cbq_query(query=statement)
-            self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = true'), eval=ad_hoc_before + 2, delay=1, tries=20)
+            self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = true'), eval=ad_hoc_before + 3, delay=1, tries=20)
         finally:
             self._cleanup_plan_stability_state()
 
