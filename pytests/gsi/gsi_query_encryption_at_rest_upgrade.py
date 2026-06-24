@@ -324,6 +324,136 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
         self._run_select_scans(baseline_queries)
         return baseline_queries, list(self.namespaces)
 
+    # ------------------------------------------------------------------ vector bucket prep
+
+    def _prepare_vector_bucket(self):
+        """Create a vector bucket, load 10k MSMARCOSiftEmbeddingProduct docs,
+        create 3 dense BHIVE indexes (no scalar, no sparse), wait online,
+        run a baseline SELECT sweep. Only call when initial_version >= 8.0.
+
+        Returns (vector_namespaces, vector_queries, vector_bucket_name).
+        """
+        vector_bucket = f"{self.test_bucket}_vector"
+        self.log.info(f"[prepare] Creating vector bucket '{vector_bucket}'")
+        bucket_params = self._create_bucket_params(
+            server=self.master, size=self.bucket_size, replicas=self.num_replicas,
+            bucket_type=self.bucket_type, enable_replica_index=self.enable_replica_index,
+            eviction_policy=self.eviction_policy, lww=self.lww,
+        )
+        self.cluster.create_standard_bucket(
+            name=vector_bucket, port=11222, bucket_params=bucket_params,
+        )
+        self.sleep(10, "Wait after vector bucket creation")
+
+        if self.initial_supports_bucket_ear:
+            self._enable_bucket_encryption(vector_bucket, self.encryption_key_id)
+
+        self.prepare_collection_for_indexing(
+            num_scopes=1, num_collections=1,
+            num_of_docs_per_collection=10000,
+            json_template="MSMARCOSiftEmbeddingProduct",
+            bucket_name=vector_bucket,
+            load_default_coll=True,
+        )
+        vector_namespaces = [ns for ns in self.namespaces if vector_bucket in ns]
+        self.log.info(f"[prepare] Vector namespaces: {vector_namespaces}")
+        self.assertGreaterEqual(
+            len(vector_namespaces), 2,
+            "Expected default + non-default vector namespaces",
+        )
+
+        query_node = self.get_nodes_from_services_map(service_type="n1ql")
+        vector_queries = set()
+        for i, ns in enumerate(vector_namespaces):
+            tail = "".join(ns.split(':')[1].split('.'))
+            # 1 BHIVE dense index
+            bhive_prefix = f"vec_bhive_{i+1}_{tail}"
+            bhive_defs = self.gsi_util_obj.get_index_definition_list(
+                dataset="MSMARCOSiftEmbeddingProduct",
+                prefix=bhive_prefix,
+                bhive_index=True,
+                array_indexes=False,
+                similarity="L2_SQUARED",
+                description_dimension=128,
+            )[:1]
+            # 1 composite dense index
+            comp_prefix = f"vec_comp_{i+1}_{tail}"
+            comp_defs = self.gsi_util_obj.get_index_definition_list(
+                dataset="MSMARCOSiftEmbeddingProduct",
+                prefix=comp_prefix,
+                bhive_index=False,
+                array_indexes=False,
+                similarity="L2_SQUARED",
+                description_dimension=128,
+            )[:1]
+            all_defs = bhive_defs + comp_defs
+            self.log.info(
+                f"[prepare] Creating {len(all_defs)} vector indexes on {ns} "
+                f"({len(bhive_defs)} BHIVE + {len(comp_defs)} composite)"
+            )
+            vector_queries.update(
+                self.gsi_util_obj.get_select_queries(definition_list=all_defs, namespace=ns)
+            )
+            for idx_def in all_defs:
+                is_bhive = getattr(idx_def, "bhive_index", False)
+                create_q = self.gsi_util_obj.get_create_index_list(
+                    definition_list=[idx_def], namespace=ns,
+                    num_replica=self.num_index_replica,
+                    bhive_index=is_bhive,
+                )
+                self.gsi_util_obj.create_gsi_indexes(
+                    create_queries=create_q, database=ns, query_node=query_node,
+                )
+            self.log.info(f"[prepare] Created {len(bhive_defs) + len(comp_defs)} vector indexes on {ns}")
+
+        self.wait_until_indexes_online(timeout=600)
+        vector_query_list = list(vector_queries)
+        self._run_select_scans(vector_query_list)
+        return vector_namespaces, vector_query_list, vector_bucket
+
+    def _capture_item_counts(self):
+        """Return a {index_name: count} map from the indexer /stats endpoint.
+        Filters out _system indexes."""
+        index_counts = self.get_item_counts_from_index_stats()
+        counts = {}
+        for entry in index_counts:
+            name, count = entry["name"], entry["count"]
+            if "_system:" in name:
+                continue
+            counts[name] = count
+        self.log.info(
+            f"[capture-counts] {len(counts)} indexes: " +
+            ", ".join(f"{k}={v}" for k, v in sorted(counts.items())[:10]) +
+            ("..." if len(counts) > 10 else "")
+        )
+        return counts
+
+    def _validate_item_counts(self, pre_counts):
+        """Fetch current index stats and assert every index still has at least the
+        same item count that was recorded pre-upgrade."""
+        current = self.get_item_counts_from_index_stats()
+        post_counts = {}
+        for entry in current:
+            name, count = entry["name"], entry["count"]
+            if "_system:" in name:
+                continue
+            post_counts[name] = count
+        mismatches = []
+        for name, pre_count in sorted(pre_counts.items()):
+            post_count = post_counts.get(name)
+            if post_count is None:
+                mismatches.append(f"  {name}: missing from post-upgrade stats")
+            elif post_count < pre_count:
+                mismatches.append(
+                    f"  {name}: count dropped from {pre_count} to {post_count}"
+                )
+        if mismatches:
+            self.fail(
+                "[validate-counts] Index item counts degraded after upgrade:\n"
+                + "\n".join(mismatches)
+            )
+        self.log.info(f"[validate-counts] {len(pre_counts)} indexes OK")
+
     # ------------------------------------------------------------------ query helpers (ported)
 
     def _set_query_completed_settings(self, stream_size=500, threshold=0):
@@ -1089,25 +1219,48 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
         query_node = query_nodes[0] if query_nodes else self.get_nodes_from_services_map(
             service_type="n1ql"
         )
-        for i, ns in enumerate(self.namespaces[:2]):
+        for i, ns in enumerate(self.namespaces):
             try:
                 tail = "".join(ns.split(':')[1].split('.'))
-                prefix = f"post_upg_{i+1}_{tail}"
-                defs = self.gsi_util_obj.get_index_definition_list(
-                    dataset=self.json_template, prefix=prefix, skip_primary=True,
-                )
+                bucket = ns.split(':')[1].split('.')[0]
+                is_vector = "_vector" in bucket
+                if is_vector:
+                    dataset = "MSMARCOSiftEmbeddingProduct"
+                    # 1 BHIVE dense
+                    bhive_defs = self.gsi_util_obj.get_index_definition_list(
+                        dataset=dataset,
+                        prefix=f"post_upg_vec_bhive_{i+1}_{tail}",
+                        bhive_index=True, array_indexes=False,
+                        similarity="L2_SQUARED", description_dimension=128,
+                    )[:1]
+                    # 1 composite dense
+                    comp_defs = self.gsi_util_obj.get_index_definition_list(
+                        dataset=dataset,
+                        prefix=f"post_upg_vec_comp_{i+1}_{tail}",
+                        bhive_index=False, array_indexes=False,
+                        similarity="L2_SQUARED", description_dimension=128,
+                    )[:1]
+                    defs = bhive_defs + comp_defs
+                else:
+                    prefix = f"post_upg_{i+1}_{tail}"
+                    defs = self.gsi_util_obj.get_index_definition_list(
+                        dataset=self.json_template, prefix=prefix, skip_primary=True,
+                    )
                 post_queries.update(
                     self.gsi_util_obj.get_select_queries(definition_list=defs, namespace=ns)
                 )
-                create_q = self.gsi_util_obj.get_create_index_list(
-                    definition_list=defs, namespace=ns,
-                    num_replica=self.num_index_replica,
-                )
-                self.gsi_util_obj.create_gsi_indexes(
-                    create_queries=create_q, database=ns, query_node=query_node,
-                )
+                for idx_def in defs:
+                    is_bhive = getattr(idx_def, "bhive_index", False)
+                    create_q = self.gsi_util_obj.get_create_index_list(
+                        definition_list=[idx_def], namespace=ns,
+                        num_replica=self.num_index_replica,
+                        bhive_index=is_bhive,
+                    )
+                    self.gsi_util_obj.create_gsi_indexes(
+                        create_queries=create_q, database=ns, query_node=query_node,
+                    )
                 self.log.info(
-                    f"[post-upgrade] Created {len(create_q)} post-upgrade indexes on {ns}"
+                    f"[post-upgrade] Created {len(defs)} post-upgrade indexes on {ns}"
                 )
             except Exception as e:
                 self.log.warning(
@@ -1814,6 +1967,18 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
             service_type="n1ql", get_all_nodes=True,
         )
 
+        # STEP 2.5: Conditional vector bucket (dense BHIVE indexes, 8.0+ only)
+        if self._version_tuple(self.initial_version) >= (8, 0):
+            self.log.info("[STEP 2.5] Creating vector bucket with dense BHIVE indexes")
+            vector_namespaces, vector_queries, vector_bucket = self._prepare_vector_bucket()
+            encrypted_buckets.append(vector_bucket)
+            baseline_queries.extend(vector_queries)
+            namespaces.extend(vector_namespaces)
+        else:
+            self.log.info(
+                "[STEP 2.5] Skipping vector bucket (initial version < 8.0)"
+            )
+
         # STEP 3: Query settings + drive workload to produce rlstream + history + spill + FFDC
         self.log.info("[STEP 3] Driving pre-upgrade query workload")
         self._set_query_completed_settings(stream_size=500, threshold=0)
@@ -1885,8 +2050,9 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
                 "files are listed below:\n" + "\n".join(pre_upgrade_failures)
             )
 
-        # STEP 5: Snapshot index identities
+        # STEP 5: Snapshot index identities and item counts for all namespaces
         pre_index_identity = self._capture_index_identity_set()
+        pre_item_counts = self._capture_item_counts()
 
         # STEP 6: Upgrade nodes one by one with mixed-mode checkpoint in the middle
         kv_nodes = self.get_nodes_from_services_map(
@@ -2039,6 +2205,15 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
         except Exception as e:
             deferred_failures.append(f"[STEP 8] post-upgrade validation error: {e}")
 
+        # STEP 8.5: Validate item counts for all namespaces
+        self.log.info("[STEP 8.5] Validating item counts across upgrade")
+        try:
+            self._validate_item_counts(pre_item_counts)
+        except AssertionError as e:
+            deferred_failures.append(f"[STEP 8.5] item count mismatch: {e}")
+        except Exception as e:
+            deferred_failures.append(f"[STEP 8.5] item count validation error: {e}")
+
         # STEP 9: Final indexer restart on every node before test exit/failure.
         restart_errors = self._restart_indexer_on_all_nodes(
             label="[STEP 9 final restart] ",
@@ -2053,22 +2228,171 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
             )
         self.log.info(f"[DONE] {mode} upgrade test PASSED")
 
+    # ------------------------------------------------------------------ simple upgrade with workload
+
+    def _run_simple_upgrade_with_workload(self, mode):
+        """Simplified upgrade test with continuous KV mutations and query workload.
+
+        Creates a single bucket, loads docs, builds scalar + composite + BHIVE
+        indexes, then upgrades all cluster nodes while running continuous kv
+        mutations and query scans in background threads.  Skips every
+        encryption validation — this is purely a workload resilience test.
+
+        Args:
+            mode: 'offline' or 'online' — passed through to _upgrade_node.
+        """
+        self.log.info("=" * 80)
+        self.log.info(
+            f"STARTING TEST: simple {mode} upgrade with background workload "
+            f"({self.initial_version} -> {self.upgrade_to})"
+        )
+        self.log.info("=" * 80)
+
+        # -- bucket + data -------------------------------------------------
+        self.log.info("[STEP 1] Creating bucket and loading data...")
+        self.bucket_params = self._create_bucket_params(
+            server=self.master, size=self.bucket_size,
+            replicas=self.num_replicas, bucket_type=self.bucket_type,
+            enable_replica_index=self.enable_replica_index,
+            eviction_policy=self.eviction_policy, lww=self.lww,
+        )
+        self.cluster.create_standard_bucket(
+            name=self.test_bucket, port=11222, bucket_params=self.bucket_params,
+        )
+        self.sleep(10, "Wait after bucket creation")
+
+        self.prepare_collection_for_indexing(
+            num_scopes=1, num_collections=1,
+            num_of_docs_per_collection=self.num_of_docs_per_collection,
+            json_template=self.json_template,
+            bucket_name=self.test_bucket,
+            load_default_coll=True,
+        )
+        self.sleep(10)
+
+        # -- indexes -------------------------------------------------------
+        self.log.info("[STEP 2] Creating indexes...")
+        select_queries = set()
+
+        scalar_queries = self.create_index_in_batches(
+            num_batches=1, replica_count=1, scalar=True,
+            dataset=self.json_template, bhive=False,
+        )
+        select_queries.update(scalar_queries)
+
+        if self._version_tuple(self.initial_version) >= (8, 0):
+            composite_queries = self.create_index_in_batches(
+                num_batches=1, replica_count=1, scalar=False,
+                dataset=self.json_template, bhive=False,
+            )
+            bhive_queries = self.create_index_in_batches(
+                num_batches=1, replica_count=1, scalar=False,
+                dataset=self.json_template, bhive=True,
+                skip_extra_indexes=False,
+            )
+            select_queries.update(composite_queries)
+            select_queries.update(bhive_queries)
+
+        self.wait_until_indexes_online()
+        self.sleep(120)
+
+        # -- continuous workload + upgrade --------------------------------
+        self.log.info("[STEP 3] Starting continuous scan + mutation threads...")
+        event = threading.Event()
+        self.run_continous_query = True
+        scan_thread = threading.Thread(
+            target=self._run_queries_continously,
+            args=(select_queries, False),
+            name="simple_upg_scan",
+        )
+        scan_thread.start()
+
+        mutation_thread = threading.Thread(
+            target=self.perform_continuous_kv_mutations,
+            args=(event,),
+            kwargs={"timeout": 4800},
+            name="simple_upg_mutation",
+        )
+        mutation_thread.start()
+
+        try:
+            self.log.info(
+                f"[STEP 4] Upgrading all nodes ({mode})..."
+            )
+            kv_nodes = self.get_nodes_from_services_map(
+                service_type="kv", get_all_nodes=True,
+            )
+            index_nodes = self.get_nodes_from_services_map(
+                service_type="index", get_all_nodes=True,
+            )
+            n1ql_nodes = self.get_nodes_from_services_map(
+                service_type="n1ql", get_all_nodes=True,
+            )
+            for node in list(kv_nodes) + list(index_nodes) + list(n1ql_nodes):
+                self._upgrade_node(node, mode)
+
+            self.update_master_node()
+        finally:
+            self.run_continous_query = False
+            event.set()
+            scan_thread.join()
+            mutation_thread.join()
+
+        # -- post-upgrade validation --------------------------------------
+        self.log.info("[STEP 5] Post-upgrade validation...")
+        self.wait_until_indexes_online()
+
+        self.create_index_in_batches(
+            num_batches=1, replica_count=1, scalar=True,
+            dataset=self.json_template,
+        )
+        self.wait_until_indexes_online()
+
+        self._run_select_scans(select_queries)
+
+        # -- restart indexer on all nodes ----------------------------------
+        try:
+            self.log.info("[STEP 6] Killing indexer process on all index nodes...")
+            self._kill_indexer_on_all_nodes(step_prefix="[STEP 6] ")
+            self.log.info("[STEP 6] PASSED - Indexer processes killed on all nodes")
+        except Exception as e:
+            self.log.warning(f"[STEP 6] WARNING - Failed to kill indexer on some nodes: {str(e)}")
+
+        self.log.info(
+            f"[DONE] simple {mode} upgrade test with workload PASSED "
+            f"({self.initial_version} -> {self.upgrade_to})"
+        )
+
     # ------------------------------------------------------------------ tests
 
     def test_offline_upgrade_with_encryption_at_rest(self):
         """Offline upgrade: per-node stop_server -> install -> start. Cluster sees the
         node bounce; remaining nodes serve traffic. Mixed-mode checkpoint between the
         first GSI/N1QL upgrade and the second."""
+        if self.input.param("simple_upgrade_with_workload", False):
+            self._run_simple_upgrade_with_workload(mode='offline')
+            return
         self.log.info("=" * 80)
         self.log.info("STARTING TEST: test_offline_upgrade_with_encryption_at_rest")
         self.log.info("=" * 80)
+        self.dcp_rebalance = self.input.param("dcp_rebalance", False)
+        if self.dcp_rebalance:
+            self.disable_shard_based_rebalance()
+            self.sleep(10)
         self._run_upgrade_test(mode='offline')
 
     def test_online_upgrade_with_encryption_at_rest(self):
         """Online upgrade: per-node rebalance-out -> install -> rebalance-in (with the
         same service list). Mixed-mode checkpoint between the first GSI/N1QL upgrade
         and the second."""
+        if self.input.param("simple_upgrade_with_workload", False):
+            self._run_simple_upgrade_with_workload(mode='online')
+            return
         self.log.info("=" * 80)
         self.log.info("STARTING TEST: test_online_upgrade_with_encryption_at_rest")
         self.log.info("=" * 80)
+        self.dcp_rebalance = self.input.param("dcp_rebalance", False)
+        if self.dcp_rebalance:
+            self.disable_shard_based_rebalance()
+            self.sleep(10)
         self._run_upgrade_test(mode='online')

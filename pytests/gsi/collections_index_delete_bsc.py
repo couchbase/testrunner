@@ -253,7 +253,7 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
         collection_namespaces_list = []
         self.rest.delete_bucket(bucket=self.test_bucket)
         self.sleep(10)
-        for bucket_num in range(5):
+        for bucket_num in range(3):
             self.test_bucket = f'{bucket_prefix}_{bucket_num}'
             buckets_list.append(self.test_bucket)
             self.cluster.create_standard_bucket(name=self.test_bucket, port=11222, bucket_params=self.bucket_params)

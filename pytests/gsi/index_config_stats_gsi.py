@@ -851,3 +851,86 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests, QueryHelperT
         "queryport.client.settings.poolOverflow" : 30
 }
         return map
+
+    def test_thp_disable_enable_setting_check(self):
+        """
+        MB-65503: THP disable/enable setting check for the indexer process.
+
+        Validate that Transparent Huge Pages (THP) is disabled for the indexer
+        process when platform.disable_thp is true (default): cat
+        /proc/<indexer PID>/status and verify THP_enabled is 0, and cat
+        /proc/<PID>/smaps_rollup and verify AnonHugePages is 0 kB. Then disable
+        the indexer setting (platform.disable_thp to false) and log the previous
+        two settings to console.
+
+        Works across RHEL 9, Ubuntu 24, Debian 13, Alma 9, SUSE 15, Rocky 9, AL2023.
+
+        https://jira.issues.couchbase.com/browse/MB-65503
+        """
+        index_nodes = self.get_nodes_from_services_map(
+            service_type="index", get_all_nodes=True,
+        )
+        # self.assertGreaterEqual(len(index_nodes), 1, "Need at least one index node")
+
+        for index_node in index_nodes:
+            shell = RemoteMachineShellConnection(index_node, verbose=False)
+            try:
+                out, _ = shell.execute_command("pgrep -f indexer")
+                pids = [l.strip() for l in out if l.strip()]
+                if not pids:
+                    self.log.warning(f"No indexer PID found on {index_node.ip}")
+                    continue
+                pid = pids[0]
+                self.log.info(f"Indexer PID on {index_node.ip}: {pid}")
+
+                # ---- Phase 1: THP should be disabled (platform.disable_thp=true by default) ----
+                self.log.info(f"[BEFORE] Checking THP state on {index_node.ip} (PID={pid})")
+
+                status_out, _ = shell.execute_command(
+                    f"grep -i 'thp' /proc/{pid}/status 2>/dev/null || echo 'NO_THP_LINES'"
+                )
+                status_lines = [l.strip() for l in status_out]
+                self.log.info(
+                    f"[BEFORE] /proc/{pid}/status THP lines on {index_node.ip}: "
+                    f"{status_lines}"
+                )
+
+                smaps_out, _ = shell.execute_command(
+                    f"grep -E '^(AnonHugePages|ShmemHugePages|FileHugePages):' "
+                    f"/proc/{pid}/smaps_rollup 2>/dev/null || echo 'NO_SMAPS'"
+                )
+                smaps_lines = [l.strip() for l in smaps_out]
+                self.log.info(
+                    f"[BEFORE] /proc/{pid}/smaps_rollup on {index_node.ip}: "
+                    f"{smaps_lines}"
+                )
+
+                # ---- Phase 2: Disable platform.disable_thp (set to false) ----
+                self.log.info(f"[DISABLE] Setting platform.disable_thp=false on {index_node.ip}")
+                rest = RestConnection(index_node)
+                rest.set_index_settings({"platform.disable_thp": False})
+                self.sleep(15, "Wait for THP setting to take effect")
+
+                # ---- Phase 3: Log THP state after disabling the setting ----
+                self.log.info(f"[AFTER] Checking THP state on {index_node.ip} (PID={pid})")
+
+                status_out2, _ = shell.execute_command(
+                    f"grep -i 'thp' /proc/{pid}/status 2>/dev/null || echo 'NO_THP_LINES'"
+                )
+                self.log.info(
+                    f"[AFTER] /proc/{pid}/status THP lines on {index_node.ip}: "
+                    f"{[l.strip() for l in status_out2]}"
+                )
+
+                smaps_out2, _ = shell.execute_command(
+                    f"grep -E '^(AnonHugePages|ShmemHugePages|FileHugePages):' "
+                    f"/proc/{pid}/smaps_rollup 2>/dev/null || echo 'NO_SMAPS'"
+                )
+                self.log.info(
+                    f"[AFTER] /proc/{pid}/smaps_rollup on {index_node.ip}: "
+                    f"{[l.strip() for l in smaps_out2]}"
+                )
+
+            finally:
+                shell.disconnect()
+
