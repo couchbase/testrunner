@@ -2944,14 +2944,14 @@ class StableTopFTS(FTSBaseTest):
         dic['array'] = ['element1', 1234, True]
         try:
             from couchbase.cluster import Cluster
-            from couchbase.cluster import PasswordAuthenticator
-            cluster = Cluster('couchbase://{0}'.format(master.ip))
-            authenticator = PasswordAuthenticator('Administrator', 'password')
-            cluster.authenticate(authenticator)
-            cb = cluster.open_bucket('default')
+            from couchbase.auth import PasswordAuthenticator
+            from couchbase.options import ClusterOptions
+            authenticator = PasswordAuthenticator(master.rest_username, master.rest_password)
+            cluster = Cluster('couchbase://{0}'.format(master.ip), ClusterOptions(authenticator))
+            collection = cluster.bucket('default').default_collection()
             if self.container_type == 'bucket':
                 for key, value in list(dic.items()):
-                    cb.upsert(key, value)
+                    collection.upsert(key, value)
             else:
                 count = 1
                 for key, value in list(dic.items()):
@@ -2964,7 +2964,8 @@ class StableTopFTS(FTSBaseTest):
                         else:
                             query = "insert into default:default."+self.scope+"."+self.collection+" (key,value) values ('key_"+str(count)+"', {'"+str(key)+"' : "+str(value)+"})"
                     count += 1
-                    cb.n1ql_query(query).execute()
+                    # SDK v4 query() is lazy; iterate rows to force execution
+                    list(cluster.query(query).rows())
         except Exception as e:
             self.fail(e)
         self.wait_for_indexing_complete()

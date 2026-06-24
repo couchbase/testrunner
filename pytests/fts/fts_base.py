@@ -5820,32 +5820,40 @@ class FTSBaseTest(unittest.TestCase):
         self.index_insights = self._input.param("index_insights", False)
 
     def enable_search_history(self):
-        fts_node = self._cb_cluster.get_random_fts_node()
-        rest = RestConnection(fts_node)
-        rest.set_node_setting("searchHistoryEnabled", "true")
-        self.log.info("Search history enabled on {0}".format(fts_node.ip))
+        # searchHistoryEnabled is a per-node manager option and each FTS node
+        # only records the queries it served, so it must be enabled on every
+        # FTS node - otherwise queries routed to a node where it is disabled
+        # leave no history (a problem on multi-node FTS clusters).
+        for fts_node in self._cb_cluster.get_fts_nodes():
+            RestConnection(fts_node).set_node_setting("searchHistoryEnabled", "true")
+            self.log.info("Search history enabled on {0}".format(fts_node.ip))
 
     def disable_search_history(self):
-        fts_node = self._cb_cluster.get_random_fts_node()
-        rest = RestConnection(fts_node)
-        rest.set_node_setting("searchHistoryEnabled", "false")
-        self.log.info("Search history disabled on {0}".format(fts_node.ip))
+        for fts_node in self._cb_cluster.get_fts_nodes():
+            RestConnection(fts_node).set_node_setting("searchHistoryEnabled", "false")
+            self.log.info("Search history disabled on {0}".format(fts_node.ip))
 
     def validate_search_history(self, index_name=None):
-        fts_node = self._cb_cluster.get_random_fts_node()
-        rest = RestConnection(fts_node)
-        response = rest.get_search_history(limit=100, index=index_name)
-        self.log.info("Search history response: {0}".format(json.dumps(response)))
+        # Search history is recorded per-node, so aggregate across every FTS
+        # node - a query may have been served by any of them.
+        results = []
+        total = 0
+        for fts_node in self._cb_cluster.get_fts_nodes():
+            rest = RestConnection(fts_node)
+            response = rest.get_search_history(limit=100, index=index_name)
+            self.log.info("Search history response from {0}: {1}".format(
+                fts_node.ip, json.dumps(response)))
 
-        self.assertIn("results", response,
-                      "Search history response missing 'results' field")
-        self.assertIn("total", response,
-                      "Search history response missing 'total' field")
+            self.assertIn("results", response,
+                          "Search history response missing 'results' field")
+            self.assertIn("total", response,
+                          "Search history response missing 'total' field")
 
-        results = response["results"]
-        if results is None:
-            results = []
-        total = response["total"]
+            node_results = response["results"]
+            if node_results:
+                results.extend(node_results)
+            if response["total"]:
+                total += response["total"]
 
         self.assertTrue(len(results) > 0,
                         "Search history has no entries after queries were run")
