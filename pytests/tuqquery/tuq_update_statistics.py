@@ -3,6 +3,7 @@ from .tuq import QueryTests
 import time
 from deepdiff import DeepDiff
 from membase.api.exception import CBQError
+from membase.api.rest_client import RestConnection
 import threading
 
 class QueryUpdateStatsTests(QueryTests):
@@ -753,3 +754,52 @@ class QueryUpdateStatsTests(QueryTests):
         actual_result = system_dictionary['results'][0]['distributionKeys']
         actual_result.sort()
         self.assertEqual(actual_result, expected_result)
+
+    def test_mb71031_no_duplicate_primary_index_on_query_collection(self):
+        """
+        MB-71031: _query collection must not have multiple primary indexes.
+        Dropping ix_system_query and triggering UPDATE STATISTICS must not
+        create a second primary — only one primary index should exist.
+        """
+        bucket = "travel-sample"
+        query_collection = f"`{bucket}`._system._query"
+
+        # Drop ix_system_query if present (cleanup from previous state)
+        try:
+            self.run_cbq_query(f"DROP INDEX ix_system_query ON {query_collection}")
+            self.log.info("MB-71031: Dropped pre-existing ix_system_query")
+        except CBQError:
+            pass
+
+        # Create a primary index (simulates post-name-change state where #primary exists)
+        try:
+            self.run_cbq_query(f"CREATE PRIMARY INDEX ON {query_collection}")
+            self.log.info("MB-71031: Created primary index on _query collection")
+        except CBQError:
+            self.log.info("MB-71031: Primary index already exists, continuing")
+
+        # Trigger UPDATE STATISTICS — previously this would create ix_system_query as a duplicate
+        self.run_cbq_query(f"UPDATE STATISTICS FOR `{bucket}`.inventory.hotel(name)")
+        self.log.info("MB-71031: UPDATE STATISTICS completed")
+
+        # Verify via indexer REST endpoint (9102) that only 1 primary exists on _query collection
+        index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        index_rest = RestConnection(index_node)
+        index_map = index_rest.get_indexer_metadata(return_system_query_scope=True)
+        primary_indexes = [
+            idx for idx in index_map.get('status', [])
+            if idx.get('bucket') == bucket
+            and idx.get('scope') == '_system'
+            and idx.get('collection') == '_query'
+            and 'PRIMARY INDEX' in idx.get('definition', '')
+        ]
+        self.log.info(f"MB-71031: Primary indexes on _query collection: {[idx.get('name') for idx in primary_indexes]}")
+        self.assertEqual(len(primary_indexes), 1,
+                         f"MB-71031: Expected exactly 1 primary index on _query collection "
+                         f"but found {len(primary_indexes)}: {[idx.get('name') for idx in primary_indexes]}")
+
+        # Cleanup
+        try:
+            self.run_cbq_query(f"DROP PRIMARY INDEX ON {query_collection}")
+        except CBQError:
+            self.log.info("MB-71031: Cleanup — primary index already dropped or not found")

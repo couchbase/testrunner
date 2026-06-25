@@ -331,7 +331,9 @@ class QueryDDLUserTests(QueryTests):
 
     def test_create_user_and_group_rbac_secadmin(self):
         """
-        Test that a user with secadmin privilege can create users and groups.
+        MB-71498: From 8.0+, security_admin no longer has cluster.admin.users!write,
+        so CREATE USER and CREATE GROUP via N1QL must be denied for security_admin.
+        Previously (pre-8.0) security_admin could do this via the old security!write privilege.
         """
         secadmin_user = "secadmin_user"
         secadmin_password = "secadminpass123"
@@ -339,31 +341,25 @@ class QueryDDLUserTests(QueryTests):
         test_user_password = "rbacpasssec123"
         test_group = "rbac_group_sec"
 
-        # Create secadmin user and grant secadmin role
         self.run_cbq_query(f'CREATE USER {secadmin_user} PASSWORD "{secadmin_password}"')
         self.run_cbq_query(f"GRANT security_admin TO {secadmin_user}")
 
         try:
-            # Create group as secadmin
-            self.run_cbq_query(
-                f'CREATE GROUP {test_group} WITH "RBAC Secadmin Test Group" NO ROLES',
-                username=secadmin_user,
-                password=secadmin_password
-            )
-            # Create user as secadmin
-            self.run_cbq_query(
-                f'CREATE USER {test_user} PASSWORD "{test_user_password}" GROUP {test_group}',
-                username=secadmin_user,
-                password=secadmin_password
-            )
-            # Verify user and group were created
+            with self.assertRaises(CBQError):
+                self.run_cbq_query(
+                    f'CREATE GROUP {test_group} WITH "RBAC Secadmin Test Group" NO ROLES',
+                    username=secadmin_user,
+                    password=secadmin_password
+                )
+            with self.assertRaises(CBQError):
+                self.run_cbq_query(
+                    f'CREATE USER {test_user} PASSWORD "{test_user_password}"',
+                    username=secadmin_user,
+                    password=secadmin_password
+                )
             user_info = self._get_user_info(test_user)
-            self.assertIsNotNone(user_info, "User should be created by secadmin user")
-            self.assertIn(test_group, user_info.get("groups", []))
+            self.assertIsNone(user_info, "security_admin should not be able to create users from 8.0+")
         finally:
-            # Cleanup
-            self.run_cbq_query(f"DROP USER {test_user}", username=secadmin_user, password=secadmin_password)
-            self.run_cbq_query(f"DROP GROUP {test_group}", username=secadmin_user, password=secadmin_password)
             self.run_cbq_query(f"DROP USER {secadmin_user}")
 
     def test_create_user_and_group_rbac_ro_admin(self):
@@ -960,4 +956,93 @@ class QueryDDLUserTests(QueryTests):
         group_info_res2 = self.run_cbq_query(f"SELECT * FROM system:group_info WHERE id = '{group2}'")
         self.assertFalse(group_info_res1['results'], "Group1 should be dropped")
         self.assertFalse(group_info_res2['results'], "Group2 should be dropped")
+
+    def test_mb71498_security_admin_denied_user_ddl(self):
+        """
+        MB-71498: Verify that security_admin is denied all user/group management DDL
+        via N1QL from 8.0+. Query now checks cluster.admin.users!write (not security!write).
+        Covers: CREATE/ALTER/DROP USER, GRANT/REVOKE ROLE, CREATE/ALTER/DROP GROUP.
+        """
+        secadmin = "mb71498_secadmin"
+        secadmin_pw = "Secadmin@123"
+        victim_user = "mb71498_victim"
+        victim_pw = "Victim@123"
+        test_group = "mb71498_group"
+
+        self.run_cbq_query(f'CREATE USER {secadmin} PASSWORD "{secadmin_pw}"')
+        self.run_cbq_query(f"GRANT security_admin TO {secadmin}")
+        self.run_cbq_query(f'CREATE USER {victim_user} PASSWORD "{victim_pw}"')
+        self.run_cbq_query(f'CREATE GROUP {test_group} NO ROLES')
+
+        try:
+            # CREATE USER
+            with self.assertRaises(CBQError):
+                self.run_cbq_query(
+                    f'CREATE USER mb71498_new PASSWORD "New@1234"',
+                    username=secadmin, password=secadmin_pw
+                )
+
+            # ALTER USER
+            with self.assertRaises(CBQError):
+                self.run_cbq_query(
+                    f'ALTER USER {victim_user} PASSWORD "{victim_pw}1"',
+                    username=secadmin, password=secadmin_pw
+                )
+
+            # DROP USER
+            with self.assertRaises(CBQError):
+                self.run_cbq_query(
+                    f'DROP USER {victim_user}',
+                    username=secadmin, password=secadmin_pw
+                )
+
+            # GRANT ROLE
+            with self.assertRaises(CBQError):
+                self.run_cbq_query(
+                    f'GRANT ro_admin TO {victim_user}',
+                    username=secadmin, password=secadmin_pw
+                )
+
+            # REVOKE ROLE
+            with self.assertRaises(CBQError):
+                self.run_cbq_query(
+                    f'REVOKE ro_admin FROM {victim_user}',
+                    username=secadmin, password=secadmin_pw
+                )
+
+            # CREATE GROUP
+            with self.assertRaises(CBQError):
+                self.run_cbq_query(
+                    f'CREATE GROUP mb71498_new_group NO ROLES',
+                    username=secadmin, password=secadmin_pw
+                )
+
+            # ALTER GROUP
+            with self.assertRaises(CBQError):
+                self.run_cbq_query(
+                    f'ALTER GROUP {test_group} ADD ROLES ro_admin',
+                    username=secadmin, password=secadmin_pw
+                )
+
+            # DROP GROUP
+            with self.assertRaises(CBQError):
+                self.run_cbq_query(
+                    f'DROP GROUP {test_group}',
+                    username=secadmin, password=secadmin_pw
+                )
+
+            # Verify victim user and group are unchanged
+            user_info = self._get_user_info(victim_user)
+            self.assertIsNotNone(user_info, "Victim user should still exist after denied operations")
+            self.assertEqual(user_info.get('roles', []), [],
+                             "Victim user roles should be unchanged")
+            group_res = self.run_cbq_query(f"SELECT * FROM system:group_info WHERE id = '{test_group}'")
+            self.assertTrue(group_res['results'], "Test group should still exist")
+
+        finally:
+            self.run_cbq_query(f"DROP USER {secadmin}")
+            self.run_cbq_query(f"DROP USER IF EXISTS {victim_user}")
+            self.run_cbq_query(f"DROP USER IF EXISTS mb71498_new")
+            self.run_cbq_query(f"DROP GROUP IF EXISTS {test_group}")
+            self.run_cbq_query(f"DROP GROUP IF EXISTS mb71498_new_group")
 

@@ -496,6 +496,69 @@ class VectorSearchTests(QueryTests):
             IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
             self.run_cbq_query('DROP INDEX default.idx_size')
 
+    def test_mb70398_ann_invalid_cross_keyspace_query_vector(self):
+        """MB-70398: ANN_DISTANCE() must reject cross-keyspace field as query vector (error 5430)."""
+        if self.vector_type == 'sparse':
+            self.log.info("Skipping MB-70398 cross-keyspace test for sparse vectors")
+            return
+        invalid_query = (
+            f'SELECT d1.id, d1.size FROM default d1, default d2 '
+            f'WHERE d2.size = 6 '
+            f'ORDER BY ANN_DISTANCE(d1.vec, d2.vec, "{self.distance}") ASC LIMIT 3'
+        )
+        try:
+            result = self.run_cbq_query(invalid_query)
+            self.fail(f"MB-70398: Expected error 5430 but got success: {result}")
+        except CBQError as ex:
+            error = self.process_CBQE(ex)
+            self.assertEqual(error['code'], 5430,
+                             f"MB-70398: Expected error code 5430 but got: {error}")
+            self.log.info("MB-70398: Cross-keyspace query vector correctly rejected with error 5430")
+
+    def test_mb70398_ann_invalid_let_variable_query_vector(self):
+        """MB-70398: ANN_DISTANCE() must reject LET variable as query vector (error 5430)."""
+        if self.vector_type == 'sparse':
+            self.log.info("Skipping MB-70398 LET variable test for sparse vectors")
+            return
+        invalid_query = (
+            f'SELECT d.id FROM default d '
+            f'LET qvec = (SELECT RAW vec FROM default WHERE size = 6 LIMIT 1) '
+            f'ORDER BY ANN_DISTANCE(d.vec, qvec[0], "{self.distance}") LIMIT 3'
+        )
+        try:
+            result = self.run_cbq_query(invalid_query)
+            self.fail(f"MB-70398: Expected error 5430 but got success: {result}")
+        except CBQError as ex:
+            error = self.process_CBQE(ex)
+            self.assertEqual(error['code'], 5430,
+                             f"MB-70398: Expected error code 5430 but got: {error}")
+            self.log.info("MB-70398: LET variable query vector correctly rejected with error 5430")
+
+    def test_mb70398_ann_valid_with_alias_query_vector(self):
+        """MB-70398: ANN_DISTANCE() must accept WITH alias as query vector (static expression)."""
+        if self.vector_type == 'sparse':
+            self.log.info("Skipping MB-70398 WITH alias test for sparse vectors")
+            return
+        valid_query = (
+            f'WITH qvec AS (SELECT RAW vec FROM default WHERE size = 6 LIMIT 1) '
+            f'SELECT d.id FROM default d '
+            f'ORDER BY ANN_DISTANCE(d.vec, qvec[0], "{self.distance}") LIMIT 3'
+        )
+        try:
+            IndexVector().create_index(self.database, similarity=self.distance,
+                                       is_xattr=self.use_xattr, is_base64=self.use_base64,
+                                       network_byte_order=self.use_bigendian,
+                                       description=self.description, dimension=self.dimension,
+                                       train=self.train, use_bhive=self.use_bhive,
+                                       vector_type=self.vector_type)
+            result = self.run_cbq_query(valid_query)
+            self.assertEqual(result['status'], 'success',
+                             f"MB-70398: WITH alias query vector should succeed: {result}")
+            self.log.info("MB-70398: WITH alias query vector accepted correctly")
+        finally:
+            IndexVector().drop_index(self.database, similarity=self.distance,
+                                     use_bhive=self.use_bhive)
+
     def test_normalize(self):
         vector = ast.literal_eval(self.vector)
         self.log.info(f"Normalize vector: {vector}")
