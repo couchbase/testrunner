@@ -410,6 +410,52 @@ class NodeHelper:
                             .format(e, self.ip))
                         self.wait_for_completion(duration, event)
         self.post_install_cb()
+        self.install_xxd()
+
+    def install_xxd(self):
+        """
+        Install xxd on Linux nodes if not already present.
+        Package source per distro:
+          - Debian/Ubuntu  : apt-get install xxd
+          - RHEL/CentOS/
+            Amazon/Fedora  : yum/dnf install vim-common
+          - SUSE           : zypper install vim
+          - Mariner        : tdnf install vim-common
+
+        Non-fatal: logs a warning if installation fails rather than aborting
+        the install pipeline. No-op on Windows (msi) and macOS (dmg) nodes.
+        """
+        if self.info.deliverable_type not in ("deb", "rpm"):
+            return
+        try:
+            out, _ = self.shell.execute_command("which xxd 2>/dev/null")
+            if out and out[0].strip():
+                log.info("xxd already present on {0}: {1}".format(
+                    self.ip, out[0].strip()))
+                return
+            log.info("Installing xxd on {0}".format(self.ip))
+            if self.info.deliverable_type == "deb":
+                install_out, _ = self.shell.execute_command(
+                    "apt-get install -y xxd 2>&1")
+            elif "suse" in self.get_os():
+                install_out, _ = self.shell.execute_command(
+                    "zypper install -y vim 2>&1")
+            elif "mariner" in self.get_os():
+                install_out, _ = self.shell.execute_command(
+                    "tdnf install -y vim-common 2>&1")
+            else:
+                install_out, _ = self.shell.execute_command(
+                    "yum install -y vim-common 2>&1 || dnf install -y vim-common 2>&1")
+            log.info("xxd install output on {0}: {1}".format(
+                self.ip, " ".join(install_out or [])))
+            verify_out, _ = self.shell.execute_command("which xxd 2>/dev/null")
+            if verify_out and verify_out[0].strip():
+                log.info("xxd installed on {0}: {1}".format(
+                    self.ip, verify_out[0].strip()))
+            else:
+                log.warning("xxd installation may have failed on {0}".format(self.ip))
+        except Exception as e:
+            log.warning("install_xxd: Exception {0} on {1}".format(e, self.ip))
 
     def post_install_cb(self):
         duration, event, timeout = install_constants.WAIT_TIMES[self.info.deliverable_type]["post_install"]

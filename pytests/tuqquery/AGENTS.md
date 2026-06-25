@@ -255,7 +255,6 @@ for node in query_nodes:
 | `_run_select_scans(queries, nodes)` | Broadcasts every query to every node (not round-robin) |
 | `_generate_concurrent_load_until_archive(queries, nodes)` | 20 × 5 batches; breaks when archives appear |
 | `_setup_bucket_indexes_scans(prefix)` | Full setup: settings → bucket → data → indexes → wait → scans |
-| `_install_tools()` | Installs xxd on all servers if missing (suite_setUp) |
 
 ### Query admin settings
 | Setting | Test value | tearDown default |
