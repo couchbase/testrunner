@@ -175,12 +175,23 @@ def find_rerun_job(args):
     rerun = False
     doc_id = "{}_{}".format(name, version_build)
     try:
-        run_document = rerun_jobs.get(doc_id, quiet=True)
-        if not store_data:
-            if not run_document.success:
+        # SDK3/4: get() raises DocumentNotFoundException for missing docs.
+        # SDK2/3 quiet=True pattern is dropped; use explicit exception handling instead.
+        existing_doc = None
+        try:
+            result = rerun_jobs.get(doc_id)
+            existing_doc = result.content_as[dict]
+        except Exception as e:
+            if 'DocumentNotFoundException' not in type(e).__name__:
+                log.warning(e)
                 return False, {}
-            else:
-                return True, run_document.value
+            # Document doesn't exist yet — fine, will create below if store_data=True
+
+        if not store_data:
+            if existing_doc is None:
+                return False, {}
+            return True, existing_doc
+
         parameters = jenkins_api.get_params(OS.getenv('BUILD_URL'))
         run_results = get_run_results()
         job_to_store = {
@@ -189,9 +200,9 @@ def find_rerun_job(args):
             "run_params": parameters,
             "run_results": run_results,
             "install_failure": install_failure}
-        if run_document.success:
+        if existing_doc is not None:
             rerun = True
-            run_document = run_document.value
+            run_document = existing_doc
         else:
             run_document = {
                 "build": version_build,
@@ -199,7 +210,14 @@ def find_rerun_job(args):
                 "jobs": []}
         run_document['num_runs'] += 1
         run_document['jobs'].append(job_to_store)
-        rerun_jobs.upsert(doc_id, run_document, ttl=(7*24*60*60))
+        try:
+            rerun_jobs.upsert(doc_id, run_document, ttl=(7*24*60*60))
+        except TypeError:
+            # SDK4: ttl kwarg not supported, use UpsertOptions
+            from datetime import timedelta
+            from couchbase.options import UpsertOptions
+            rerun_jobs.upsert(doc_id, run_document,
+                              UpsertOptions(expiry=timedelta(days=7)))
         return rerun, run_document
     except Exception as e:
         log.warning(e)
