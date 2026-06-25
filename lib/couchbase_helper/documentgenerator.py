@@ -330,6 +330,13 @@ class JsonDocGenerator(KVGenerator):
             self.learnings = fileobj.readlines()
             self.learnings = [line.strip() for line in self.learnings]
 
+        # Use an isolated RNG for location so that adding the 'location' field
+        # does not consume values from the shared global RNG. Drawing location
+        # from the global stream would shift the deterministic sequence used for
+        # names/salary/etc and silently change which docs match query-time tests
+        # (e.g. the fts sorting tests that assert on fixed emp ids).
+        self._location_random = random.Random(0)
+
         size = 0
         if not len(self.args) == 0:
             size = 1
@@ -464,8 +471,8 @@ class JsonDocGenerator(KVGenerator):
         return lang
 
     def generate_location(self):
-        return {"lat": round(random.uniform(-90, 90), 6),
-                "lon": round(random.uniform(-180, 180), 6)}
+        return {"lat": round(self._location_random.uniform(-90, 90), 6),
+                "lon": round(self._location_random.uniform(-180, 180), 6)}
 
 
 class WikiJSONGenerator(KVGenerator):
