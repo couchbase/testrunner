@@ -5,6 +5,13 @@ cleanup_workspace() {
   rm -rf *.deb *.rpm *.msi
 }
 
+# Set desired python env
+export PYENV_VERSION="3.10.13"
+export PYENV_ROOT="$HOME/.pyenv"
+export PATH="$PYENV_ROOT/bin:$PATH"
+eval "$(pyenv init -)"
+pyenv local $PYENV_VERSION
+
 support_ver="6.5"
 small_ver=${version_number:0:3}
 host_ip=$(hostname -I | awk '{print $1}')
@@ -28,13 +35,6 @@ git submodule update --init --force --remote
 if [ "$cherrypick" != "None" ]; then
    sh -c "$cherrypick"
 fi
-
-# Set desired python env
-export PYENV_VERSION="3.10.13"
-export PYENV_ROOT="$HOME/.pyenv"
-export PATH="$PYENV_ROOT/bin:$PATH"
-eval "$(pyenv init -)"
-pyenv local $PYENV_VERSION
 
 echo "##### Python packages check #####"
 if [ "$(python3 --version | cut -d' ' -f 2)" != "$PYENV_VERSION" ]; then
