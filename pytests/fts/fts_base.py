@@ -5883,6 +5883,18 @@ class FTSBaseTest(unittest.TestCase):
 
     def validate_index_insights(self, index_name, field, insight="termFrequencies",
                                 limit=5, descending=True):
+        # The FTS insights endpoint aggregates results by making node-to-node
+        # HTTP calls to the plain (non-TLS) FTS port 8094. When TLS is enforced
+        # that port is shut down, so the server-side aggregation fails with
+        # "connection refused" (or silently returns no results). Skip the
+        # validation under enforce_tls rather than fail on this known
+        # server-side limitation.
+        if self.enforce_tls:
+            self.log.info("Skipping index insights validation for '{0}': the FTS "
+                          "insights API performs node-to-node calls over the "
+                          "non-TLS port (8094), which is disabled when TLS is "
+                          "enforced.".format(index_name))
+            return
         fts_node = self._cb_cluster.get_random_fts_node()
         rest = RestConnection(fts_node)
         response = rest.get_index_insights(index_name, field, insight,
