@@ -5905,8 +5905,12 @@ class FTSBaseTest(unittest.TestCase):
         self.assertTrue(response is not None,
                         "Index insights returned None for {0}".format(insight))
 
+        # The insights endpoint returns the data under a top-level key named
+        # after the requested insight, e.g.
+        #   {"status": "ok", "request": {...},
+        #    "termFrequencies": [{"term": "sr", "frequency": 4348}, ...]}
         if isinstance(response, dict):
-            results = response.get("results", response.get("entries", []))
+            results = response.get(insight, [])
         elif isinstance(response, list):
             results = response
         else:
