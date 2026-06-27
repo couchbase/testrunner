@@ -2,6 +2,7 @@
 
 import copy
 import json
+from datetime import timedelta
 from lib.membase.helper.rbac_exclusion_helper import verify_rbac_exclusion_syntax
 import random
 import time
@@ -2945,9 +2946,17 @@ class StableTopFTS(FTSBaseTest):
         try:
             from couchbase.cluster import Cluster
             from couchbase.auth import PasswordAuthenticator
-            from couchbase.options import ClusterOptions
+            from couchbase.options import ClusterOptions, TLSVerifyMode
             authenticator = PasswordAuthenticator(master.rest_username, master.rest_password)
-            cluster = Cluster('couchbase://{0}'.format(master.ip), ClusterOptions(authenticator))
+            if self.use_https or self.enforce_tls:
+                cluster_conn_str = 'couchbases://{0}?tls_verify=none'.format(master.ip)
+                cluster_opts = ClusterOptions(authenticator, tls_verify=TLSVerifyMode.NONE)
+            else:
+                cluster_conn_str = 'couchbase://{0}'.format(master.ip)
+                cluster_opts = ClusterOptions(authenticator)
+
+            cluster = Cluster.connect(cluster_conn_str, cluster_opts)
+            cluster.wait_until_ready(timedelta(seconds=20))
             collection = cluster.bucket('default').default_collection()
             if self.container_type == 'bucket':
                 for key, value in list(dic.items()):
