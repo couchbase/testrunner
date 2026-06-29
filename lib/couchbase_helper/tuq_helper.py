@@ -376,8 +376,9 @@ class N1QLHelper():
                 error_result = error_result[:500]
             raise CBQError(error_result, server.ip)
 
-        # Log metrics if available
-        if isinstance(result, dict) and 'metrics' in result and 'elapsedTime' in result['metrics']:
+        # Log metrics if available (honour the verbose flag so high-volume
+        # callers can suppress this per-query line)
+        if verbose and isinstance(result, dict) and 'metrics' in result and 'elapsedTime' in result['metrics']:
             self.log.info(f"TOTAL ELAPSED TIME: {result['metrics']['elapsedTime']}")
 
         return result

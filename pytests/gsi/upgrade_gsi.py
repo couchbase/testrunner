@@ -1,6 +1,7 @@
 import copy
 import json
 import logging
+from functools import partial
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 import random
@@ -35,6 +36,15 @@ QUERY_TEMPLATE = "SELECT {0} FROM %s "
 class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, AutoFailoverBaseTest):
     def setUp(self):
         super(UpgradeSecondaryIndex, self).setUp()
+        # Upgrade tests fire a very large number of queries (continuous scans /
+        # mutations), each of which otherwise logs a "TOTAL ELAPSED TIME" line.
+        # Default this test's query path to verbose=False so those per-query
+        # lines are suppressed. Can be re-enabled with query_verbose=True.
+        query_verbose = self.input.param("query_verbose", False)
+        if not query_verbose:
+            self.run_cbq_query = partial(self.n1ql_helper.run_cbq_query, verbose=False)
+            if getattr(self, "gsi_util_obj", None) is not None:
+                self.gsi_util_obj.run_query = self.run_cbq_query
         self.initial_build_type = self.input.param('initial_build_type', None)
         self.upgrade_build_type = self.input.param('upgrade_build_type', self.initial_build_type)
         self.disable_plasma_upgrade = self.input.param("disable_plasma_upgrade", False)

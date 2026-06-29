@@ -719,6 +719,29 @@ class NodeHelper:
                 #ok to ignore
                 pass
 
+def get_toybuild_repo(toybuild_upgrade_url, version):
+    """Normalize a toybuild URL into the repo base expected by
+    BuildQuery.create_build_url, which appends "<build_number>/<name>".
+
+    Accepts either the directory that contains the build number
+    (e.g. ".../couchbase-server/toybuilds/22994/") or the toybuilds base
+    directory itself (".../couchbase-server/toybuilds/"). In both cases the
+    returned repo ends with a trailing slash and does NOT include the build
+    number, so the URL constructed downstream is:
+        <repo>/<build_number>/<build_name>
+    """
+    repo = toybuild_upgrade_url.strip().rstrip('/')
+    try:
+        build_number = version.split('-')[1]
+    except IndexError:
+        build_number = None
+    if build_number and repo.endswith('/' + build_number):
+        repo = repo[:-len(build_number)]
+    else:
+        repo = repo + '/'
+    return repo
+
+
 def _get_mounted_volumes(shell):
     volumes, _ = shell.execute_command("ls /tmp | grep '{0}'".format("couchbase-server-"))
     return volumes

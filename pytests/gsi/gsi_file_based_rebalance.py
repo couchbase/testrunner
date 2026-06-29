@@ -1496,7 +1496,108 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
         self.log.info(f"result is {result}")
         self.assertEqual(result['results'][0]["$1"], 100000, "docs not matching")
 
+    def test_loss_of_non_replica_indexes_on_rebalance_out_with_index_shard_affinity(self):
+        """
+        3-node cluster with KV/N1QL/index on all nodes.
+        Create a bucket and load 10,000 hotel docs using magma loader.
+        Apply shard affinity indexer settings (honourNodesInDefn=True so that the
+        nodes clause is honoured while shard affinity is enabled).
+        Create:
+          idx1 with 2 replicas on field email
+          idx2 with no replicas on field country, pinned to node1 via nodes clause
+          idx3 with no replicas on field city, pinned to the same node1 via nodes clause
+        Capture the list of indexes, rebalance out node1 and capture the list again.
+        Assert that no indexes are lost after the rebalance.
+        """
+        version = tuple(int(x) for x in self.cb_version.split('-')[0].split('.')[:2])
+        self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
+                                                        replicas=self.num_replicas, bucket_type=self.bucket_type,
+                                                        enable_replica_index=self.enable_replica_index,
+                                                        eviction_policy=self.eviction_policy, lww=self.lww)
+        self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
+                                            bucket_params=self.bucket_params)
+        self.buckets = self.rest.get_buckets()
+        # load 10,000 hotel docs using magma loader
+        self.use_magma_loader = True
+        self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
+                                             num_of_docs_per_collection=self.num_of_docs_per_collection,
+                                             json_template=self.json_template, load_default_coll=True)
+        time.sleep(10)
+        # apply shard affinity indexer settings
+        index_settings = {
+            "indexer.settings.enable_shard_affinity": True,
+            "indexer.plasma.minShardsPerNode": 2,
+            "indexer.plasma.shardLimitPerNode": 2,
+            "indexer.planner.internal.min_shards_per_node": 2,
+            "indexer.planner.honourNodesInDefn": True,
+        }
+        indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        # index settings are cluster-wide, applying on a single indexer node is enough.
+        # Apply the settings one at a time as they may not all take effect in a single call.
+        index_rest = RestConnection(indexer_nodes[0])
+        for setting, value in index_settings.items():
+            index_rest.set_index_settings({setting: value})
+        time.sleep(10)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql")
+        # node1 - the node the nodes clause pins to and the node that gets rebalanced out.
+        # Avoid the master/orchestrator node.
+        node1 = None
+        for node in indexer_nodes:
+            if node.ip != self.master.ip:
+                node1 = node
+                break
+        self.assertIsNotNone(node1, "Could not find a non-master indexer node to use as node1")
+        self.log.info(f"node1 chosen for nodes clause and rebalance out: {node1.ip}:{self.node_port}")
+        namespace = self.namespaces[0]
+        create_queries = [
+            f'create index idx1 on {namespace}(email) with {{"num_replica": 2}}',
+            f'create index idx2 on {namespace}(country) with {{"nodes": ["{node1.ip}:{self.node_port}"]}}',
+            f'create index idx3 on {namespace}(city) with {{"nodes": ["{node1.ip}:{self.node_port}"]}}',
+        ]
+        for query in create_queries:
+            self.run_cbq_query(query=query, server=query_node)
+        self.wait_until_indexes_online()
+        time.sleep(30)
+        # capture the list of indexes before rebalance
+        index_list_before = self.fetch_index_names_list()
+        self.log.info(f"Index list before rebalance out of node1: {index_list_before}")
+        # rebalance out node1
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [node1],
+                                                 cluster_config=self.cluster_config)
+        time.sleep(3)
+        status, _ = self.rest._rebalance_status_and_progress()
+        start_time = time.time()
+        timeout = 60  # 60 seconds timeout
+        while status != 'running':
+            if time.time() - start_time > timeout:
+                self.log.warning(f"Rebalance did not start running within {timeout} seconds. Current status: {status}")
+                break
+            time.sleep(1)
+            status, _ = self.rest._rebalance_status_and_progress()
+        self.log.info("Rebalance has started running.")
+        time.sleep(10)
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=250)
+        rebalance.result()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        time.sleep(30)
+        self.wait_until_indexes_online()
+        # capture the list of indexes after rebalance and compare
+        index_list_after = self.fetch_index_names_list()
+        self.log.info(f"Index list after rebalance out of node1: {index_list_after}")
+        missing_indexes = index_list_before - index_list_after
+        self.assertEqual(missing_indexes, set(),
+                         f"Indexes lost after rebalancing out node1. Missing: {missing_indexes}. "
+                         f"Before: {index_list_before}. After: {index_list_after}")
+
     # common methods
+    def fetch_index_names_list(self):
+        indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        rest = RestConnection(indexer_nodes[0])
+        index_resp = rest.get_indexer_metadata()
+        if 'status' not in index_resp:
+            raise Exception(f"No index metadata seen in response {index_resp}")
+        return set(index['indexName'] for index in index_resp['status'])
+
     def _return_maps(self):
         index_map = self.get_index_map_from_index_endpoint(return_system_query_scope=False)
         stats_map = self.get_index_stats(perNode=True, return_system_query_scope=False)

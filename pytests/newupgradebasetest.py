@@ -17,6 +17,7 @@ from query_tests_helper import QueryHelperTests
 from couchbase_helper.tuq_helper import N1QLHelper
 from pytests.eventing.eventing_helper import EventingHelper
 from builds.build_query import BuildQuery
+from scripts import install_utils
 from pytests.eventing.eventing_constants import HANDLER_CODE
 from random import randint
 from fts.fts_base import FTSBaseTest
@@ -244,7 +245,16 @@ class NewUpgradeBaseTest(QueryHelperTests, FTSBaseTest):
         if info is None:
             info = remote.extract_remote_info()
         build_repo = CB_REPO
-        if version[:5] in CB_RELEASE_BUILDS.keys():
+        # Toy builds are published under a "toybuilds/<build_number>/" directory
+        # instead of the release codename directory. When a toybuild URL is
+        # supplied, point the repo at that directory so the build name is
+        # constructed exactly as usual but downloaded from the toybuild path.
+        toybuild_upgrade_url = self.input.param('toybuild_upgrade_url', None)
+        if toybuild_upgrade_url:
+            build_repo = install_utils.get_toybuild_repo(toybuild_upgrade_url, version)
+            self.log.info("Using toybuild repo %s for upgrade version %s"
+                          % (build_repo, version))
+        elif version[:5] in CB_RELEASE_BUILDS.keys():
             if version[:3] in CB_VERSION_NAME:
                 build_repo = CB_REPO + CB_VERSION_NAME[version[:3]] + "/"
 

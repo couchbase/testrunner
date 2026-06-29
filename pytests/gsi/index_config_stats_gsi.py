@@ -852,6 +852,56 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests, QueryHelperT
 }
         return map
 
+    def _wait_for_indexer_ready(self, node, timeout=120, poll_interval=5, label=""):
+        """Poll the indexer stats endpoint on ``node`` until it responds.
+
+        Returns True once the indexer serves a non-empty stats payload,
+        False if it never becomes ready within ``timeout`` seconds.
+        """
+        end_time = time.time() + timeout
+        while time.time() < end_time:
+            try:
+                if RestConnection(node).get_indexer_stats(timeout=10):
+                    self.log.info(f"{label}Indexer is ready on {node.ip}")
+                    return True
+            except Exception as e:
+                self.log.info(f"{label}Indexer not ready yet on {node.ip}: {e}")
+            self.sleep(poll_interval,
+                       f"{label}Waiting for indexer readiness on {node.ip}")
+        return False
+
+    def _restart_indexer_on_all_nodes(self, label="", readiness_timeout=120):
+        """Restart indexer service on every index node.
+
+        After starting the indexer, waits for it to actually serve requests
+        again (rather than a blind sleep) so callers can safely run scans or
+        read indexer state immediately after this returns.
+        """
+        index_nodes = self.get_nodes_from_services_map(
+            service_type="index", get_all_nodes=True,
+        )
+        errors = []
+        for node in index_nodes:
+            remote = RemoteMachineShellConnection(node, verbose=False)
+            try:
+                self.log.info(f"{label}Restarting indexer on {node.ip}")
+                remote.stop_indexer()
+                self.sleep(5, f"{label}Waiting for indexer to stop on {node.ip}")
+                remote.start_indexer()
+                if not self._wait_for_indexer_ready(
+                        node, timeout=readiness_timeout, label=label):
+                    msg = (f"{label}{node.ip}: indexer did not become ready "
+                           f"within {readiness_timeout}s after restart")
+                    self.log.error(msg)
+                    errors.append(msg)
+            except Exception as e:
+                msg = f"{label}{node.ip}: indexer restart failed: {e}"
+                self.log.error(msg)
+                errors.append(msg)
+            finally:
+                remote.disconnect()
+        return errors
+
     def test_thp_disable_enable_setting_check(self):
         """
         MB-65503: THP disable/enable setting check for the indexer process.
@@ -860,18 +910,54 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests, QueryHelperT
         process when platform.disable_thp is true (default): cat
         /proc/<indexer PID>/status and verify THP_enabled is 0, and cat
         /proc/<PID>/smaps_rollup and verify AnonHugePages is 0 kB. Then disable
-        the indexer setting (platform.disable_thp to false) and log the previous
-        two settings to console.
+        the indexer setting (platform.disable_thp to false), restart the
+        indexer on all index nodes, and log the previous two settings to
+        console.
 
         Works across RHEL 9, Ubuntu 24, Debian 13, Alma 9, SUSE 15, Rocky 9, AL2023.
 
         https://jira.issues.couchbase.com/browse/MB-65503
         """
+        # ---- Phase 0: Load hotel dataset (100k items) and create indexes ----
+        self.bucket_params = self._create_bucket_params(
+            server=self.master, size=self.bucket_size,
+            replicas=self.num_replicas, bucket_type=self.bucket_type,
+            enable_replica_index=self.enable_replica_index,
+            eviction_policy=self.eviction_policy, lww=self.lww,
+        )
+        self.cluster.create_standard_bucket(
+            name=self.test_bucket, port=11222,
+            bucket_params=self.bucket_params,
+        )
+        self.buckets = self.rest.get_buckets()
+        self.prepare_collection_for_indexing(
+            num_scopes=1, num_collections=1,
+            num_of_docs_per_collection=10000,
+            json_template="Hotel",
+        )
+        query_node = self.get_nodes_from_services_map(service_type="n1ql")
+        query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
+        select_queries = []
+        for namespace in self.namespaces:
+            queries = self.gsi_util_obj.get_create_index_list(
+                definition_list=query_definitions, namespace=namespace,
+                num_replica=self.num_index_replica,
+            )
+            self.gsi_util_obj.create_gsi_indexes(
+                create_queries=queries, database=namespace,
+                query_node=query_node,
+            )
+            select_queries.extend(self.gsi_util_obj.get_select_queries(
+                definition_list=query_definitions, namespace=namespace,
+            ))
+        self.wait_until_indexes_online()
+
         index_nodes = self.get_nodes_from_services_map(
             service_type="index", get_all_nodes=True,
         )
         # self.assertGreaterEqual(len(index_nodes), 1, "Need at least one index node")
 
+        # ---- Phase 1: THP should be disabled (platform.disable_thp=true by default) ----
         for index_node in index_nodes:
             shell = RemoteMachineShellConnection(index_node, verbose=False)
             try:
@@ -883,7 +969,6 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests, QueryHelperT
                 pid = pids[0]
                 self.log.info(f"Indexer PID on {index_node.ip}: {pid}")
 
-                # ---- Phase 1: THP should be disabled (platform.disable_thp=true by default) ----
                 self.log.info(f"[BEFORE] Checking THP state on {index_node.ip} (PID={pid})")
 
                 status_out, _ = shell.execute_command(
@@ -904,14 +989,48 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests, QueryHelperT
                     f"[BEFORE] /proc/{pid}/smaps_rollup on {index_node.ip}: "
                     f"{smaps_lines}"
                 )
+            finally:
+                shell.disconnect()
 
-                # ---- Phase 2: Disable platform.disable_thp (set to false) ----
-                self.log.info(f"[DISABLE] Setting platform.disable_thp=false on {index_node.ip}")
-                rest = RestConnection(index_node)
-                rest.set_index_settings({"platform.disable_thp": False})
-                self.sleep(15, "Wait for THP setting to take effect")
+        # ---- Phase 2: Disable platform.disable_thp (set to false) ----
+        self.log.info(f"[DISABLE] Setting platform.disable_thp=false on {index_nodes[0].ip}")
+        rest = RestConnection(index_nodes[0])
+        rest.set_index_settings({"platform.disable_thp": False})
+        self.sleep(15, "Wait for THP setting to take effect")
 
-                # ---- Phase 3: Log THP state after disabling the setting ----
+        # ---- Phase 3: Restart indexer on all index nodes so the new setting takes effect ----
+        restart_errors = self._restart_indexer_on_all_nodes(label="[DISABLE-RESTART] ")
+        if restart_errors:
+            self.fail(
+                "Indexer restart failed on some nodes:\n" + "\n".join(restart_errors)
+            )
+
+        # ---- Phase 3b: Run scans against all indexes so the indexer touches its data pages ----
+        self.log.info(
+            f"[SCAN] Running {len(select_queries)} select queries against created indexes"
+        )
+        scan_consistency = getattr(self, 'scan_consistency', None) or 'not_bounded'
+        scan_tasks = self.gsi_util_obj.aysnc_run_select_queries(
+            select_queries=select_queries, query_node=query_node,
+            scan_consistency=scan_consistency,
+        )
+        for task in scan_tasks:
+            try:
+                task.result()
+            except Exception as err:
+                self.log.error(f"[SCAN] Select query failed: {err}")
+        self.sleep(10, "Wait for indexer to settle after scans")
+
+        # ---- Phase 4: Log THP state after disabling the setting and restarting ----
+        for index_node in index_nodes:
+            shell = RemoteMachineShellConnection(index_node, verbose=False)
+            try:
+                out, _ = shell.execute_command("pgrep -f indexer")
+                pids = [l.strip() for l in out if l.strip()]
+                if not pids:
+                    self.log.warning(f"No indexer PID found on {index_node.ip}")
+                    continue
+                pid = pids[0]
                 self.log.info(f"[AFTER] Checking THP state on {index_node.ip} (PID={pid})")
 
                 status_out2, _ = shell.execute_command(
@@ -930,7 +1049,6 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests, QueryHelperT
                     f"[AFTER] /proc/{pid}/smaps_rollup on {index_node.ip}: "
                     f"{[l.strip() for l in smaps_out2]}"
                 )
-
             finally:
                 shell.disconnect()
 
