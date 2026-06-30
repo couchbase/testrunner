@@ -453,6 +453,19 @@ class FlexFeaturesFTS(FTSBaseTest):
                 idx.index_definition['uuid'] = idx.get_uuid()
                 idx.update()
 
+        # [MBREPRO] The default_analyzer (and custom mapping) updates above
+        # rotate the index UUID and trigger a FULL re-index under a brand new
+        # DCP feed. Without re-waiting here, the flex count queries that follow
+        # can race the rebuild and see a partial, still-growing result set.
+        # Observed on multi-node cloud: type=79292 / mutated=81773 /
+        # is_manager=82769 vs the expected 100000, while a single-node local
+        # cluster finishes the rebuild in time and returns the full 100000.
+        # wait_for_indexing_complete() also drains num_mutations_to_index to 0,
+        # so it correctly blocks until the post-update rebuild has caught up.
+        self.sleep(5, "allowing post-update re-index to start before re-waiting")
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
+
     def _perform_results_checks(self, tests=None, index_configuration="", custom_mapping=False, check_pushdown=True):
         for test in tests:
             result = self._cb_cluster.run_n1ql_query("explain " + test['flex_query'])
