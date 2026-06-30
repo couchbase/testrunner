@@ -419,7 +419,7 @@ class CliBaseTest(BaseTestCase):
         return True
 
     def verifyBucketSettings(self, server, bucket_name, bucket_type, memory_quota,
-                             eviction_policy, replica_count, enable_index_replica,
+                             eviction_policy, replica_count,
                              priority, enable_flush):
         rest = RestConnection(server)
         result = rest.get_bucket_json(bucket_name)
@@ -448,17 +448,6 @@ class CliBaseTest(BaseTestCase):
             "replicaNumber"]:
             log.info("Replica count does not match (%s vs %s)", replica_count,
                      result["replicaNumber"])
-            return False
-
-        if enable_index_replica == 1:
-            enable_index_replica = True
-        elif enable_index_replica == 0:
-            enable_index_replica = False
-
-        if enable_index_replica is not None and enable_index_replica != result[
-            "replicaIndex"]:
-            log.info("Replica index enabled does not match (%s vs %s)",
-                     enable_index_replica, result["replicaIndex"])
             return False
 
         if priority == "high":

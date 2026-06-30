@@ -1711,12 +1711,11 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
             self.assertTrue(self.verifyCommandOutput(stdout, expect_error,
                                                      "Bucket created"),
                                                      "Expected command to succeed")
-            self.assertTrue(self.verifyBucketSettings(server, bucket_name,
-                                                bucket_type, memory_quota,
-                                                eviction_policy, replica_count,
-                                                enable_index_replica, priority,
-                                                enable_flush),
-                                                "Bucket settings not set properly")
+            self.assertTrue(
+                self.verifyBucketSettings(
+                    server, bucket_name, bucket_type, memory_quota,
+                    eviction_policy, replica_count, priority, enable_flush),
+                "Bucket settings not set properly")
         else:
             self.assertTrue(not self.verifyContainsBucket(server, bucket_name),
                             "Bucket was created even though an error occurred")
@@ -1783,7 +1782,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
             self.assertTrue(self.verifyCommandOutput(stdout, expect_error, "Bucket edited"),
                             "Expected command to succeed")
             self.assertTrue(self.verifyBucketSettings(server, bucket_name, None, memory_quota,
-                                eviction_policy, replica_count, None, priority, enable_flush),
+                                eviction_policy, replica_count, priority, enable_flush),
                             "Bucket settings not set properly")
         else:
             # List buckets
@@ -3034,7 +3033,6 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         self.bucket_ram = self.input.param("bucket-ram", 256)
         self.eviction_policy = self.input.param("eviction-policy", "fullEviction")
         replica_count = self.input.param("replica-count", 1)
-        enable_index_replica = self.input.param("enable-replica-index", 1)
         self.priority = self.input.param("priority", "high")
         self.enable_flush = self.input.param("enable-flush", 0)
         ops_before_upgrade = self.input.param("ops-before-upgrade", False)
@@ -3325,17 +3323,16 @@ class XdcrCLITest(CliBaseTest):
 
     def __verify_bucket_config(self, server, bucket_name, bucket_type,
                                memory_quota, eviction_policy, replica_count,
-                               enable_index_replica, priority, enable_flush,
+                               priority, enable_flush,
                                stdout, expect_error):
         self.assertTrue(self.verifyCommandOutput(stdout, expect_error,
                                                  "Bucket created"),
                                                  "Expected command to succeed")
-        self.assertTrue(self.verifyBucketSettings(server, bucket_name,
-                                                bucket_type, memory_quota,
-                                                eviction_policy, replica_count,
-                                                enable_index_replica, priority,
-                                                enable_flush),
-                                                "Bucket settings not set properly")
+        self.assertTrue(
+            self.verifyBucketSettings(
+                server, bucket_name, bucket_type, memory_quota,
+                eviction_policy, replica_count, priority, enable_flush),
+            "Bucket settings not set properly")
     def test_xdcr_recreate_bucket(self):
         """
             Setup an XDCR cluster.
@@ -3369,8 +3366,7 @@ class XdcrCLITest(CliBaseTest):
                                          admin_tools_package=self.admin_tools_package)
         self.__verify_bucket_config(server_s, bucket_name, bucket_type,
                                     memory_quota, eviction_policy, replica_count,
-                                    enable_index_replica, priority, enable_flush,
-                                    stdout_s, expect_error)
+                                    priority, enable_flush, stdout_s, expect_error)
 
         cli_s.bucket_delete(bucket_name, admin_tools_package=self.admin_tools_package)
         stdout_s, _, _ = cli_s.bucket_create(bucket_name, bucket_type, memory_quota,
@@ -3380,7 +3376,7 @@ class XdcrCLITest(CliBaseTest):
                                              admin_tools_package=self.admin_tools_package)
         self.__verify_bucket_config(server_s, bucket_name, bucket_type,
                                     memory_quota, eviction_policy, replica_count,
-                                    enable_index_replica, priority, enable_flush,
+                                    priority, enable_flush,
                                     stdout_s, expect_error)
 
         server_r = copy.deepcopy(self.dest_nodes[0])
@@ -3392,8 +3388,7 @@ class XdcrCLITest(CliBaseTest):
                                          admin_tools_package=self.admin_tools_package)
         self.__verify_bucket_config(server_r, bucket_name, bucket_type,
                                    memory_quota, eviction_policy, replica_count,
-                                   enable_index_replica, priority, enable_flush,
-                                   stdout_r, expect_error)
+                                   priority, enable_flush, stdout_r, expect_error)
 
         cli_r.bucket_delete(bucket_name, admin_tools_package=self.admin_tools_package)
         stdout_r, _, _ = cli_r.bucket_create(bucket_name, bucket_type, memory_quota,
@@ -3403,7 +3398,7 @@ class XdcrCLITest(CliBaseTest):
                                              admin_tools_package=self.admin_tools_package)
         self.__verify_bucket_config(server_r, bucket_name, bucket_type,
                                    memory_quota, eviction_policy, replica_count,
-                                   enable_index_replica, priority, enable_flush,
+                                   priority, enable_flush,
                                    stdout_r, expect_error)
 
     def testXDCRSetup(self):
