@@ -575,17 +575,16 @@ class XdcrCLITest(CliBaseTest):
 
     def __verify_bucket_config(self, server, bucket_name, bucket_type,
                                memory_quota, eviction_policy, replica_count,
-                               enable_index_replica, priority, enable_flush,
+                               priority, enable_flush,
                                stdout, expect_error):
         self.assertTrue(self.verifyCommandOutput(stdout, expect_error,
                                                  "Bucket created"),
                                                  "Expected command to succeed")
-        self.assertTrue(self.verifyBucketSettings(server, bucket_name,
-                                                bucket_type, memory_quota,
-                                                eviction_policy, replica_count,
-                                                enable_index_replica, priority,
-                                                enable_flush),
-                                                "Bucket settings not set properly")
+        self.assertTrue(
+            self.verifyBucketSettings(
+                server, bucket_name, bucket_type, memory_quota,
+                eviction_policy, replica_count, priority, enable_flush),
+            "Bucket settings not set properly")
 
     def testXDCRSetup(self):
         error_expected_in_command = self.input.param("error-expected", None)
