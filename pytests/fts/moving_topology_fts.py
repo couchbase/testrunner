@@ -1361,7 +1361,8 @@ class MovingTopFTS(FTSBaseTest):
         index = self.create_index_generate_queries()
         graceful = self._input.param("graceful", False)
         if graceful:
-            node = self._cb_cluster.get_kv_nodes()[1]
+            master = self._cb_cluster.get_master_node()
+            node = next(n for n in self._cb_cluster.get_kv_nodes() if n.ip != master.ip)
         else:
             node = self._cb_cluster.get_fts_nodes()[0]
         self._cb_cluster.async_failover(graceful=graceful, node=node).result()
