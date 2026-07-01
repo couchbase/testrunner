@@ -4598,8 +4598,21 @@ class StableTopFTS(FTSBaseTest):
     }
 
     def _create_deep_pagination_nontextual_index(self, bucket):
-        index = self.create_index(bucket, "dp_nontextual_idx")
-        index.index_definition['params']['mapping'] = copy.deepcopy(self._deep_pagination_index_mapping)
+        collection_index, type, index_scope, index_collections = self.define_index_parameters_collection_related()
+        index = self.create_index(bucket, "dp_nontextual_idx", collection_index=collection_index, _type=type,
+                                  scope=index_scope, collections=index_collections)
+        if collection_index:
+            # For collection indexes, apply field properties to the collection type mapping
+            type_key = type if isinstance(type, str) else type[0]
+            mapping = index.index_definition['params']['mapping']
+            mapping['types'][type_key]['dynamic'] = False
+            mapping['types'][type_key]['properties'] = copy.deepcopy(
+                self._deep_pagination_index_mapping['default_mapping']['properties'])
+            mapping['docvalues_dynamic'] = True
+            mapping['index_dynamic'] = True
+            mapping['store_dynamic'] = False
+        else:
+            index.index_definition['params']['mapping'] = copy.deepcopy(self._deep_pagination_index_mapping)
         index.index_definition['uuid'] = index.get_uuid()
         index.update()
         return index
@@ -4626,7 +4639,7 @@ class StableTopFTS(FTSBaseTest):
         bucket = self._cb_cluster.get_bucket_by_name('default')
         self.load_employee_dataset(self._num_items)
         index = self._create_deep_pagination_nontextual_index(bucket)
-        self.wait_for_indexing_complete()
+        self.wait_for_indexing_complete(self._num_items)
         self.sleep(5)
 
         num_items = self._num_items
@@ -4665,7 +4678,7 @@ class StableTopFTS(FTSBaseTest):
         bucket = self._cb_cluster.get_bucket_by_name('default')
         self.load_employee_dataset(self._num_items)
         index = self._create_deep_pagination_nontextual_index(bucket)
-        self.wait_for_indexing_complete()
+        self.wait_for_indexing_complete(self._num_items)
         self.sleep(5)
 
         num_items = self._num_items
@@ -4704,7 +4717,7 @@ class StableTopFTS(FTSBaseTest):
         bucket = self._cb_cluster.get_bucket_by_name('default')
         self.load_employee_dataset(self._num_items)
         index = self._create_deep_pagination_nontextual_index(bucket)
-        self.wait_for_indexing_complete()
+        self.wait_for_indexing_complete(self._num_items)
         self.sleep(5)
 
         num_items = self._num_items
@@ -4755,7 +4768,7 @@ class StableTopFTS(FTSBaseTest):
         bucket = self._cb_cluster.get_bucket_by_name('default')
         self.load_employee_dataset(self._num_items)
         index = self._create_deep_pagination_nontextual_index(bucket)
-        self.wait_for_indexing_complete()
+        self.wait_for_indexing_complete(self._num_items)
         self.sleep(5)
 
         num_items = self._num_items
