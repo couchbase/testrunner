@@ -514,7 +514,7 @@ class EventingJWTAuth(EventingBaseTest):
         self.deploy_function(body, jwt_token=self.jwt_token)
         # Drop function scope — eventing internally undeploys and deletes the function
         self.rest.delete_bucket(self.src_bucket_name)
-        self.wait_for_handler_internal_undeployment_and_deletion(body['appname'])
+        self.wait_for_handler_state(self.function_name, "undeployed")
 
 
     def test_eventing_jwt_dropping_metadata_keyspace_when_handler_is_deployed(self):
@@ -528,7 +528,7 @@ class EventingJWTAuth(EventingBaseTest):
         self.deploy_function(body, jwt_token=self.jwt_token)
         # Drop metadata keyspace — eventing internally undeploys and deletes the function
         self.rest.delete_bucket(self.metadata_bucket_name)
-        self.wait_for_handler_internal_undeployment_and_deletion(body['appname'])
+        self.wait_for_handler_state(self.function_name, "undeployed")
 
     def test_jwt_permitted_users_and_user_groups(self):
         '''
@@ -538,10 +538,21 @@ class EventingJWTAuth(EventingBaseTest):
         '''
         # Setup JWT configuration
         self.setup_jwt_config()
-        body = self.create_save_function_body(self.function_name, self.handler_code, jwt_token=self.jwt_token)
-
         if self.jwt_roles in ["admin", "eventing_admin"]:
             log.info(f"Testing with role {self.jwt_roles} which should have permissions to create and deploy functions")
+            body = self.create_save_function_body(self.function_name, self.handler_code, jwt_token=self.jwt_token)
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0")
+            self.deploy_function(body, jwt_token=self.jwt_token)
+            self.verify_doc_count_collections("default.scope0.collection1", self.docs_per_day * self.num_docs)
+            self.pause_function(body, jwt_token=self.jwt_token)
+            self.resume_function(body, jwt_token=self.jwt_token)
+            self.undeploy_function(body, jwt_token=self.jwt_token)
+            self.delete_function(body, jwt_token=self.jwt_token)
+            log.info(f"Test passed for role {self.jwt_roles}")
+
+        elif "eventing_manage_functions" in self.jwt_roles:
+            log.info(f"Testing with role {self.jwt_roles} - function created with basic auth, lifecycle ops with JWT")
+            body = self.create_save_function_body(self.function_name, self.handler_code)
             self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0")
             self.deploy_function(body, jwt_token=self.jwt_token)
             self.verify_doc_count_collections("default.scope0.collection1", self.docs_per_day * self.num_docs)
@@ -554,6 +565,7 @@ class EventingJWTAuth(EventingBaseTest):
         else:
             log.info(
                 f"Testing with role {self.jwt_roles} which should NOT have permissions to create and deploy functions")
+            body = self.create_save_function_body(self.function_name, self.handler_code, jwt_token=self.jwt_token)
             try:
                 self.deploy_function(body, jwt_token=self.jwt_token)
                 raise Exception(
