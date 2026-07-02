@@ -55,10 +55,23 @@ class MovingTopFTS(FTSBaseTest):
         self.fts_target_node = None
         self.index_src=None
         self.validation_data = None
-        try:
-            RestConnection(self._cb_cluster.__master_node()[0]).modify_memory_quota(kv_quota=512,fts_quota=2500)
-        except Exception as e:
-            self.log.info(f"Error modifying memory quota: {e}")
+        # Memory quota override for Read-From-Replica (RFR) tests only.
+        #
+        # Background: The original code used self._cb_cluster.__master_node()[0], which Python
+        # name-mangles to _MovingTopFTS__master_node inside a subclass, causing a silent
+        # AttributeError on every run. As a result, the KV=512/FTS=2500 quota was never applied.
+        #
+        # Why gate on read_from_replica:
+        #   - Non-RFR moving-topology suites must keep their per-test quota settings unchanged.
+        #   - Other jobs using MovingTopFTS run with KV=3000/FTS=3000 on separate KV and FTS nodes,
+        #     where modifying quotas succeeds without issue.
+        #   - RFR tests require reduced KV (512 MB) and elevated FTS (2500 MB) quotas to function
+        #     correctly, so the override is applied only in that case.
+        if self.read_from_replica:
+            try:
+                RestConnection(self._cb_cluster.get_master_node()).modify_memory_quota(kv_quota=512, fts_quota=2500)
+            except Exception as e:
+                self.log.info(f"Error modifying memory quota: {e}")
         if TestInputSingleton.input.param("custom_queries_enabled", False):
             from .udf_datagen.udf_datagen import generate_docs, compute_ground_truth
             self._udf = UDFHelper(self)
@@ -2725,10 +2738,18 @@ class MovingTopFTS(FTSBaseTest):
         for plans in indexdef['planPIndexes']:
             if "nodes" in plans:
                 for nodeId, val in plans["nodes"].items():
-                    nodeIds.append(nodeId)
+                    if nodeId not in nodeIds:
+                        nodeIds.append(nodeId)
+        # planPIndexes lists a node per partition, so nodeIds would otherwise carry
+        # one duplicate entry per partition (e.g. 18 for an 18-partition index). Keep
+        # only the distinct nodes hosting the index so we fail over each host once -
+        # iterating per-partition failed over already-down nodes repeatedly and
+        # drained the free-node pool ("Number of free nodes: 0, test tried to add 1").
         hostnames = []
         for nodeId in nodeIds:
-            hostnames.append(cfg['nodeDefsWanted']['nodeDefs'][nodeId]['hostPort'][:-5])
+            hostname = cfg['nodeDefsWanted']['nodeDefs'][nodeId]['hostPort'][:-5]
+            if hostname not in hostnames:
+                hostnames.append(hostname)
 
         # failover all nodes 1 by 1 and validate index parition count each time
         for i in range(len(hostnames)):
@@ -2769,10 +2790,15 @@ class MovingTopFTS(FTSBaseTest):
         for plans in indexdef['planPIndexes']:
             if "nodes" in plans:
                 for nodeId, val in plans["nodes"].items():
-                    nodeIds.append(nodeId)
+                    if nodeId not in nodeIds:
+                        nodeIds.append(nodeId)
+        # dedupe to the distinct hosting nodes - planPIndexes lists one entry per
+        # partition, so iterating raw would fail over the same node many times over
         hostnames = []
         for nodeId in nodeIds:
-            hostnames.append(cfg['nodeDefsWanted']['nodeDefs'][nodeId]['hostPort'][:-5])
+            hostname = cfg['nodeDefsWanted']['nodeDefs'][nodeId]['hostPort'][:-5]
+            if hostname not in hostnames:
+                hostnames.append(hostname)
 
         # failover all nodes 1 by 1 and validate index parition count each time
         for i in range(len(hostnames)):
@@ -2815,10 +2841,15 @@ class MovingTopFTS(FTSBaseTest):
         for plans in indexdef['planPIndexes']:
             if "nodes" in plans:
                 for nodeId, val in plans["nodes"].items():
-                    nodeIds.append(nodeId)
+                    if nodeId not in nodeIds:
+                        nodeIds.append(nodeId)
+        # dedupe to the distinct hosting nodes - planPIndexes lists one entry per
+        # partition, so iterating raw would fail over the same node many times over
         hostnames = []
         for nodeId in nodeIds:
-            hostnames.append(cfg['nodeDefsWanted']['nodeDefs'][nodeId]['hostPort'][:-5])
+            hostname = cfg['nodeDefsWanted']['nodeDefs'][nodeId]['hostPort'][:-5]
+            if hostname not in hostnames:
+                hostnames.append(hostname)
 
         # failover all nodes 1 by 1 and validate index parition count each time
         for i in range(len(hostnames)):
@@ -2842,7 +2873,11 @@ class MovingTopFTS(FTSBaseTest):
                                       kwargs={'servers': self._cb_cluster.get_nodes(), 'to_add': [], 'to_remove': [],
                                               'services': None})
             thread.start()
-            self._cb_cluster.__stop_rebalance()
+            # stop_rebalance is a RestConnection method - the previous
+            # self._cb_cluster.__stop_rebalance() name-mangled to
+            # _MovingTopFTS__stop_rebalance and raised AttributeError. Issue it via
+            # the master node, matching the RestConnection usage pattern in this file.
+            RestConnection(self._cb_cluster.get_master_node()).stop_rebalance()
             self._cb_cluster.add_back_specific_node(node=node_obj, master_node=node_obj2, rebalance=True)
 
             err = self.validate_partition_distribution(rest)

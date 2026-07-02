@@ -315,15 +315,33 @@ class StableTopFTS(FTSBaseTest):
         if expected_no_of_results is None:
             expected_no_of_results = self._input.param("expected_no_of_results", None)
 
+        # A read-from-replica query is served from a single node's local
+        # partitions (variable_node). wait_for_indexing_complete only guarantees
+        # the *aggregate* index is caught up - for pure-update workloads the doc
+        # count never changes, so a replica partition on the chosen node can still
+        # be catching up (especially right after restart_couchbase) and return
+        # fewer hits than expected. Retry a bounded number of times to let the
+        # replica converge before failing.
+        rfr_retries = self._input.param("rfr_query_retry", 12)
         for index in self._cb_cluster.get_indexes():
-            hits, matches, _, _ = index.execute_query(query,
-                                                      zero_results_ok=zero_results_ok,
-                                                      expected_hits=expected_hits,
-                                                      expected_no_of_results=expected_no_of_results,
-                                                      variable_node=self.fts_target_node,
-                                                      bucket_name=index._source_name,
-                                                      validation_data=self.validation_data,
-                                                      fts_nodes=self.fts_nodes)
+            attempt = 0
+            while True:
+                try:
+                    hits, matches, _, _ = index.execute_query(query,
+                                                              zero_results_ok=zero_results_ok,
+                                                              expected_hits=expected_hits,
+                                                              expected_no_of_results=expected_no_of_results,
+                                                              variable_node=self.fts_target_node,
+                                                              bucket_name=index._source_name,
+                                                              validation_data=self.validation_data,
+                                                              fts_nodes=self.fts_nodes)
+                    break
+                except FTSException as e:
+                    attempt += 1
+                    if attempt >= rfr_retries:
+                        raise
+                    self.sleep(10, f"RFR query mismatch ({e}); replica may still be "
+                                   f"catching up, retry {attempt}/{rfr_retries}")
             self.log.info("Hits: %s" % hits)
             self.log.info("Matches: %s" % matches)
 
