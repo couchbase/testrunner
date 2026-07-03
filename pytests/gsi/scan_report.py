@@ -71,6 +71,7 @@ class Scan_Report(FileBasedRebalance):
         self.use_python_sdk = self.input.param("use_python_sdk", False)
         self.log_query_response = self.input.param("log_query_response", False)
         self.no_limit = self.input.param("no_limit", False)
+        self.scanreport_wait = int(self.input.param("scanreport_wait", 15))
         self.encoder = SentenceTransformer(self.data_model, device="cpu")
         self.encoder.cpu()
         self.gsi_util_obj.set_encoder(encoder=self.encoder)
@@ -976,6 +977,7 @@ class Scan_Report(FileBasedRebalance):
             self.log.info(f"Validating scan reports for {group['name']} indexes (detailed) via {query_method}")
             self._run_scans_and_validate(group['queries'], runDetailed=True,
                                           index_names=group['index_names'], validate_rows_delta=True,
+                                          extra_query_params={"scanreport_wait": self.scanreport_wait},
                                           use_python_sdk=self.use_python_sdk)
 
     def test_at_plus_index_consistency_scan_report(self):
