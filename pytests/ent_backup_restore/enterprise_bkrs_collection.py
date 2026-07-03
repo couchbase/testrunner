@@ -1,4 +1,5 @@
 import json
+import time
 from random import randrange, choice
 
 from couchbase_helper.cluster import Cluster
@@ -59,12 +60,29 @@ class EnterpriseBackupRestoreCollectionTest(EnterpriseBackupRestoreCollectionBas
     def test_backup_create(self):
         self.backup_create_validate()
 
+    def _wait_for_backup_service_ready(self, rest, timeout=60, poll_interval=5):
+        """ The backup service can take a few seconds to finish initializing
+        after the cluster/bucket is provisioned; poll it as admin until it
+        responds instead of racing it. """
+        api = rest.baseUrl + "_p/backup/api/v1/plan"
+        end_time = time.time() + timeout
+        while time.time() < end_time:
+            status, content, _ = rest._http_request(
+                api, 'GET',
+                headers=rest._create_headers_with_auth(rest.username, rest.password))
+            if status:
+                return
+            self.log.info("Backup service not ready yet (%s); retrying..." % content)
+            self.sleep(poll_interval, "waiting for backup service to initialize")
+        self.log.warning("Backup service did not become ready within %ss" % timeout)
+
     def _verify_rbac_exclusion_backup_restore(self):
         rest = RestConnection(self.master)
         buckets = rest.get_buckets()
         if not buckets:
             self.log.warning("No buckets found for RBAC exclusion test; skipping")
             return
+        self._wait_for_backup_service_ready(rest)
         bucket_name = buckets[0].name
         scope_name = "rbac_excl_scope"
         allowed_col = "coll_allowed"
@@ -106,7 +124,8 @@ class EnterpriseBackupRestoreCollectionTest(EnterpriseBackupRestoreCollectionBas
             verify_rbac_exclusion_syntax(
                 self, rest, bucket_name, scope_name, allowed_col, excluded_col,
                 "backup_restore", runtype=self.input.param("runtype", "default"),
-                service_validator=backup_service_validator)
+                service_validator=backup_service_validator,
+                extra_roles="ro_admin")
         finally:
             if scope_created:
                 try:
