@@ -847,8 +847,8 @@ class GSIUtils(object):
             prim_index_name = f'#primary_{"".join(random.choices(string.ascii_uppercase + string.digits, k=10))}'
             definitions_list.append(
                 QueryDefinition(index_name=prim_index_name, index_fields=[],
-                                query_template=RANGE_SCAN_TEMPLATE.format("suffix",
-                                                                          "suffix is not NULL order by suffix"),
+                                query_template=RANGE_SCAN_TEMPLATE.format("price",
+                                                                          "price is not NULL order by price"),
                                 is_primary=True))
 
         # GSI index on multiple fields
@@ -948,14 +948,14 @@ class GSIUtils(object):
         prim_index_name = f'#primary_{"".join(random.choices(string.ascii_uppercase + string.digits, k=10))}'
         definitions_list.append(
             QueryDefinition(index_name=prim_index_name, index_fields=[],
-                            query_template=RANGE_SCAN_TEMPLATE.format("suffix", "suffix is not NULL"),
+                            query_template=RANGE_SCAN_TEMPLATE.format("price", "price is not NULL"),
                             is_primary=True, defer_build=False))
 
         # Primary index + deferred + partitioned
         prim_index_defer = f'#primary_{"".join(random.choices(string.ascii_uppercase + string.digits, k=10))}'
         definitions_list.append(
             QueryDefinition(index_name=prim_index_defer, index_fields=[],
-                            query_template=RANGE_SCAN_TEMPLATE.format("suffix", "suffix is not NULL"),
+                            query_template=RANGE_SCAN_TEMPLATE.format("price", "price is not NULL"),
                             is_primary=True, defer_build=True, partition_by_fields=['meta().id']))
 
         # Single field GSI Query
