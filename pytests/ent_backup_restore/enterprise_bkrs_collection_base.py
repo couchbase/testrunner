@@ -533,6 +533,14 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
 
     def get_bucket_scope_cluster_host(self):
         bucket_name = self.buckets[0].name
+        # When the bucket is remapped on restore (e.g. --map-data default=default_0)
+        # the original source bucket no longer exists on a single-cluster run, so query
+        # the remapped name — mirroring get_bucket_scope_restore_cluster_host().
+        # map_bucket_name is only populated once restore creates the remapped target;
+        # before that (e.g. create_collection_cluster_host, pre-backup) the source
+        # bucket still has its original name, so fall back to it.
+        if self.backupset.map_buckets and self.backupset.map_bucket_name:
+            bucket_name = self.backupset.map_bucket_name[0]
         if self.use_rest:
             scopes = self.rest_bk.get_bucket_scopes(bucket_name)
         else:

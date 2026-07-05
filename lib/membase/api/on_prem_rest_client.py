@@ -841,7 +841,7 @@ class RestConnection(object):
             elif extract == "collections":
                 return collections
         except Exception as e:
-            raise Exception("Cannot extract {} for bucket {} from manifest {}".format(extract, bucket, e.message))
+            raise Exception("Cannot extract {} for bucket {} from manifest {}".format(extract, bucket, str(e)))
 
     def get_bucket_scopes(self, bucket):
         return self._parse_manifest(bucket, "scopes")
@@ -865,7 +865,7 @@ class RestConnection(object):
                 log.error("Cannot get collections for scope {} because it does not exist".format(scope))
             return collections_in_scope
         except Exception as e:
-            raise Exception("Cannot get collections for bucket {}-> scope{} {}".format(bucket, scope, e.message))
+            raise Exception("Cannot get collections for bucket {}-> scope{} {}".format(bucket, scope, str(e)))
 
     def delete_scope(self, bucket, scope):
         api = self.baseUrl + 'pools/default/buckets/%s/scopes/%s' % (bucket, scope)
@@ -910,7 +910,7 @@ class RestConnection(object):
                       .format(bucket, scope, collection))
         except Exception as e:
             raise Exception("Exception thrown while getting collection uid {}"
-                            .format(e.message))
+                            .format(str(e)))
 
     def run_view(self, bucket, view, name):
         api = self.capiBaseUrl + '/%s/_design/%s/_view/%s' % (bucket, view, name)
