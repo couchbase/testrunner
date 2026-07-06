@@ -5241,9 +5241,10 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self._take_n_backups(n=3)
 
             # remove the backup directory
-            success, _, _ = self.backup_remove(test)
+            success, output, message = self.backup_remove(test)
             if not success:
-                self.fail("Failed to remove backups")
+                self.log.error("cbbackupmgr remove output: {0}".format(output))
+                self.fail("Failed to remove backups: {0}".format(message))
 
             self._verify_backup_directory_count(0)
             self._delete_repo()
@@ -5253,8 +5254,9 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.backup_create()
             self._take_n_backups(n=3)
 
-            success, _, _ = self.backup_remove(test)
+            success, output, message = self.backup_remove(test)
             if success:
+                self.log.error("cbbackupmgr remove output: {0}".format(output))
                 self.fail("Test should have failed")
 
             self._verify_backup_directory_count(3)
@@ -5280,44 +5282,55 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.fail("Expected 3 backups instead have {0}".format(len(dir_names)))
 
         # test non existent directory name
-        success, _, _ = self.backup_remove("3000-09-30T10_42_37.64647+01_00")
+        success, output, message = self.backup_remove("3000-09-30T10_42_37.64647+01_00")
         if success:
+            self.log.error("cbbackupmgr remove output: {0}".format(output))
             self.fail("Should not be able to remove non existent directory")
 
         self._verify_backup_directory_count(3)
 
         # test start > backup start
-        success, _, _ = self.backup_remove("3000-09-30T10_42_37.64647+01_00,3000-09-30T10_43_37.64647+01_00")
+        success, output, message = self.backup_remove("3000-09-30T10_42_37.64647+01_00,3000-09-30T10_43_37.64647+01_00")
         if success:
+            self.log.error("cbbackupmgr remove output: {0}".format(output))
             self.fail("Should not be able to remove by directory range where the start is in the future")
 
         self._verify_backup_directory_count(3)
 
         # test start == backup start end > backup end
-        success, _, _ = self.backup_remove("{0}.64647+01_00,3000-09-30T10_43_37.64647+01_00".format(dir_names[0]))
+        success, output, message = self.backup_remove("{0}.64647+01_00,3000-09-30T10_43_37.64647+01_00".format(dir_names[0]))
         if success:
+            self.log.error("cbbackupmgr remove output: {0}".format(output))
             self.fail("Should not be able to remove by directory range where the end is in the future")
 
         self._verify_backup_directory_count(3)
 
         # test start before end
-        success, _, _ = self.backup_remove("{0},{1}".format(dir_names[-1], dir_names[0]))
+        success, output, message = self.backup_remove("{0},{1}".format(dir_names[-1], dir_names[0]))
         if success:
+            self.log.error("cbbackupmgr remove output: {0}".format(output))
             self.fail("Should not be able to remove by directory range where start is after end")
 
         self._verify_backup_directory_count(3)
 
         # test valid single directory
-        success, _, _ = self.backup_remove("{0}".format(dir_names[0]))
+        # dir_names[0] is the base full backup that dir_names[1] and dir_names[-1]
+        # (incrementals) depend on, so cbbackupmgr's safe-remove check would
+        # otherwise refuse this on its own; disable it since this step is only
+        # exercising --backups name-based selection, not incremental-chain safety.
+        success, output, message = self.backup_remove("{0}".format(dir_names[0]),
+                                                        disable_safe_remove_check=True)
         if not success:
-            self.fail("Should not have failed to remove directories by backup directory name")
+            self.log.error("cbbackupmgr remove output: {0}".format(output))
+            self.fail("Should not have failed to remove directories by backup directory name: {0}".format(message))
 
         self._verify_backup_directory_count(2)
 
         # test valid
-        success, _, _ = self.backup_remove("{0},{1}".format(dir_names[1], dir_names[-1]))
+        success, output, message = self.backup_remove("{0},{1}".format(dir_names[1], dir_names[-1]))
         if not success:
-            self.fail("Should not have failed to remove directories by backup directory name range")
+            self.log.error("cbbackupmgr remove output: {0}".format(output))
+            self.fail("Should not have failed to remove directories by backup directory name range: {0}".format(message))
 
         self._verify_backup_directory_count(0)
 

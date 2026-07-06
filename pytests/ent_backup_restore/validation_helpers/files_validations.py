@@ -53,9 +53,6 @@ class BackupRestoreFilesValidations(BackupRestoreValidationBase):
             expected_meta_json['disable_ft_alias'] = True
         if self.backupset.disable_analytics:
             expected_meta_json['disable_analytics'] = True
-        if self.objstore_provider and self.objstore_provider.schema_prefix() == "gs://":
-            expected_meta_json['filter_vbuckets']['enabled'] = True
-            expected_meta_json['filter_vbuckets']['list'] = list(range(64))
         actual_meta_json = self.get_backup_meta_json()
 
         # ---- Encryption at Rest (EaR) — Impl Backup_EaR_Implementation.md §5.3.1 ----

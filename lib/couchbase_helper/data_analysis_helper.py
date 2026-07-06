@@ -903,7 +903,13 @@ class DataCollector(object):
                 backup_name = [backup_name]
             else:
                 if objstore_provider:
-                    backup_name = [max(objstore_provider.list_backups(backupset.directory, repository), key=TimeUtil.rfc3339nano_to_datetime)]
+                    available_backups = objstore_provider.list_backups(backupset.directory, repository)
+                    if not available_backups:
+                        print(f"---- No backups found under {backupset.directory}/{repository}. "
+                              f"Objects at that prefix: {objstore_provider.list_objects(prefix=f'{backupset.directory}/{repository}')}")
+                        staging_restore()
+                        return None, status
+                    backup_name = [max(available_backups, key=TimeUtil.rfc3339nano_to_datetime)]
                 else:
                     backup_name, e = conn.execute_command(f"ls -tr {backupset.directory}/{repository} | tail -1")
                     if not backup_name or e:
@@ -913,6 +919,9 @@ class DataCollector(object):
             if objstore_provider:
                 bucket_name = objstore_provider.list_buckets(backupset.directory, repository, backup_name[0])
                 if not bucket_name:
+                    print(f"---- No bucket directory found under {backupset.directory}/{repository}/{backup_name[0]}. "
+                          f"Objects at that prefix: {objstore_provider.list_objects(prefix=f'{backupset.directory}/{repository}/{backup_name[0]}')}")
+                    staging_restore()
                     return None, status
             else:
                 # Resolve the on-disk bucket sub-directory. 8.x names it by

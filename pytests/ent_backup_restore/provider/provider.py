@@ -19,7 +19,11 @@ class Provider(metaclass=abc.ABCMeta):
         self.secret_access_key = secret_access_key
         self.staging_directory = staging_directory
         self.backup_pattern = "([0-9]+)-(0[1-9]|1[012])-(0[1-9]|[12][0-9]|3[01])[Tt]([01][0-9]|2[0-3])_([0-5][0-9])_([0-5][0-9]|60)(\.[0-9]+)?(([Zz])|([\+|\-]([01][0-9]|2[0-3])_[0-5][0-9]))"
-        self.bucket_pattern = r".*\-[0-9a-z]{32}"
+        # Bucket directories are named "<bucket-uuid>" (32 hex chars) in
+        # current builds, or "<bucket-name>-<bucket-uuid>" in older layouts.
+        # Match both, additively (same version-naming issue already handled
+        # for the local-filesystem path in data_analysis_helper.py).
+        self.bucket_pattern = r"(?:.*\-)?[0-9a-z]{32}"
         self.rift_pattern = r"index_\d+.sqlite.\d+"
 
     def __del__(self):
