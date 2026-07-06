@@ -6206,6 +6206,17 @@ class RestConnection(object):
             raise Exception(content)
         return json.loads(content)
 
+    '''
+    Get External User
+    '''
+    def get_external_user(self, user_id):
+        url = "settings/rbac/users/external/" + user_id
+        api = self.baseUrl + url
+        status, content, header = self._http_request(api, 'GET')
+        if not status:
+            return None
+        return json.loads(content)
+
 
 
     '''
@@ -7495,6 +7506,36 @@ class RestConnection(object):
         api  =  self.baseUrl + "settings/jwt"
         params = json.dumps(jwt_config)
         status, content, header = self._http_request(api, 'PUT', params)
+        return status, content, header
+
+    def get_jwt_config(self):
+        api = self.baseUrl + "settings/jwt"
+        status, content, header = self._http_request(api, 'GET')
+        return status, content, header
+
+    def delete_jwt_config(self):
+        api = self.baseUrl + "settings/jwt"
+        status, content, header = self._http_request(api, 'DELETE')
+        return status, content, header
+
+    def request_with_jwt_bearer(self, token, endpoint, method='GET', params=''):
+        """
+        Make a Couchbase REST request authenticated with a JWT Bearer token.
+        Args:
+            token: JWT bearer token string
+            endpoint: REST endpoint path, e.g. "whoami" or "pools/default"
+            method: HTTP method (default: GET)
+            params: request body / query string
+        Returns:
+            tuple: (status, content, header)
+        """
+        api = self.baseUrl + endpoint.lstrip('/')
+        headers = {
+            'Authorization': 'Bearer %s' % token,
+            'Accept': '*/*',
+            'Content-Type': 'application/x-www-form-urlencoded',
+        }
+        status, content, header = self._http_request(api, method, params, headers=headers)
         return status, content, header
 
     def load_trusted_CAs(self):
