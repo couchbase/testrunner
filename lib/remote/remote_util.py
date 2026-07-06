@@ -4138,7 +4138,7 @@ class RemoteMachineShellConnection(KeepRefs):
             self.log_command_output(o, r)
             return o
         elif self.info.type.lower() == "linux":
-            command = "ss -4anpe | grep :%s | grep 'LISTEN' | awk -F ' ' '{print $5}'" % port
+            command = "ss -H -4 -tln state listening '( sport = :%s )' | awk '{print $3}'" % port
             o, r = self.execute_command(command)
             self.log_command_output(o, r)
             return o
@@ -5226,11 +5226,13 @@ class RemoteMachineShellConnection(KeepRefs):
                                                      item_size, command_options, collection_id):
         cbworkloadgen_command = self._get_cbworkloadgen_command()
 
-        protocol = "https://" if self.port == "18091" else ""
-        if self.port == "18091":
-            command_options += " --no-ssl-verify "
-        command = "%s -n %s%s:%s -r %s -i %s -b %s -c %s -s %s %s -u %s -p %s" % (cbworkloadgen_command,
-                                                                          protocol, "localhost", self.port,
+        # This command runs via SSH on the node itself and always targets
+        # "localhost", so TLS is never required for the loopback connection
+        # (plain ports stay open on 127.0.0.1 even under strict encryption).
+        # Always use plain HTTP here: cbworkloadgen's TLS memcached path goes
+        # through cb_bin_client.py, which calls the long-removed
+        # ssl.wrap_socket() API and hangs indefinitely instead of erroring.
+        command = "%s -n localhost:8091 -r %s -i %s -b %s -c %s -s %s %s -u %s -p %s" % (cbworkloadgen_command,
                                                                           ratio, num_items, bucket,
                                                                           collection_id,
                                                                           item_size, command_options,
@@ -5249,11 +5251,9 @@ class RemoteMachineShellConnection(KeepRefs):
             timeout = min(14400, max(1200, num_items // 10))
         cbworkloadgen_command = self._get_cbworkloadgen_command()
 
-        protocol = "https://" if self.port == "18091" else ""
-        if self.port == "18091":
-            command_options += " --no-ssl-verify "
-        command = "%s -n %s%s:%s -r %s -i %s -b %s -s %s %s -u %s -p %s" % (cbworkloadgen_command,
-                                                                          protocol, "localhost", self.port,
+        # See execute_cbworkloadgen_collection above: always use plain HTTP
+        # against localhost to avoid cb_bin_client.py's broken TLS path.
+        command = "%s -n localhost:8091 -r %s -i %s -b %s -s %s %s -u %s -p %s" % (cbworkloadgen_command,
                                                                           ratio, num_items, bucket,
                                                                           item_size, command_options,
                                                                           username, password)
