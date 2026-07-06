@@ -1096,6 +1096,46 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         # Return a list of all the collection ids
         return {(f"scope{i}", f"collection{j}"): rest_conn.get_collection_uid(bucket_name, f"scope{i}", f"collection{j}") for i in range(no_of_scopes) for j in range(no_of_collections)}
 
+    def load_via_pillowfight(self, server, num_items, ratio, bucket, item_size, scope, collection,
+                             key_prefix="pymc", json_docs=True, timeout=None):
+        """ Load documents into a specific scope/collection with cbc-pillowfight.
+
+        cbworkloadgen can't be used here when TLS is enforced: its TLS memcached path goes
+        through cb_bin_client.py, which calls the long-removed ssl.wrap_socket() API and hangs
+        indefinitely instead of erroring (confirmed live: hung 1200s+ with this exact
+        traceback). cbc-pillowfight is a libcouchbase (C SDK) tool with working native TLS
+        support, so it's used here instead, following the same pattern as the other
+        cbc-pillowfight callers in this codebase (e.g. xdcrnewbasetests.py).
+
+        Note: cbc-pillowfight's --json mode fills documents with opaque placeholder fields,
+        not cbworkloadgen's name/age/index/body shape -- identify loaded documents by key
+        (e.g. via cbexport's --include-key) rather than by body content.
+        """
+        if timeout is None:
+            timeout = min(14400, max(1200, num_items // 10))
+        set_pct = float(ratio)
+        if set_pct <= 1:
+            set_pct *= 100
+
+        if self.enforce_tls:
+            spec = f"couchbases://{server.ip}/{bucket}?ssl=no_verify"
+        else:
+            spec = f"couchbase://localhost/{bucket}"
+
+        # -t 1: with multiple threads, cbc-pillowfight splits --sequential population across
+        # threads and rounds down when num_items doesn't divide evenly, silently populating
+        # fewer than num_items documents (confirmed live: -I 5 -t 4 wrote only 4).
+        cmd = f"/opt/couchbase/bin/cbc-pillowfight -U '{spec}' -u {server.rest_username} -P {server.rest_password} " \
+              f"-I {num_items} -m {item_size} -M {item_size} -r {int(set_pct)} -B 100 -t 1 --sequential " \
+              f"-p {key_prefix} --populate-only --collection {scope}.{collection}"
+        if json_docs:
+            cmd += " --json"
+
+        shell = RemoteMachineShellConnection(server)
+        output, error = shell.execute_command(cmd, timeout=timeout)
+        shell.log_command_output(output, error)
+        shell.disconnect()
+
     def get_hidden_repo_name(self, repo_name):
         """ Get the hidden repo name for `repo_name`
         """

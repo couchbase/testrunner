@@ -136,16 +136,19 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
             for key in data:
                 value = data[key]
                 raw_restored_values[key] = value  # Store raw value for potential debug logging
-                if '"b\'' in value:
-                    value = ",".join(value.split(',')[4:8])
-                else:
-                    value = ",".join(value.split(',')[4:5])
-                value = value.replace('""', '"')
-                if value.startswith('"b\''):
-                    value = value[3:-2]
-                elif value.startswith("b"):
-                    value = value.split(',')[0]
-                data[key] = value
+                if info != "n1ql":
+                    # cbtransfer's CSV rows need slicing out to the real value; the
+                    # n1ql collector already returns the plain document JSON string.
+                    if '"b\'' in value:
+                        value = ",".join(value.split(',')[4:8])
+                    else:
+                        value = ",".join(value.split(',')[4:5])
+                    value = value.replace('""', '"')
+                    if value.startswith('"b\''):
+                        value = value[3:-2]
+                    elif value.startswith("b"):
+                        value = value.split(',')[0]
+                    data[key] = value
             self.log.info("Compare backup data in bucket %s " % bucket.name)
             is_equal, not_equal, extra, not_present = \
                                         self.compare_dictionary(backedup_kv, data)

@@ -151,18 +151,21 @@ class BackupRestoreValidationBase:
             file_name = "{0}-{1}-{2}-{3}.json".format(bucket, "key_value", backup_type, backup_num)
             file_path = os.path.join(backup_validation_path, file_name)
             data = complete_map[bucket]
-            for key in data:
-                value = data[key]
-                if '"b\'' in value:
-                    value = ",".join(value.split(',')[4:8])
-                else:
-                    value = ",".join(value.split(',')[4:5])
-                value = value.replace('""', '"')
-                if value.startswith('"b\''):
-                    value = value[3:-2]
-                elif value.startswith("b"):
-                    value = value.split(',')[0]
-                data[key] = value
+            if info != "n1ql":
+                # cbtransfer's CSV rows need slicing out to the real value; the
+                # n1ql collector already returns the plain document JSON string.
+                for key in data:
+                    value = data[key]
+                    if '"b\'' in value:
+                        value = ",".join(value.split(',')[4:8])
+                    else:
+                        value = ",".join(value.split(',')[4:5])
+                    value = value.replace('""', '"')
+                    if value.startswith('"b\''):
+                        value = value[3:-2]
+                    elif value.startswith("b"):
+                        value = value.split(',')[0]
+                    data[key] = value
             with open(file_path, 'w') as f:
                 json.dump(data, f)
 

@@ -3657,7 +3657,7 @@ class RemoteMachineShellConnection(KeepRefs):
         if self.remote and self.use_sudo or use_channel:
             channel = self._ssh_client.get_transport().open_session()
             channel.get_pty()
-            channel.settimeout(900)
+            channel.settimeout(timeout)
             stdin = channel.makefile('wb')
             stdout = channel.makefile('rb')
             stderro = channel.makefile_stderr('rb')
@@ -5226,13 +5226,11 @@ class RemoteMachineShellConnection(KeepRefs):
                                                      item_size, command_options, collection_id):
         cbworkloadgen_command = self._get_cbworkloadgen_command()
 
-        # This command runs via SSH on the node itself and always targets
-        # "localhost", so TLS is never required for the loopback connection
-        # (plain ports stay open on 127.0.0.1 even under strict encryption).
-        # Always use plain HTTP here: cbworkloadgen's TLS memcached path goes
-        # through cb_bin_client.py, which calls the long-removed
-        # ssl.wrap_socket() API and hangs indefinitely instead of erroring.
-        command = "%s -n localhost:8091 -r %s -i %s -b %s -c %s -s %s %s -u %s -p %s" % (cbworkloadgen_command,
+        protocol = "https://" if self.port == "18091" else ""
+        if self.port == "18091":
+            command_options += " --no-ssl-verify "
+        command = "%s -n %s%s:%s -r %s -i %s -b %s -c %s -s %s %s -u %s -p %s" % (cbworkloadgen_command,
+                                                                          protocol, "localhost", self.port,
                                                                           ratio, num_items, bucket,
                                                                           collection_id,
                                                                           item_size, command_options,
@@ -5251,9 +5249,11 @@ class RemoteMachineShellConnection(KeepRefs):
             timeout = min(14400, max(1200, num_items // 10))
         cbworkloadgen_command = self._get_cbworkloadgen_command()
 
-        # See execute_cbworkloadgen_collection above: always use plain HTTP
-        # against localhost to avoid cb_bin_client.py's broken TLS path.
-        command = "%s -n localhost:8091 -r %s -i %s -b %s -s %s %s -u %s -p %s" % (cbworkloadgen_command,
+        protocol = "https://" if self.port == "18091" else ""
+        if self.port == "18091":
+            command_options += " --no-ssl-verify "
+        command = "%s -n %s%s:%s -r %s -i %s -b %s -s %s %s -u %s -p %s" % (cbworkloadgen_command,
+                                                                          protocol, "localhost", self.port,
                                                                           ratio, num_items, bucket,
                                                                           item_size, command_options,
                                                                           username, password)
@@ -5315,10 +5315,11 @@ class RemoteMachineShellConnection(KeepRefs):
             log.error("Command didn't run successfully. Error: {0}".format(r))
         return o, r
 
-    def execute_cbexport(self, target, bucket, scope=None, collection=None, output_file="/tmp/output.json"):
+    def execute_cbexport(self, target, bucket, scope=None, collection=None, output_file="/tmp/output.json",
+                         include_key=None):
         """
         """
-        self.execute_command("rm -f {output_file}")
+        self.execute_command(f"rm -f {output_file}")
 
         protocol = "couchbases://" if self.port == "18091" else "couchbase://"
         port = ":18091" if self.port == "18091" else ""
@@ -5330,6 +5331,13 @@ class RemoteMachineShellConnection(KeepRefs):
         if collection:
             command += f" -collection-field {collection}"
 
+        if include_key:
+            # Surfaces the document's actual key as a field, independent of
+            # whatever the document body contains -- needed for callers that
+            # load data with cbc-pillowfight, whose --json mode fills bodies
+            # with opaque placeholder fields rather than caller-chosen content.
+            command += f" --include-key {include_key}"
+
         if self.port == "18091":
             command += " --no-ssl-verify"
 
@@ -5337,7 +5345,7 @@ class RemoteMachineShellConnection(KeepRefs):
         if exit_code > 0:
             return None
 
-        output, error = self.execute_command("cat /tmp/output.json")
+        output, error = self.execute_command(f"cat {output_file}")
         return json.loads(''.join(output))
 
     def remove_win_backup_dir(self):

@@ -8,6 +8,7 @@ from lib.mc_bin_client import MemcachedClient
 from memcached.helper.data_helper import MemcachedClientHelper
 from membase.api.rest_client import RestConnection
 from lib.couchbase_helper.time_helper import TimeUtil
+from lib.Cb_constants.CBServer import CbServer
 # constants used in this file only
 DELETED_ITEMS_FAILURE_ANALYSIS_FORMAT="\n1) Failure :: Deleted Items :: Expected {0}, Actual {1}"
 DELETED_ITEMS_SUCCESS_ANALYSIS_FORMAT="\n1) Success :: Deleted Items "
@@ -456,6 +457,14 @@ class DataCollector(object):
             else
               {bucket {key: value list}}
         """
+        if CbServer.use_https and mode == "memory" and not getReplica:
+            # cbtransfer's data channel is plain memcached with no TLS support, so
+            # it hangs indefinitely against a strict-encryption cluster (port 11210
+            # is closed externally in that mode). N1QL is already TLS-aware
+            # (RestConnection.query_tool), so use it instead for the live-cluster case.
+            return self.collect_data_via_n1ql(servers, buckets, userId=userId,
+                                              password=password, perNode=perNode)
+
         completeMap = {}
         for bucket in buckets:
             completeMap[bucket.name] = {}
@@ -490,6 +499,46 @@ class DataCollector(object):
                 else:
                     completeMap[bucket].update(newMap)
         return headerInfo,completeMap
+
+    def collect_data_via_n1ql(self, servers, buckets, userId="Administrator",
+                              password="password", perNode=False, timeout=120):
+        """
+            TLS-safe replacement for the cbtransfer-based collector (see collect_data).
+            Returns headerInfo="n1ql" as a marker so callers know values are already
+            plain JSON strings (not cbtransfer's CSV rows) and skip CSV-specific parsing.
+
+            timeout bounds each query_tool call: query_tool's own default (1300s)
+            lets RestConnection._http_request retry a dead n1ql service for ~20+
+            minutes per call before failing, turning an unreachable service into a
+            multi-hour stall instead of a fast, clear error.
+
+            Returns the same shape as collect_data:
+              {bucket {node { key: value }}} if perNode else {bucket {key: value}}
+        """
+        rest = RestConnection(servers[0])
+        rest.username = userId
+        rest.password = password
+        completeMap = {}
+        for bucket in buckets:
+            try:
+                rest.query_tool("CREATE PRIMARY INDEX IF NOT EXISTS ON `%s`" % bucket.name,
+                                timeout=timeout)
+            except Exception as e:
+                print("Could not create primary index on {0}: {1}".format(bucket.name, e))
+            try:
+                result = rest.query_tool(
+                    "SELECT META(b).id AS `$key`, b AS `$value` FROM `%s` AS b" % bucket.name,
+                    timeout=timeout)
+            except Exception as e:
+                raise Exception("N1QL query failed collecting data for bucket {0} via {1} "
+                                "(is the n1ql service reachable on that node?): {2}"
+                                .format(bucket.name, servers[0].ip, e))
+            rows = result.get("results", []) if isinstance(result, dict) else []
+            bucketMap = {}
+            for row in rows:
+                bucketMap[row["$key"]] = json.dumps(row["$value"], sort_keys=True)
+            completeMap[bucket.name] = {servers[0].ip: bucketMap} if perNode else bucketMap
+        return "n1ql", completeMap
 
     def collect_vbucket_stats(self,buckets, servers, collect_vbucket = True,
                               collect_vbucket_seqno = True,
