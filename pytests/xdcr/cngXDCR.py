@@ -197,6 +197,241 @@ class CNGXDCRBaseTest(XDCRNewBaseTest):
                 phase, ckpt_before, ckpt_after))
         return ckpt_after
 
+    # ------------------------------------------------------------------ #
+    #  Credential-rotation verification helpers.                          #
+    #                                                                     #
+    #  These exist so the password-change test never trusts an API on its #
+    #  return code alone. Each turns a silent assumption ("the password   #
+    #  changed", "the ref took the new creds", "the status is truthful")  #
+    #  into either a hard assertion or a greppable [pwchange] log line, so #
+    #  a product bug surfaces here instead of as a confusing downstream    #
+    #  failure (or a false pass).                                          #
+    # ------------------------------------------------------------------ #
+    def _probe_admin_auth(self, node, password):
+        """Probe pools/default on `node` with an explicit password.
+
+        Returns (ok: bool, http_status: str). Does NOT raise on 401 — the
+        caller decides whether success or rejection is the expected
+        outcome. Used to prove a password rotation actually took effect
+        rather than inferring it from the changePassword HTTP 200.
+        """
+        # check_connectivity=False: the constructor's own probe would use
+        # node.rest_password (which may be mid-rotation); we supply explicit
+        # creds below instead, so the probe outcome reflects `password` alone.
+        rest = RestConnection(node, check_connectivity=False)
+        api = rest.baseUrl + "pools/default"
+        headers = rest._create_headers_with_auth(node.rest_username, password)
+        try:
+            status, _, response = rest._http_request(api, "GET", headers=headers)
+        except Exception as e:
+            return False, "EXC:{0}".format(e)
+        http_status = response.get("status", "?") if response else "?"
+        return bool(status), http_status
+
+    def _change_target_admin_password_verified(self, cluster, new_password,
+                                               old_password=None):
+        """Rotate the target admin password and prove the rotation landed.
+
+        Beyond the base changePassword (which only checks HTTP 200) this
+        asserts the NEW password authenticates and, when given, that the
+        OLD password is rejected — catching both a no-op rotation and the
+        security bug of a stale credential outliving its rotation.
+        """
+        node = cluster.get_master_node()
+        self.log.info("[pwchange] rotating target admin password on {0} "
+                      "(cluster={1})".format(node.ip, cluster.get_name()))
+        self._change_admin_password(cluster, new_password)
+
+        ok_new, st_new = self._probe_admin_auth(node, new_password)
+        self.log.info("[pwchange] NEW-password auth probe: ok={0} "
+                      "http_status={1}".format(ok_new, st_new))
+        self.assertTrue(
+            ok_new,
+            "Target admin password change did not take effect — NEW password "
+            "rejected (http_status={0}) on {1}".format(st_new, node.ip))
+
+        if old_password is not None and old_password != new_password:
+            ok_old, st_old = self._probe_admin_auth(node, old_password)
+            # Tolerate a brief auth-cache TTL before declaring the old
+            # credential dead, but no longer.
+            for attempt in range(3):
+                if not ok_old:
+                    break
+                self.sleep(3, "waiting for old admin password to be "
+                              "invalidated (attempt {0})".format(attempt + 1))
+                ok_old, st_old = self._probe_admin_auth(node, old_password)
+            self.log.info("[pwchange] OLD-password auth probe (expect "
+                          "rejection): ok={0} http_status={1}".format(
+                              ok_old, st_old))
+            self.assertFalse(
+                ok_old,
+                "PRODUCT/SECURITY BUG: OLD admin password still authenticates "
+                "(http_status={0}) after rotation on {1}".format(
+                    st_old, node.ip))
+
+    def _snapshot_replication_health(self, rest_src, src_cluster,
+                                     dest_cluster, label):
+        """One-instant cross-check of connectivity vs *actual* replication.
+
+        The whole test treats connectivityStatus as ground truth. This
+        records, at the same instant: per-ref connectivity, source backlog
+        (changes_left), per-bucket src/dest item counts, the successful-
+        checkpoint count, and per-replication id/status. Comparing these
+        snapshots across a boundary is how a "status lies" product bug
+        (RC_OK while data is stuck, or error while data still flows) becomes
+        visible instead of silently passing. Returns the snapshot dict.
+        """
+        snap = {"label": label}
+        try:
+            snap["connectivity"] = self.get_connectivity_status(rest_src)
+        except Exception as e:
+            snap["connectivity"] = "ERR:{0}".format(e)
+        try:
+            snap["changes_left"] = self.get_total_changes_left(src_cluster)
+        except Exception as e:
+            snap["changes_left"] = "ERR:{0}".format(e)
+        try:
+            snap["checkpoints"] = self.get_successful_checkpoint_count(rest_src)
+        except Exception as e:
+            snap["checkpoints"] = "ERR:{0}".format(e)
+        counts = {}
+        for b in src_cluster.get_buckets():
+            db = self.find_matching_bucket(b, dest_cluster.get_buckets())
+            try:
+                counts[b.name] = {
+                    "src": self.bucket_item_count(src_cluster, b.name),
+                    "dest": self.bucket_item_count(dest_cluster, db.name)}
+            except Exception as e:
+                counts[b.name] = "ERR:{0}".format(e)
+        snap["item_counts"] = counts
+        try:
+            snap["repls"] = [
+                {"id": r.get("id"), "status": r.get("status"),
+                 "pauseRequested": r.get("pauseRequested")}
+                for r in rest_src.get_replications()]
+        except Exception as e:
+            snap["repls"] = "ERR:{0}".format(e)
+        self.log.info("[pwchange][health:{0}] {1}".format(label, snap))
+        return snap
+
+    def _log_ref_state(self, rest_src, rc_name, label):
+        """Re-read a remote-cluster ref after a modify and log it.
+
+        modify_remote_cluster returning HTTP 200 only proves the request
+        was accepted, not that the stored ref now carries the new creds /
+        hostname. Re-reading turns 'accepted but not applied' into a
+        visible line. Returns the matched ref dict (or None).
+        """
+        try:
+            refs = rest_src.get_remote_clusters()
+        except Exception as e:
+            self.log.warning("[pwchange][ref:{0}] get_remote_clusters "
+                             "failed: {1}".format(label, e))
+            return None
+        match = next((r for r in refs if r.get("name") == rc_name), None)
+        if match is None:
+            self.log.warning(
+                "[pwchange][ref:{0}] ref '{1}' NOT FOUND after modify; "
+                "present={2}".format(
+                    label, rc_name, [r.get("name") for r in refs]))
+            return None
+        summary = {k: match.get(k) for k in (
+            "name", "uuid", "hostname", "username", "encryptionType",
+            "secureType", "connectivityStatus", "connectivityErrors",
+            "deleted")}
+        self.log.info("[pwchange][ref:{0}] {1}".format(label, summary))
+        return match
+
+    def _assert_pause_state(self, rest_src, src_bucket, dest_bucket,
+                            expected_paused, label):
+        """Read pauseRequested back and assert it matches what we set.
+
+        pause_resume_cycle is otherwise fire-and-forget; this proves the
+        setting actually landed so the hostile-window manipulation is real.
+        """
+        actual = self._replication.get_param(
+            rest_src, src_bucket, dest_bucket, REPL_PARAM.PAUSE_REQUESTED)
+        actual_bool = str(actual).strip().lower() in ("true", "1")
+        self.log.info("[pwchange][pause:{0}] pauseRequested read-back={1!r} "
+                      "-> {2} (expected_paused={3})".format(
+                          label, actual, actual_bool, expected_paused))
+        self.assertEqual(
+            actual_bool, expected_paused,
+            "pauseRequested did not take effect at {0}: read-back={1!r}, "
+            "expected_paused={2}".format(label, actual, expected_paused))
+
+    def _assert_backlog_drains(self, src_cluster, label, timeout=180):
+        """Assert replication_changes_left reaches 0 within timeout.
+
+        A direct data-flow check independent of connectivityStatus: a ref
+        can report RC_OK while the pipeline is wedged. Returns final backlog.
+        """
+        final = self.wait_for_backlog_to_drain(src_cluster, timeout)
+        self.log.info("[pwchange][backlog:{0}] final changes_left={1}".format(
+            label, final))
+        self.assertEqual(
+            final, 0,
+            "Backlog did not drain after {0}: changes_left={1} (connectivity "
+            "may report RC_OK while replication is wedged — possible product "
+            "bug)".format(label, final))
+        return final
+
+    def _warn_if_backlog_drains_while_error(self, src_cluster, rest_src,
+                                            rc_name, label, observe=20):
+        """Soft probe for the inverse 'status lies' bug: while a ref reports
+        an error state and still holds stale creds, a source backlog must
+        NOT drain. If it drains to zero, replication is succeeding despite a
+        reported error / broken target auth — surface a greppable warning.
+
+        Warning-level, not a hard fail: a handful of optimistically-
+        replicated in-flight docs is not conclusive, but a backlog going to
+        zero while the ref is in error is a strong signal worth catching.
+        """
+        error_states = (CONNECTIVITY_STATUS.RC_DEGRADED,
+                        CONNECTIVITY_STATUS.RC_ERROR,
+                        CONNECTIVITY_STATUS.RC_AUTH_ERR)
+        start_backlog = self.get_total_changes_left(src_cluster)
+        start_status = self.get_connectivity_status(rest_src, rc_name=rc_name)
+        self.sleep(observe,
+                   "observing backlog while ref '{0}' in error".format(rc_name))
+        end_backlog = self.get_total_changes_left(src_cluster)
+        end_status = self.get_connectivity_status(rest_src, rc_name=rc_name)
+        self.log.info(
+            "[pwchange][error-window:{0}] start(status={1}, backlog={2}) -> "
+            "end(status={3}, backlog={4})".format(
+                label, start_status, start_backlog, end_status, end_backlog))
+        if end_status in error_states and start_backlog > 0 and end_backlog == 0:
+            self.log.warning(
+                "[pwchange][error-window:{0}] POSSIBLE PRODUCT BUG: backlog "
+                "drained from {1} to 0 while ref reported '{2}' (replication "
+                "succeeded despite reported error / broken target auth)".format(
+                    label, start_backlog, end_status))
+
+    def _try_change_credentials(self, src_cluster, dest_cluster, rc_name,
+                                username, password, lb_ip, label):
+        """Modify ref creds, tolerating modify-time credential validation.
+
+        ns_server may either (a) accept any creds at modify time and surface
+        bad ones later via an error connectivityStatus, or (b) validate at
+        modify time and reject. Both are legitimate; recording which the
+        product did keeps path (b) from blowing up as an opaque ERROR and
+        leaves a clear log line either way. Returns True iff the modify was
+        accepted.
+        """
+        try:
+            self._refs.change_credentials(
+                src_cluster, dest_cluster, rc_name, username, password,
+                lb_ip=lb_ip)
+            self.log.info("[pwchange][{0}] modify ACCEPTED by remote-cluster "
+                          "API (username={1})".format(label, username))
+            self._log_ref_state(
+                RestConnection(src_cluster.get_master_node()), rc_name, label)
+            return True
+        except Exception as e:
+            self.log.info("[pwchange][{0}] modify REJECTED at modify time: "
+                          "{1}".format(label, e))
+            return False
+
     def _assert_add_remote_cluster_fails(self, src_rest, hostname, port,
                                          name, username, password,
                                          certificate=None):
@@ -1144,15 +1379,31 @@ class XDCRCNGResiliencyTests(CNGXDCRBaseTest):
         self.verify_results()
 
     def test_cng_target_admin_password_change(self):
-        """Rotate target Administrator password in correct and incorrect order."""
+        """Rotate target Administrator password in correct and incorrect order.
+
+        connectivityStatus is never trusted on its own. After each rotation
+        we prove it took effect (new password authenticates, old is
+        rejected); after each credential modify we re-read the ref; and at
+        every phase boundary we snapshot connectivity *together with*
+        backlog / item-counts / checkpoints so a "status lies" product bug
+        (RC_OK while data is wedged, or error while data still flows)
+        surfaces in the log instead of passing silently. Every recovery is
+        confirmed by an actual data-flow + checkpoint check, not just the
+        status flip.
+        """
         items = self._input.param("items", 5000)
         new_password = self._input.param("new_password", "NewP@ssw0rd!")
         recovery_timeout = self._input.param("recovery_timeout", 180)
 
         src_cluster, dest_cluster, infra, rest_src = self._setup_single_cng_pair()
         rc_name = "cng_pw_change"
-        self._setup_cng_replication(
+        rep_ids = self._setup_cng_replication(
             src_cluster, dest_cluster, infra.lb_ip, rc_name=rc_name)
+        # start_for_buckets returns the started replication ids; an empty
+        # list means setup silently created no replication to test against.
+        self.assertTrue(
+            rep_ids, "No replications were started for ref '{0}'".format(rc_name))
+        log.info("[pwchange] replications started: {0}".format(rep_ids))
 
         src_bucket = src_cluster.get_buckets()[0].name
         dest_bucket = dest_cluster.get_buckets()[0].name
@@ -1166,54 +1417,122 @@ class XDCRCNGResiliencyTests(CNGXDCRBaseTest):
         self._expect_connectivity(
             rest_src, rc_name, CONNECTIVITY_STATUS.RC_OK, timeout=60)
         ckpt_before = self.get_successful_checkpoint_count(rest_src)
+        self._snapshot_replication_health(
+            rest_src, src_cluster, dest_cluster, "baseline")
 
         try:
-            # Phase 1 (correct order): change target first, then update source ref
-            self._change_admin_password(dest_cluster, new_password)
-            self._expect_error_connectivity(rest_src, rc_name, timeout=120)
+            # ---- Phase 1 (correct order): change target first, then ref ----
+            self._change_target_admin_password_verified(
+                dest_cluster, new_password, old_password=original_password)
+            err_status = self._expect_error_connectivity(
+                rest_src, rc_name, timeout=120)
+            log.info("[pwchange][phase1] ref entered error state '{0}' after "
+                     "target password change".format(err_status))
+            self._snapshot_replication_health(
+                rest_src, src_cluster, dest_cluster, "phase1-auth-error")
 
             tasks_p1 = self._replication.load_async(src_cluster, count=items // 3)
+            # With the ref in error and still holding the stale password, the
+            # freshly loaded backlog must not drain. If it does, the reported
+            # error is a lie / target auth is being bypassed.
+            self._warn_if_backlog_drains_while_error(
+                src_cluster, rest_src, rc_name, "phase1", observe=20)
             self._refs.change_credentials(
                 src_cluster, dest_cluster, rc_name,
                 dest_master.rest_username, new_password, lb_ip=infra.lb_ip)
+            self._log_ref_state(rest_src, rc_name, "phase1-after-cred-update")
             self._expect_connectivity(
-                rest_src, rc_name, CONNECTIVITY_STATUS.RC_OK, timeout=recovery_timeout)
+                rest_src, rc_name, CONNECTIVITY_STATUS.RC_OK,
+                timeout=recovery_timeout)
+            # Fresh, reset-proof checkpoint baseline captured at the moment of
+            # recovery: a credential modify restarts the goxdcr pipeline, which
+            # can reset num_checkpoints to ~0. Asserting against the pre-Phase-1
+            # baseline would then either falsely fail or falsely pass.
+            ckpt_resume_p1 = self.get_successful_checkpoint_count(rest_src)
+            if ckpt_resume_p1 < ckpt_before:
+                log.warning("[pwchange][phase1] checkpoint counter RESET on "
+                            "recovery: before={0}, at-recovery={1} (pipeline "
+                            "restart)".format(ckpt_before, ckpt_resume_p1))
             for task in tasks_p1:
                 task.result()
             self._wait_for_replication_to_catchup(timeout=300)
-
+            self._assert_backlog_drains(src_cluster, "phase1-recovery")
             self._assert_checkpoints_progress(
-                rest_src, ckpt_before, phase="Phase 1 recovery")
+                rest_src, ckpt_resume_p1, phase="Phase 1 recovery")
+            self._snapshot_replication_health(
+                rest_src, src_cluster, dest_cluster, "phase1-recovered")
 
-            # Phase 2 (wrong order): update source ref first with wrong password -> error
-            self._refs.change_credentials(
-                src_cluster, dest_cluster, rc_name,
-                dest_master.rest_username, "WrongPassword123!", lb_ip=infra.lb_ip)
-            self._expect_error_connectivity(rest_src, rc_name, timeout=120)
+            # ---- Phase 2 (wrong order): ref creds wrong first ----
+            wrong_accepted = self._try_change_credentials(
+                src_cluster, dest_cluster, rc_name, dest_master.rest_username,
+                "WrongPassword123!", infra.lb_ip, "phase2-wrongpw")
+            if wrong_accepted:
+                self._expect_error_connectivity(rest_src, rc_name, timeout=120)
+            else:
+                log.info("[pwchange][phase2] wrong-password modify rejected at "
+                         "modify time; ref retains valid creds (RC_OK expected)")
+            self._snapshot_replication_health(
+                rest_src, src_cluster, dest_cluster, "phase2-wrongpw")
 
             # Fix: revert dest to original, update ref to match
-            self._change_admin_password(dest_cluster, original_password)
+            self._change_target_admin_password_verified(
+                dest_cluster, original_password, old_password=new_password)
             self._refs.change_credentials(
                 src_cluster, dest_cluster, rc_name,
                 dest_master.rest_username, original_password, lb_ip=infra.lb_ip)
+            self._log_ref_state(rest_src, rc_name, "phase2-after-fix")
             self._expect_connectivity(
-                rest_src, rc_name, CONNECTIVITY_STATUS.RC_OK, timeout=recovery_timeout)
+                rest_src, rc_name, CONNECTIVITY_STATUS.RC_OK,
+                timeout=recovery_timeout)
+            # Phase 2 previously had NO data-flow check after recovery — a flip
+            # to RC_OK was the only evidence. Drive a small probe load so the
+            # recovery is proven by real convergence + a fresh checkpoint,
+            # attributable to Phase 2 rather than to the later phases.
+            ckpt_resume_p2 = self.get_successful_checkpoint_count(rest_src)
+            probe_items = max(1, items // 10)
+            probe_gen = BlobGenerator("pwchange-p2-probe-", "pwchange-p2-probe-",
+                                      self._value_size, end=probe_items)
+            src_cluster.load_all_buckets_from_generator(probe_gen)
+            self._wait_for_replication_to_catchup(timeout=300)
+            self._assert_backlog_drains(src_cluster, "phase2-recovery")
+            self._assert_checkpoints_progress(
+                rest_src, ckpt_resume_p2, phase="Phase 2 recovery")
+            self._snapshot_replication_health(
+                rest_src, src_cluster, dest_cluster, "phase2-recovered")
 
-            # Phase 3 (hostile): password change under in-flight load + pause/resume
+            # ---- Phase 3 (hostile): pw change under load + pause/resume ----
             tasks_p3 = self._replication.load_async(src_cluster, count=items // 3)
-            self._change_admin_password(dest_cluster, new_password)
+            self._change_target_admin_password_verified(
+                dest_cluster, new_password, old_password=original_password)
             for j in range(3):
-                self._replication.pause_resume_cycle(
-                    rest_src, src_bucket, dest_bucket,
-                    reason="auth-error window, pass/resume {0}".format(j + 1))
+                # Verify each pause/resume actually landed rather than firing
+                # the cycle blind — the manipulation must be real for the
+                # hostile window to mean anything.
+                self._replication.pause(rest_src, src_bucket, dest_bucket)
+                self._assert_pause_state(
+                    rest_src, src_bucket, dest_bucket, True,
+                    "phase3-pause-{0}".format(j + 1))
+                self.sleep(5, "auth-error window, pause {0}".format(j + 1))
+                self._replication.resume(rest_src, src_bucket, dest_bucket)
+                self._assert_pause_state(
+                    rest_src, src_bucket, dest_bucket, False,
+                    "phase3-resume-{0}".format(j + 1))
             self._refs.change_credentials(
                 src_cluster, dest_cluster, rc_name,
                 dest_master.rest_username, new_password, lb_ip=infra.lb_ip)
+            self._log_ref_state(rest_src, rc_name, "phase3-after-cred-update")
             self._expect_connectivity(
-                rest_src, rc_name, CONNECTIVITY_STATUS.RC_OK, timeout=recovery_timeout)
+                rest_src, rc_name, CONNECTIVITY_STATUS.RC_OK,
+                timeout=recovery_timeout)
+            ckpt_resume_p3 = self.get_successful_checkpoint_count(rest_src)
             for task in tasks_p3:
                 task.result()
             self._wait_for_replication_to_catchup(timeout=300)
+            self._assert_backlog_drains(src_cluster, "phase3-recovery")
+            self._assert_checkpoints_progress(
+                rest_src, ckpt_resume_p3, phase="Phase 3 recovery")
+            self._snapshot_replication_health(
+                rest_src, src_cluster, dest_cluster, "phase3-recovered")
 
             self.verify_results()
         finally:

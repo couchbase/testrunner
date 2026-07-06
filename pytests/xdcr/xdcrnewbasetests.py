@@ -92,6 +92,7 @@ class CONNECTIVITY_STATUS:
     RC_OK = "RC_OK"
     RC_DEGRADED = "RC_DEGRADED"
     RC_ERROR = "RC_ERROR"
+    RC_AUTH_ERR = "RC_AUTH_ERR"
 
 
 class TOPOLOGY:
@@ -5608,7 +5609,8 @@ class XDCRNewBaseTest(unittest.TestCase):
         self.log.info("Waiting for error connectivity status")
         end_time = time.time() + timeout
         error_statuses = [CONNECTIVITY_STATUS.RC_DEGRADED,
-                          CONNECTIVITY_STATUS.RC_ERROR]
+                          CONNECTIVITY_STATUS.RC_ERROR,
+                          CONNECTIVITY_STATUS.RC_AUTH_ERR]
         statuses = {}
         while time.time() < end_time:
             statuses = self.get_connectivity_status(rest)
