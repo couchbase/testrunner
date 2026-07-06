@@ -3702,7 +3702,7 @@ class RemoteMachineShellConnection(KeepRefs):
         if self.remote and self.use_sudo or use_channel:
             channel = self._ssh_client.get_transport().open_session()
             channel.get_pty()
-            channel.settimeout(900)
+            channel.settimeout(timeout)
             stdin = channel.makefile('wb')
             stdout = channel.makefile('rb')
             stderro = channel.makefile_stderr('rb')
@@ -5239,10 +5239,11 @@ class RemoteMachineShellConnection(KeepRefs):
             log.error("Command didn't run successfully. Error: {0}".format(r))
         return o, r
 
-    def execute_cbexport(self, target, bucket, scope=None, collection=None, output_file="/tmp/output.json"):
+    def execute_cbexport(self, target, bucket, scope=None, collection=None, output_file="/tmp/output.json",
+                         include_key=None):
         """
         """
-        self.execute_command("rm -f {output_file}")
+        self.execute_command(f"rm -f {output_file}")
 
         protocol = "couchbases://" if self.port == "18091" else "couchbase://"
         port = ":18091" if self.port == "18091" else ""
@@ -5254,6 +5255,13 @@ class RemoteMachineShellConnection(KeepRefs):
         if collection:
             command += f" -collection-field {collection}"
 
+        if include_key:
+            # Surfaces the document's actual key as a field, independent of
+            # whatever the document body contains -- needed for callers that
+            # load data with cbc-pillowfight, whose --json mode fills bodies
+            # with opaque placeholder fields rather than caller-chosen content.
+            command += f" --include-key {include_key}"
+
         if self.port == "18091":
             command += " --no-ssl-verify"
 
@@ -5261,7 +5269,7 @@ class RemoteMachineShellConnection(KeepRefs):
         if exit_code > 0:
             return None
 
-        output, error = self.execute_command("cat /tmp/output.json")
+        output, error = self.execute_command(f"cat {output_file}")
         return json.loads(''.join(output))
 
     def remove_win_backup_dir(self):

@@ -2970,17 +2970,21 @@ class BackupServiceTest(BackupServiceBase):
         # Create scopes and collections
         ids = self.create_variable_no_of_collections_and_scopes(self.backupset.cluster_host, bucket_name, no_of_scopes, no_of_collections)
 
-        # Populate each collection with documents and prefix each document key with its collection id
-        for key in ids:
-            remote_connection.execute_cbworkloadgen(self.backupset.cluster_host.rest_username, self.backupset.cluster_host.rest_password, no_of_items, "1", bucket_name, 3, f"-j -c {ids[key]} --prefix={ids[key]}-pymc")
+        # Populate each collection with documents, prefixing each document key with its collection id
+        for scope_name, collection_name in ids:
+            collection_id = ids[(scope_name, collection_name)]
+            self.load_via_pillowfight(self.backupset.cluster_host, no_of_items, "1", bucket_name, 3,
+                                      scope_name, collection_name, key_prefix=f"{collection_id}-pymc")
 
         self.sleep(30)
 
-        # A function which identifies our documents uniquely
-        document_key_function = DocumentUtil.unique_document_key("name", "scope", "collection")
+        # A function which identifies our documents uniquely by their actual key. cbc-pillowfight
+        # (needed for working TLS support) fills documents with opaque placeholder fields rather
+        # than caller-chosen content, so identity has to come from the key, not the body.
+        document_key_function = DocumentUtil.unique_document_key("key", "scope", "collection")
 
         # Collect the documents from the bucket
-        data = remote_connection.execute_cbexport(self.backupset.cluster_host, bucket_name, "scope", "collection")
+        data = remote_connection.execute_cbexport(self.backupset.cluster_host, bucket_name, "scope", "collection", include_key="key")
         data.sort(key=document_key_function)
         self.assertEqual(len(data), no_of_collections * no_of_scopes * no_of_items)
 
@@ -2996,19 +3000,17 @@ class BackupServiceTest(BackupServiceBase):
         self.sleep(120)
 
         # Check the documents were successfully restored
-        data_after_restore = remote_connection.execute_cbexport(self.backupset.cluster_host, bucket_name, "scope", "collection")
+        data_after_restore = remote_connection.execute_cbexport(self.backupset.cluster_host, bucket_name, "scope", "collection", include_key="key")
         data_after_restore.sort(key=document_key_function)
         self.assertEqual(data, data_after_restore)
 
         data_after_restore_dict = {document_key_function(document): document for document in data_after_restore}
 
-        # Predict the body of each document
+        # Check every expected document was restored (cbc-pillowfight zero-pads sequential keys to 20 digits)
         for scope_no, collection_no, item_no in itertools.product(range(no_of_scopes), range(no_of_collections), range(no_of_items)):
             scope_name, collection_name = f"scope{scope_no}", f"collection{collection_no}"
             collection_id = ids[(scope_name, collection_name)]
-            document = data_after_restore_dict[(scope_name, collection_name, f"{collection_id}-pymc{item_no}")]
-            self.assertEqual(document['index'], str(item_no))
-            self.assertEqual(document['body'], "000")
+            self.assertIn((scope_name, collection_name, f"{collection_id}-pymc{item_no:020d}"), data_after_restore_dict)
 
     def test_merging_and_restoring_with_collections(self):
         """ Test merging and restoring with collections
@@ -3025,8 +3027,10 @@ class BackupServiceTest(BackupServiceBase):
 
         # Take n one off backups
         def provisioning_function(i):
-            for key in ids:
-                remote_connection.execute_cbworkloadgen(self.backupset.cluster_host.rest_username, self.backupset.cluster_host.rest_password, no_of_items, "1", bucket_name, 2 + i, f"-j -c {ids[key]} --prefix={ids[key]}-pymc")
+            for scope_name, collection_name in ids:
+                collection_id = ids[(scope_name, collection_name)]
+                self.load_via_pillowfight(self.backupset.cluster_host, no_of_items, "1", bucket_name, 2 + i,
+                                          scope_name, collection_name, key_prefix=f"{collection_id}-pymc")
 
         self.take_n_one_off_backups("active", repo_name, None, no_of_backups, doc_load_sleep=30, data_provisioning_function=provisioning_function)
 
@@ -3039,11 +3043,13 @@ class BackupServiceTest(BackupServiceBase):
         backups = [backup._date for backup in self.get_backups("active", repo_name)]
         self.assertEqual(len(backups), 1)
 
-        # A function which identifies our documents uniquely
-        document_key_function = DocumentUtil.unique_document_key("name", "scope", "collection")
+        # A function which identifies our documents uniquely by their actual key (see
+        # test_restoring_collections: cbc-pillowfight's placeholder body content isn't
+        # matchable to specific expected values the way cbworkloadgen's was)
+        document_key_function = DocumentUtil.unique_document_key("key", "scope", "collection")
 
         # Collect the documents from the bucket
-        data = remote_connection.execute_cbexport(self.backupset.cluster_host, bucket_name, "scope", "collection")
+        data = remote_connection.execute_cbexport(self.backupset.cluster_host, bucket_name, "scope", "collection", include_key="key")
         data.sort(key=document_key_function)
         self.assertEqual(len(data), no_of_collections * no_of_scopes * no_of_items)
 
@@ -3056,18 +3062,19 @@ class BackupServiceTest(BackupServiceBase):
         self.sleep(120)
 
         # Check the documents were successfully restored
-        data_after_restore = remote_connection.execute_cbexport(self.backupset.cluster_host, bucket_name, "scope", "collection")
+        data_after_restore = remote_connection.execute_cbexport(self.backupset.cluster_host, bucket_name, "scope", "collection", include_key="key")
         data_after_restore.sort(key=document_key_function)
         self.assertEqual(data, data_after_restore)
 
         data_after_restore_dict = {document_key_function(document): document for document in data_after_restore}
 
+        # Check every expected document survived the merge and restore (each key was written
+        # twice, once per provisioning round, so this also confirms the merge kept one copy
+        # per key rather than duplicating or dropping any)
         for scope_no, collection_no, item_no in itertools.product(range(no_of_scopes), range(no_of_collections), range(no_of_items)):
             scope_name, collection_name = f"scope{scope_no}", f"collection{collection_no}"
             collection_id = ids[(scope_name, collection_name)]
-            document = data_after_restore_dict[(scope_name, collection_name, f"{collection_id}-pymc{item_no}")]
-            self.assertEqual(document['index'], str(item_no))
-            self.assertEqual(document['body'], "0" * (1 + no_of_backups))
+            self.assertIn((scope_name, collection_name, f"{collection_id}-pymc{item_no:020d}"), data_after_restore_dict)
 
     # Test logs
 
