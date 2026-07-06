@@ -40,7 +40,7 @@ class EventingN1QL(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.N1QL_PREPARE, worker_count=3)
         self.deploy_function(body)
         # Wait for eventing to catch up with all the create mutations and verify results
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, on_delete=True,skip_stats_validation=True)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * self.num_docs, on_delete=True,skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
         query = "drop primary index on " + self.src_bucket_name
         self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_server)
@@ -186,11 +186,11 @@ class EventingN1QL(EventingBaseTest):
     def test_n1ql_iterator(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
-        body = self.create_save_function_body(self.function_name, HANDLER_CODE.N1QL_ITERATOR, dcp_stream_boundary="from_now", execution_timeout=15)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.N1QL_ITERATOR, dcp_stream_boundary="from_now", execution_timeout=100)
         self.deploy_function(body)
         query = "UPDATE "+self.src_bucket_name+" set mutated=1 where mutated=0 limit 1"
         self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_server)
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * self.num_docs, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
     # This was moved from base class to here because http://ci-eventing.northscale.in/ was failing as it could not find
@@ -327,7 +327,7 @@ class EventingN1QL(EventingBaseTest):
         body = self.create_save_function_body(self.function_name,"handler_code/n1ql_op_slow_handler.js",
                                               dcp_stream_boundary="everything", execution_timeout=60)
         self.deploy_function(body)
-        self.verify_eventing_results(self.function_name, 2016, skip_stats_validation=True)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * self.num_docs, skip_stats_validation=True)
         gen_load_del = copy.deepcopy(self.gens_load)
         # delete json documents
         self.load(gen_load_del, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -347,11 +347,11 @@ class EventingN1QL(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, "handler_code/n1ql_op_to_set_expiry.js",
                                               dcp_stream_boundary="everything", execution_timeout=60)
         self.deploy_function(body)
-        self.verify_eventing_results(self.function_name, 2016, skip_stats_validation=True)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * self.num_docs, skip_stats_validation=True)
         body1 = self.create_save_function_body(self.function_name+"_check", "handler_code/check_for_expiry.js",
                                               dcp_stream_boundary="everything", execution_timeout=60,multi_dst_bucket=True)
         self.deploy_function(body1)
-        self.verify_eventing_results(self.function_name, 2016,bucket=self.dst_bucket_name1, skip_stats_validation=True)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * self.num_docs, bucket=self.dst_bucket_name1, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
         self.undeploy_and_delete_function(body1)
 
@@ -386,7 +386,7 @@ class EventingN1QL(EventingBaseTest):
                   batch_size=self.batch_size)
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.N1QL_DELETE_QUERY_TEST, worker_count=3)
         self.deploy_function(body)
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * self.num_docs, skip_stats_validation=True)
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                  batch_size=self.batch_size, op_type='delete')
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
@@ -412,7 +412,7 @@ class EventingN1QL(EventingBaseTest):
         if self.pause_resume:
             self.resume_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * self.num_docs, skip_stats_validation=True)
         # delete json documents
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')

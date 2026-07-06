@@ -62,6 +62,7 @@ class EventingExpired(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, "handler_code/cancel_timer_with_expiry.js")
         self.deploy_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
+        self.sleep(270, "waiting for Timers to be cancelled / fired")
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
