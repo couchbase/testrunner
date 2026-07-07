@@ -3723,7 +3723,9 @@ class CouchbaseCluster:
         # the rebalance must be orchestrated through a node that will still be
         # in the cluster afterwards - using a node that is being ejected (e.g.
         # the master during a master swap) makes every progress/monitor REST
-        # call fail with "unknown pool" once that node leaves the cluster
+        # call fail with "unknown pool" once that node leaves the cluster.
+        # RebalanceTask uses servers[0] as the REST orchestrator, so put a
+        # surviving node first in the list passed to async_rebalance.
         orchestrator = next(
             (node for node in self.__nodes if node not in to_remove_node),
             self.__master_node)
@@ -3745,12 +3747,13 @@ class CouchbaseCluster:
             " {2} cluster {3}"
             .format(to_remove_node, to_add_node, self.__name,
                     self.__master_node.ip))
+        rebalance_servers = [orchestrator] + \
+            [node for node in self.__nodes if node is not orchestrator]
         task = self.__clusterop.async_rebalance(
-            self.__nodes,
+            rebalance_servers,
             to_add_node,
             to_remove_node,
-            services=services,
-            master=orchestrator)
+            services=services)
 
         for remove_node in to_remove_node:
             self.__nodes.remove(remove_node)
@@ -3970,11 +3973,16 @@ class CouchbaseCluster:
         for failover_node in self.__fail_over_nodes:
             for server_node in server_nodes:
                 if server_node.ip == failover_node.ip:
-                    rest.add_back_node(server_node.id)
+                    # recoveryType must be set while the node is still in the
+                    # inactiveFailed state; calling it after add_back_node
+                    # (reAddNode) makes ns_server reject it with "node can't be
+                    # used for delta recovery". This matches the working order
+                    # in add_back_node / add_back_specific_node.
                     if recovery_type:
                         rest.set_recovery_type(
                             otpNode=server_node.id,
                             recoveryType=recovery_type)
+                    rest.add_back_node(server_node.id)
         for node in self.__fail_over_nodes:
             if node not in self.__nodes:
                 self.__nodes.append(node)

@@ -1676,7 +1676,12 @@ class MovingTopFTS(FTSBaseTest):
         recovery = self._input.param("recovery", None)
         graceful = self._input.param("graceful", False)
         index = self.create_index_generate_queries()
-        if graceful:
+        # delta recovery needs persisted (kv) data and graceful failover needs
+        # active vbuckets to hand off, so both require a kv node. Only a plain
+        # hard failover with full/no recovery can target an fts-only node -
+        # requesting delta recovery on an fts node is rejected by ns_server
+        # with "node can't be used for delta recovery".
+        if graceful or recovery == 'delta':
             services = ['kv']
             node = self._cb_cluster.get_kv_nodes()[1]
         else:
@@ -2450,7 +2455,10 @@ class MovingTopFTS(FTSBaseTest):
 
         # failover the fts node on which index recides
         nodeIds = []
-        rest = RestConnection(self._master)
+        # the index/cfg REST endpoints are served on the fts port, so target an
+        # fts node - self._master is a kv-only node here (e.g. D,D,F,F) and its
+        # fts port is closed, giving "Connection refused"
+        rest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
 
         index = self._cb_cluster.get_indexes()[0]
         _, indexdef = rest.get_fts_index_definition(index.name, index._source_name, index.scope)
