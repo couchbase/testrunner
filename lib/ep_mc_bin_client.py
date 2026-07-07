@@ -92,7 +92,10 @@ class MemcachedError(exceptions.Exception):
 
     def __init__(self, status, msg):
         supermsg='Memcached error #' + repr(status)
-        if msg: supermsg += ":  " + msg
+        if msg:
+            if isinstance(msg, bytes):
+                msg = msg.decode('utf-8', 'replace')
+            supermsg += ":  " + msg
         exceptions.Exception.__init__(self, supermsg)
 
         self.status=status

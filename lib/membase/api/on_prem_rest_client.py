@@ -2986,16 +2986,15 @@ class RestConnection(object):
 
     def get_active_key_count(self, bucket):
         """Fetch bucket stats and return the bucket's curr_items count"""
-        bucket_stats = self.fetch_bucket_stats(bucket)
         ret_val = -1
         retries = 10
         while retries > 0:
             try:
+                bucket_stats = self.fetch_bucket_stats(bucket)
                 ret_val = bucket_stats['op']['samples']['curr_items'][-1]
                 return ret_val
-            except KeyError as err:
+            except (KeyError, json.JSONDecodeError) as err:
                 log.error(f"get_active_key_count() function for bucket {bucket} reported an error {err}")
-                log.error(f"Corresponding bucket stats JSON is {bucket_stats}")
                 time.sleep(2)
                 retries = retries - 1
         return ret_val
