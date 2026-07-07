@@ -512,6 +512,10 @@ class DataCollector(object):
             minutes per call before failing, turning an unreachable service into a
             multi-hour stall instead of a fast, clear error.
 
+            servers[0] must be a node running the n1ql service; callers that may
+            have kv/index-only nodes first (e.g. GSI/FTS backup tests) should order
+            the list with get_nodes_from_services_map(service_type="n1ql") first.
+
             Returns the same shape as collect_data:
               {bucket {node { key: value }}} if perNode else {bucket {key: value}}
         """

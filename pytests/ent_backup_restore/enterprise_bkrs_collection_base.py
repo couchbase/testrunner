@@ -435,6 +435,21 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
     def cluster_to_restore(self):
         return self.get_nodes_in_cluster(self.backupset.restore_cluster_host)
 
+    def _n1ql_node_first(self, servers):
+        """Order `servers` so a node running the n1ql service is first.
+
+        The TLS-safe data collector (collect_data_via_n1ql) queries servers[0];
+        tests that add kv/index-only nodes can otherwise put a node with no query
+        service first, making data validation fail with "is the n1ql service
+        reachable". Reuse the existing service map lookup to put the n1ql node
+        first, leaving the rest of the list intact.
+        """
+        n1ql_node = self.get_nodes_from_services_map(service_type="n1ql", servers=servers)
+        if not n1ql_node:
+            return servers
+        return [s for s in servers if s.ip == n1ql_node.ip] + \
+               [s for s in servers if s.ip != n1ql_node.ip]
+
     def number_of_processors(self):
         remote_client = RemoteMachineShellConnection(self.input.clusters[1][0])
         info = remote_client.extract_remote_info().type.lower()
@@ -722,15 +737,52 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
     def __load_all_buckets(self, cluster=None, item_size=125, ratio=0.9, command_options=""):
         if not cluster:
             cluster = self.master
+        # When TLS is enforced, cbworkloadgen's memcached path hangs indefinitely
+        # (its cb_bin_client.py TLS code calls the long-removed ssl.wrap_socket()),
+        # so the SSH channel idles and paramiko only aborts after the full command
+        # timeout (~1200s), making test_backup_restore_collection_sanity fail.
+        # Load with cbc-pillowfight (native libcouchbase TLS) in that case; fall
+        # back to cbworkloadgen on non-TLS clusters.
+        if self.enforce_tls:
+            for bucket in self.buckets:
+                self.__load_bucket_via_pillowfight(cluster, bucket.name, item_size, ratio)
+        else:
+            shell = RemoteMachineShellConnection(cluster)
+            for bucket in self.buckets:
+                shell.execute_cbworkloadgen(cluster.rest_username,
+                                            cluster.rest_password,
+                                            self.num_items,
+                                            ratio,
+                                            bucket.name,
+                                            item_size,
+                                            command_options)
+            shell.disconnect()
+
+    def __load_bucket_via_pillowfight(self, cluster, bucket, item_size, ratio,
+                                      scope="_default", collection="_default", key_prefix="pymc"):
+        """ TLS-safe replacement for cbworkloadgen using cbc-pillowfight (libcouchbase,
+        native TLS). This is the initial whole-bucket load, so it targets the _default
+        scope/collection. Kept self-contained here to avoid changing the shared base
+        classes; mirrors BackupServiceBase.load_via_pillowfight. Note: --json docs carry
+        opaque placeholder fields, so downstream checks should match on key, not body. """
+        timeout = min(14400, max(1200, self.num_items // 10))
+        set_pct = float(ratio)
+        if set_pct <= 1:
+            set_pct *= 100
+        if self.enforce_tls:
+            spec = f"couchbases://{cluster.ip}/{bucket}?ssl=no_verify"
+        else:
+            spec = f"couchbase://localhost/{bucket}"
+        # -t 1: with multiple threads cbc-pillowfight splits --sequential across threads and
+        # rounds down when num_items doesn't divide evenly, silently loading fewer docs.
+        cmd = f"/opt/couchbase/bin/cbc-pillowfight -U '{spec}' -u {cluster.rest_username} " \
+              f"-P {cluster.rest_password} -I {self.num_items} -m {item_size} -M {item_size} " \
+              f"-r {int(set_pct)} -B 100 -t 1 --sequential -p {key_prefix} --populate-only " \
+              f"--collection {scope}.{collection} --json"
         shell = RemoteMachineShellConnection(cluster)
-        for bucket in self.buckets:
-            shell.execute_cbworkloadgen(cluster.rest_username,
-                                        cluster.rest_password,
-                                        self.num_items,
-                                        ratio,
-                                        bucket.name,
-                                        item_size,
-                                        command_options)
+        output, error = shell.execute_command(cmd, timeout=timeout)
+        shell.log_command_output(output, error)
+        shell.disconnect()
 
     def backup_create(self, del_old_backup=True):
         args = "config --archive {0} --repo {1}".format(self.backupset.directory, self.backupset.name)
@@ -941,9 +993,10 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
                     self.store_vbucket_seqno()
                 else:
                     return
-            self.validation_helper.store_keys(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
+            backup_servers = self._n1ql_node_first(self.cluster_to_backup)
+            self.validation_helper.store_keys(backup_servers, self.buckets, self.number_of_backups_taken,
                                               self.backup_validation_files_location)
-            self.validation_helper.store_latest(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
+            self.validation_helper.store_latest(backup_servers, self.buckets, self.number_of_backups_taken,
                                                 self.backup_validation_files_location)
             self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
                                                     self.backup_validation_files_location,
@@ -1524,9 +1577,10 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
                     self.fail(message)
 
         if repeats < 2 and not skip_validation:
-            self.validation_helper.store_keys(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
+            backup_servers = self._n1ql_node_first(self.cluster_to_backup)
+            self.validation_helper.store_keys(backup_servers, self.buckets, self.number_of_backups_taken,
                                               self.backup_validation_files_location)
-            self.validation_helper.store_latest(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
+            self.validation_helper.store_latest(backup_servers, self.buckets, self.number_of_backups_taken,
                                                 self.backup_validation_files_location)
             self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
                                                     self.backup_validation_files_location, merge=True)

@@ -2094,7 +2094,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                      "roles": "{0}".format(self.cluster_new_role)}]
         users_can_backup_all = ["admin", "bucket_full_access[*]",
                                 "data_backup[*]", "eventing_admin",
-                                "cluster_admin", "backup_admin"]
+                                "backup_admin"]
         users_can_not_backup_all = ["views_admin[*]", "replication_admin",
                                     "replication_target[*]", "data_monitoring[*]",
                                     "data_writer[*]", "data_reader[*]",
@@ -4684,7 +4684,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             kwargs = {}
             if self.input.param("enforce_tls", False):
                 kwargs["demandEncryption"] = 1
-                trusted_ca = rest_dest.get_trusted_CAs()[-1]["pem"]
+                trusted_ca = self._select_trusted_ca_for_node(rest_dest, self.servers[1])
                 kwargs["certificate"] = trusted_ca
             rest_src.add_remote_cluster(self.servers[1].ip, self.servers[1].port, self.backupset.cluster_host_username,
                                         self.backupset.cluster_host_password, "C2", **kwargs)

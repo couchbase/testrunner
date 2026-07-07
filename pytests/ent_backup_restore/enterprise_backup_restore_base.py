@@ -557,6 +557,22 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
     def cluster_to_restore(self):
         return self.get_nodes_in_cluster(self.backupset.restore_cluster_host)
 
+    def _n1ql_node_first(self, servers):
+        """Order `servers` so a node running the n1ql service is first.
+
+        The TLS-safe data collector (collect_data_via_n1ql) queries servers[0];
+        GSI/FTS backup tests add kv/index-only nodes that can be first in the
+        cluster listing and have no query service, which made data validation
+        fail with "is the n1ql service reachable". Reuse the existing service
+        map lookup to put the n1ql node first, leaving the rest of the list
+        (which the cbtransfer collector still iterates) intact.
+        """
+        n1ql_node = self.get_nodes_from_services_map(service_type="n1ql", servers=servers)
+        if not n1ql_node:
+            return servers
+        return [s for s in servers if s.ip == n1ql_node.ip] + \
+               [s for s in servers if s.ip != n1ql_node.ip]
+
     def number_of_processors(self):
         remote_client = RemoteMachineShellConnection(self.input.clusters[1][0])
         info = remote_client.extract_remote_info().type.lower()
@@ -878,9 +894,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     self.store_vbucket_seqno()
                 else:
                     return
-            self.validation_helper.store_keys(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
+            backup_servers = self._n1ql_node_first(self.cluster_to_backup)
+            self.validation_helper.store_keys(backup_servers, self.buckets, self.number_of_backups_taken,
                                               self.backup_validation_files_location)
-            self.validation_helper.store_latest(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
+            self.validation_helper.store_latest(backup_servers, self.buckets, self.number_of_backups_taken,
                                                 self.backup_validation_files_location)
 
     def backup_restore(self):
@@ -1295,6 +1312,20 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 self.log.info("Remove expired items by checking them")
                 self._verify_all_buckets(self.backupset.restore_cluster_host)
 
+            # bk_dir is the on-disk archive path (objstore staging prefix when a
+            # provider is used, with raw-IPv6 chars escaped). Its definition used
+            # to sit at the top of this method feeding the log-grep commands; when
+            # those moved to _backup_log_path_glob the definition was removed, but
+            # this backups_on_disk listing still needs it, so define it here.
+            ipv6_raw_format = [":", "[", "]"]
+            ipv6_raw_ip = ":" in self.backupset.directory
+            bk_raw_ipv6_dir = self.backupset.directory
+            if ipv6_raw_ip:
+                for x in ipv6_raw_format:
+                    bk_raw_ipv6_dir = bk_raw_ipv6_dir.replace(x, "\\" + x)
+            bk_dir = f"{self.backupset.objstore_staging_directory + '/' if self.objstore_provider else ''}{self.backupset.directory}"
+            if ipv6_raw_ip:
+                bk_dir = bk_raw_ipv6_dir
             info = remote_client.extract_remote_info().type.lower()
             check_dir = bk_dir if info != "windows" else bk_dir.replace("C\\:", "/cygdrive/c")
             output = remote_client.list_files(f"{check_dir}/backup")
@@ -1533,10 +1564,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         conn.log_command_output(o, e)
         self.number_of_backups_taken += 1
         self.store_vbucket_seqno()
-        self.validation_helper.store_keys(self.cluster_to_backup, self.buckets,
+        backup_servers = self._n1ql_node_first(self.cluster_to_backup)
+        self.validation_helper.store_keys(backup_servers, self.buckets,
                                           self.number_of_backups_taken,
                                           self.backup_validation_files_location)
-        self.validation_helper.store_latest(self.cluster_to_backup, self.buckets,
+        self.validation_helper.store_latest(backup_servers, self.buckets,
                                             self.number_of_backups_taken,
                                             self.backup_validation_files_location)
         conn.disconnect()
@@ -1587,10 +1619,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         conn.log_command_output(o, e)
         self.number_of_backups_taken += 1
         self.store_vbucket_seqno()
-        self.validation_helper.store_keys(self.cluster_to_backup, self.buckets,
+        backup_servers = self._n1ql_node_first(self.cluster_to_backup)
+        self.validation_helper.store_keys(backup_servers, self.buckets,
                                           self.number_of_backups_taken,
                                           self.backup_validation_files_location)
-        self.validation_helper.store_latest(self.cluster_to_backup, self.buckets,
+        self.validation_helper.store_latest(backup_servers, self.buckets,
                                             self.number_of_backups_taken,
                                             self.backup_validation_files_location)
         conn.disconnect()
@@ -1641,10 +1674,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         conn.log_command_output(o, e)
         self.number_of_backups_taken += 1
         self.store_vbucket_seqno()
-        self.validation_helper.store_keys(self.cluster_to_backup, self.buckets,
+        backup_servers = self._n1ql_node_first(self.cluster_to_backup)
+        self.validation_helper.store_keys(backup_servers, self.buckets,
                                           self.number_of_backups_taken,
                                           self.backup_validation_files_location)
-        self.validation_helper.store_latest(self.cluster_to_backup, self.buckets,
+        self.validation_helper.store_latest(backup_servers, self.buckets,
                                             self.number_of_backups_taken,
                                             self.backup_validation_files_location)
         conn.disconnect()
@@ -3673,6 +3707,30 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                            "found: {0}".format(tokens))
         return True, ("No targeted plaintext recoverable at rest" if must_be_absent
                       else "Tokens present as expected (unencrypted path)")
+
+    def _select_trusted_ca_for_node(self, rest_dest, node):
+        """
+        Picks the trusted CA to pin for a remote-cluster/XDCR reference to `node`.
+
+        get_trusted_CAs() returns every CA the destination cluster has ever
+        trusted, including the original auto-generated default cluster CA that
+        predates any custom certs - it does not indicate which one actually
+        signed the node's current certificate. Under the multi-CA x509 test
+        setup (setup_multi_root_certs), that default CA typically ends up last
+        in the list, so blindly taking [-1] pins the wrong CA and the TLS
+        handshake fails with "certificate signed by unknown authority".
+        node_ca_map records which intermediate CA (named "<intermediate>_<root>",
+        e.g. "i1_r1") actually signed each node, so use that to find the
+        matching root CA by subject CN instead of guessing by position.
+        """
+        trusted_cas = rest_dest.get_trusted_CAs()
+        node_ca_map = getattr(getattr(self, "x509", None), "node_ca_map", None)
+        signed_by = node_ca_map.get(str(node.ip), {}).get("signed_by") if node_ca_map else None
+        root_ca_name = signed_by.split("_", 1)[-1] if signed_by else None
+        for ca in trusted_cas:
+            if root_ca_name and ca.get("subject", "").split("CN=")[-1] == root_ca_name:
+                return ca["pem"]
+        return trusted_cas[-1]["pem"]
 
     def setup_multi_root_certs(self):
         # Generate and upload the certs

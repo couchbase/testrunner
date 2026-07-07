@@ -58,11 +58,20 @@ class cbstatsTests(CliBaseTest):
             keys_map = {}
             for i in range(1, self.num_items + 1):
                 vb_id = i - len(bucket_info.vbuckets) * int(i // len(bucket_info.vbuckets))
+                key = "test_docs-%s" % i
                 try:
-                    mc_conn.set("test_docs-%s" % i, 0, 0, json.dumps('{ "test" : "test"}').encode("ascii", "ignore"), vb_id)
+                    mc_conn.set(key, 0, 0, json.dumps('{ "test" : "test"}').encode("ascii", "ignore"), vb_id)
+                    # mc_conn is connected to self.master only. On a multi-node
+                    # cluster it cannot store a key whose vbucket is active on
+                    # another node: the set does not raise, but the key isn't
+                    # actually persisted here, and "cbstats key" (also run against
+                    # master) then reports KEY_ENOENT for it -> a topology-dependent
+                    # flake. Confirm the key is genuinely retrievable on this node's
+                    # vbucket and only then track it for verification.
+                    mc_conn.get(key, vbucket=vb_id)
                 except Exception:
                     continue
-                keys_map["test_docs-%s" % i] = vb_id
+                keys_map[key] = vb_id
             count = 0
             for key, vb_id in keys_map.items():
                 output, error = self.shell.execute_cbstats(self.buckets[0], self.command, key,

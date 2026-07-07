@@ -43,7 +43,11 @@ class BackupRestoreValidationBase:
                                                                       deletedItems=False,
                                                                       updatedItems=False)
         if not is_same:
-            msg = "{0} is not true".format(summary)
+            # Include the detailed per-vbucket/per-field diff (result), not just the
+            # high-level summary, so failures like "Updated Items: Expected False,
+            # Actual True" show which vbucket and which stat (abs_high_seqno,
+            # purge_seqno, or an unmapped field) actually differ.
+            msg = "{0} is not true\nDetails:{1}".format(summary, result)
             raise AssertionError(msg)
         return True, "End Verification for vbucket sequence numbers comparison "
 
