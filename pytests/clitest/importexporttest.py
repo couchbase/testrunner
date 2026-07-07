@@ -1014,7 +1014,7 @@ class ImportExportTests(CliBaseTest):
                     if self.dgm_run:
                         res_status = stats_all_buckets[bucket.name].get_stats([self.master],
                                      bucket, '', 'vb_active_perc_mem_resident')[self.master]
-                        while int(res_status) > self.active_resident_threshold:
+                        while float(res_status) > self.active_resident_threshold:
                             self.sleep(5)
                             res_status = stats_all_buckets[bucket.name].get_stats([self.master],
                                          bucket, '',
