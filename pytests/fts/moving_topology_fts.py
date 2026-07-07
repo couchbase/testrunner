@@ -1745,7 +1745,13 @@ class MovingTopFTS(FTSBaseTest):
         except Exception as e:
             self.log.info("Expected exception : %s" % e)
         NodeHelper.start_couchbase(node)
-        NodeHelper.wait_warmup_completed([node])
+        # node is an fts node (get_random_fts_node); in a cluster where the fts
+        # node has no kv service, wait_warmup_completed's KV bucket-warmup stat
+        # is "Not Supported", so wait for the couchbase service to come back.
+        if "kv" in node.services:
+            NodeHelper.wait_warmup_completed([node])
+        else:
+            NodeHelper.wait_service_started(node)
         self.run_query_and_compare(index)
         frest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
         err = self.validate_partition_distribution(frest)
@@ -1795,7 +1801,17 @@ class MovingTopFTS(FTSBaseTest):
         #TESTED
         index = self.create_index_generate_queries()
         node = self._cb_cluster.get_random_fts_node()
-        NodeHelper.kill_erlang(node)
+        if "kv" in node.services:
+            NodeHelper.kill_erlang(node)
+        else:
+            # fts-only node: kill_erlang waits for KV bucket warmup, which is
+            # "Not Supported" on a non-kv node. Kill erlang inline and wait for
+            # the couchbase service to restart instead.
+            shell = RemoteMachineShellConnection(node)
+            shell.kill_erlang(shell.extract_remote_info())
+            shell.start_couchbase()
+            shell.disconnect()
+            NodeHelper.wait_service_started(node)
         self.is_index_partitioned_balanced(index)
         self.run_query_and_compare(index)
         frest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
