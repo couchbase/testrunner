@@ -1221,7 +1221,15 @@ class BackupServiceTest(BackupServiceBase):
 
         if remove_repository:
             # Check the repository does not exist on the filesystem
-            self.assertTrue(f"Backup Repository `{repository.repo}` not found" in output[0])
+            # In cbbackupmgr 8.1.0 the friendly "Backup Repository `X` not found" is
+            # replaced by a raw filesystem error surfaced while opening the archive.
+            missing_repo_error = "Error getting archive information: failed to open archive: " \
+                                 "failed to mount archive: failed to list repo contents: " \
+                                 "open {0}/{1}: no such file or directory" \
+                                 .format(self.backupset.directory, repository.repo)
+            self.assertTrue(
+                f"Backup Repository `{repository.repo}` not found" in output[0] or
+                missing_repo_error in output[0])
         else:
             # Check the repositry exists on the filesystem
             self.assertEqual(json.loads(output[0])['name'], repository.repo)

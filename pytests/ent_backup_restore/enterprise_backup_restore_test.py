@@ -1541,7 +1541,9 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.log.info("Start to delete bucket")
         BucketOperationHelper.delete_all_buckets_or_assert([self.master], self)
         output, _ = self.backup_restore()
-        if output and "Error restoring cluster" not in output[0]:
+        # cbbackupmgr 8.1+ prints a leading blank line and a Transfer status table
+        # before the error line, so the error is no longer always output[0].
+        if not self._check_output("Error restoring cluster", output):
             self.fail("Restore to non exist bucket should fail")
 
     def test_merge_backup_from_old_and_new_bucket(self):
@@ -1902,13 +1904,18 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             if subcommand == "":
                 content = ['cbbackupmgr [<command>] [<args>]', '',
                            '  backup    Backup a Couchbase cluster']
+                self.validate_help_content(output[:3], content)
             elif subcommand == "help":
-                content = ['cbbackupmgr help [<command>] [<args>]', '',
-                           '  backup                Backup up data in your Couchbase cluster']
+                self.validate_help_content(output[:2], ['cbbackupmgr help [<command>] [<args>]', ''])
+                backup_line = " ".join(output[2].split())
+                self.assertIn(backup_line,
+                              ["backup Backup up data in your Couchbase cluster",
+                               "backup Backup data in your Couchbase cluster"],
+                              "Expected error message not thrown")
             else:
                 content = ['cbbackupmgr {0} [<args>]'.format(subcommand), '',
                            'Required Flags:']
-            self.validate_help_content(output[:3], content)
+                self.validate_help_content(output[:3], content)
         elif display_option == "--help":
             content = None
             if subcommand == "":
@@ -3797,7 +3804,15 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         rest.delete_bucket()
         bucket_name = "default"
         rest_helper = RestHelper(rest)
-        rest.create_bucket(bucket=bucket_name, ramQuotaMB=512)
+        # Recreate with the same bucket type/storage backend as the original bucket -
+        # e.g. defaulting to a persistent "membase" bucket here when the suite is
+        # running with bucket_type=ephemeral leaves the recreated bucket's vbucket
+        # stats (seqnos, etc) incomparable with the pre-delete backup, since ephemeral
+        # and persistent buckets report cbstats vbucket-seqno differently.
+        rest.create_bucket(bucket=bucket_name, ramQuotaMB=512,
+                           bucketType=self.bucket_type,
+                           evictionPolicy=self.eviction_policy,
+                           storageBackend=self.bucket_storage)
         bucket_ready = rest_helper.vbucket_map_ready(bucket_name)
         if not bucket_ready:
             self.fail("Bucket {0} is not created after 120 seconds.".format(bucket_name))
@@ -3837,8 +3852,10 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         remote_client.disconnect()
-        self.assertEqual(output[0], "Backup repository creation failed: Backup Repository `backup` exists",
-                         "Expected error message not thrown")
+        self.assertIn(output[0],
+                      ["Backup repository creation failed: Backup Repository `backup` exists",
+                       "Backup repository creation failed: file exists"],
+                      "Expected error message not thrown")
 
     def test_objstore_negative_args(self):
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
@@ -3973,7 +3990,9 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertEqual(output[0], "Expected argument for option: --repo", "Expected error message not thrown")
+        self.assertIn(output[0],
+                      ["Expected argument for option: --repo", "Expected flag: http://localhost:8091"],
+                      "Expected error message not thrown")
         cmd = cmd_to_test + " --archive {0} --repo {1} -u Administrator -p password".format(self.backupset.directory,
                                                                                             self.backupset.name)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
@@ -3986,7 +4005,11 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertEqual(output[0], "Expected argument for option: -c", "Expected error message not thrown")
+        # In cbbackupmgr 8.1.0 '-c' consumes the trailing '-u' as its literal value,
+        # then chokes on 'Administrator' as an unexpected positional argument.
+        self.assertIn(output[0],
+                      ["Expected argument for option: -c", "Expected flag: Administrator"],
+                      "Expected error message not thrown")
         cmd = cmd_to_test + " --archive {0} --repo {1} -c http://{2}:{3}".format(self.backupset.directory,
                                                                                  self.backupset.name,
                                                                                  self.backupset.cluster_host.ip,
@@ -4030,9 +4053,15 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             cmd_test = cmd_to_test[1:-1]
         if cmd_test == "restore":
             part_message = 'restoring'
-        self.assertTrue("Error {0} cluster: Backup Repository `abc` not found"\
-                        .format(part_message) in output[-1],
-                        "Expected error message not thrown. Actual output %s " % output[-1])
+        # In cbbackupmgr 8.1.0 the friendly "Backup Repository `abc` not found" is
+        # replaced by a raw filesystem error surfaced while opening the archive.
+        missing_repo_error = "Error {0} cluster: failed to open archive: failed to mount archive: " \
+                             "failed to list repo contents: open {1}/abc: no such file or directory" \
+                             .format(part_message, self.backupset.directory)
+        self.assertTrue(
+            "Error {0} cluster: Backup Repository `abc` not found".format(part_message) in output[-1] or
+            missing_repo_error in output[-1],
+            "Expected error message not thrown. Actual output %s " % output[-1])
         cmd = cmd_to_test + " --archive {0} --repo {1} --cluster abc --username {2} \
                               --password {3}".format(self.backupset.directory,
                                                      self.backupset.name,
@@ -4110,8 +4139,10 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertEqual(output[0], "Flag required, but not specified: -r/--repo",
-                         "Expected error message not thrown")
+        self.assertIn(output[0],
+                      ["Flag required, but not specified: -r/--repo",
+                       "Flag required, but not specified: --backup"],
+                      "Expected error message not thrown")
         cmd = "compact --archive {0} --repo".format(self.backupset.directory)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
@@ -4143,8 +4174,15 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertTrue(self._check_output("Backup Repository `abc` not found", output),
-                        "Expected error message not thrown")
+        # In cbbackupmgr 8.1.0 'compact' no longer surfaces the friendly
+        # "Backup Repository `abc` not found" message; it now fails deeper,
+        # while opening the archive, with a raw filesystem error.
+        missing_repo_error = "failed to list repo contents: open {0}/abc: no such file or directory".format(
+            self.backupset.directory)
+        self.assertTrue(
+            self._check_output("Backup Repository `abc` not found", output) or
+            self._check_output(missing_repo_error, output),
+            "Expected error message not thrown")
         cmd = "compact --archive {0} --repo {1} --backup abc".format(self.backupset.directory,
                                                                      self.backupset.name)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
@@ -4189,7 +4227,14 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/cbbackupmgr {1} -r".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertEqual(output[0], "Expected argument for option: --repo", "Expected error message not thrown")
+        # In cbbackupmgr 8.1.0 '--repo' consumes the trailing '-r' as its literal
+        # value (repo name "-r") instead of erroring on the missing argument, so
+        # parsing proceeds further and fails on the missing --start/--end instead.
+        self.assertTrue(
+            output and output[0] in ("Expected argument for option: --repo",
+                                     "Error merging data: either --start and --end are required or --date-range"),
+            "Expected error message not thrown, got: {0}".format(output[0] if output else "<no output>")
+        )
         cmd = "merge --archive {0} --repo {1}".format(self.backupset.directory, self.backupset.name)
         command = "{0}/cbbackupmgr {1} --start start --end end".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
@@ -4224,15 +4269,20 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertTrue("Error merging data: archive '/root/xyz' does not exist" in output[-1],
+        self.assertTrue(self._check_output("Error merging data: archive '/root/xyz' does not exist", output),
                         "Expected error message not thrown")
         cmd = "merge --archive {0} --repo abc --start {1} --end {2}".format(self.backupset.directory,
                                                                             self.backups[0], self.backups[1])
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertTrue("Error merging data: Backup Repository `abc` not found" in output[-1],
-                        "Expected error message not thrown")
+        missing_repo_error = "Error merging data: failed to open archive: failed to mount archive: " \
+                             "failed to list repo contents: open {0}/abc: no such file or directory" \
+                             .format(self.backupset.directory)
+        self.assertTrue(
+            "Error merging data: Backup Repository `abc` not found" in output[-1] or
+            missing_repo_error in output[-1],
+            "Expected error message not thrown")
         cmd = "merge --archive {0} --repo {1} --start abc --end {2}".format(self.backupset.directory,
                                                                             self.backupset.name, self.backups[1])
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
@@ -4270,7 +4320,9 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertEqual(output[0], "Expected argument for option: --archive", "Expected error message not thrown")
+        self.assertIn(output[0],
+                      ["Expected argument for option: --archive", "Expected flag: http://localhost:8091"],
+                      "Expected error message not thrown")
         cmd = "remove --archive {0}".format(self.backupset.directory)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
@@ -4285,14 +4337,20 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertTrue("Removing backup repository failed: archive '{0}xyz' does not exist".format(self.root_path) in output[-1],
+        self.assertTrue(self._check_output(
+                        "Removing backup repository failed: archive '{0}xyz' does not exist".format(self.root_path),
+                        output),
                         "Expected error message not thrown")
         cmd = "remove --archive {0} --repo xyz".format(self.backupset.directory)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         remote_client.disconnect()
-        self.assertIn("Backup Repository `xyz` not found", output[-1])
+        missing_repo_error = "Removing backup repository failed: failed to open archive: failed to mount archive: " \
+                             "failed to list repo contents: open {0}/xyz: no such file or directory" \
+                             .format(self.backupset.directory)
+        self.assertTrue(
+            "Backup Repository `xyz` not found" in output[-1] or missing_repo_error in output[-1])
 
     def test_backup_restore_with_views(self):
         """
@@ -4865,7 +4923,12 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         conn.execute_command("mv /tmp/entbackup/backup /tmp/entbackup/backup2")
         conn.disconnect()
         output, error = self.backup_restore()
-        self.assertTrue("Backup Repository `backup` not found" in output[-1], "Expected error message not thrown")
+        missing_repo_error = "Error restoring cluster: failed to open archive: failed to mount archive: " \
+                             "failed to list repo contents: open {0}/backup: no such file or directory" \
+                             .format(self.backupset.directory)
+        self.assertTrue(
+            "Backup Repository `backup` not found" in output[-1] or missing_repo_error in output[-1],
+            "Expected error message not thrown")
         self.log.info("Expected error message thrown")
 
     def test_backup_logs_for_keywords(self):
