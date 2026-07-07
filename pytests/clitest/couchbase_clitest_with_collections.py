@@ -684,7 +684,6 @@ class XdcrCLITest(CliBaseTest):
         to_bucket = self.input.param("xdcr-to-bucket", None)
         from_bucket = self.input.param("xdcr-from-bucket", None)
         error_expected = self.input.param("error-expected", False)
-        replication_mode = self.input.param("replication_mode", None)
         pause_resume = self.input.param("pause-resume", None)
         checkpoint_interval = self.input.param("checkpoint_interval", None)
         source_nozzles = self.input.param("source_nozzles", None)
@@ -701,7 +700,6 @@ class XdcrCLITest(CliBaseTest):
         options += (" --xdcr-cluster-name=\'{0}\'".format(xdcr_cluster_name), "")[xdcr_cluster_name is None]
         options += (" --xdcr-from-bucket=\'{0}\'".format(from_bucket), "")[from_bucket is None]
         options += (" --xdcr-to-bucket=\'{0}\'".format(to_bucket), "")[to_bucket is None]
-        options += (" --xdcr-replication-mode=\'{0}\'".format(replication_mode), "")[replication_mode is None]
         options += (" --source-nozzle-per-node=\'{0}\'".format(source_nozzles), "")[source_nozzles is None]
         options += (" --target-nozzle-per-node=\'{0}\'".format(target_nozzles), "")[target_nozzles is None]
         options += (" --filter-expression=\'{0}\'".format(filter_expression), "")[filter_expression is None]
