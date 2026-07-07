@@ -36,8 +36,8 @@ for node in query_nodes:
 ## File types
 | File | Created when | Validated by |
 |------|-------------|-------------|
-| `rlstream.*` | `completed-stream-size > 0` and queries run | `_assert_rlstream_files_encrypted` (immediate) |
-| `local_request_log.*` | rlstream idle timeout or 100 MiB | `_assert_local_request_log_files_encrypted` (polls 120 s) |
+| `rlstream.*` | On-disk active request-log stream files; created when `completed-stream-size > 0` and queries run | `_assert_rlstream_files_encrypted` (immediate) |
+| `local_request_log.*` | A 30 s sweeper archives an rlstream file once it is ≥ 256 KiB AND idle ≥ 10 min | `_assert_local_request_log_files_encrypted` (polls 120 s) |
 | `query_ffdc_MAN_*` | `trigger_query_ffdc()` API call | `_trigger_ffdc_and_verify` (polls 180 s) |
 
 ## Key helpers
@@ -50,7 +50,7 @@ for node in query_nodes:
 | `_wait_for_new_query_key_ids(baseline, timeout, label)` | Polls until any node has new key_id; returns full current dict |
 | `_set_query_completed_settings(stream_size, threshold)` | Applies to all nodes, sleeps 10 s, verifies |
 | `_run_select_scans(queries, nodes)` | Broadcasts every query to every node (not round-robin) |
-| `_generate_concurrent_load_until_archive(queries, nodes)` | 20 × 5 batches; breaks when archives appear |
+| `_generate_load_and_archive_request_logs(queries, nodes)` | Fill (sustained load) → raise completed-threshold to idle the stream → poll ≤13 min for `local_request_log.*` archival (needs ≥256 KiB + ≥10 min idle) |
 | `_setup_bucket_indexes_scans(prefix)` | Full setup: settings → bucket → data → indexes → wait → scans |
 
 ## Query admin settings

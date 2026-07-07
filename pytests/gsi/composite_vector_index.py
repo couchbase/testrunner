@@ -2562,22 +2562,25 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             keyspace = namespace.split(":")[-1]
             bucket, scope, collection = keyspace.split(".")
 
+            # Keys are 1-based (baseline restore holds doc_1..doc_<num_of_docs>), so the
+            # incremental create must start at num_of_docs + 1; otherwise it re-writes the
+            # last baseline doc (doc_<num_of_docs>) and yields one fewer new doc than expected.
             if self.isSparse:
                 self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
                                                 percent_update=0, percent_delete=0, workers=16, scope=scope,
                                                 collection=collection, json_template=self.json_template, timeout=2000,
                                                 op_type="create",
-                                                create_start=self.num_of_docs_per_collection,
+                                                create_start=self.num_of_docs_per_collection + 1,
                                                 create_end=(self.num_of_docs_per_collection +
-                                                            self.num_of_docs_per_collection // 2))
+                                                            self.num_of_docs_per_collection // 2 + 1))
             else:
                 self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
                                                 percent_update=0, percent_delete=0, workers=16, scope=scope,
                                                 collection=collection, json_template=self.json_template, timeout=2000,
                                                 op_type="create", dim=self.dimension, model=self.data_model,
-                                                create_start=self.num_of_docs_per_collection,
+                                                create_start=self.num_of_docs_per_collection + 1,
                                                 create_end=(self.num_of_docs_per_collection +
-                                                            self.num_of_docs_per_collection // 2))
+                                                            self.num_of_docs_per_collection // 2 + 1))
             task = self.cluster.async_load_gen_docs(data_nodes[0], bucket=bucket,
                                                     generator=self.gen_create,
                                                     timeout_secs=2000, use_magma_loader=True)
@@ -2832,6 +2835,14 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         self.update_master_node()
         self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        # monitorRebalance returning True only means the rebalance finished - on full
+        # recovery of an index node its index instances are rebuilt from scratch and the
+        # build can still be in progress afterwards. Wait for the recovered instances to
+        # come online and drain their pending mutations before asserting item counts,
+        # otherwise a still-building instance reports items_count=0.
+        self.wait_until_indexes_online()
+        self.validate_no_pending_mutations()
+        self.sleep(30)
         partial_index_list = self.get_partial_indexes_name_list()
         _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
         index_item_count_map = {}
@@ -4381,7 +4392,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                         for index, stats in indexes.items()
                         for key, val in stats.items() if 'num_docs_pending' in key]
         self.log.info(f"Docs Pending after indexer kill: {docs_pending}")
-        self.wait_for_mutation_processing()
+        self.wait_for_mutation_processing(index_nodes)
         for namespace in self.namespaces:
             if self.isSparse:
                 count_query = f"select count(size) from {namespace} where size > 0;"
@@ -7228,11 +7239,28 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         all_keys = result.get('results', [])
         num_docs = len(all_keys)
 
-        self.log.info(f"Executing {scenario} scenario with {num_docs} docs, batch_size={batch_size}")
+        # Some scenarios deliberately produce sparse vectors that the GSI IVF
+        # indexer treats as invalid (duplicate indices, non-ascending indices).
+        # Applying them to *every* document leaves 0 qualifying vectors to train
+        # on, so index creation fails ("Number of qualifying or valid vectors 0
+        # are less than the number of N centroids") and the indexes land in Error
+        # state. Keep a valid-vector population so the index can still train while
+        # the invalid vectors exercise the duplicate/unsorted handling path.
+        invalidating_scenarios = {"duplicate_indices_sparse", "unsorted_indices_sparse"}
+        keys_to_mutate = all_keys
+        if scenario in invalidating_scenarios:
+            invalid_percent = self.input.param("mutation_invalid_percent", 50)
+            num_to_mutate = int(num_docs * invalid_percent / 100)
+            keys_to_mutate = all_keys[:num_to_mutate]
+            self.log.info(f"{scenario}: mutating {len(keys_to_mutate)}/{num_docs} docs to invalid "
+                          f"sparse vectors, leaving {num_docs - len(keys_to_mutate)} valid for index training")
 
-        for batch_start in range(0, num_docs, batch_size):
-            batch_end = min(batch_start + batch_size, num_docs)
-            batch_keys = all_keys[batch_start:batch_end]
+        num_mutate = len(keys_to_mutate)
+        self.log.info(f"Executing {scenario} scenario with {num_mutate}/{num_docs} docs, batch_size={batch_size}")
+
+        for batch_start in range(0, num_mutate, batch_size):
+            batch_end = min(batch_start + batch_size, num_mutate)
+            batch_keys = keys_to_mutate[batch_start:batch_end]
 
             # Fetch each doc via SDK and apply mutations
             updated_docs = {}
@@ -7267,7 +7295,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 sdk_client.upsert_multi(updated_docs, scope=scope, collection=collection)
             self.log.info(f"Updated batch {batch_start}-{batch_end}, docs: {len(updated_docs)}")
 
-        self.log.info(f"Successfully updated {num_docs} docs with scenario: {scenario}")
+        self.log.info(f"Successfully updated {num_mutate} docs with scenario: {scenario}")
 
     def _apply_sparse_mutation(self, doc, scenario, sparse_vec_size):
         """

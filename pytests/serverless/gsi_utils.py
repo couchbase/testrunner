@@ -2454,11 +2454,16 @@ class GSIUtils(object):
     # - Sparse vector indexes (BHIVE and Composite) - DOT product only, IVF1024 no quantization
 
     def generate_msmarco_embedding_product_scalar_index_definition(self, index_name_prefix=None,
-                                                                    skip_primary=False, limit=10):
+                                                                    skip_primary=False, limit=10,
+                                                                    scale_down_indexes_count=False):
         """
         Generate scalar index definitions for MSMARCOSiftEmbeddingProduct dataset.
         ~3 index definitions following the shoe_scalar pattern.
         Scalar fields: size, color, brand, country, category, type, review
+
+        When scale_down_indexes_count is True, only one index of each type is
+        returned (primary + a single scalar secondary) so the overall index
+        count can be reduced while still exercising every type.
         """
         definitions_list = []
         if not index_name_prefix:
@@ -2479,19 +2484,20 @@ class GSIUtils(object):
                             index_fields=['size'],
                             query_template=RANGE_SCAN_TEMPLATE.format("meta().id", "size = 5")))
 
-        # Composite scalar fields - size, color, brand
-        definitions_list.append(
-            QueryDefinition(index_name=index_name_prefix + 'size_color_brand',
-                            index_fields=['size', 'color', 'brand'],
-                            query_template=RANGE_SCAN_TEMPLATE.format("brand, color",
-                                                                      "size = 5 AND color = 'Green'")))
+        if not scale_down_indexes_count:
+            # Composite scalar fields - size, color, brand
+            definitions_list.append(
+                QueryDefinition(index_name=index_name_prefix + 'size_color_brand',
+                                index_fields=['size', 'color', 'brand'],
+                                query_template=RANGE_SCAN_TEMPLATE.format("brand, color",
+                                                                          "size = 5 AND color = 'Green'")))
 
-        # Composite scalar fields - country, type, review
-        definitions_list.append(
-            QueryDefinition(index_name=index_name_prefix + 'country_type_review',
-                            index_fields=['country', 'type', 'review'],
-                            query_template=RANGE_SCAN_TEMPLATE.format("country, type",
-                                                                      "country = 'USA' AND review >= 1")))
+            # Composite scalar fields - country, type, review
+            definitions_list.append(
+                QueryDefinition(index_name=index_name_prefix + 'country_type_review',
+                                index_fields=['country', 'type', 'review'],
+                                query_template=RANGE_SCAN_TEMPLATE.format("country, type",
+                                                                          "country = 'USA' AND review >= 1")))
 
         return definitions_list
 
@@ -2500,7 +2506,8 @@ class GSIUtils(object):
                                                                          skip_primary=False, limit=10,
                                                                          quantization_algo_description_vector=None,
                                                                          persist_full_vector=True,
-                                                                         skip_extra_indexes=True):
+                                                                         skip_extra_indexes=True,
+                                                                         scale_down_indexes_count=False):
         """
         Generate BHIVE dense vector index definitions for MSMARCOSiftEmbeddingProduct dataset.
         ~3 index definitions following the shoe_vector_bhive pattern.
@@ -2531,20 +2538,21 @@ class GSIUtils(object):
                             train_list=train_list, limit=limit,
                             query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(f"embedding, {query_vec}", query_vec)))
 
-        # Single vector field with INCLUDE clause for scalar filtering
-        definitions_list.append(
-            QueryDefinition(index_name=index_name_prefix + 'vector_with_include',
-                            index_fields=['embedding VECTOR'],
-                            dimension=128, description=f"IVF,{quantization_algo_description_vector}",
-                            similarity=similarity, persist_full_vector=persist_full_vector,
-                            scan_nprobes=scan_nprobes, train_list=train_list, limit=limit,
-                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
-                                f"meta().id, embedding, {query_vec}",
-                                "review >= 1",
-                                query_vec),
-                            include_fields=['review']))
+        if not scale_down_indexes_count:
+            # Single vector field with INCLUDE clause for scalar filtering
+            definitions_list.append(
+                QueryDefinition(index_name=index_name_prefix + 'vector_with_include',
+                                index_fields=['embedding VECTOR'],
+                                dimension=128, description=f"IVF,{quantization_algo_description_vector}",
+                                similarity=similarity, persist_full_vector=persist_full_vector,
+                                scan_nprobes=scan_nprobes, train_list=train_list, limit=limit,
+                                query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
+                                    f"meta().id, embedding, {query_vec}",
+                                    "review >= 1",
+                                    query_vec),
+                                include_fields=['review']))
 
-        if not skip_extra_indexes:
+        if not skip_extra_indexes and not scale_down_indexes_count:
             # Vector with multiple scalar INCLUDE fields
             definitions_list.append(
                 QueryDefinition(index_name=index_name_prefix + 'vector_multi_include',
@@ -2564,7 +2572,8 @@ class GSIUtils(object):
                                                                                similarity="L2", train_list=None,
                                                                                scan_nprobes=1, skip_primary=False,
                                                                                limit=10,
-                                                                               quantization_algo_description_vector=None):
+                                                                               quantization_algo_description_vector=None,
+                                                                               scale_down_indexes_count=False):
         """
         Generate composite dense vector index definitions for MSMARCOSiftEmbeddingProduct dataset.
         ~3 index definitions following the shoe_vector_composite pattern.
@@ -2598,32 +2607,33 @@ class GSIUtils(object):
                                 "size = 5",
                                 query_vec)))
 
-        # Composite: vector in the middle with multiple scalars
-        definitions_list.append(
-            QueryDefinition(index_name=index_name_prefix + 'multi_scalar_middle_vec',
-                            index_fields=['brand', 'embedding VECTOR', 'color'],
-                            dimension=128, description=f"IVF,{quantization_algo_description_vector}",
-                            similarity=similarity,
-                            scan_nprobes=scan_nprobes,
-                            train_list=train_list, limit=limit,
-                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
-                                f"meta().id, embedding, {query_vec}",
-                                "brand = 'Nike' AND color = 'Green'",
-                                query_vec)))
+        if not scale_down_indexes_count:
+            # Composite: vector in the middle with multiple scalars
+            definitions_list.append(
+                QueryDefinition(index_name=index_name_prefix + 'multi_scalar_middle_vec',
+                                index_fields=['brand', 'embedding VECTOR', 'color'],
+                                dimension=128, description=f"IVF,{quantization_algo_description_vector}",
+                                similarity=similarity,
+                                scan_nprobes=scan_nprobes,
+                                train_list=train_list, limit=limit,
+                                query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
+                                    f"meta().id, embedding, {query_vec}",
+                                    "brand = 'Nike' AND color = 'Green'",
+                                    query_vec)))
 
-        # Composite: multiple scalars leading, partitioned by scalar
-        definitions_list.append(
-            QueryDefinition(index_name=index_name_prefix + 'multi_scalar_partitioned',
-                            index_fields=['type', 'size', 'embedding VECTOR'],
-                            dimension=128, description=f"IVF,{quantization_algo_description_vector}",
-                            similarity=similarity,
-                            scan_nprobes=scan_nprobes,
-                            train_list=train_list, limit=limit,
-                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
-                                f"meta().id, embedding, {query_vec}, type",
-                                "size > 4 AND size < 6 AND country = 'USA'",
-                                query_vec),
-                            partition_by_fields=['category']))
+            # Composite: multiple scalars leading, partitioned by scalar
+            definitions_list.append(
+                QueryDefinition(index_name=index_name_prefix + 'multi_scalar_partitioned',
+                                index_fields=['type', 'size', 'embedding VECTOR'],
+                                dimension=128, description=f"IVF,{quantization_algo_description_vector}",
+                                similarity=similarity,
+                                scan_nprobes=scan_nprobes,
+                                train_list=train_list, limit=limit,
+                                query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
+                                    f"meta().id, embedding, {query_vec}, type",
+                                    "size > 4 AND size < 6 AND country = 'USA'",
+                                    query_vec),
+                                partition_by_fields=['category']))
 
 
         return definitions_list
@@ -2631,7 +2641,8 @@ class GSIUtils(object):
     def generate_msmarco_embedding_product_sparse_vector_index_defintion_bhive(self, index_name_prefix=None,
                                                                                 train_list=None, scan_nprobes=1,
                                                                                 skip_primary=False, limit=10,
-                                                                                persist_full_vector=True, sparsejl_dim=4096):
+                                                                                persist_full_vector=True, sparsejl_dim=4096,
+                                                                                scale_down_indexes_count=False):
         """
         Generate BHIVE sparse vector index definitions for MSMARCOSiftEmbeddingProduct dataset.
         ~3 index definitions. Sparse uses DOT product only and IVF1024 (no quantization).
@@ -2671,38 +2682,40 @@ class GSIUtils(object):
                                 f"meta().id, {scan_sparse_vec}",
                                 scan_sparse_vec)))
 
-        # 2. Sparse vector with INCLUDE clause for scalar filtering on size
-        definitions_list.append(
-            QueryDefinition(index_name=index_name_prefix + 'sparse_with_include',
-                            index_fields=[f'{sparse_vecfield} SPARSE VECTOR'],
-                            description=description,
-                            scan_nprobes=scan_nprobes, limit=limit,
-                            expected_title=title, sparsejl_dim=sparsejl_dim,
-                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
-                                f"meta().id, size, {scan_sparse_vec}",
-                                "size = 5",
-                                scan_sparse_vec),
-                            include_fields=['size']))
+        if not scale_down_indexes_count:
+            # 2. Sparse vector with INCLUDE clause for scalar filtering on size
+            definitions_list.append(
+                QueryDefinition(index_name=index_name_prefix + 'sparse_with_include',
+                                index_fields=[f'{sparse_vecfield} SPARSE VECTOR'],
+                                description=description,
+                                scan_nprobes=scan_nprobes, limit=limit,
+                                expected_title=title, sparsejl_dim=sparsejl_dim,
+                                query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
+                                    f"meta().id, size, {scan_sparse_vec}",
+                                    "size = 5",
+                                    scan_sparse_vec),
+                                include_fields=['size']))
 
-        # 3. Sparse vector with INCLUDE for multiple scalars
-        definitions_list.append(
-            QueryDefinition(index_name=index_name_prefix + 'sparse_multi_include_bhive',
-                            index_fields=[f'{sparse_vecfield} SPARSE VECTOR'],
-                            description=description, train_list=train_list,
-                            scan_nprobes=scan_nprobes, limit=limit,
-                            expected_title=title, sparsejl_dim=sparsejl_dim,
-                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
-                                f"meta().id, size, color, brand, {scan_sparse_vec}",
-                                "size = 5 AND color = 'Green'",
-                                scan_sparse_vec),
-                            include_fields=['size', 'color', 'brand']))
+            # 3. Sparse vector with INCLUDE for multiple scalars
+            definitions_list.append(
+                QueryDefinition(index_name=index_name_prefix + 'sparse_multi_include_bhive',
+                                index_fields=[f'{sparse_vecfield} SPARSE VECTOR'],
+                                description=description, train_list=train_list,
+                                scan_nprobes=scan_nprobes, limit=limit,
+                                expected_title=title, sparsejl_dim=sparsejl_dim,
+                                query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
+                                    f"meta().id, size, color, brand, {scan_sparse_vec}",
+                                    "size = 5 AND color = 'Green'",
+                                    scan_sparse_vec),
+                                include_fields=['size', 'color', 'brand']))
 
         return definitions_list
 
     def generate_msmarco_embedding_product_sparse_vector_index_definitions_composite(self, index_name_prefix=None,
                                                                                       train_list=None, scan_nprobes=1,
                                                                                       skip_primary=False, limit=10,
-                                                                                      sparsejl_dim=4096):
+                                                                                      sparsejl_dim=4096,
+                                                                                      scale_down_indexes_count=False):
         """
         Generate composite sparse vector index definitions for MSMARCOSiftEmbeddingProduct dataset.
         ~3 index definitions. Sparse uses DOT product only and IVF1024 (no quantization).
@@ -2733,29 +2746,30 @@ class GSIUtils(object):
                                 f"meta().id, {scan_sparse_vec}",
                                 scan_sparse_vec)))
 
-        # 2. Scalar leading + sparse vector, filter on size
-        definitions_list.append(
-            QueryDefinition(index_name=index_name_prefix + 'scalar_leading_sparse',
-                            index_fields=['size', f'{sparse_vecfield} SPARSE VECTOR'],
-                            description=description,
-                            scan_nprobes=scan_nprobes, limit=limit,
-                            expected_title=title, sparsejl_dim=sparsejl_dim,
-                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
-                                f"meta().id, size, {scan_sparse_vec}",
-                                "size = 5",
-                                scan_sparse_vec)))
+        if not scale_down_indexes_count:
+            # 2. Scalar leading + sparse vector, filter on size
+            definitions_list.append(
+                QueryDefinition(index_name=index_name_prefix + 'scalar_leading_sparse',
+                                index_fields=['size', f'{sparse_vecfield} SPARSE VECTOR'],
+                                description=description,
+                                scan_nprobes=scan_nprobes, limit=limit,
+                                expected_title=title, sparsejl_dim=sparsejl_dim,
+                                query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
+                                    f"meta().id, size, {scan_sparse_vec}",
+                                    "size = 5",
+                                    scan_sparse_vec)))
 
-        # 3. Multiple scalars + sparse vector
-        definitions_list.append(
-            QueryDefinition(index_name=index_name_prefix + 'multi_scalar_sparse',
-                            index_fields=['size', 'color', 'brand', f'{sparse_vecfield} SPARSE VECTOR'],
-                            description=description, train_list=train_list,
-                            scan_nprobes=scan_nprobes, limit=limit,
-                            expected_title=title, sparsejl_dim=sparsejl_dim,
-                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
-                                f"meta().id, size, color, brand, {scan_sparse_vec}",
-                                "size = 5 AND color = 'Green'",
-                                scan_sparse_vec)))
+            # 3. Multiple scalars + sparse vector
+            definitions_list.append(
+                QueryDefinition(index_name=index_name_prefix + 'multi_scalar_sparse',
+                                index_fields=['size', 'color', 'brand', f'{sparse_vecfield} SPARSE VECTOR'],
+                                description=description, train_list=train_list,
+                                scan_nprobes=scan_nprobes, limit=limit,
+                                expected_title=title, sparsejl_dim=sparsejl_dim,
+                                query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
+                                    f"meta().id, size, color, brand, {scan_sparse_vec}",
+                                    "size = 5 AND color = 'Green'",
+                                    scan_sparse_vec)))
 
         return definitions_list
 
@@ -3186,7 +3200,8 @@ class GSIUtils(object):
                                   scan_nprobes=1, array_indexes=False, limit=None, quantization_algo_color_vector=None,
                                   quantization_algo_description_vector="SQ8", is_base64=False, bhive_index=False,
                                   xattr_indexes=False, description_dimension=384, persist_full_vector=True, scalar=False,
-                                  skip_extra_indexes=True, is_sparse=False, sparsejl_dim=4096):
+                                  skip_extra_indexes=True, is_sparse=False, sparsejl_dim=4096,
+                                  scale_down_indexes_count=False):
 
         if dataset == 'Person' or dataset == 'default':
             definition_list = self.generate_person_data_index_definition(index_name_prefix=prefix,
@@ -3300,7 +3315,8 @@ class GSIUtils(object):
                 definition_list = self.generate_msmarco_embedding_product_scalar_index_definition(
                     index_name_prefix=prefix,
                     skip_primary=skip_primary,
-                    limit=limit)
+                    limit=limit,
+                    scale_down_indexes_count=scale_down_indexes_count)
             elif is_sparse:
                 # Sparse vector indexes - DOT product only, IVF
                 if bhive_index:
@@ -3310,7 +3326,8 @@ class GSIUtils(object):
                         train_list=train_list,
                         scan_nprobes=scan_nprobes,
                         limit=limit,
-                        persist_full_vector=persist_full_vector, sparsejl_dim=sparsejl_dim)
+                        persist_full_vector=persist_full_vector, sparsejl_dim=sparsejl_dim,
+                        scale_down_indexes_count=scale_down_indexes_count)
                 else:
                     definition_list = self.generate_msmarco_embedding_product_sparse_vector_index_definitions_composite(
                         index_name_prefix=prefix,
@@ -3318,7 +3335,8 @@ class GSIUtils(object):
                         train_list=train_list,
                         scan_nprobes=scan_nprobes,
                         limit=limit,
-                        sparsejl_dim=sparsejl_dim)
+                        sparsejl_dim=sparsejl_dim,
+                        scale_down_indexes_count=scale_down_indexes_count)
             else:
                 # Dense vector indexes
                 if bhive_index:
@@ -3331,7 +3349,8 @@ class GSIUtils(object):
                         limit=limit,
                         quantization_algo_description_vector=quantization_algo_description_vector,
                         persist_full_vector=persist_full_vector,
-                        skip_extra_indexes=skip_extra_indexes)
+                        skip_extra_indexes=skip_extra_indexes,
+                        scale_down_indexes_count=scale_down_indexes_count)
                 else:
                     definition_list = self.generate_msmarco_embedding_product_vector_index_definitions_composite(
                         index_name_prefix=prefix,
@@ -3340,7 +3359,8 @@ class GSIUtils(object):
                         train_list=train_list,
                         scan_nprobes=scan_nprobes,
                         limit=limit,
-                        quantization_algo_description_vector=quantization_algo_description_vector)
+                        quantization_algo_description_vector=quantization_algo_description_vector,
+                        scale_down_indexes_count=scale_down_indexes_count)
 
         elif dataset == 'MsMARCO':
             # MsMARCO sparse vectors - used for mutations and additional load scenarios

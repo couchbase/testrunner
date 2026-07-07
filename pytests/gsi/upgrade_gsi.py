@@ -84,6 +84,10 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         self.test_name_prefix = self.input.param("test_name_prefix", "test")
         self.start_test_with_fbr = self.input.param("start_test_with_fbr", False)
         self.dcp_rebalance = self.input.param("dcp_rebalance", False)
+        # When enabled, index definition generators return a single index of
+        # each type per namespace, reducing the overall index count while still
+        # exercising every index type (scalar/composite/bhive/sparse/primary).
+        self.scale_down_indexes_count = self.input.param("scale_down_indexes_count", False)
         if self.enable_dgm:
             if self.gsi_type == 'memory_optimized':
                 self.skipTest("DGM can be achieved only for plasma")
@@ -576,16 +580,29 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
             self.fail(f'Node {node} is serving scans when its getting rebalanced in')
 
     def scans_post_upgrade_new(self, select_queries):
+        select_queries_post_upgrade = []
+        # Create only a small handful (1-3) of indexes total, using the same
+        # dataset/document type that was loaded (self.json_template). Person
+        # indexes on non-Person documents index fields that don't exist, so
+        # they cover nothing and their scans are meaningless.
+        remaining = random.randint(1, 3)
         for namespace in self.namespaces:
+            if remaining <= 0:
+                break
             prefix = f'idx_{"".join(random.choices(string.ascii_uppercase + string.digits, k=10))}' \
                      f'_batch_1_'
-            definition_list = self.gsi_util_obj.get_index_definition_list(dataset='Person', prefix=prefix)
+            definition_list = self.gsi_util_obj.get_index_definition_list(
+                dataset=self.json_template, prefix=prefix,
+                scale_down_indexes_count=self.scale_down_indexes_count)
+            definition_list = definition_list[:remaining]
+            remaining -= len(definition_list)
             create_list_post_upgrade = self.gsi_util_obj.get_create_index_list(definition_list=definition_list,
                                                                                namespace=namespace,
                                                                                defer_build_mix=False)
-            select_queries_post_upgrade = self.gsi_util_obj.get_select_queries(definition_list=definition_list,
-                                                                               namespace=namespace,
-                                                                               limit=100)
+            select_queries_post_upgrade.extend(
+                self.gsi_util_obj.get_select_queries(definition_list=definition_list,
+                                                     namespace=namespace,
+                                                     limit=100))
             self.log.info(f"Create index list: {create_list_post_upgrade}")
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_list_post_upgrade,
                                                  query_node=self.query_node)
@@ -1639,12 +1656,15 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 event = Event()
                 self.enable_redistribute_indexes()
                 select_queries_scalar = self.create_index_in_batches(replica_count=1, scalar=True, dataset=self.json_template,
-                                                                     bhive=False)
+                                                                     bhive=False,
+                                                                     scale_down_indexes_count=self.scale_down_indexes_count)
                 if self.initial_version >= "8.0":
                     select_queries_composite = self.create_index_in_batches(replica_count=1, scalar=False,
-                                                                            dataset=self.json_template, bhive=False)
+                                                                            dataset=self.json_template, bhive=False,
+                                                                            scale_down_indexes_count=self.scale_down_indexes_count)
                     select_queries_bhive = self.create_index_in_batches(replica_count=1, scalar=False,
-                                                                        dataset=self.json_template, bhive=True, skip_extra_indexes=False)
+                                                                        dataset=self.json_template, bhive=True, skip_extra_indexes=False,
+                                                                        scale_down_indexes_count=self.scale_down_indexes_count)
                 self.wait_until_indexes_online()
                 self.sleep(120)
 
@@ -1661,7 +1681,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 self.update_master_node()
                 if self.upgrade_to >= "8.0" and not self.dcp_rebalance:
                     self.enable_shard_based_rebalance(provisioned=None)
-                self.create_index_in_batches(num_batches=1, replica_count=1, dataset=self.json_template, scalar=True)
+                self.create_index_in_batches(num_batches=1, replica_count=1, dataset=self.json_template, scalar=True,
+                                             scale_down_indexes_count=self.scale_down_indexes_count)
                 self.wait_until_indexes_online()
                 if self.upgrade_to >= "8.0":
                     self.item_count_related_validations()
@@ -3011,7 +3032,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                                                                           limit=self.scan_limit,
                                                                           quantization_algo_color_vector=self.quantization_algo_color_vector,
                                                                           quantization_algo_description_vector=self.quantization_algo_description_vector,
-                                                                          bhive_index=bhive_index)
+                                                                          bhive_index=bhive_index,
+                                                                          scale_down_indexes_count=self.scale_down_indexes_count)
                 create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions,
                                                                          namespace=namespace, defer_build=True,
                                                                          num_replica=self.num_index_replica,
@@ -3131,7 +3153,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                     quantization_algo_color_vector=self.quantization_algo_color_vector,
                     quantization_algo_description_vector=self.quantization_algo_description_vector,
                     bhive_index=bhive_index,
-                    is_sparse=True
+                    is_sparse=True,
+                    scale_down_indexes_count=self.scale_down_indexes_count
                 )
                 create_queries = self.gsi_util_obj.get_create_index_list(
                     definition_list=definitions,
@@ -3772,9 +3795,14 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         else:
             self.validate_shard_affinity(node_in=node_in, provisioned=provisioned)
 
-    def create_index_in_batches(self, num_batches=2, replica_count=None, randomise_replica_count=True, scalar=False, dataset="Hotel", bhive=False, skip_extra_indexes=True):
+    def create_index_in_batches(self, num_batches=2, replica_count=None, randomise_replica_count=True, scalar=False, dataset="Hotel", bhive=False, skip_extra_indexes=True, scale_down_indexes_count=False):
         select_queries = set()
         query_node = self.get_nodes_from_services_map(service_type="n1ql")
+        if scale_down_indexes_count:
+            # Scaled-down runs keep a single index of each type per namespace,
+            # so a single batch is enough - additional batches would only add
+            # duplicate index types with different name prefixes.
+            num_batches = 1
         for _ in range(num_batches):
             if replica_count is None:
                 replica_count = random.randint(1, 2)
@@ -3793,7 +3821,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                                                                       limit=self.scan_limit,
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector,
                                                                       quantization_algo_description_vector=self.quantization_algo_description_vector,
-                                                                      bhive_index=bhive, scalar=scalar, skip_extra_indexes=skip_extra_indexes)
+                                                                      bhive_index=bhive, scalar=scalar, skip_extra_indexes=skip_extra_indexes,
+                                                                      scale_down_indexes_count=scale_down_indexes_count)
             for namespace in self.namespaces:
                 select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
                                                                            namespace=namespace))
