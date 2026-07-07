@@ -5191,7 +5191,7 @@ class RemoteMachineShellConnection(KeepRefs):
             command = command.replace("18091", "8091")
             command = command.replace("--no-ssl-verify", "")
         log.info("command to run: {0}".format(command))
-        output, error = self.execute_command(command, debug=False, use_channel=True)
+        output, error = self.execute_command(command, use_channel=True)
         return output, error
 
     def get_cluster_certificate_info(self, bin_path, cert_path,
