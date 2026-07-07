@@ -7,7 +7,7 @@ import time
 import os
 from couchbase_helper.cluster import Cluster
 
-sys.path = [".", "lib"] + sys.path
+sys.path = [".", "lib", os.path.dirname(os.path.abspath(__file__))] + sys.path
 import testconstants
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.on_prem_rest_client import RestHelper
