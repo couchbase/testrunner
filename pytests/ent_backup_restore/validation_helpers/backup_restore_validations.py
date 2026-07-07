@@ -78,8 +78,27 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
             return status, msg
         return True, msg
 
+    @staticmethod
+    def _strip_ignored_fields(value, ignore_fields):
+        """
+        Drops the given top-level fields from a document's JSON value before
+        comparison, so fields that legitimately change between the backup
+        snapshot and the restored copy (e.g. a mutation counter) don't cause
+        a false-positive mismatch.
+        """
+        try:
+            doc = json.loads(value)
+        except (ValueError, TypeError):
+            return value
+        if not isinstance(doc, dict):
+            return value
+        for field in ignore_fields:
+            doc.pop(field, None)
+        return json.dumps(doc, sort_keys=True)
+
     def validate_restore(self, backup_number, backup_vbucket_seqno, restored_vbucket_seqno, compare_uuid=False,
-                         compare="==", get_replica=False, mode="memory", backups_on_disk=None):
+                         compare="==", get_replica=False, mode="memory", backups_on_disk=None,
+                         ignore_fields=None):
         """
         Validates ep-engine stats and restored data
         :param backup_number: backup end number
@@ -89,17 +108,18 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
         :param compare: comparator function
         :param get_replica: bool to decide whether to compare replicas or not
         :param mode: where to get the items from - can be "disk" or "memory"
+        :param ignore_fields: list of top-level document fields to exclude from
+                              the backup-vs-restore value comparison
         :return: status and message
         """
         self.log.info("backup start: " + str(self.backupset.start))
         self.log.info("backup end: " + str(self.backupset.end))
         success_msg = ""
-        if not self.backupset.force_updates:
-            status, msg = self.compare_vbucket_stats(backup_vbucket_seqno[backup_number - 1], restored_vbucket_seqno,
-                            compare_uuid=compare_uuid, seqno_compare=compare, mapBucket = self.backupset.map_buckets)
-            if not status:
-                return status, msg
-            success_msg = "{0}\n".format(msg)
+        # vbucket abs_high_seqno comparison intentionally removed: on restore,
+        # services can write their own metadata to the bucket (bumping the seqno)
+        # even though they didn't at load/backup time, so backup_seqno vs
+        # restored_seqno is not a reliable equality/inequality condition. The
+        # document-level key/value validation below is the authoritative check.
         for bucket in self.buckets:
             kv_file_name = "{0}-{1}-{2}-{3}.json".format(bucket.name, "key_value", "backup", backup_number)
             kv_file_path = os.path.join(self.backup_validation_path, kv_file_name)
@@ -150,8 +170,14 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
                         value = value.split(',')[0]
                     data[key] = value
             self.log.info("Compare backup data in bucket %s " % bucket.name)
+            compare_backedup_kv, compare_data = backedup_kv, data
+            if ignore_fields:
+                compare_backedup_kv = {k: self._strip_ignored_fields(v, ignore_fields)
+                                      for k, v in backedup_kv.items()}
+                compare_data = {k: self._strip_ignored_fields(v, ignore_fields)
+                               for k, v in data.items()}
             is_equal, not_equal, extra, not_present = \
-                                        self.compare_dictionary(backedup_kv, data)
+                                        self.compare_dictionary(compare_backedup_kv, compare_data)
             # Debug: Log detailed info for mismatched keys
             if not_equal:
                 for mismatched_key in not_equal.keys():

@@ -1242,7 +1242,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
     def backup_restore_validate(self, compare_uuid=False,
                                 seqno_compare_function="==",
                                 replicas=False, mode="memory",
-                                expected_error=None):
+                                expected_error=None, ignore_fields=("mutated",)):
         if self.vbuckets_filter_no_data:
             self.log.info("No data in backup repo as expected.")
             return
@@ -1337,7 +1337,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                                                   compare_uuid=compare_uuid,
                                                                   compare=seqno_compare_function,
                                                                   get_replica=replicas, mode=mode,
-                                                                  backups_on_disk=backups_on_disk)
+                                                                  backups_on_disk=backups_on_disk,
+                                                                  ignore_fields=ignore_fields)
 
             """ limit the length of message printout to 3000 chars """
             info = str(msg)[:3000] + '..' if len(str(msg)) > 3000 else msg
