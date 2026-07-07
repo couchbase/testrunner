@@ -128,7 +128,7 @@ class EventingSecurity(EventingBaseTest):
             self.fts_callable.wait_for_indexing_complete(item_count=self.fts_doc_count, idx=self.fts_index)
             self.sleep(30, "Waiting for FTS indexing to complete")
         ntonencryptionBase().disable_nton_cluster([self.master])
-        self.sleep(120)
+        self.sleep(90, "Waiting after disabling n2n encryption")
         body = self.create_save_function_body(self.function_name, self.handler_code, jwt_token=jwt_token)
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0")
         self.deploy_function(body, jwt_token=jwt_token)
@@ -141,6 +141,7 @@ class EventingSecurity(EventingBaseTest):
         else:
             self.undeploy_function(body, jwt_token=jwt_token)
         ntonencryptionBase().setup_nton_cluster(self.servers, clusterEncryptionLevel=self.ntonencrypt_level)
+        self.sleep(90, "Waiting after enabling n2n encryption")
         if getattr(self, 'is_analytics', False) or getattr(self, 'is_fts', False):
             self.sleep(30, "Waiting for services to stabilize after enabling n2n encryption")
         if self.pause_resume:
@@ -154,6 +155,7 @@ class EventingSecurity(EventingBaseTest):
         else:
             self.undeploy_function(body, jwt_token=jwt_token)
         ntonencryptionBase().setup_nton_cluster(self.servers, clusterEncryptionLevel="all")
+        self.sleep(90, "Waiting after changing encryption level to all")
         if getattr(self, 'is_analytics', False) or getattr(self, 'is_fts', False):
             self.sleep(30, "Waiting for services to stabilize after changing encryption level to all")
         if self.pause_resume:
@@ -175,6 +177,7 @@ class EventingSecurity(EventingBaseTest):
         else:
             self.undeploy_function(body, jwt_token=jwt_token)
         ntonencryptionBase().disable_nton_cluster([self.master])
+        self.sleep(90, "Waiting after disabling n2n encryption")
         if getattr(self, 'is_analytics', False) or getattr(self, 'is_fts', False):
             self.sleep(30, "Waiting for services to stabilize after disabling n2n encryption")
         if self.pause_resume:

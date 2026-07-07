@@ -150,4 +150,4 @@ class EventingOndeploy(EventingBaseTest):
         self.deploy_function(body)
         # drop metadata keyspace — eventing internally undeploys and deletes the function
         self.rest.delete_bucket(self.metadata_bucket_name)
-        self.wait_for_handler_internal_undeployment_and_deletion(body['appname'])
+        self.wait_for_handler_state(self.function_name, "undeployed")
