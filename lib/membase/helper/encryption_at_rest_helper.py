@@ -129,6 +129,21 @@ class EncryptionUtil:
         rest = RestConnection(cluster_master)
         bypass_encryption_func()
 
+        # Clean up any leftover secrets from previous runs to avoid "Must be unique" errors
+        status, existing_secrets = rest.get_all_secrets()
+        if status and existing_secrets:
+            try:
+                secrets_list = json.loads(existing_secrets)
+                if isinstance(secrets_list, list):
+                    for secret in secrets_list:
+                        secret_id = secret.get('id')
+                        if secret_id is not None:
+                            self.log.info("Deleting existing encryption secret id={0} name={1}".format(
+                                secret_id, secret.get('name', '')))
+                            rest.delete_secret(secret_id)
+            except (ValueError, TypeError) as e:
+                self.log.warning("Could not parse existing secrets response: {0}".format(e))
+
         if create_KMIP_secret:
             params = EncryptionUtil.create_secret_params(
                 name=EncryptionUtil.generate_random_name("kmip"),

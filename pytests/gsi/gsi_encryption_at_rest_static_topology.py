@@ -946,7 +946,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
             status, response = self.rest.disable_bucket_encryption(bucket_a)
             if not status:
                 raise Exception(f"Failed to disable encryption on bucket_A: {response}")
-            status, response = self.rest.enable_bucket_encryption(bucket_b, key_id)
+            status, response = self.rest.enable_bucket_encryption(bucket_b, self.encryption_at_rest_id)
             if not status:
                 raise Exception(f"Failed to enable encryption on bucket_B: {response}")
             self.log.info("[STEP 7] PASSED - Encryption toggled on both buckets")
@@ -2724,7 +2724,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
         # ========== TEST COMPLETE ==========
         self.log.info("=" * 80)
         self.log.info("TEST PASSED: test_gsi_encryption_at_rest_compaction_workload")
-        self.log.info(f"gsi_type={self.gsi_type}, key_id={key_id}")
+        self.log.info(f"gsi_type={self.gsi_type}, key_id={self.encryption_at_rest_id}")
         self.log.info("=" * 80)
 
 
@@ -3185,7 +3185,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
                 f"to trigger DEK rotation while workloads run..."
             )
             self.set_bucket_dek_rotation_config(
-                bucket_name, key_id,
+                bucket_name, self.encryption_at_rest_id,
                 dek_rotation_interval=DEK_ROTATION_INTERVAL_S,
                 dek_lifetime=DEK_ROTATION_INTERVAL_S * 5
             )
@@ -3856,7 +3856,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
             self.log.info(f"[STEP 3] Creating bucket '{bucket_name}' with encryption...")
             self.create_bucket_with_encryption(bucket_name, enable_encryption=True)
             self.set_bucket_dek_rotation_config(
-                bucket_name, key_id,
+                bucket_name, self.encryption_at_rest_id,
                 dek_rotation_interval=STABLE_DEK_INTERVAL_S,
                 dek_lifetime=STABLE_DEK_INTERVAL_S
             )
@@ -3909,7 +3909,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
             DEK_ROTATION_INTERVAL_S = self.kek_rotation_interval_seconds
             self.log.info(f"[STEP 6] Triggering DEK rotation via short TTL ({DEK_ROTATION_INTERVAL_S}s)...")
             self.set_bucket_dek_rotation_config(
-                bucket_name, key_id,
+                bucket_name, self.encryption_at_rest_id,
                 dek_rotation_interval=DEK_ROTATION_INTERVAL_S,
                 dek_lifetime=DEK_ROTATION_INTERVAL_S * 5
             )
@@ -4102,7 +4102,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
             self.log.info(f"[STEP 3] Creating bucket '{bucket_name}' with encryption...")
             self.create_bucket_with_encryption(bucket_name, enable_encryption=True)
             self.set_bucket_dek_rotation_config(
-                bucket_name, key_id,
+                bucket_name, self.encryption_at_rest_id,
                 dek_rotation_interval=STABLE_DEK_INTERVAL_S,
                 dek_lifetime=STABLE_DEK_INTERVAL_S
             )
