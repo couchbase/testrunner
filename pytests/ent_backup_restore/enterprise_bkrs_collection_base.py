@@ -1265,9 +1265,12 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
             bk_log_file_name = "backup.log"
             if "6.5" <= RestConnection(self.backupset.backup_host).get_nodes_version():
                 bk_log_file_name = "backup-*.log"
-            command = "cat " + self.backupset.directory + \
-                      "/logs/{0} | grep '".format(bk_log_file_name) + \
-                      error_str + "' -A 10 -B 100"
+            # 8.1 moved the sub-command log from <archive>/logs to <archive>/<repo>/logs;
+            # glob both depths so the diagnostic still finds the error on either version.
+            command = "grep -h '" + error_str + "' " + \
+                      self.backupset.directory + "/logs/" + bk_log_file_name + " " + \
+                      self.backupset.directory + "/*/logs/" + bk_log_file_name + \
+                      " -A 10 -B 100 2>/dev/null"
             output, error = shell.execute_command(command)
             shell.log_command_output(output, error)
         if 'Required Flags:' in res:

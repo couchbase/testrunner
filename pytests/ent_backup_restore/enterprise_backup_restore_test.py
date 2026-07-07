@@ -5092,8 +5092,10 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         # Read the backup file output until we find evidence of a DCP connection,
         # or the backup finishes.
         backup_client = RemoteMachineShellConnection(self.backupset.backup_host)
-        command = "tail -n 1 {}/logs/backup-*.log | grep ' (DCP) '"\
-                                               .format(self.backupset.directory)
+        # 8.1 moved the backup sub-command log under the repo directory; the helper
+        # globs both the 8.0 and 8.1 locations.  Search the whole file, not just the
+        # last line, so the DCP evidence isn't missed.
+        command = "grep ' (DCP) ' {} 2>/dev/null".format(self._backup_log_path_glob())
         Future.wait_until(
             lambda: (bool(backup_client.execute_command(command)[0]) or backup_result.done()),
             lambda x: x is True,
@@ -5110,8 +5112,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         backup_result.result(timeout=200)
 
         expected_message = "(timed out after 3m0s|Stream has been inactive for 1m0s)"
-        command = "cat {}/logs/backup-*.log | grep -E '{}' " \
-                         .format(self.backupset.directory, expected_message)
+        command = "grep -hE '{}' {} 2>/dev/null" \
+                         .format(expected_message, self._backup_log_path_glob())
         output, _ = backup_client.execute_command(command)
         if not output:
             self.fail("Mutations were blocked for over 60 seconds, "
@@ -5177,22 +5179,25 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backup_create()
         self.backup_cluster()
 
-        # If the threads where auto-selected then a log message should appear
+        # If the threads where auto-selected then a log message should appear.
+        # 8.1 moved the sub-command log under the repo dir; the helper globs both.
         shell = RemoteMachineShellConnection(self.backupset.backup_host)
-        output, _ = shell.execute_command("cat {}/logs/backup-*.log | grep"
-                                          " '(Cmd) Automatically set the number"
-                                          " of threads to'".format(self.backupset.directory))
+        output, _ = shell.execute_command(
+            "grep -h '(Cmd) Automatically set the number of threads to' {} 2>/dev/null"
+            .format(self._backup_log_path_glob()))
         if not output:
             self.fail("Threads were not automatically selected")
 
-        # Remove the logs and test the same thing for restore
-        shell.execute_command("rm -r {}/logs".format(self.backupset.directory))
+        # Remove the logs and test the same thing for restore.  Clear both the 8.0
+        # (<archive>/logs) and 8.1 (<archive>/<repo>/logs) locations so the leftover
+        # backup log can't satisfy the restore check below.
+        shell.execute_command("rm -r {0}/logs {0}/*/logs".format(self.backupset.directory))
 
         self.backupset.force_updates = True
         self.backup_restore()
-        output, _ = shell.execute_command("cat {}/logs/backup-*.log | grep"
-                                          " '(Cmd) Automatically set the number"
-                                          " of threads to'".format(self.backupset.directory))
+        output, _ = shell.execute_command(
+            "grep -h '(Cmd) Automatically set the number of threads to' {} 2>/dev/null"
+            .format(self._backup_log_path_glob()))
         if not output:
             self.fail("Threads were not automatically selected")
 

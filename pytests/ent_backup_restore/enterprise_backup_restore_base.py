@@ -1210,8 +1210,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             bk_log_file_name = "backup*log"
 
             command = (
-                f"cat {self.backupset.objstore_staging_directory + '/' if self.objstore_provider else ''}"
-                f"{self.backupset.directory}/logs/{bk_log_file_name} | grep {error_str} -A 10 -B 100"
+                f"grep '{error_str}' {self._backup_log_path_glob(bk_log_file_name)} "
+                f"-A 10 -B 100 2>/dev/null"
             )
 
             output, error = shell.execute_command(command)
@@ -1244,22 +1244,13 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             self.assertTrue(error_found, "Expected error not found: %s" % expected_error)
             return
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
+        # _backup_log_path_glob handles the object-store staging prefix, raw-IPv6
+        # escaping and the 8.0 vs 8.1 log-directory depth.
         bk_log_file_name = "backup*log"
-        ipv6_raw_format = [":", "[", "]"]
-        ipv6_raw_ip = False
-        bk_raw_ipv6_dir = ""
-        if ":" in self.backupset.directory:
-            ipv6_raw_ip = True
-            bk_raw_ipv6_dir = self.backupset.directory
-            for x in ipv6_raw_format:
-                bk_raw_ipv6_dir = bk_raw_ipv6_dir.replace(x, "\\" + x)
-        bk_dir = f"{self.backupset.objstore_staging_directory + '/' if self.objstore_provider else ''}{self.backupset.directory}"
-        if ipv6_raw_ip:
-            bk_dir = bk_raw_ipv6_dir
 
         if self.check_logs:
-            command = "grep 'Restore completed successfully' " + bk_dir + \
-                    "/logs/{0}".format(bk_log_file_name)
+            command = "grep 'Restore completed successfully' " + \
+                    self._backup_log_path_glob(bk_log_file_name) + " 2>/dev/null"
             output, error = remote_client.execute_command(command)
             if self.debug_logs:
                 remote_client.log_command_output(output, error)
@@ -1269,8 +1260,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 self.log.info("Restore error: %s", error)
                 self.sleep(360)
                 self.fail("Restoring backup failed.")
-            command = "grep 'Transfer failed' " + bk_dir + \
-                    "/logs/{0}".format(bk_log_file_name)
+            command = "grep 'Transfer failed' " + \
+                    self._backup_log_path_glob(bk_log_file_name) + " 2>/dev/null"
             output, error = remote_client.execute_command(command)
             if self.debug_logs:
                 remote_client.log_command_output(output, error)
@@ -1743,6 +1734,25 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             if not ready:
                 self.fail("Server failed to start")
 
+    def _backup_log_path_glob(self, log_glob="backup-*.log"):
+        """Return space-separated shell globs matching cbbackupmgr sub-command
+        (backup/restore/merge) logs for both archive layouts.
+
+        Prior to 8.1 the sub-command log lived at <archive>/logs/<glob>.  From 8.1
+        it moved down under the repo: <archive>/<repo>/logs/<glob>.  We emit a glob
+        for each depth so callers work on either version.  The object-store staging
+        directory prefix and raw-IPv6 escaping in the archive path are handled here
+        too.  Intended to be interpolated into a `grep <globs> 2>/dev/null` command
+        (the 2>/dev/null swallows "No such file" for whichever depth is absent).
+        """
+        directory = self.backupset.directory
+        if ":" in directory:  # raw IPv6 address - escape for the shell/grep
+            for ch in (":", "[", "]"):
+                directory = directory.replace(ch, "\\" + ch)
+        prefix = self.backupset.objstore_staging_directory + "/" if self.objstore_provider else ""
+        base = prefix + directory
+        return f"{base}/logs/{log_glob} {base}/*/logs/{log_glob}"
+
     def _check_output_in_backup_logs(self, words, at_start = False, lines_before = 0, lines_after = 0):
         """ Checks if a word is present in the backup logs.
 
@@ -1759,8 +1769,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         words = "|".join(words) if isinstance(words, list) else words
         caret = '^' if at_start else ''
 
+        # -h suppresses the filename prefix grep adds when scanning multiple files so
+        # the output matches the old single-file `cat | grep` form that _check_output
+        # expects to parse.
         output, error = remote_client.execute_command(
-                    f"cat {self.backupset.directory}/logs/backup-*.log | grep '{caret}{words}' -B {lines_before} -A {lines_after}"
+                    f"grep -h '{caret}{words}' {self._backup_log_path_glob()} -B {lines_before} -A {lines_after} 2>/dev/null"
         )
 
         return self._check_output(words, output), output, error
@@ -2318,10 +2331,15 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         Only fail if the completed log contains no DCP evidence at all, which
         indicates a genuine problem with the backup.
         """
-        log_directory = self.backupset.objstore_staging_directory + "/*/logs" if self.objstore_provider else self.backupset.directory + "/logs"
-        # Search the full log file rather than only the last line.
-        command = "grep ' (DCP) ' {}/backup-*.log 2>/dev/null"\
-                                                   .format(log_directory)
+        # In 8.0 the backup sub-command wrote its log to <archive>/logs/backup-*.log;
+        # from 8.1 it moved down under the repo (<archive>/<repo>/logs/backup-*.log).
+        # _backup_log_path_glob emits a glob for both depths (and the object-store
+        # staging prefix) so the DCP check works on either version.  Bounded globs are
+        # used rather than a recursive grep because this runs in a tight polling loop
+        # and the staging tree can hold a large amount of transient backup data we
+        # don't want to walk on every poll.  We search the whole file, not just the
+        # last line.
+        command = "grep ' (DCP) ' {} 2>/dev/null".format(self._backup_log_path_glob())
         backup_client = RemoteMachineShellConnection(self.backupset.backup_host)
         # Scale the polling window with item count so large datasets have
         # enough time for the DCP stream to show up in logs before backup ends.
