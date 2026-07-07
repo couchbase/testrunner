@@ -1520,7 +1520,13 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         result, output, _ = self.backup_merge()
         if result:
             self.log.info("Here is the output from command %s " % output[0])
-            if not self._check_output(error_msg, output):
+            # cbbackupmgr 8.1.0 rewords this to include the failing file's path (which
+            # contains a dynamic backup timestamp/bucket UUID) and the underlying
+            # JSON-decode reason instead of the generic "is corrupt" phrasing.
+            new_error_present = (self._check_output("failed to read bucket settings at", output) and
+                                 self._check_output("bucket-config.json", output) and
+                                 self._check_output("unexpected EOF", output))
+            if not (self._check_output(error_msg, output) or new_error_present):
                 self.fail("read bucket config should fail since bucket-config.json is invalid")
         remote_client.disconnect()
 
@@ -4269,7 +4275,9 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertTrue(self._check_output("Error merging data: archive '/root/xyz' does not exist", output),
+        # cbbackupmgr 8.1.0 now inserts "failed to open archive: " between the
+        # subcommand wrapper and this detail, so check for the detail alone.
+        self.assertTrue(self._check_output("archive '/root/xyz' does not exist", output),
                         "Expected error message not thrown")
         cmd = "merge --archive {0} --repo abc --start {1} --end {2}".format(self.backupset.directory,
                                                                             self.backups[0], self.backups[1])
@@ -4337,8 +4345,10 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
+        # cbbackupmgr 8.1.0 now inserts "failed to open archive: " between the
+        # subcommand wrapper and this detail, so check for the detail alone.
         self.assertTrue(self._check_output(
-                        "Removing backup repository failed: archive '{0}xyz' does not exist".format(self.root_path),
+                        "archive '{0}xyz' does not exist".format(self.root_path),
                         output),
                         "Expected error message not thrown")
         cmd = "remove --archive {0} --repo xyz".format(self.backupset.directory)

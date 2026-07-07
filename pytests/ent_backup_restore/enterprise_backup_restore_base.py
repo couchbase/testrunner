@@ -1238,7 +1238,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     if self.debug_logs:
                         print("output from cmd: ", line)
                         print("expect error   : ", expected_error)
-                    if line.find(expected_error) != -1:
+                    # Case-insensitive: cbbackupmgr has changed the capitalization of
+                    # some error messages across versions (e.g. 8.1 lowercased the
+                    # leading word of some sentences), independent of their wording.
+                    if line.lower().find(expected_error.lower()) != -1:
                         error_found = True
                         break
             self.assertTrue(error_found, "Expected error not found: %s" % expected_error)
