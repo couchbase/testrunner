@@ -5263,12 +5263,12 @@ class CBRecoveryTask(Task):
                     self.set_exception(CBRecoveryFailedException("cbrecovery hangs"))
                     return
                 self.retries += 1
-                task_manager.schedule(self, 20)
+                task_manager.schedule(self, 60)
             else:
                 self.progress = progress
                 self.log.info("cbrecovery progress: {0}".format(self.progress))
                 self.retries = 0
-                task_manager.schedule(self, 20)
+                task_manager.schedule(self, 60)
         else:
             if self.started:
                 self.shell.disconnect()
