@@ -1181,17 +1181,30 @@ class XDCRRemoteClusterRef:
             certs += ca_dict["pem"]
         return certs
 
+    def __effective_client_certs(self):
+        """Return the (client_certificate, client_key) to use for this remote
+        cluster reference. In XDCR a client cert authenticates the *source* to
+        the *target*, so it is only valid when the destination cluster has
+        client-cert auth enabled. When it does not, sending a client cert makes
+        the target reject the reference ("client certificate authentication
+        setting set to enable or mandatory"), so drop it here.
+        """
+        if self.__client_certificate and not self.__dest_cluster.has_client_cert_auth():
+            return None, None
+        return self.__client_certificate, self.__client_key
+
     def connection_pre_check(self, rest_conn_src, dest_master, certificate):
         log = logger.Logger.get_logger()
         log.info("Pre check flow started")
+        client_certificate, client_key = self.__effective_client_certs()
         res = rest_conn_src.start_connection_pre_check(
             dest_master.cluster_ip, dest_master.port,
             self.dest_user,
             self.dest_pass, self.__name,
             demandEncryption=self.__encryption,
             certificate=certificate,
-            clientCertificate=self.__client_certificate,
-            clientKey=self.__client_key)
+            clientCertificate=client_certificate,
+            clientKey=client_key)
         log.info(str(res))
         self.__taskId = res["taskId"]
         log.info("connection pre check started successfully with taskId {0}".format(self.__taskId))
@@ -1233,6 +1246,7 @@ class XDCRRemoteClusterRef:
         if self.__pre_check:
             self.connection_pre_check(rest_conn_src, dest_master, certificate)
 
+        client_certificate, client_key = self.__effective_client_certs()
         if not self.__use_scramsha:
             self.__rest_info = rest_conn_src.add_remote_cluster(
                 dest_master.cluster_ip, dest_master.port,
@@ -1240,8 +1254,8 @@ class XDCRRemoteClusterRef:
                 self.dest_pass, self.__name,
                 demandEncryption=self.__encryption,
                 certificate=certificate,
-                clientCertificate=self.__client_certificate,
-                clientKey=self.__client_key
+                clientCertificate=client_certificate,
+                clientKey=client_key
             )
         else:
             print("Using scram-sha authentication")
@@ -1285,14 +1299,15 @@ class XDCRRemoteClusterRef:
                 else:
                     certificate = rest_conn_dest.get_cluster_ceritificate()
 
+                client_certificate, client_key = self.__effective_client_certs()
                 self.__rest_info = rest_conn_src.modify_remote_cluster(
                     dest_master.ip, dest_master.port,
                     self.dest_user,
                     self.dest_pass, self.__name,
                     demandEncryption=encryption,
                     certificate=certificate,
-                    clientCertificate=self.__client_certificate,
-                    clientKey=self.__client_key
+                    clientCertificate=client_certificate,
+                    clientKey=client_key
                 )
             else:
                 print("Using scram-sha authentication")
@@ -1744,6 +1759,13 @@ class CouchbaseCluster:
         self.scope_num = scope_num
         self.collection_num = collection_num
         self.use_https = use_https
+        # Spare nodes popped from the global free pool and reserved for this
+        # cluster so they can be pre-provisioned (e.g. x509 certs) before a
+        # later rebalance-in/swap-rebalance adds them.
+        self.__reserved_nodes = []
+        # True when this cluster has client-cert auth enabled. XDCR remote-cluster
+        # refs only present a client cert when the *destination* cluster has it on.
+        self.__client_cert_auth = False
 
     def __str__(self):
         return "Couchbase Cluster: %s, Master Ip: %s" % (
@@ -1793,6 +1815,30 @@ class CouchbaseCluster:
 
     def get_nodes(self):
         return self.__nodes
+
+    def reserve_spare_nodes(self, count=1):
+        """Pop `count` spare nodes from the global free pool and reserve them
+        for this cluster. Reserved nodes are consumed first by a subsequent
+        rebalance-in/swap-rebalance, which lets the caller pre-provision them
+        (e.g. load x509 certs) before they join the cluster.
+        @return: list of reserved server objects.
+        """
+        raise_if(
+            len(FloatingServers._serverlist) < count,
+            XDCRException(
+                "Number of free nodes: {0} is not enough to reserve {1} nodes.".
+                format(len(FloatingServers._serverlist), count))
+        )
+        reserved = [FloatingServers._serverlist.pop() for _ in range(count)]
+        self.__reserved_nodes.extend(reserved)
+        return reserved
+
+    def set_client_cert_auth(self, enabled=True):
+        """Record whether this cluster has client-cert auth enabled."""
+        self.__client_cert_auth = enabled
+
+    def has_client_cert_auth(self):
+        return self.__client_cert_auth
 
     def get_name(self):
         return self.__name
@@ -2751,14 +2797,18 @@ class CouchbaseCluster:
         @param num_nodes: number of nodes to rebalance-in to cluster.
         """
         raise_if(
-            len(FloatingServers._serverlist) < num_nodes,
+            len(FloatingServers._serverlist) + len(self.__reserved_nodes) < num_nodes,
             XDCRException(
                 "Number of free nodes: {0} is not preset to add {1} nodes.".
-                format(len(FloatingServers._serverlist), num_nodes))
+                format(len(FloatingServers._serverlist) + len(self.__reserved_nodes),
+                       num_nodes))
         )
         to_add_node = []
         for _ in range(num_nodes):
-            to_add_node.append(FloatingServers._serverlist.pop())
+            if self.__reserved_nodes:
+                to_add_node.append(self.__reserved_nodes.pop())
+            else:
+                to_add_node.append(FloatingServers._serverlist.pop())
         self.__log.info(
             "Starting rebalance-in nodes:{0} at {1} cluster {2}".format(
                 to_add_node, self.__name, self.__master_node.ip))
@@ -2782,7 +2832,10 @@ class CouchbaseCluster:
         else:
             to_remove_node = [self.__nodes[-1]]
 
-        to_add_node = [FloatingServers._serverlist.pop()]
+        if self.__reserved_nodes:
+            to_add_node = [self.__reserved_nodes.pop()]
+        else:
+            to_add_node = [FloatingServers._serverlist.pop()]
 
         self.__log.info(
             "Starting swap-rebalance [remove_node:{0}] -> [add_node:{1}] at {2} cluster {3}"

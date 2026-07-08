@@ -109,23 +109,38 @@ class XDCRSecurityTests(XDCRNewBaseTest):
                 cluster.toggle_security_setting([cluster.get_master_node()], setting, value)
 
         if multiple_ca:
+            # Spare nodes that a later rebalance-in/swap-rebalance will add are not
+            # part of cluster.get_nodes() yet, so reserve and provision them with
+            # this cluster's x509 certs now. Otherwise they present an untrusted
+            # cert when joining the strict-n2n cluster ("Unknown CA").
+            rebalance_in_clusters = self.get_cluster_objects_for_input(rebalance_in) \
+                if rebalance_in else []
+            swap_rebalance_clusters = self.get_cluster_objects_for_input(swap_rebalance) \
+                if swap_rebalance else []
             for cluster in self.get_cluster_objects_for_input(multiple_ca):
                 master = cluster.get_master_node()
+                spare_nodes = []
+                if cluster in rebalance_in_clusters:
+                    spare_nodes += cluster.reserve_spare_nodes(1)
+                if cluster in swap_rebalance_clusters:
+                    spare_nodes += cluster.reserve_spare_nodes(1)
+                nodes_to_provision = cluster.get_nodes() + spare_nodes
                 ntonencryptionBase().disable_nton_cluster([master])
                 CbServer.x509 = x509main(host=master)
-                for server in cluster.get_nodes():
+                for server in nodes_to_provision:
                     CbServer.x509.delete_inbox_folder_on_server(server=server)
-                CbServer.x509.generate_multiple_x509_certs(servers=cluster.get_nodes())
+                CbServer.x509.generate_multiple_x509_certs(servers=nodes_to_provision)
                 if all_node_upload:
                     for node_num in range(len(cluster.get_nodes())):
                         CbServer.x509.upload_root_certs(server=cluster.get_nodes()[node_num],
                                             root_ca_names=[CbServer.x509.root_ca_names[node_num]])
                 else:
-                    for server in cluster.get_nodes():
+                    for server in nodes_to_provision:
                         CbServer.x509.upload_root_certs(server)
-                CbServer.x509.upload_node_certs(servers=cluster.get_nodes())
+                CbServer.x509.upload_node_certs(servers=nodes_to_provision)
                 if use_client_certs:
                     CbServer.x509.upload_client_cert_settings(server=master)
+                    cluster.set_client_cert_auth(True)
                     client_cert_path, client_key_path = CbServer.x509.get_client_cert(
                         int_ca_name=int_ca_name)
                     # Copy the certs onto the test machines
