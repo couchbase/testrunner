@@ -4000,8 +4000,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         else:
             # Dense composite (non-bhive) indexes
             partitioned_index_color_rgb_vector = QueryDefinition(index_name='partitioned_color',
-                                                                 index_fields=['rating', 'colorRGBVector Vector',
-                                                                               'category'],
+                                                                 index_fields=['rating', 'category',
+                                                                               'colorRGBVector Vector'],
                                                                  dimension=3,
                                                                  description=f"IVF,{self.quantization_algo_color_vector}",
                                                                  similarity=self.similarity,
@@ -4016,8 +4016,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                  )
 
             non_partitioned_index_color_rgb_vector = QueryDefinition(index_name='non_partitioned_color',
-                                                                     index_fields=['rating', 'colorRGBVector Vector',
-                                                                                   'category'],
+                                                                     index_fields=['rating', 'category',
+                                                                                   'colorRGBVector Vector'],
                                                                      dimension=3,
                                                                      description=f"IVF,{self.quantization_algo_color_vector}",
                                                                      similarity=self.similarity,
@@ -4031,8 +4031,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                      )
 
             partitioned_index_description_vector = QueryDefinition("partitioned_descriptionVector",
-                                                                   index_fields=['rating', 'descriptionVector Vector',
-                                                                                 'category'],
+                                                                   index_fields=['rating', 'category',
+                                                                                 'descriptionVector Vector'],
                                                                    dimension=384,
                                                                    description=f"IVF,{self.quantization_algo_description_vector}",
                                                                    similarity=self.similarity,
@@ -4050,8 +4050,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
             non_partitioned_index_description_vector = QueryDefinition("non_partitioned_descriptionVector",
                                                                        index_fields=['rating',
-                                                                                     'descriptionVector Vector',
-                                                                                     'category'],
+                                                                                     'category',
+                                                                                     'descriptionVector Vector'],
                                                                        dimension=384,
                                                                        description=f"IVF,{self.quantization_algo_description_vector}",
                                                                        similarity=self.similarity,
