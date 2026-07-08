@@ -3711,6 +3711,20 @@ class CouchbaseCluster:
                                             sleep_before_rebalance=sleep_before_rebalance)
         task.result()
 
+    def rebalance(self, servers=None, to_add=None, to_remove=None, services=None):
+        """Synchronously rebalance the cluster. Defaults to the cluster's
+        current node list with no topology change, which just rebalances any
+        pending (e.g. added-back) nodes into the cluster.
+        """
+        if servers is None:
+            servers = self.__nodes
+        return self.__clusterop.rebalance(servers, to_add or [], to_remove or [],
+                                          services=services)
+
+    def stop_rebalance(self):
+        """Stop an in-progress rebalance on the cluster."""
+        self.__stop_rebalance()
+
     def __async_swap_rebalance(self, master=False, num_nodes=1, services=None):
         """Swap-rebalance nodes on Cluster
         @param master: True if swap-rebalance master node else False.

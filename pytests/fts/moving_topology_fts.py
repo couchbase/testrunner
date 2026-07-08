@@ -2662,7 +2662,7 @@ class MovingTopFTS(FTSBaseTest):
                                       kwargs={'servers': self._cb_cluster.get_nodes(), 'to_add': [], 'to_remove': [],
                                               'services': None})
             thread.start()
-            self._cb_cluster.__stop_rebalance()
+            self._cb_cluster.stop_rebalance()
             self._cb_cluster.add_back_specific_node(node=node_obj, master_node=node_obj2, rebalance=True)
 
             err = self.validate_partition_distribution(rest)
