@@ -286,6 +286,7 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         self.backupset = backupset
         self.objstore_provider = objstore_provider
         self.cluster = Cluster()
+        self.num_items = self.input.param("items", 10000)
 
     def get_os_info(self, server):
         os_type, os_dist = get_info(server)
@@ -1287,6 +1288,18 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
             for e in self.sys_log_count:
                 self.assertEqual(self.sys_log_count[e], len([event for event in events if event["event_id"] == e]))
 
+        # Reset the time before any other tearDown step. backup_service_cleanup()
+        # below deletes repositories/plans against the same (possibly cloud-backed)
+        # archive that a clock-skewed test may have already been failing to reach;
+        # if that raises, tearDown aborts and a reset done afterwards would never
+        # run, leaving the node's clock skewed for the next test. Resetting first
+        # also means cleanup itself runs against a correct clock.
+        if self.input.param('reset_time', False):
+            try:
+                self.time.reset()
+            except AttributeError:
+                pass
+
         self.preamble()
         self.backup_service_cleanup()
         if self.enforce_tls:
@@ -1301,9 +1314,6 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
                 shell.execute_command(f"rm -rf {self.x509.CACERTFILEPATH}")
                 self.x509.delete_inbox_folder_on_server(server=server)
             self.x509.teardown_certs(servers=self.servers)
-        # If the reset_time flag is set, reset the time during the tearDown
-        if self.input.param('reset_time', False):
-            self.time.reset()
 
         # The tearDown before the setUp which means certain attributes such as the backupset do not exist
         try:
@@ -1379,6 +1389,17 @@ class Time:
         params:
             time_change (str): The time change e.g. "+1 month +1 day"
         """
+        if isinstance(self.remote_connection, MultipleRemoteShellConnections):
+            # Resolve a relative expression (e.g. "next friday 0745") once against
+            # a single reference node, then set that same absolute timestamp on
+            # every node. Letting each node parse the relative expression
+            # independently is unsafe once the nodes' clocks have drifted apart -
+            # "next friday" can resolve to different calendar dates depending on
+            # each node's own (possibly stale) current time, silently desyncing
+            # the cluster by up to a week.
+            reference_output, _ = self.remote_connection.connections[0].execute_command(f"date --date='{time_change}' --rfc-3339=seconds")
+            time_change = reference_output[0]
+
         self.remote_connection.execute_command(f"date --set='{time_change}'")
 
     def get_system_time(self):
@@ -1740,10 +1761,15 @@ class File:
 
     @staticmethod
     def find(output, substrings):
-        """ Checks if all the substrings are present in the output
+        """ Checks if all the substrings are present in the output.
+
+        Each entry may be a single string (must match) or a tuple/list of
+        alternative strings (at least one must match), to tolerate log
+        wording changes across server versions.
         """
         for substring in substrings:
-            if not any(substring in line for line in output):
+            alternatives = substring if isinstance(substring, (tuple, list)) else (substring,)
+            if not any(alt in line for alt in alternatives for line in output):
                 return False, substring
 
         return True, None

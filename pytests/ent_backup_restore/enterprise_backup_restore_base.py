@@ -2014,22 +2014,26 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             to_element = 5
             if self.backupset.filter_values:
                 to_element = 7
-            for key in buckets_data[bucket.name]:
-                value = buckets_data[bucket.name][key]
-                if self.backupset.random_keys:
-                    value = ",".join(value.split(',')[4:to_element])
-                    value = value.replace('""', '"')
-                    if value.startswith('"') and value.endswith('"'):
-                        value = value[1:-1]
-                else:
-                    try:
-                        json.loads(",".join(value.split(',')[4:8])[3:-2].replace('""','"'))
-                        value = ",".join(value.split(',')[4:8])[3:-2].replace('""','"')
-                    except:
-                        value = ",".join(value.split(',')[4:5])
-                if value.startswith("b'"):
-                    value = value[2:-1]
-                buckets_data[bucket.name][key] = value
+            if headerInfo != "n1ql":
+                # cbtransfer's CSV rows need slicing out to the real value; the
+                # n1ql collector (used for TLS/strict-encryption clusters) already
+                # returns the plain document JSON string.
+                for key in buckets_data[bucket.name]:
+                    value = buckets_data[bucket.name][key]
+                    if self.backupset.random_keys:
+                        value = ",".join(value.split(',')[4:to_element])
+                        value = value.replace('""', '"')
+                        if value.startswith('"') and value.endswith('"'):
+                            value = value[1:-1]
+                    else:
+                        try:
+                            json.loads(",".join(value.split(',')[4:8])[3:-2].replace('""','"'))
+                            value = ",".join(value.split(',')[4:8])[3:-2].replace('""','"')
+                        except:
+                            value = ",".join(value.split(',')[4:5])
+                    if value.startswith("b'"):
+                        value = value[2:-1]
+                    buckets_data[bucket.name][key] = value
             self.log.info("*** Compare data in bucket and in backup file of bucket {0} ***"
                           .format(bucket.name))
             if not skip_stats_check:
@@ -2043,6 +2047,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     self.fail("Buckets {0} did not persisted.".format(failed_persisted_bucket))
             count = 0
             key_count = 0
+            mismatch_samples = []
+            n1ql_binary_skipped = 0
             version = RestConnection(self.backupset.backup_host).get_nodes_version()
 
             if filter_keys:
@@ -2055,6 +2061,19 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                             if restore_file_data[bucket.name][key]:
                                 bucket_data_value = buckets_data[bucket.name][key]
                                 restore_data_value = restore_file_data[bucket.name][key]["Value"]
+
+                                # N1QL (used in place of cbtransfer under enforce_tls, since
+                                # cbtransfer's KV data channel has no TLS support) cannot
+                                # represent non-JSON document values in its result set - it
+                                # substitutes this placeholder instead of the real bytes for
+                                # any binary/blob document. There is no way to recover the
+                                # actual value from N1QL in that case, so skip the byte-for-byte
+                                # comparison for this key rather than reporting a false mismatch.
+                                if headerInfo == "n1ql" and bucket_data_value.startswith('"<binary ('):
+                                    n1ql_binary_skipped += 1
+                                    key_count += 1
+                                    continue
+
                                 if version[:3] <= "6.6":
                                     bucket_data_value = str(bucket_data_value.replace(" ", ""))
 
@@ -2078,11 +2097,14 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                                     bucket: {1} != {2} file" \
                                                        .format(key, bucket_data_value,
                                                                restore_data_value))
+                                        if len(mismatch_samples) < 3:
+                                            mismatch_samples.append((key, bucket_data_value, restore_data_value))
                                         data_matched = False
                                         count += 1
                                     else:
-                                        raise Exception("Data not match in backup bucket {0}" \
-                                                        .format(bucket.name))
+                                        raise Exception("Data not match in backup bucket {0}. Sample mismatches "
+                                                        "(key, bucket value, file value): {1}"
+                                                        .format(bucket.name, mismatch_samples))
                                 key_count += 1
                             else:
                                 raise Exception("Key {0} has no value: {1}"
@@ -2090,7 +2112,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                         except Exception as e:
                             if e:
                                 print(e)
-                                raise Exception("There was a prolbem with the data in bucket: {0}".format(bucket.name))
+                                raise Exception("There was a prolbem with the data in bucket: {0}. "
+                                                "Underlying error: {1}. Sample mismatches "
+                                                "(key, bucket value, file value): {2}"
+                                                .format(bucket.name, e, mismatch_samples))
                     else:
                         if bucket.name not in restore_file_data:
                             self.log.warning("Bucket '%s' not found in restore_file_data. "
@@ -2107,6 +2132,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     if len(restore_file_data[bucket.name]) != key_count:
                         raise Exception("Total key counts do not match.  Backup {0} != {1} bucket" \
                                         .format(len(restore_file_data[bucket.name]), key_count))
+            if n1ql_binary_skipped:
+                self.log.info("Skipped byte-for-byte comparison for {0} binary/non-JSON "
+                              "document(s) in bucket {1}: N1QL cannot return their actual "
+                              "value.".format(n1ql_binary_skipped, bucket.name))
             self.log.info("******** Data match in backup file and bucket {0} ******** " \
                           .format(bucket.name))
             print(("Bucket: ", bucket.name))
