@@ -5,7 +5,7 @@ from .flex_index_phase1 import FlexIndexTests
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
 from couchbase.cluster import Cluster
-from couchbase.cluster import PasswordAuthenticator
+from couchbase.auth import PasswordAuthenticator
 import couchbase.subdocument as SD
 from security.auditmain import audit
 import socket
