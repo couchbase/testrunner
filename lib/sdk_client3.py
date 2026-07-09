@@ -208,9 +208,9 @@ class SDKClient(object):
 
             if collection:
                 self.collection_connect(scope, collection)
-                self.collection.mutate_in(key, spec_list, **kwargs)
+                return self.collection.mutate_in(key, spec_list, **kwargs)
             else:
-                self.default_collection.mutate_in(key, spec_list, **kwargs)
+                return self.default_collection.mutate_in(key, spec_list, **kwargs)
         except CouchbaseException as e:
             raise
 

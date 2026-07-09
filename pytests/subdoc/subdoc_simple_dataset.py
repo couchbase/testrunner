@@ -33,14 +33,14 @@ class SubdocSimpleDataset(SubdocBaseTest):
             self.client.insert(KEY, val, 60)
         else:
             self.client.insert(KEY, {}, 60)
-        rv = self.client.cb.mutate_in(KEY, SD.upsert('_system1', val, xattr=True, create_parents=True))
+        rv = self.client.mutate_in(KEY, specs=[SD.upsert('_system1', val, xattr=True, create_parents=True)])
         self.assertTrue(rv.success)
-        rv = self.client.cb.mutate_in(KEY, SD.upsert('_system2', {'field1': val, 'field2': val}, xattr=True,
-                                                     create_parents=True))
+        rv = self.client.mutate_in(KEY, specs=[SD.upsert('_system2', {'field1': val, 'field2': val}, xattr=True,
+                                                     create_parents=True)])
         self.assertTrue(rv.success)
-        rv = self.client.cb.mutate_in(KEY, SD.upsert('a', {'field1': {'sub_field1a': 0, 'sub_field1b': 00},
+        rv = self.client.mutate_in(KEY, specs=[SD.upsert('a', {'field1': {'sub_field1a': 0, 'sub_field1b': 00},
                                                            'field2': {'sub_field2a': 20, 'sub_field2b': 200}},
-                                                     xattr=True, create_parents=True))
+                                                     xattr=True, create_parents=True)])
         self.assertTrue(rv.success)
 
         self.client.upsert(KEY, value={}, ttl=20)
@@ -477,9 +477,9 @@ class SubdocSimpleDataset(SubdocBaseTest):
         self.sdk_client = SDKClient(scheme=scheme, hosts=[host], bucket="default")
 
         self.sdk_client.set(self.key, value=jsonDump, ttl=60)
-        rv = self.sdk_client.cb.mutate_in(self.key, SD.upsert('my.attr', "value",
+        rv = self.sdk_client.mutate_in(self.key, specs=[SD.upsert('my.attr', "value",
                                                               xattr=True,
-                                                              create_parents=True), ttl=60)
+                                                              create_parents=True)], ttl=60)
         self.assertTrue(rv.success)
 
         # wait for it to persist and then evict the key

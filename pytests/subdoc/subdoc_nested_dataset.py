@@ -413,15 +413,15 @@ class SubdocNestedDataset(SubdocBaseTest):
         THREADS = 20
 
         main_bucket = SDKClient(scheme="couchbase", hosts=[self.servers[0].ip],
-                  bucket='default').cb
+                  bucket='default')
         main_bucket.upsert(DOCID, {'recs':[]})
 
         class Runner(Thread):
             def run(self, *args, **kw):
                 cb = SDKClient(scheme="couchbase", hosts=[SERVER_IP],
-                  bucket='default').cb
+                  bucket='default')
                 for x in range(ITERATIONS):
-                    cb.mutate_in(DOCID, SD.array_append('recs', 1))
+                    cb.mutate_in(DOCID, specs=[SD.array_append('recs', 1)])
 
         thrs = [Runner() for x in range(THREADS)]
         [t.start() for t in thrs]
@@ -1007,5 +1007,3 @@ class SubdocNestedDataset(SubdocBaseTest):
             test_case()
         except Exception as ex:
             result[test_case_name] = str(ex)
-
-
