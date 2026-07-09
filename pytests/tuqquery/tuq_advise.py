@@ -702,3 +702,38 @@ class QueryAdviseTests(QueryTests):
             self.log.info(f"ADVISE NEST result: {result_nest['results']}")
         except Exception as e:
             self.fail(f"ADVISE NEST panicked or failed: {e}")
+
+    def test_mb70630_advise_nested_any_no_panic(self):
+        """
+        MB-70630: ADVISE panics on query with deeply nested ANY/IN clauses.
+        Verifies both the panicking query and the equivalent simpler form return success.
+        """
+        # Query that previously caused panic — nested ANY with separate satisfies clauses
+        panic_query = (
+            "ADVISE SELECT 1 FROM default a "
+            "WHERE (c1 = 1 OR (ANY v1 IN a1 SATISFIES v1.c1 = 1 END) "
+            "OR (ANY v1 IN a1 SATISFIES ANY v2 IN v1.a1 SATISFIES v2.c1 = 1 END END)) "
+            "AND (c5 = 1 OR (ANY cv1 IN a1 SATISFIES cv1.c5 = 1 END) "
+            "OR (ANY cv1 IN a1 SATISFIES ANY cv2 IN cv1.a1 SATISFIES cv2.c5 = 1 END END))"
+        )
+        try:
+            result = self.run_cbq_query(panic_query)
+            self.assertEqual(result.get('status'), 'success',
+                             f"MB-70630: ADVISE panicked or returned non-success: {result}")
+            self.log.info("MB-70630: Nested ANY ADVISE query completed without panic")
+        except Exception as e:
+            self.fail(f"MB-70630: ADVISE panicked on nested ANY query: {e}")
+
+        # Equivalent simpler form — should also work
+        simple_query = (
+            "ADVISE SELECT 1 FROM default a "
+            "WHERE (c1 = 1 OR (ANY v1 IN a1 SATISFIES v1.c1 = 1 OR ANY v2 IN v1.a1 SATISFIES v2.c1 = 1 END END)) "
+            "AND (c5 = 1 OR (ANY cv1 IN a1 SATISFIES cv1.c5 = 1 OR ANY cv2 IN cv1.a1 SATISFIES cv2.c5 = 1 END END))"
+        )
+        try:
+            result = self.run_cbq_query(simple_query)
+            self.assertEqual(result.get('status'), 'success',
+                             f"MB-70630: Simpler ADVISE form failed: {result}")
+            self.log.info("MB-70630: Simpler nested ANY ADVISE query also succeeded")
+        except Exception as e:
+            self.fail(f"MB-70630: ADVISE failed on simpler nested ANY query: {e}")

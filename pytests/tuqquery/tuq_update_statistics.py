@@ -803,3 +803,108 @@ class QueryUpdateStatsTests(QueryTests):
             self.run_cbq_query(f"DROP PRIMARY INDEX ON {query_collection}")
         except CBQError:
             self.log.info("MB-71031: Cleanup — primary index already dropped or not found")
+
+    def test_mb70745_cbo_stats_key_with_double_colon(self):
+        """
+        MB-70745: UPDATE STATISTICS on an index whose key expression contains '::'
+        must store stats correctly in _system._query.
+        Previously, CBO stats documents with '::' in the key were rejected during restore.
+        """
+        scope = "mb70745_scope"
+        collection = "mb70745_coll"
+        index_name = "mb70745_idx"
+        bucket = "travel-sample"
+
+        try:
+            self.run_cbq_query(f"CREATE SCOPE `{bucket}`.`{scope}` IF NOT EXISTS")
+            self.sleep(2)
+            self.run_cbq_query(f"CREATE COLLECTION `{bucket}`.`{scope}`.`{collection}` IF NOT EXISTS")
+            self.sleep(2)
+            self.run_cbq_query(
+                f"INSERT INTO `{bucket}`.`{scope}`.`{collection}` (KEY _k, VALUE _v) "
+                f"SELECT 'id::'||TO_STRING(i) AS _k, {{\"c1\": i, \"c2\": 100 + i}} AS _v "
+                f"FROM ARRAY_RANGE(1, 1000) AS i"
+            )
+            self.log.info("MB-70745: Inserted 999 docs with '::' in keys")
+            self.run_cbq_query(
+                f"CREATE INDEX {index_name} ON `{bucket}`.`{scope}`.`{collection}`"
+                f"(split(meta().id, '::')[1])"
+            )
+            self.log.info(f"MB-70745: Created index {index_name} with '::' in key expression")
+            self.run_cbq_query(
+                f"UPDATE STATISTICS FOR `{bucket}`.`{scope}`.`{collection}` INDEX ({index_name})"
+            )
+            self.log.info("MB-70745: UPDATE STATISTICS completed")
+            result = self.run_cbq_query(
+                f"SELECT COUNT(*) AS cnt FROM `{bucket}`.`_system`.`_query` "
+                f"WHERE type = 'histogram' AND `collection` = '{collection}'"
+            )
+            count = result['results'][0].get('cnt', 0)
+            self.assertGreater(count, 0,
+                               f"MB-70745: No histogram stats found in _system._query for {collection}")
+            self.log.info(f"MB-70745: {count} histogram entries stored — '::' key handled correctly")
+        finally:
+            try:
+                self.run_cbq_query(f"DROP INDEX {index_name} ON `{bucket}`.`{scope}`.`{collection}`")
+            except Exception:
+                pass
+            try:
+                self.run_cbq_query(f"DROP COLLECTION `{bucket}`.`{scope}`.`{collection}` IF EXISTS")
+            except Exception:
+                pass
+            try:
+                self.run_cbq_query(f"DROP SCOPE `{bucket}`.`{scope}` IF EXISTS")
+            except Exception:
+                pass
+
+    def test_mb70666_index_updated_timestamp_in_dictionary(self):
+        """
+        MB-70666: The 'updated' timestamp for index optimizer stats must appear
+        in system:dictionary under each index entry after UPDATE STATISTICS runs.
+        Previously, the per-index 'updated' field was missing.
+        """
+        bucket = "travel-sample"
+        index_name = "mb70666_idx"
+        try:
+            try:
+                self.run_cbq_query(
+                    f"CREATE INDEX {index_name} ON `{bucket}`.`inventory`.`hotel`(city, country)"
+                )
+            except CBQError:
+                self.log.info(f"MB-70666: Index {index_name} already exists, continuing")
+            self.sleep(2)
+
+            self.run_cbq_query(
+                f"UPDATE STATISTICS FOR `{bucket}`.`inventory`.`hotel`(city, country)"
+            )
+            self.log.info("MB-70666: UPDATE STATISTICS completed")
+            self.sleep(3)
+
+            result = self.run_cbq_query(
+                f"SELECT * FROM system:dictionary WHERE `bucket` = '{bucket}' "
+                f"AND `scope` = 'inventory' AND `keyspace` = 'hotel'"
+            )
+            self.assertGreater(len(result['results']), 0,
+                               "MB-70666: No dictionary entry found for hotel collection")
+
+            dictionary = result['results'][0]['dictionary']
+            indexes = dictionary.get('indexes', [])
+            self.assertGreater(len(indexes), 0,
+                               "MB-70666: No indexes found in system:dictionary for hotel")
+
+            our_index = next((idx for idx in indexes if idx.get('indexName') == index_name), None)
+            self.assertIsNotNone(our_index,
+                                 f"MB-70666: Index '{index_name}' not found in system:dictionary")
+            self.assertIn('updated', our_index,
+                          f"MB-70666: 'updated' timestamp missing from index '{index_name}': {our_index}")
+            self.assertIsNotNone(our_index['updated'],
+                                 f"MB-70666: 'updated' timestamp is None for index '{index_name}'")
+            self.log.info(f"MB-70666: Index '{index_name}' has updated={our_index['updated']} — fix verified")
+
+        finally:
+            try:
+                self.run_cbq_query(
+                    f"DROP INDEX {index_name} ON `{bucket}`.`inventory`.`hotel`"
+                )
+            except CBQError:
+                pass
