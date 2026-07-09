@@ -3944,6 +3944,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                      scan_color_vec_2),
                                                                  partition_by_fields=['meta().id'],
                                                                  include_fields=['fuel', 'year'],
+                                                                 bhive_index=True,
                                                                  train_list=self.trainlist)
             non_partitioned_index_color_rgb_vector = QueryDefinition(index_name='non_partitioned_color_rgb_bhive',
                                                                      index_fields=['colorRGBVector VECTOR'],
@@ -3958,6 +3959,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                          "fuel = 'Diesel' ",
                                                                          scan_color_vec_2),
                                                                      include_fields=['fuel', 'year'],
+                                                                     bhive_index=True,
                                                                      train_list=self.trainlist)
             partitioned_index_description_vector = QueryDefinition(index_name='partitioned_description_bhive',
                                                                    index_fields=['descriptionVector VECTOR'],
@@ -3974,6 +3976,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                        scan_desc_vec_2),
                                                                    partition_by_fields=['meta().id'],
                                                                    include_fields=['rating', 'category'],
+                                                                   bhive_index=True,
                                                                    train_list=self.trainlist
                                                                    )
 
@@ -3991,6 +3994,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                            "'Luxury Car', 'Supercar']",
                                                                            scan_desc_vec_2),
                                                                        include_fields=['rating', 'category'],
+                                                                       bhive_index=True,
                                                                        train_list=self.trainlist
                                                                        )
 
