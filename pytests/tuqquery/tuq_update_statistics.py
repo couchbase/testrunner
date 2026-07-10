@@ -908,3 +908,133 @@ class QueryUpdateStatsTests(QueryTests):
                 )
             except CBQError:
                 pass
+        actual_result = system_dictionary['results'][0]['distributionKeys']
+        actual_result.sort()
+        self.assertEqual(actual_result, expected_result)
+
+    def test_mb71168_aggregate_case_expressions_correctness(self):
+        """
+        MB-71168: Complex aggregate CASE expressions previously took ~14s vs ~6s
+        for an equivalent LET-based rewrite. Fix caches aggregate string so
+        expressions are not computed multiple times per row.
+        Verifies both query forms return identical results.
+        """
+        bucket = "travel-sample"
+        scope = "mb71168_scope"
+        collection = "mb71168_coll"
+        ix1 = "mb71168_ix1"
+        ix2 = "mb71168_ix2"
+        doc_count = 10000
+
+        try:
+            self.run_cbq_query(f"CREATE SCOPE `{bucket}`.`{scope}` IF NOT EXISTS")
+            self.sleep(2)
+            self.run_cbq_query(f"CREATE COLLECTION `{bucket}`.`{scope}`.`{collection}` IF NOT EXISTS")
+            self.sleep(2)
+
+            # Insert test docs matching the bug repro pattern
+            self.run_cbq_query(f"""
+                UPSERT INTO `{bucket}`.`{scope}`.`{collection}` (KEY k, VALUE doc)
+                SELECT "k"||TO_STR(d) AS k,
+                       {{"updated":"2026-03-25T01:00:00",
+                         "created":"2026-03-25T01:00:00",
+                         "geo": CASE WHEN IMOD(d,2) == 0 THEN "US" ELSE MISSING END,
+                         "segment":"consumer",
+                         "comparisonResults":{{
+                             "v1-vs-v2":{{"summary":{{"overallMatch": CASE IMOD(d,4) WHEN 0 THEN true WHEN 1 THEN false WHEN 2 THEN NULL END, "totalFields": IMOD(d,7)}}}},
+                             "v1-vs-v3":{{"summary":{{"overallMatch": CASE IMOD(d,4) WHEN 0 THEN true WHEN 1 THEN false WHEN 2 THEN NULL END, "totalFields": IMOD(d,7)}}}},
+                             "v1-vs-v4":{{"summary":{{"overallMatch": CASE IMOD(d,4) WHEN 0 THEN true WHEN 1 THEN false WHEN 2 THEN NULL END, "totalFields": IMOD(d,7)}}}}
+                         }}}} AS doc
+                FROM ARRAY_RANGE(0,{doc_count}) AS d
+            """)
+            self.log.info(f"MB-71168: Inserted {doc_count} docs")
+
+            self.run_cbq_query(
+                f"CREATE INDEX {ix1} ON `{bucket}`.`{scope}`.`{collection}`(geo, segment, created)"
+            )
+            self.run_cbq_query(
+                f"CREATE INDEX {ix2} ON `{bucket}`.`{scope}`.`{collection}`("
+                f"updated, "
+                f"comparisonResults.`v1-vs-v2`.summary.overallMatch, comparisonResults.`v1-vs-v2`.summary.totalFields, "
+                f"comparisonResults.`v1-vs-v3`.summary.overallMatch, comparisonResults.`v1-vs-v3`.summary.totalFields, "
+                f"comparisonResults.`v1-vs-v4`.summary.overallMatch, comparisonResults.`v1-vs-v4`.summary.totalFields)"
+            )
+            self.sleep(3)
+            self.log.info("MB-71168: Indexes created")
+
+            ks = f"`{bucket}`.`{scope}`.`{collection}`"
+            where = (f'cr.updated BETWEEN "2026-03-25T00:00:00" AND "2026-03-25T23:59:59" '
+                     f'AND od.created BETWEEN "2026-03-25T00:00:00" AND "2026-03-25T23:59:59" '
+                     f'AND od.geo = "US" AND od.segment = "consumer"')
+
+            # Original complex query — repeated CASE expressions in each COUNT
+            complex_query = f"""
+                SELECT COUNT(1) AS totalOrders,
+                    COUNT(CASE WHEN cr.comparisonResults.`v1-vs-v2`.summary.overallMatch = true AND cr.comparisonResults.`v1-vs-v2`.summary.totalFields > 0 THEN 1 END) AS v1v2_success,
+                    COUNT(CASE WHEN cr.comparisonResults.`v1-vs-v2`.summary.overallMatch = false THEN 1 END) AS v1v2_failures,
+                    COUNT(CASE WHEN cr.comparisonResults.`v1-vs-v2`.summary.overallMatch IS NULL THEN 1 END) AS v1v2_null,
+                    COUNT(CASE WHEN cr.comparisonResults.`v1-vs-v3`.summary.overallMatch = true AND cr.comparisonResults.`v1-vs-v3`.summary.totalFields > 0 THEN 1 END) AS v1v3_success,
+                    COUNT(CASE WHEN cr.comparisonResults.`v1-vs-v3`.summary.overallMatch = false THEN 1 END) AS v1v3_failures,
+                    COUNT(CASE WHEN cr.comparisonResults.`v1-vs-v3`.summary.overallMatch IS NULL THEN 1 END) AS v1v3_null,
+                    COUNT(CASE WHEN cr.comparisonResults.`v1-vs-v4`.summary.overallMatch = true AND cr.comparisonResults.`v1-vs-v4`.summary.totalFields > 0 THEN 1 END) AS v1v4_success,
+                    COUNT(CASE WHEN cr.comparisonResults.`v1-vs-v4`.summary.overallMatch = false THEN 1 END) AS v1v4_failures,
+                    COUNT(CASE WHEN cr.comparisonResults.`v1-vs-v4`.summary.overallMatch IS NULL THEN 1 END) AS v1v4_null
+                FROM {ks} cr
+                JOIN {ks} AS od ON META(cr).id = META(od).id
+                WHERE {where}
+            """
+
+            # LET-based rewrite — expressions computed once
+            let_query = f"""
+                SELECT COUNT(1) AS totalOrders,
+                    COUNT(v2s) AS v1v2_success, COUNT(v2f) AS v1v2_failures, COUNT(v2n) AS v1v2_null,
+                    COUNT(v3s) AS v1v3_success, COUNT(v3f) AS v1v3_failures, COUNT(v3n) AS v1v3_null,
+                    COUNT(v4s) AS v1v4_success, COUNT(v4f) AS v1v4_failures, COUNT(v4n) AS v1v4_null
+                FROM {ks} cr
+                JOIN {ks} AS od ON META(cr).id = META(od).id
+                LET v2s = CASE WHEN cr.comparisonResults.`v1-vs-v2`.summary.overallMatch = true AND cr.comparisonResults.`v1-vs-v2`.summary.totalFields > 0 THEN 1 END,
+                    v2f = CASE WHEN cr.comparisonResults.`v1-vs-v2`.summary.overallMatch = false THEN 1 END,
+                    v2n = CASE WHEN cr.comparisonResults.`v1-vs-v2`.summary.overallMatch IS NULL THEN 1 END,
+                    v3s = CASE WHEN cr.comparisonResults.`v1-vs-v3`.summary.overallMatch = true AND cr.comparisonResults.`v1-vs-v3`.summary.totalFields > 0 THEN 1 END,
+                    v3f = CASE WHEN cr.comparisonResults.`v1-vs-v3`.summary.overallMatch = false THEN 1 END,
+                    v3n = CASE WHEN cr.comparisonResults.`v1-vs-v3`.summary.overallMatch IS NULL THEN 1 END,
+                    v4s = CASE WHEN cr.comparisonResults.`v1-vs-v4`.summary.overallMatch = true AND cr.comparisonResults.`v1-vs-v4`.summary.totalFields > 0 THEN 1 END,
+                    v4f = CASE WHEN cr.comparisonResults.`v1-vs-v4`.summary.overallMatch = false THEN 1 END,
+                    v4n = CASE WHEN cr.comparisonResults.`v1-vs-v4`.summary.overallMatch IS NULL THEN 1 END
+                WHERE {where}
+            """
+
+            complex_result = self.run_cbq_query(complex_query, query_params={"timeout": "300s"})
+            self.assertEqual(complex_result['status'], 'success', f"MB-71168: Complex query failed: {complex_result}")
+            complex_elapsed = complex_result['metrics']['elapsedTime']
+            self.log.info(f"MB-71168: Complex query elapsed: {complex_elapsed}")
+
+            let_result = self.run_cbq_query(let_query, query_params={"timeout": "300s"})
+            self.assertEqual(let_result['status'], 'success', f"MB-71168: LET query failed: {let_result}")
+            let_elapsed = let_result['metrics']['elapsedTime']
+            self.log.info(f"MB-71168: LET query elapsed: {let_elapsed}")
+
+            # Verify both return same results
+            self.assertEqual(complex_result['results'], let_result['results'],
+                             f"MB-71168: Results mismatch between complex and LET queries")
+            self.log.info("MB-71168: Both queries return identical results — fix verified")
+
+        finally:
+            try:
+                self.run_cbq_query(f"DROP INDEX {ix1} ON `{bucket}`.`{scope}`.`{collection}`")
+            except Exception:
+                pass
+            try:
+                self.run_cbq_query(f"DROP INDEX {ix2} ON `{bucket}`.`{scope}`.`{collection}`")
+            except Exception:
+                pass
+            try:
+                self.run_cbq_query(f"DROP COLLECTION `{bucket}`.`{scope}`.`{collection}` IF EXISTS")
+            except Exception:
+                pass
+            try:
+                self.run_cbq_query(f"DROP SCOPE `{bucket}`.`{scope}` IF EXISTS")
+            except Exception:
+                pass
+
+

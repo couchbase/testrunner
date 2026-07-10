@@ -1039,6 +1039,69 @@ class QueriesViewsTests(QuerySanityTests):
                     except:
                         pass
 
+    def test_mb72773_indexinfo_basic(self):
+        """MB-72773: indexinfo() returns info for a specific index - basic case."""
+        self.fail_if_no_buckets()
+        query_bucket = self.query_buckets[0]
+        bucket = self.buckets[0]
+        index_name = "ix_mb72773_basic"
+        try:
+            self.query = f"CREATE INDEX {index_name} ON {query_bucket}(name) USING {self.index_type}"
+            self.run_cbq_query()
+            self._wait_for_index_online(bucket, index_name)
+
+            self.query = f"SELECT d.* FROM indexinfo('{index_name}', '{bucket.name}', '_default', '_default') AS d"
+            result = self.run_cbq_query()
+            self.assertTrue(len(result['results']) > 0,
+                            f"indexinfo() returned empty results for existing index {index_name}")
+            index_data = result['results'][0]
+            self.assertEqual(index_data.get('name'), index_name,
+                             f"Expected index name {index_name}, got {index_data.get('name')}")
+            self.assertIn('state', index_data,
+                          f"indexinfo() result missing 'state' field: {index_data}")
+        finally:
+            self.query = f"DROP INDEX {index_name} ON {query_bucket} USING {self.index_type}"
+            try:
+                self.run_cbq_query()
+            except Exception:
+                pass
+
+    def test_mb72773_indexinfo_nonexistent(self):
+        """MB-72773: indexinfo() returns empty array for non-existent index."""
+        self.fail_if_no_buckets()
+        bucket = self.buckets[0]
+        self.query = f"SELECT d.* FROM indexinfo('ix_does_not_exist_mb72773', '{bucket.name}', '_default', '_default') AS d"
+        result = self.run_cbq_query()
+        self.assertEqual(len(result['results']), 0,
+                         f"indexinfo() should return empty array for non-existent index, got: {result['results']}")
+
+    def test_mb72773_indexinfo_multiple_fields(self):
+        """MB-72773: indexinfo() works for composite index and result contains key fields."""
+        self.fail_if_no_buckets()
+        query_bucket = self.query_buckets[0]
+        bucket = self.buckets[0]
+        index_name = "ix_mb72773_composite"
+        try:
+            self.query = f"CREATE INDEX {index_name} ON {query_bucket}(name, job_title) USING {self.index_type}"
+            self.run_cbq_query()
+            self._wait_for_index_online(bucket, index_name)
+
+            self.query = f"SELECT d.* FROM indexinfo('{index_name}', '{bucket.name}', '_default', '_default') AS d"
+            result = self.run_cbq_query()
+            self.assertTrue(len(result['results']) > 0,
+                            f"indexinfo() returned empty results for composite index {index_name}")
+            index_data = result['results'][0]
+            self.assertEqual(index_data.get('name'), index_name,
+                             f"Expected index name {index_name}, got {index_data.get('name')}")
+            self.assertIn('index_key', index_data,
+                          f"indexinfo() result missing 'index_key' field: {index_data}")
+        finally:
+            self.query = f"DROP INDEX {index_name} ON {query_bucket} USING {self.index_type}"
+            try:
+                self.run_cbq_query()
+            except Exception:
+                pass
+
     def test_negative_indexes(self):
         queries_errors = {'create index gsi on ' + self.query_buckets[0] + '(name) USING %s': ('syntax error', 3000)}
         self.negative_common_body(queries_errors)
