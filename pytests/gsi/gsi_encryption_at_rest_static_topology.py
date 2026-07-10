@@ -973,20 +973,24 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
         try:
             self.log.info(f"[STEP 9] Upserting {upsert_count} docs into each bucket post-toggle...")
             for bucket_name in [bucket_a, bucket_b]:
-                values = ", ".join(
-                    f"(\"toggle_upsert_{i}\", {{\"name\": \"toggle_doc_{i}\", \"toggle_seq\": {i}}})"
-                    for i in range(upsert_count)
+                # Use the same doc generator/schema as the initial load (not ad hoc JSON) so
+                # the new docs carry the fields (price, free_breakfast, type, etc.) that the
+                # created GSI indexes are built on — otherwise GSI correctly excludes
+                # schema-incompatible docs while the raw KV count doesn't, causing a
+                # false-positive mismatch in item_count_related_validations().
+                gen_toggle_upsert = SDKDataLoader(
+                    num_ops=upsert_count, percent_create=100, percent_update=0, percent_delete=0,
+                    scope="_default", collection="_default",
+                    json_template=self.json_template, output=True,
+                    username=self.username, password=self.password,
+                    key_prefix="toggle_upsert_"
                 )
-                upsert_query = (
-                    f"UPSERT INTO `{bucket_name}` (KEY, VALUE) VALUES {values} RETURNING META().id"
+                tasks = self.data_ops_javasdk_loader_in_batches_to_collection(
+                    bucket_name, gen_toggle_upsert, batch_size=upsert_count
                 )
-                result = self.run_cbq_query(query=upsert_query, server=query_node)
-                returned_ids = [r['id'] for r in result.get('results', [])]
-                self.assertEqual(
-                    len(returned_ids), upsert_count,
-                    f"[STEP 9] Expected {upsert_count} upserted docs in '{bucket_name}', got {len(returned_ids)}"
-                )
-                self.log.info(f"[STEP 9] Upserted {len(returned_ids)} docs into '{bucket_name}'")
+                for task in tasks:
+                    task.result()
+                self.log.info(f"[STEP 9] Upserted {upsert_count} schema-conformant docs into '{bucket_name}'")
             self.log.info("[STEP 9] PASSED - Upserts succeeded on both buckets")
         except Exception as e:
             self.log.error(f"[STEP 9] FAILED: {str(e)}")
@@ -1239,21 +1243,27 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
             self.log.info(f"[STEP 9] Running post-recovery mutations on both buckets "
                           f"(upsert={upsert_count}, delete={delete_count}, update={update_count})...")
             for bucket_name in [bucket_a, bucket_b]:
-                # Upsert new docs
-                upsert_values = ", ".join(
-                    f"(\"recovery_upsert_{i}\", {{\"name\": \"recovery_doc_{i}\", \"recovery_seq\": {i}}})"
-                    for i in range(upsert_count)
+                # Upsert new docs. Use the same doc generator/schema as the initial load
+                # (not ad hoc JSON) so the new docs carry the fields (price, free_breakfast,
+                # type, etc.) that the created GSI indexes are built on — otherwise GSI
+                # correctly excludes schema-incompatible docs while the raw KV count doesn't,
+                # causing a false-positive mismatch in item_count_related_validations().
+                gen_recovery_upsert = SDKDataLoader(
+                    num_ops=upsert_count, percent_create=100, percent_update=0, percent_delete=0,
+                    scope="_default", collection="_default",
+                    json_template=self.json_template, output=True,
+                    username=self.username, password=self.password,
+                    key_prefix="recovery_upsert_"
                 )
-                upsert_result = self.run_cbq_query(
-                    query=f"UPSERT INTO `{bucket_name}` (KEY, VALUE) VALUES {upsert_values} RETURNING META().id",
-                    server=query_node
+                tasks = self.data_ops_javasdk_loader_in_batches_to_collection(
+                    bucket_name, gen_recovery_upsert, batch_size=upsert_count
                 )
-                actual_upserted = len(upsert_result.get('results', []))
-                self.assertEqual(actual_upserted, upsert_count,
-                    f"[STEP 9] '{bucket_name}': expected {upsert_count} upserted docs, got {actual_upserted}")
+                for task in tasks:
+                    task.result()
+                self.log.info(f"[STEP 9] '{bucket_name}': upserted {upsert_count} schema-conformant docs")
 
                 # Delete docs by key range (first delete_count keys from the initial load)
-                delete_keys = ", ".join(f'"pymc{i}"' for i in range(delete_count))
+                delete_keys = ", ".join(f'"doc_{i}"' for i in range(delete_count))
                 delete_result = self.run_cbq_query(
                     query=f"DELETE FROM `{bucket_name}` USE KEYS [{delete_keys}] RETURNING META().id",
                     server=query_node
@@ -1262,7 +1272,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
                 self.log.info(f"[STEP 9] '{bucket_name}': deleted {actual_deleted} docs")
 
                 # Update docs by key range (next update_count keys)
-                update_keys = ", ".join(f'"pymc{i}"' for i in range(delete_count, delete_count + update_count))
+                update_keys = ", ".join(f'"doc_{i}"' for i in range(delete_count, delete_count + update_count))
                 self.run_cbq_query(
                     query=f"UPDATE `{bucket_name}` USE KEYS [{update_keys}] SET recovery_updated = true",
                     server=query_node
@@ -1953,19 +1963,26 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
         try:
             self.log.info(f"[STEP 12] Running post-re-encryption mutations "
                           f"(upsert={upsert_count}, delete={delete_count}, update={update_count})...")
-            upsert_values = ", ".join(
-                f"(\"reencrypt_upsert_{i}\", {{\"name\": \"reencrypt_doc_{i}\", \"reencrypt_seq\": {i}}})"
-                for i in range(upsert_count)
+            # Use the same doc generator/schema as the initial load (not ad hoc JSON) so
+            # the new docs carry the fields (price, free_breakfast, type, etc.) that the
+            # created GSI indexes are built on — otherwise GSI correctly excludes
+            # schema-incompatible docs while the raw KV count doesn't, causing a
+            # false-positive mismatch in item_count_related_validations().
+            gen_reencrypt_upsert = SDKDataLoader(
+                num_ops=upsert_count, percent_create=100, percent_update=0, percent_delete=0,
+                scope="_default", collection="_default",
+                json_template=self.json_template, output=True,
+                username=self.username, password=self.password,
+                key_prefix="reencrypt_upsert_"
             )
-            upsert_result = self.run_cbq_query(
-                query=f"UPSERT INTO `{bucket_name}` (KEY, VALUE) VALUES {upsert_values} RETURNING META().id",
-                server=query_node
+            tasks = self.data_ops_javasdk_loader_in_batches_to_collection(
+                bucket_name, gen_reencrypt_upsert, batch_size=upsert_count
             )
-            actual_upserted = len(upsert_result.get('results', []))
-            self.assertEqual(actual_upserted, upsert_count,
-                f"[STEP 12] Expected {upsert_count} upserted docs, got {actual_upserted}")
+            for task in tasks:
+                task.result()
+            self.log.info(f"[STEP 12] Upserted {upsert_count} schema-conformant docs into '{bucket_name}'")
 
-            delete_keys = ", ".join(f'"pymc{i}"' for i in range(delete_count))
+            delete_keys = ", ".join(f'"doc_{i}"' for i in range(delete_count))
             delete_result = self.run_cbq_query(
                 query=f"DELETE FROM `{bucket_name}` USE KEYS [{delete_keys}] RETURNING META().id",
                 server=query_node
@@ -1973,7 +1990,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
             actual_deleted = len(delete_result.get('results', []))
             self.log.info(f"[STEP 12] Deleted {actual_deleted} docs")
 
-            update_keys = ", ".join(f'"pymc{i}"' for i in range(delete_count, delete_count + update_count))
+            update_keys = ", ".join(f'"doc_{i}"' for i in range(delete_count, delete_count + update_count))
             self.run_cbq_query(
                 query=f"UPDATE `{bucket_name}` USE KEYS [{update_keys}] SET reencrypt_updated = true",
                 server=query_node
