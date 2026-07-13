@@ -494,12 +494,6 @@ class ForwardLocalOnlyXDCRBase(XDCRNewBaseTest):
                 "Expected {0}={1} on {2}->{3}, got {4}".format(
                     FORWARD_LOCAL_ONLY, expected, src_bucket, dest_bucket,
                     actual))
-    def _scrape_skipped_metric(self, server):
-        """Pull `xdcr_non_local_mutations_skipped_total` from `server`,
-        summed across label sets. Raises `MetricsScrapeError` on infra
-        failure (distinct from "metric absent")."""
-        return self.scrape_prometheus_metric(server, SKIPPED_METRIC)
-
     def _wait_for_metric_increment(self, cluster, baseline, timeout=None,
                                     poll_interval=15):
         """Poll the cluster-wide skipped counter until it exceeds baseline
@@ -528,22 +522,29 @@ class ForwardLocalOnlyXDCRBase(XDCRNewBaseTest):
         return last
 
     def _get_skipped_total(self, cluster):
-        """Cluster-wide sum of non-local mutations skipped.
-        Propagates `MetricsScrapeError` if ANY node's Prometheus
-        endpoint is unreachable so a node-down event does NOT silently
-        read as "counter didn't increment"."""
-        total = 0.0
-        for node in cluster.get_nodes():
-            value = self._scrape_skipped_metric(node)
-            self.log.info(
-                "{0} {1}={2} on {3} ({4})".format(
-                    self._tag(), SKIPPED_METRIC, value,
-                    node.ip, cluster.get_name()))
-            total += value
+        """Cluster-wide sum of non-local mutations skipped, read via
+        the stats query API (`/pools/default/stats/range`) -- the only
+        REST channel that serves goxdcr's Prometheus series; the :8091
+        node expositions never carry xdcr_* metrics and read them as
+        a vacuous 0.0. Propagates `MetricsScrapeError` on any stats
+        backend error so a node-down event does NOT silently read as
+        "counter didn't increment". Logs the matched series count:
+        0 series means the metric is ABSENT (e.g. replication not yet
+        registered/scraped), which is not the same as a genuine
+        zero."""
+        total, series_count = self.query_prometheus_metric(
+            cluster, SKIPPED_METRIC)
+        if series_count == 0:
+            self.log.warning(
+                "{0} {1} has NO series on {2} -- reading it as 0.0. "
+                "Absent != zero: series are expected once "
+                "replications exist (the counter registers even for "
+                "paused pipelines)".format(
+                    self._tag(), SKIPPED_METRIC, cluster.get_name()))
         self.log.info(
-            "{0} cluster {1} total {2}={3}".format(
+            "{0} cluster {1} total {2}={3} (series={4})".format(
                 self._tag(), cluster.get_name(),
-                SKIPPED_METRIC, total))
+                SKIPPED_METRIC, total, series_count))
         return total
     def _borrow_sdk_client(self, cluster, bucket_name):
         """Return a cached SDK client for (cluster, bucket). Callers
@@ -1310,12 +1311,6 @@ class ForwardLocalOnlyXDCRBase(XDCRNewBaseTest):
         self._local_hlv_src_cache[cache_key] = src
         return src
 
-    def _scrape_metric_lines(self, server, name_substr,
-                              endpoints=("_prometheusMetrics",
-                                          "_prometheusMetricsHigh")):
-        return self.scrape_prometheus_lines(
-            server, name_substr, endpoints=endpoints)
-
     def _remote_cluster_uuid_for_peer(self, cluster, peer_cluster):
         return self.remote_cluster_uuid_for_peer(cluster, peer_cluster)
 
@@ -1351,8 +1346,11 @@ class ForwardLocalOnlyXDCRTests(ForwardLocalOnlyXDCRBase):
         """SDK creates + updates with forwardLocalOnly=true on bidir
         AA replication. All mutations are LOCAL (Type-1 SDK writes
         with HLV stamping on outbound). Spec: local mutations
-        replicate normally; skip counter is documented to stay flat
-        (but on current builds is unreliable -- see diagnostic logs).
+        replicate normally. Note the replicated copies are foreign-HLV
+        on the RECEIVING side, so with FLO=true on both outbounds each
+        cluster skips the other's copies on the return path -- both
+        skip counters are expected to ADVANCE (~sdk_count each), not
+        stay flat.
 
         Assertions (in order of strength):
           1. Doc counts converge across both clusters
@@ -1371,10 +1369,15 @@ class ForwardLocalOnlyXDCRTests(ForwardLocalOnlyXDCRBase):
              check, the test would pass even if FLO did nothing
              beyond regular ECCV+AA replication.
 
-        Counter delta is logged as DIAGNOSTIC only -- the skip
-        counter is currently unwired on goxdcr; previous assertion
-        `assertEqual(delta, 0)` was vacuous (counter always at 0
-        regardless of FLO behavior)."""
+        Counter deltas are logged as DIAGNOSTIC only: with FLO on
+        both sides the per-side expectation depends on load timing,
+        so the strict counter assertion lives in
+        `test_forward_local_only_counter_one_cluster_only` (one-sided
+        FLO, deterministic delta). A previous revision asserted
+        `delta == 0` based on a misread -- the counter was being
+        scraped from :8091/_prometheusMetrics, which never carries
+        xdcr_* series, so it read a vacuous 0.0 regardless of
+        product behavior."""
         self._standard_flo_setup(
             disable_shortcircuit_on=list(self.get_cb_clusters()))
         self._verify_forward_local_only_setting(self.src_cluster, True)
@@ -1842,12 +1845,12 @@ class ForwardLocalOnlyXDCRTests(ForwardLocalOnlyXDCRBase):
             Assertion: HLV xattr PRESENT on A's flo-shortcircuit-B-*
             docs (after a settle window).
 
-        Why this signal and not the skipped counter: the counter is
-        documented to track FLO-skipped mutations, but on this build
-        FLO appears to short-circuit BEFORE the counter increment
-        path, so it stays at 0 even under correct behavior. HLV-
-        xattr-on-A is a direct, observable consequence of the echo
-        path firing (or not), independent of the counter's wiring."""
+        Why this signal and not the skipped counter: HLV-xattr-on-A
+        is a direct data-path consequence of the echo firing (or
+        not), independent of stats plumbing. The counter (read via
+        the stats query API) is logged as corroborating diagnostic;
+        its strict assertion lives in
+        `test_forward_local_only_counter_one_cluster_only`."""
         self._standard_flo_setup(
             disable_shortcircuit_on=self.dest_cluster, enable_flo=False)
 
@@ -2095,11 +2098,10 @@ class ForwardLocalOnlyXDCRTests(ForwardLocalOnlyXDCRBase):
         """Bisects FLO's outbound-skip effect via HLV-xattr-on-A.
 
         Spec says `xdcr_non_local_mutations_skipped_total` should
-        increment on the dropping side. Empirically on current builds
-        the counter is registered but does not advance (the FLO skip
-        path short-circuits before the increment site). Rather than
-        depend on the unwired counter for the test outcome, use the
-        DIRECT observable consequence of the skip path firing or not:
+        increment on the dropping side; the strict counter assertion
+        lives in `test_forward_local_only_counter_one_cluster_only`.
+        This test bisects the same behavior through the DIRECT
+        observable consequence of the skip path firing or not:
         whether A's KV-no-HLV doc gets overwritten by a B-side echo.
 
         Bisect:
@@ -2112,9 +2114,11 @@ class ForwardLocalOnlyXDCRTests(ForwardLocalOnlyXDCRBase):
             KV-no-HLV doc loses CR to incoming HLV-stamped echo ->
             A's doc gains HLV xattr.
 
-        Counter values are logged at every stage so the same test
-        run produces evidence for the goxdcr counter-wiring bug
-        report without making the assertion depend on it."""
+        Counter values (read via the stats query API) are logged at
+        every stage as corroborating diagnostics without making the
+        assertion depend on them. Expected: Branch A delta on B is
+        ~sdk_count (B skips A's foreign-HLV docs); Branch B delta on
+        B is 0 (FLO off on B's outbound -> no skip path)."""
         self._standard_flo_setup(
             disable_shortcircuit_on=self.dest_cluster, enable_flo=False)
 
@@ -2250,12 +2254,13 @@ class ForwardLocalOnlyXDCRTests(ForwardLocalOnlyXDCRBase):
             `xdcr_non_local_mutations_skipped_total` on B.
 
         Why this scenario is the right one for a strict counter
-        assertion: when FLO is on BOTH clusters, the foreign-HLV
-        skip happens at the OUTBOUND DCP layer before the counter
-        increment site on current builds (separately tracked as a
-        product issue). With FLO on ONE cluster, the skip path is
-        the only handler the foreign-HLV doc traverses, and the
-        counter is guaranteed to bump per spec.
+        assertion: with FLO on ONE side only, the expected deltas are
+        exact and attributable -- B (FLO=true) must skip every
+        foreign-HLV doc and count each skip, while A (FLO=false) has
+        no skip path active, so A's counter must stay flat. With FLO
+        on both sides, both counters advance and the per-side
+        expectation depends on load timing, so the assertion would
+        have to be loose.
 
         Verifications (strict, in order):
           1. Setting readback: FLO=true on B's reps, FLO=false on
@@ -2275,87 +2280,34 @@ class ForwardLocalOnlyXDCRTests(ForwardLocalOnlyXDCRBase):
         cr_metric = "xdcr_docs_failed_cr_source_total"
         written_metric = "xdcr_docs_written_total"
 
-        # Empirically, the per-node `/_prometheusMetrics` endpoint
-        # returns 0 for `xdcr_docs_written_total` on this build even
-        # when goxdcr is actively writing docs. The cluster-level
-        # `/metrics` endpoint (ns_server's aggregated Prometheus
-        # exposition) surfaces the same metric with non-zero values.
-        # Use `/metrics` for written; keep cr_source_fail on the
-        # per-node path (no observed discrepancy there).
-        import re as _re
-
-        def _scrape_one(cluster, metric_name, label):
-            total = 0.0
-            per_node = []
-            for node in cluster.get_nodes():
-                try:
-                    v = self.scrape_prometheus_metric(node, metric_name)
-                except MetricsScrapeError as e:
-                    self.log.warning(
-                        "{0} {1} {2} scrape FAILED on {3} ({4}): "
-                        "{5}".format(
-                            self._tag(), label, metric_name,
-                            node.ip, cluster.get_name(), e))
-                    per_node.append((node.ip, "<scrape-failed>"))
-                    continue
-                per_node.append((node.ip, v))
-                total += v
-            self.log.info(
-                "{0} {1} cluster={2} {3} per-node={4} total={5}".format(
-                    self._tag(), label, cluster.get_name(),
-                    metric_name, per_node, total))
-            return total
-
-        def _scrape_via_metrics_api(cluster, metric_name, label):
-            """Cluster-level /metrics scrape. Boundary-matches the
-            metric name (avoids the prefix-match bug that would sum
-            `<name>_<suffix>` series). Returns the float sum across
-            every label-set series for `metric_name`, or 0.0 on
-            scrape failure with a warning."""
-            rest = RestConnection(cluster.get_master_node())
-            api = rest.baseUrl + "metrics"
+        def _scrape_metric(cluster, metric_name, label):
+            """Cluster-wide total via the stats query API -- the :8091
+            node expositions do not carry xdcr_* series at all, so
+            reading them there yields a vacuous 0.0. Best-effort:
+            returns 0.0 with a warning on scrape failure because these
+            two metrics are diagnostics; the assertion-bearing skip
+            counter goes through `_get_skipped_total`, which raises
+            instead."""
             try:
-                status, content, _ = rest._http_request(api)
-            except Exception as e:
+                total, series = self.query_prometheus_metric(
+                    cluster, metric_name)
+            except MetricsScrapeError as e:
                 self.log.warning(
-                    "{0} {1} /metrics request raised on {2}: {3}"
-                    .format(self._tag(), label,
-                             cluster.get_name(), e))
+                    "{0} {1} {2} scrape FAILED on {3}: {4}".format(
+                        self._tag(), label, metric_name,
+                        cluster.get_name(), e))
                 return 0.0
-            if not status:
-                self.log.warning(
-                    "{0} {1} /metrics non-OK on {2}".format(
-                        self._tag(), label, cluster.get_name()))
-                return 0.0
-            text = (content.decode()
-                    if isinstance(content, bytes) else str(content))
-            pat = _re.compile(
-                r"^" + _re.escape(metric_name)
-                + r"(\{[^}]*\})?\s+(\S+)\s*$", _re.MULTILINE)
-            total = 0.0
-            sample_lines = []
-            for m in pat.finditer(text):
-                try:
-                    v = float(m.group(2))
-                except ValueError:
-                    continue
-                total += v
-                if len(sample_lines) < 3:
-                    sample_lines.append(
-                        "{0}={1}".format(m.group(1) or "<no-labels>", v))
             self.log.info(
-                "{0} {1} cluster={2} {3} /metrics total={4} "
-                "samples={5}".format(
+                "{0} {1} cluster={2} {3} total={4} series={5}".format(
                     self._tag(), label, cluster.get_name(),
-                    metric_name, total, sample_lines))
+                    metric_name, total, series))
             return total
 
         def _scrape_cr_failed(cluster, label):
-            return _scrape_one(cluster, cr_metric, label)
+            return _scrape_metric(cluster, cr_metric, label)
 
         def _scrape_written(cluster, label):
-            return _scrape_via_metrics_api(
-                cluster, written_metric, label)
+            return _scrape_metric(cluster, written_metric, label)
 
         self._set_forward_local_only_on_cluster(
             self.dest_cluster, True)
@@ -2506,12 +2458,14 @@ class ForwardLocalOnlyXDCRTests(ForwardLocalOnlyXDCRBase):
         written_delta_a = written_post_a - written_baseline_a
         self.log.info(
             "{0} DIAGNOSTIC {1} deltas: B={2} (baseline={3}), "
-            "A={4} (baseline={5}). Zero on B implies B's outbound "
-            "to A is not running at all -- attribution flips from "
-            "'skip path bug' to 'B's outbound stalled'.".format(
+            "A={4} (baseline={5}). Expected: ~0 on B (FLO skips "
+            "everything, nothing written to A) and >= {6} on A "
+            "(forward A->B load). Non-zero on B means B echoed "
+            "foreign-HLV docs instead of skipping; zero on A means "
+            "the forward path did not deliver.".format(
                 self._tag(), written_metric,
                 written_delta_b, written_baseline_b,
-                written_delta_a, written_baseline_a))
+                written_delta_a, written_baseline_a, sdk_count))
 
         # Attribution gate: distinguish "skip path broken" from
         # "outbound stalled" before claiming PRODUCT BUG on the skip
@@ -2541,14 +2495,19 @@ class ForwardLocalOnlyXDCRTests(ForwardLocalOnlyXDCRBase):
         self.assertGreaterEqual(
             delta_b, sdk_count,
             "{0} PRODUCT BUG: with FLO=true on B's outbound only, "
-            "B must skip foreign-HLV docs and bump the counter by "
-            ">= {1}. Observed delta={2}. "
+            "B must skip foreign-HLV docs and bump `{3}` by "
+            ">= {1}. Observed delta={2} via the stats query API "
+            "(/pools/default/stats/range). "
             "Setting verified: FLO=true on B, FLO=false on A, "
             "disableHlvBasedShortCircuit=true on B. Forward "
-            "replication confirmed (HLV stamped on B). "
-            "Prometheus metric `{3}` is registered but the "
-            "increment path in goxdcr's outbound FLO-skip code "
-            "is broken or not reached on this build.".format(
+            "replication confirmed (HLV stamped on B) and B's "
+            "outbound consumed the docs (docs_received_from_dcp "
+            "above), so a flat counter means goxdcr skipped without "
+            "counting. Before filing, cross-check the per-nozzle "
+            "`nonLocalMutationsSkipped=` values in the xmem state "
+            "dumps in B's goxdcr.log: nonzero there while this "
+            "metric stays flat re-attributes the bug to stats "
+            "export rather than the skip path.".format(
                 self._tag(), sdk_count, delta_b, SKIPPED_METRIC))
 
         if delta_a is not None:

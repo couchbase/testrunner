@@ -6349,20 +6349,103 @@ class XDCRNewBaseTest(unittest.TestCase):
             return None
 
     # ------------------------------------------------------------------
-    # Prometheus scrape helpers. Distinct from "metric absent from
-    # response" (legitimate zero) -- raises on infra failure so callers
-    # do not silently coerce a node-down event into a zero reading.
+    # Prometheus metric readers.
+    #
+    # Endpoint semantics (verified on 8.1.0-2452): the :8091 REST
+    # expositions do NOT serve all service metrics --
+    # `/_prometheusMetrics` carries only the cluster manager's own
+    # series (sys_*/cm_*/sysproc_*/...), and `/metrics` carries
+    # ns_server + KV but not goxdcr. Service metrics such as `xdcr_*`
+    # are scraped by the node-local Prometheus directly from each
+    # service and are reachable through the stats query API
+    # (`POST /pools/default/stats/range`), which is what the UI uses.
+    # Reading an `xdcr_*` metric off the :8091 expositions silently
+    # yields 0.0 forever ("metric absent" summed as zero) -- that
+    # exact misread once misattributed goxdcr's working FLO skip
+    # counter as a product bug. Use `query_prometheus_metric` for
+    # service metrics; `scrape_prometheus_metric` only for series the
+    # :8091 expositions actually carry.
+    #
+    # All readers raise `MetricsScrapeError` on infra failure so
+    # callers do not silently coerce a node-down event into a zero
+    # reading.
     # ------------------------------------------------------------------
+    def query_prometheus_metric(self, cluster, metric_name,
+                                 window=60, step=15):
+        """Cluster-wide read of `metric_name` via the stats query API
+        on the master node (`POST /pools/default/stats/range`) -- the
+        channel that actually serves service metrics (xdcr_*, kv_*,
+        ...); see section comment above.
+
+        Returns `(total, series_count)`: `total` sums the most recent
+        sample of every matched series (all label sets, all nodes);
+        `series_count` is how many series matched. A count of 0 means
+        the metric has no series (absent), which is NOT the same as a
+        genuine zero -- callers must surface the distinction.
+
+        Raises `MetricsScrapeError` if the request fails or the stats
+        backend reports errors (e.g. a node's Prometheus unreachable),
+        so partial reads never masquerade as low totals."""
+        rest = RestConnection(cluster.get_master_node())
+        api = rest.baseUrl + "pools/default/stats/range"
+        payload = json.dumps([{
+            "metric": [{"label": "name", "value": metric_name}],
+            "start": -window,
+            "step": step,
+        }])
+        try:
+            status, content, _ = rest._http_request(
+                api, "POST", payload,
+                headers=rest._create_capi_headers())
+        except Exception as e:
+            raise MetricsScrapeError(
+                "stats/range request for {0} failed on {1}: {2}".format(
+                    metric_name, cluster.get_name(), e))
+        if not status:
+            raise MetricsScrapeError(
+                "stats/range non-OK for {0} on {1}: {2}".format(
+                    metric_name, cluster.get_name(), content))
+        try:
+            result = json.loads(content)[0]
+        except (ValueError, IndexError, TypeError) as e:
+            raise MetricsScrapeError(
+                "stats/range unparsable for {0} on {1}: {2}".format(
+                    metric_name, cluster.get_name(), e))
+        errors = result.get("errors") or []
+        if errors:
+            raise MetricsScrapeError(
+                "stats/range reported errors for {0} on {1}: {2}".format(
+                    metric_name, cluster.get_name(), errors))
+        total = 0.0
+        series = result.get("data") or []
+        for entry in series:
+            values = entry.get("values") or []
+            if not values:
+                continue
+            try:
+                total += float(values[-1][1])
+            except (TypeError, ValueError, IndexError):
+                self.log.warning(
+                    "{0} Could not parse stats/range sample for {1}: "
+                    "{2}".format(
+                        self._log_tag(), metric_name, values[-1]))
+        return total, len(series)
+
     def scrape_prometheus_metric(self, server, metric_name,
                                    sum_across_labels=True,
                                    endpoints=("_prometheusMetrics",)):
-        """Scrape `metric_name` from the node's Prometheus endpoint(s).
-        Returns the summed float (default) or a list of (endpoint, line)
-        tuples if `sum_across_labels=False`.
+        """Scrape `metric_name` from the node's :8091 Prometheus
+        exposition(s). Only ns_server's own series live there --
+        service metrics (xdcr_*, kv_*, ...) are NEVER served on these
+        endpoints and read as absent; use `query_prometheus_metric`
+        for those. Returns the summed float (default; 0.0 with a
+        WARNING when the metric is absent) or a list of
+        (endpoint, line) tuples if `sum_across_labels=False`.
         Raises `MetricsScrapeError` if every endpoint is unreachable."""
         rest = RestConnection(server)
         total = 0.0
         lines = []
+        matched = 0
         any_ok = False
         last_err = None
         for endpoint in endpoints:
@@ -6393,6 +6476,7 @@ class XDCRNewBaseTest(unittest.TestCase):
                 name = stripped.split("{", 1)[0].split(None, 1)[0]
                 if name != metric_name:
                     continue
+                matched += 1
                 if sum_across_labels:
                     try:
                         total += float(line.rsplit(None, 1)[-1])
@@ -6406,6 +6490,14 @@ class XDCRNewBaseTest(unittest.TestCase):
             raise MetricsScrapeError(
                 "Prometheus scrape failed on {0}: {1}".format(
                     server.ip, last_err))
+        if not matched:
+            self.log.warning(
+                "{0} metric {1} ABSENT from {2} on {3} -- returning "
+                "0.0/[], but absent is NOT a zero reading. Service "
+                "metrics (xdcr_*, kv_*) are never exposed on these "
+                "endpoints; use query_prometheus_metric for them"
+                .format(self._log_tag(), metric_name,
+                        list(endpoints), server.ip))
         return total if sum_across_labels else lines
 
     def scrape_prometheus_lines(self, server, name_substr,
@@ -6415,7 +6507,9 @@ class XDCRNewBaseTest(unittest.TestCase):
         (case-insensitive) across the given endpoints. Used to detect
         whether a metric is exposed under a different name or label
         set than expected. Best-effort; does not raise on individual
-        endpoint failure."""
+        endpoint failure. NOTE: the :8091 expositions only carry
+        ns_server's own series -- an empty result for xdcr_*/kv_*
+        names means "not on this channel", not "does not exist"."""
         rest = RestConnection(server)
         matches = []
         for endpoint in endpoints:
