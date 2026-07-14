@@ -53,6 +53,14 @@ ELIXIR_ONPREM = "ELIXIR_ONPREM"
 ON_PREM_PROVISIONED = "ON_PREM_PROVISIONED"
 SERVERLESS_COLUMNAR = "SERVERLESS_COLUMNAR"
 
+# Frameworks whose ini file lives in an internal/private GitHub repo rather
+# than this repo's b/resources/, keyed by the doc's "framework" value.
+FRAMEWORK_GITHUB_REPO_MAP = {
+    # "testrunner": "couchbase/testrunner",
+    # "TAF": "couchbaselabs/TAF",
+    "RTAF": "couchbaselabs/RTAF",
+}
+
 CLOUD_SERVER_TYPES = [AWS, AZURE, GCP, SERVERLESS_ONCLOUD,
                       PROVISIONED_ONCLOUD, SERVERLESS_COLUMNAR]
 
@@ -114,6 +122,28 @@ def get_ssh_username_password(ini_file_name):
 
 def rreplace(str, pattern, num_replacements):
     return str.rsplit(pattern, num_replacements)[0]
+
+
+def fetch_ini_from_github(ini_file, repo, ref):
+    """Fetch an ini file from an internal GitHub repo and write it to
+    ini_file's path relative to the current working directory."""
+    gh_user = OS.environ.get("GITHUB_USER")
+    gh_token = OS.environ.get("GITHUB_TOKEN")
+    if not gh_user or not gh_token:
+        raise Exception(
+            "GITHUB_USER/GITHUB_TOKEN env vars must be set to fetch "
+            f"{ini_file} from {repo}")
+
+    url = f"https://raw.githubusercontent.com/{repo}/{ref}/{ini_file}"
+    response = requests.get(url, auth=(gh_user, gh_token), timeout=30)
+    response.raise_for_status()
+
+    parent_dir = OS.path.dirname(ini_file)
+    if parent_dir:
+        OS.makedirs(parent_dir, exist_ok=True)
+    with open(ini_file, "wb") as f:
+        f.write(response.content)
+    log.info(f"Fetched {ini_file} from {repo}@{ref}")
 
 
 def get_available_servers_count(options=None, is_addl_pool=False,
@@ -322,6 +352,9 @@ def extract_individual_tests_from_query_result(col_rel_version,
     conf_file = str(data['confFile']).strip()
     component = str(data["component"]).strip()
     framework = data["framework"] if "framework" in data else "testrunner"
+    if framework in FRAMEWORK_GITHUB_REPO_MAP:
+        fetch_ini_from_github(
+            ini_file, FRAMEWORK_GITHUB_REPO_MAP[framework], options.branch)
     jenkins_server_url = data['jenkins_server_url'] \
         if 'jenkins_server_url' in data else options.jenkins_server_url
     jenkins_server_url = str(jenkins_server_url)
@@ -465,7 +498,8 @@ def handle_no_launch_flag(testsToLaunch, options, total_jobs_count,
                                   testsToLaunch[i]['mode'], testsToLaunch[i]['timeLimit'],
                                   options.columnar_version,
                                   testsToLaunch[i]['mixed_build_config'],
-                                  options.is_dynamic_vms)
+                                  options.is_dynamic_vms,
+                                  options.rosetta_version)
         url = url + '&dispatcher_params=' + urllib.parse.urlencode(
             {"parameters": curr_job_info})
         # optional add [-docker] [-Jenkins extension] - TBD duplicate
@@ -586,6 +620,7 @@ def main():
     parser.add_option('--job_url', dest='job_url', default=None)
     parser.add_option('--sleep_between_trigger', dest='sleep_between_trigger', default=0)
     parser.add_option('--columnar_version', dest='columnar_version', default=0)
+    parser.add_option('--rosetta_version', dest='rosetta_version', default='')
     parser.add_option('--is_dynamic_vms', dest='is_dynamic_vms', default="false")
     parser.add_option('--log_level', dest='log_level', default='INFO',
                       help='Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)')
@@ -634,12 +669,14 @@ def main():
           nolaunch.............{}
           is_dynamic_vms.......{}
           Columnar version.....{}
+          Rosetta version......{}
           """.format(options.run, options.version, RELEASE_VERSION,
                      options.branch, branch_mismatch_warning, options.os,
                      options.url, options.cherrypick,
                      options.dashboardReportedParameters,
                      options.rerun_params, options.TIMEOUT, options.noLaunch,
-                     options.is_dynamic_vms, options.columnar_version))
+                     options.is_dynamic_vms, options.columnar_version,
+                     options.rosetta_version))
 
     if options.TEST_SUITE_DB:
         TEST_SUITE_DB = options.TEST_SUITE_DB
@@ -810,7 +847,7 @@ def main():
                    'installParameters={9}&branch={10}&slave={11}&' \
                    'owners={12}&mailing_list={13}&mode={14}&timeout={15}&' \
                    'columnar_version_number={16}&mixed_build_config={17}&' \
-                   'is_dynamic_vms={18}'
+                   'is_dynamic_vms={18}&rosetta_version={19}'
     if options.rerun_params:
         rerun_params = options.rerun_params.strip('\'')
         launchString = launchString + '&' + urllib.parse.urlencode({
@@ -1131,7 +1168,8 @@ def main():
                                           curr_job['timeLimit'],
                                           options.columnar_version,
                                           curr_job['mixed_build_config'],
-                                          options.is_dynamic_vms)
+                                          options.is_dynamic_vms,
+                                          options.rosetta_version)
                 url = url + '&dispatcher_params=' + urllib.parse.urlencode(
                     {"parameters": curr_job_info})
 
