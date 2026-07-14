@@ -27,6 +27,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import couchbase.subdocument as SD
 from couchbase_helper.documentgenerator import BlobGenerator
+from membase.api.exception import XDCRException
 from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection
 from xdcr.xdcrnewbasetests import (
@@ -168,19 +169,34 @@ class ForwardLocalOnlyXDCRBase(XDCRNewBaseTest):
                         "{2}".format(self._tag(), cluster.get_name(), e))
                     continue
                 for repl in replications:
-                    src_b = repl.get("source")
-                    dest_b = repl.get("target", "").rsplit("/", 1)[-1]
-                    if not src_b or not dest_b:
+                    # Address each replication by settingsURI:
+                    # bucket-name resolution (set_xdcr_param) hits the
+                    # first match only, skipping siblings when several
+                    # replications share bucket names (chain/ring
+                    # topologies).
+                    settings_uri = repl.get("settingsURI")
+                    repl_id = repl.get("id", settings_uri)
+                    if not settings_uri:
                         continue
+                    api = rest.baseUrl[:-1] + settings_uri
                     try:
-                        rest.set_xdcr_param(
-                            src_b, dest_b, FORWARD_LOCAL_ONLY, "false")
+                        status, content, _ = rest._http_request(
+                            api, "POST", urllib.parse.urlencode(
+                                {FORWARD_LOCAL_ONLY: "false"}))
+                        if not status:
+                            raise XDCRException(
+                                "non-OK response: {0}".format(content))
+                        self.log.info(
+                            "{0} tearDown: reset {1}=false on {2} "
+                            "repl {3}".format(
+                                self._tag(), FORWARD_LOCAL_ONLY,
+                                cluster.get_name(), repl_id))
                     except Exception as e:
                         self.log.warning(
                             "{0} tearDown: could not reset FLO on "
-                            "{1} {2}->{3}: {4}".format(
+                            "{1} repl {2}: {3}".format(
                                 self._tag(), cluster.get_name(),
-                                src_b, dest_b, e))
+                                repl_id, e))
         except Exception as e:
             self.log.warning(
                 "{0} tearDown FLO reset raised (non-fatal): {1}".format(
@@ -389,23 +405,83 @@ class ForwardLocalOnlyXDCRBase(XDCRNewBaseTest):
             "Waiting {0}s for ECCV to settle on all clusters".format(
                 self.eccv_settle_timeout))
         time.sleep(self.eccv_settle_timeout)
-    def _set_forward_local_only_on_cluster(self, cluster, value):
-        """Set forwardLocalOnly on every replication originating at
-        `cluster`. Each set is verified via REST readback; failure to
-        persist fails the test immediately."""
+    def _set_forward_local_only_on_replication(self, cluster, repl,
+                                                value, settle=5):
+        """Set forwardLocalOnly on ONE replication, addressed by its
+        `settingsURI`, then read the same URI back and assert.
+
+        The bucket-name helpers (`rest.set_xdcr_param` /
+        `set_xdcr_param_verified`) resolve the replication by source/
+        target bucket NAMES and always operate on the first match --
+        on a cluster with several replications between same-named
+        buckets (e.g. B->A and B->C, both default->default, in a
+        3-cluster chain) they would set one replication repeatedly
+        and never touch the others.
+
+        Raises `XDCRException` (with the REST response body, so
+        callers can match product validation messages) when the POST
+        is rejected."""
         rest = RestConnection(cluster.get_master_node())
-        replications = rest.get_replications()
+        api = rest.baseUrl[:-1] + repl["settingsURI"]
+        repl_id = repl.get("id", repl["settingsURI"])
+        coerced = str(value).lower()
+        self.log.info(
+            "{0} SET xdcr_param: cluster={1} repl={2} {3}={4}".format(
+                self._tag(), cluster.get_name(), repl_id,
+                FORWARD_LOCAL_ONLY, coerced))
+        status, content, _ = rest._http_request(
+            api, "POST",
+            urllib.parse.urlencode({FORWARD_LOCAL_ONLY: coerced}))
+        if not status:
+            raise XDCRException(
+                "Unable to set {0}={1} on replication {2} on cluster "
+                "{3}: {4}".format(
+                    FORWARD_LOCAL_ONLY, coerced, repl_id,
+                    cluster.get_name(), content))
+        if settle:
+            time.sleep(settle)
+        status, content, _ = rest._http_request(api)
+        if not status:
+            self.fail(
+                "{0} VERIFY FAILED: could not read back {1} on "
+                "replication {2}: {3}".format(
+                    self._tag(), FORWARD_LOCAL_ONLY, repl_id, content))
+        actual = json.loads(content).get(FORWARD_LOCAL_ONLY)
+        self.log.info(
+            "{0} VERIFY xdcr_param: repl={1} {2}={3} (expected {4})"
+            .format(self._tag(), repl_id, FORWARD_LOCAL_ONLY,
+                    actual, coerced))
+        self.assertEqual(
+            str(actual).lower(), coerced,
+            "{0} {1} did not persist on replication {2}; got {3!r}"
+            .format(self._tag(), FORWARD_LOCAL_ONLY, repl_id, actual))
+
+    def _set_forward_local_only_on_cluster(self, cluster, value,
+                                            peer_cluster=None):
+        """Set forwardLocalOnly on every replication originating at
+        `cluster` -- or, with `peer_cluster`, only the replications
+        targeting that peer (required in >=3-cluster topologies where
+        the setting is legal on some legs only, e.g. mixed-ECCV
+        chains: the product rejects FLO=true when the source bucket
+        has ECCV off). Each replication is addressed individually by
+        settingsURI and verified via readback; failure to persist
+        fails the test immediately."""
+        if peer_cluster is not None:
+            replications = [
+                repl for repl, _ in self.replications_to_peer(
+                    cluster, peer_cluster)]
+        else:
+            rest = RestConnection(cluster.get_master_node())
+            replications = rest.get_replications()
         if not replications:
             self.fail(
-                "{0} No replications found on cluster {1} when setting "
-                "forwardLocalOnly".format(self._tag(), cluster.get_name()))
+                "{0} No replications found on cluster {1} (peer={2}) "
+                "when setting forwardLocalOnly".format(
+                    self._tag(), cluster.get_name(),
+                    peer_cluster.get_name() if peer_cluster else "any"))
         for repl in replications:
-            src_bucket = repl["source"]
-            dest_bucket = repl["target"].rsplit("/", 1)[-1]
-            self._set_and_verify_xdcr_param(
-                cluster, src_bucket, dest_bucket,
-                FORWARD_LOCAL_ONLY, str(value).lower(),
-                settle=5, assert_match=True)
+            self._set_forward_local_only_on_replication(
+                cluster, repl, value)
 
     def _enable_forward_local_only_everywhere(self):
         for cluster in self.get_cb_clusters():
@@ -1686,7 +1762,48 @@ class ForwardLocalOnlyXDCRTests(ForwardLocalOnlyXDCRBase):
         self._set_eccv_on_cluster(cluster_c, False)
         time.sleep(self.eccv_settle_timeout)
 
-        self._enable_forward_local_only_everywhere()
+        # Product constraint (goxdcr replication_spec_service
+        # validation): forwardLocalOnly=true requires ECCV on the
+        # source bucket (and on the target bucket at creation time).
+        # In this mixed chain only the A<->B legs qualify: C's
+        # outbound is rejected with 400 because C's source bucket has
+        # ECCV off, and B->C would fail the target-side check on the
+        # creation path. The C->B->A flow under test only needs FLO
+        # on B->A anyway (B must treat C's HLV-less docs as local and
+        # forward them).
+        self._set_forward_local_only_on_cluster(
+            cluster_a, True, peer_cluster=cluster_b)
+        self._set_forward_local_only_on_cluster(
+            cluster_b, True, peer_cluster=cluster_a)
+
+        # Negative guard: the product must keep rejecting FLO on C's
+        # outbound while C's source bucket has no ECCV -- the premise
+        # this mixed topology rests on. Non-validation failures (e.g.
+        # master unreachable) propagate as test errors instead of
+        # masquerading as the expected rejection.
+        c_rejected = False
+        try:
+            self._set_forward_local_only_on_cluster(
+                cluster_c, True, peer_cluster=cluster_b)
+        except Exception as e:
+            if "enableCrossClusterVersioning" not in str(e):
+                raise
+            c_rejected = True
+            self.log.info(
+                "{0} FLO on C's outbound rejected as expected "
+                "(source-bucket ECCV off): {1}".format(self._tag(), e))
+        self.assertTrue(
+            c_rejected,
+            "{0} PRODUCT BUG: goxdcr accepted forwardLocalOnly=true "
+            "on C's outbound although C's source bucket has "
+            "enableCrossClusterVersioning=false; validation in "
+            "replication_spec_service should reject it".format(
+                self._tag()))
+
+        self.log.info(
+            "Waiting {0}s for live-update of forwardLocalOnly".format(
+                self.flo_settle_timeout))
+        time.sleep(self.flo_settle_timeout)
 
         # Snapshot B's docs_written stat targeting A. Used to prove
         # docs traversed B (B forwarded C-originated docs to A).
