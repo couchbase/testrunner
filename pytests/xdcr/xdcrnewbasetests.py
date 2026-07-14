@@ -3089,6 +3089,15 @@ class CouchbaseCluster:
         remote_cluster.add()
         self.__remote_clusters.append(remote_cluster)
 
+    def register_remote_cluster_ref(self, remote_cluster_ref):
+        """Register a pre-built XDCRRemoteClusterRef WITHOUT issuing the
+        REST create. For suites (e.g. CNG) that create refs/replications
+        through raw REST calls: _wait_for_replication_to_catchup and
+        verify_results only see replications registered here, so without
+        this both silently no-op.
+        """
+        self.__remote_clusters.append(remote_cluster_ref)
+
     # add params to what to modify
     def modify_remote_cluster(self, remote_cluster_name, require_encryption):
         """Modify Remote Cluster Reference Settings for given name.
@@ -4586,15 +4595,20 @@ class XDCRNewBaseTest(unittest.TestCase):
             self.fail("Replication restarted on one of the nodes, scroll above"
                       "for reason")
 
-    def get_collection_info(self, bucket, master):
-        print("Getting collection info for bucket: ", bucket)
+    def get_collection_info(self, bucket, master, cbadmin_password="password"):
+        # execute_cbstats dereferences bucket.name — accept bare names too
+        if isinstance(bucket, str):
+            bucket = Bucket(name=bucket)
+        print("Getting collection info for bucket: ", bucket.name)
         print("Master: ", master)
         shell = RemoteMachineShellConnection(master)
         nameOutput, error = shell.execute_cbstats(bucket, "collections",
                                                    cbadmin_user="Administrator",
+                                                   cbadmin_password=cbadmin_password,
                                                    options=" | grep ':name'")
         itemsOutput, error = shell.execute_cbstats(bucket, "collections",
                                                    cbadmin_user="Administrator",
+                                                   cbadmin_password=cbadmin_password,
                                                    options=" | grep ':items'")
         shell.disconnect()
         # collection_names = []

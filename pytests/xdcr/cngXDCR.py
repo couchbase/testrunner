@@ -24,12 +24,13 @@ Organisation:
 
 import gc
 import json
+import time
 
 from couchbase_helper.documentgenerator import BlobGenerator
 from membase.api.rest_client import RestConnection
 from TestInput import TestInputSingleton
-from .xdcrnewbasetests import XDCRNewBaseTest, FloatingServers, NodeHelper, \
-    REPL_PARAM, CONNECTIVITY_STATUS
+from .xdcrnewbasetests import XDCRNewBaseTest, XDCRRemoteClusterRef, \
+    FloatingServers, NodeHelper, REPL_PARAM, CONNECTIVITY_STATUS
 from .haproxy_utils import HAPROXY_FRONTEND_PORT
 from .cng import (
     CNGInfraRegistry, CertManager, InfraManager, RemoteRefManager,
@@ -82,7 +83,11 @@ class CNGXDCRBaseTest(XDCRNewBaseTest):
             active_remote_refs_fn=self.active_remote_refs,
             change_standard_credentials_fn=self.change_standard_remote_ref_credentials)        
         self._replication = None
-        self._topology = None        
+        self._topology = None
+        # Current admin password per cluster name — consulted by the
+        # catchup override so cbstats keeps working after a test rotates
+        # a cluster's Administrator password.
+        self._cluster_admin_passwords = {}
         NodeHelper.raise_fd_soft_limit(log=log)
         super().setUp()
         self._replication = ReplicationManager(
@@ -148,8 +153,206 @@ class CNGXDCRBaseTest(XDCRNewBaseTest):
                                rc_name="cng_C1_to_C2", xdcr_params=None):
         """Create a CNG remote ref and start replications for all bucket pairs."""
         self._refs.add_cng_ref(src_cluster, dest_cluster, lb_ip, rc_name)
-        return self._replication.start_for_buckets(
+        rep_ids = self._replication.start_for_buckets(
             src_cluster, dest_cluster, rc_name, xdcr_params)
+        self._register_replications_for_verification(
+            src_cluster, dest_cluster, rc_name)
+        return rep_ids
+
+    _CATCHUP_POLL_INTERVAL_SECS = 60
+
+    def _wait_for_replication_to_catchup(self, timeout=1200,
+                                         fetch_bucket_stats_by="minute",
+                                         exclude_paths=[]):
+        """CNG-aware catchup: evaluate the adjusted comparison every poll.
+
+        The base implementation compares raw bucket counts for the whole
+        timeout and only subtracts the SDKLoader system collections after
+        the timeout has burnt down. In java_sdk_client environments raw
+        counts can never match — _system._query is loaded on the source
+        but never replicated, and _system._mobile arrives late via the
+        lower-priority backfill pipeline — so every call cost its full
+        timeout before the corrective math ran. Apply the subtraction
+        (and any exclude_paths) inside the polling loop instead, and fail
+        with a per-collection breakdown for triage.
+
+        exclude_paths entries are '<cluster-name>.<bucket>.<collection>',
+        e.g. 'C2.default.xdcr_test_col' — for collections a test has
+        legitimately desynced via DDL (XDCR does not replicate DDL).
+        """
+        for cluster in self._all_clusters():
+            cluster.run_expiry_pager()
+        end_time = time.time() + timeout
+        for src_cluster in self._all_clusters():
+            rest_src = RestConnection(src_cluster.get_master_node())
+            for remote_ref in src_cluster.get_remote_clusters():
+                dest_cluster = remote_ref.get_dest_cluster()
+                rest_dest = RestConnection(dest_cluster.get_master_node())
+                for bucket in src_cluster.get_buckets():
+                    self._wait_bucket_replication_catchup(
+                        src_cluster, dest_cluster, rest_src, rest_dest,
+                        bucket, end_time, fetch_bucket_stats_by,
+                        exclude_paths)
+
+    def _bucket_item_count_via_rest(self, rest, bucket_name, zoom):
+        try:
+            return rest.fetch_bucket_stats(bucket=bucket_name, zoom=zoom)[
+                "op"]["samples"]["curr_items"][-1]
+        except Exception as e:
+            log.warning("fetch_bucket_stats({0}) failed ({1}); falling back "
+                        "to per-node interestingStats".format(bucket_name, e))
+            info = rest.get_bucket_json(bucket_name)
+            return sum(node["interestingStats"]["curr_items"]
+                       for node in info["nodes"])
+
+    def _adjusted_bucket_count(self, cluster, bucket, raw_count,
+                               exclude_paths):
+        """raw_count minus non-comparable collections on this cluster.
+
+        Subtracts _system._query and _system._mobile plus any matching
+        exclude_paths. Returns (adjusted_count, per-collection breakdown).
+        """
+        adjusted = raw_count
+        breakdown = {}
+        cbadmin_password = self._cluster_admin_passwords.get(
+            cluster.get_name(), "password")
+        for node in cluster.get_nodes():
+            # This runs every poll over SSH — a transient failure must not
+            # error the test; treat it as empty info and keep polling.
+            try:
+                info = self.get_collection_info(
+                    bucket, node, cbadmin_password=cbadmin_password)[0]
+            except Exception as e:
+                log.warning(
+                    "get_collection_info failed on {0}/{1}: {2}".format(
+                        cluster.get_name(), node.ip, e))
+                info = {}
+            if not info:
+                log.warning(
+                    "Empty collection info from {0}/{1} — adjusted count "
+                    "may be off".format(cluster.get_name(), node.ip))
+            for name, count in info.items():
+                breakdown[name] = breakdown.get(name, 0) + count
+            adjusted -= info.get("_query", 0)
+            adjusted -= info.get("_mobile", 0)
+            for path in exclude_paths:
+                parts = path.split(".")
+                if (parts[0] == cluster.get_name()
+                        and parts[1] == bucket.name):
+                    adjusted -= info.get(parts[-1], 0)
+        return adjusted, breakdown
+
+    def _cng_permission_denial_hint(self, src_cluster):
+        """Name CNG PermissionDenied retry storms in catchup failures.
+
+        The CNG nozzle retries PermissionDenied forever BELOW the nozzle
+        (goxdcr parts/cng/pool.go isRetryableError), so no DataSentFailed
+        event, no eaccess stat and no UI alert fires and the remote ref
+        stays RC_OK while the pipeline is wedged — the only evidence is
+        goxdcr.log. Surface it in the failure message so a bare count
+        mismatch self-diagnoses. Counts are cumulative over goxdcr.log*.
+        """
+        try:
+            matches, count = NodeHelper.check_goxdcr_log(
+                src_cluster.get_master_node(),
+                "No permissions to write documents",
+                print_matches=True)
+            if count:
+                sample = matches[-1].strip() if matches else ""
+                return (" goxdcr.log shows {0} CNG PermissionDenied write "
+                        "errors and the pipeline retries them forever "
+                        "(latest: {1}). Likely the remote-ref user lacks "
+                        "SystemCollectionMutation (data.docs swrite) for "
+                        "_system collections — replication_target does not "
+                        "include it.".format(count, sample))
+        except Exception as e:
+            log.warning("PermissionDenied goxdcr scan failed: {0}".format(e))
+        return ""
+
+    def _wait_bucket_replication_catchup(self, src_cluster, dest_cluster,
+                                         rest_src, rest_dest, bucket,
+                                         end_time, zoom, exclude_paths):
+        while True:
+            raw1 = self._bucket_item_count_via_rest(rest_src, bucket.name,
+                                                    zoom)
+            raw2 = self._bucket_item_count_via_rest(rest_dest, bucket.name,
+                                                    zoom)
+            if raw1 == raw2:
+                log.info("Replication caught up for bucket {0}: {1}".format(
+                    bucket.name, raw1))
+                return
+            adj1, breakdown1 = self._adjusted_bucket_count(
+                src_cluster, bucket, raw1, exclude_paths)
+            adj2, breakdown2 = self._adjusted_bucket_count(
+                dest_cluster, bucket, raw2, exclude_paths)
+            if adj1 == adj2:
+                log.info("Replication caught up for bucket {0} (adjusted): "
+                         "{1} (raw {2} vs {3})".format(
+                             bucket.name, adj1, raw1, raw2))
+                return
+            if time.time() >= end_time:
+                log.error("Catchup FAILED for bucket {0}. Source collections: "
+                          "{1}. Dest collections: {2}. Excluded paths: "
+                          "{3}".format(bucket.name, breakdown1, breakdown2,
+                                       exclude_paths))
+                denial_hint = self._cng_permission_denial_hint(src_cluster)
+                self.fail("Not all items replicated for bucket {0}: "
+                          "source={1}, dest={2} (adjusted; raw {3} vs "
+                          "{4}).{5}".format(bucket.name, adj1, adj2, raw1,
+                                            raw2, denial_hint))
+            self.wait_interval(
+                self._CATCHUP_POLL_INTERVAL_SECS,
+                "Bucket {0}: raw {1} vs {2}, adjusted {3} vs {4}. Waiting "
+                "for replication to catch up".format(
+                    bucket.name, raw1, raw2, adj1, adj2))
+
+    def verify_results(self, skip_verify_data=[], skip_verify_revid=[]):
+        """Base verification plus a hard-failing value pass.
+
+        The base implementation swallows verify_data exceptions (only revid
+        mismatches fail the test), so metadata-preserving body corruption
+        through the CNG proxy would go unnoticed. After the base pass —
+        which also merges source kv_store expectations into the destination
+        — re-run the kv_store value check on every cluster involved in a
+        registered replication, with failures propagated.
+        """
+        super().verify_results(skip_verify_data=skip_verify_data,
+                               skip_verify_revid=skip_verify_revid)
+        verified = set()
+        for cluster in self._all_clusters():
+            for ref in cluster.get_remote_clusters():
+                for end in (ref.get_src_cluster(), ref.get_dest_cluster()):
+                    if end.get_name() in verified:
+                        continue
+                    verified.add(end.get_name())
+                    end.verify_data(max_verify=self._max_verify,
+                                    timeout=600, skip=skip_verify_data)
+
+    def _register_replications_for_verification(self, src_cluster,
+                                                dest_cluster, rc_name):
+        """Mirror REST-created replications as framework objects.
+
+        The CNG managers drive refs/replications through raw REST, so
+        cluster.get_remote_clusters() stays empty and both
+        _wait_for_replication_to_catchup and verify_results silently
+        no-op. Registering constructed-but-not-REST-created framework
+        objects (no .add()/.start() — the REST state already exists)
+        makes the count wait and the kv_store value/revid verification
+        real. One registration per directed cluster pair: repeat calls
+        (ref churn, re-created refs) reuse the first registration.
+        """
+        for existing in src_cluster.get_remote_clusters():
+            if existing.get_dest_cluster() is dest_cluster:
+                return existing
+        ref = XDCRRemoteClusterRef(src_cluster, dest_cluster, rc_name,
+                                   encryption=True)
+        dest_buckets = dest_cluster.get_buckets()
+        for src_bucket in src_cluster.get_buckets():
+            ref.create_replication(
+                src_bucket,
+                toBucket=self.find_matching_bucket(src_bucket, dest_buckets))
+        src_cluster.register_remote_cluster_ref(ref)
+        return ref
 
 
     def _expect_connectivity(self, src_rest, rc_name, expected_status, timeout=120):
@@ -250,6 +453,7 @@ class CNGXDCRBaseTest(XDCRNewBaseTest):
             ok_new,
             "Target admin password change did not take effect — NEW password "
             "rejected (http_status={0}) on {1}".format(st_new, node.ip))
+        self._cluster_admin_passwords[cluster.get_name()] = new_password
 
         if old_password is not None and old_password != new_password:
             ok_old, st_old = self._probe_admin_auth(node, old_password)
@@ -505,6 +709,10 @@ class XDCRCNGBasicTests(CNGXDCRBaseTest):
                 src_cluster, rc_name_fwd, src_bucket, dest_bucket)
             self._replication.create_single(
                 dest_cluster, rc_name_rev, dest_bucket, src_bucket)
+        self._register_replications_for_verification(
+            src_cluster, dest_cluster, rc_name_fwd)
+        self._register_replications_for_verification(
+            dest_cluster, src_cluster, rc_name_rev)
 
         self.load_data_topology()
         self.perform_update_delete()
@@ -524,6 +732,8 @@ class XDCRCNGBasicTests(CNGXDCRBaseTest):
             # Phase 1: Standard remote ref
             self._refs.add_standard_ref(src_cluster, dest_cluster, rc_name)
             self._replication.start_for_buckets(src_cluster, dest_cluster, rc_name)
+            self._register_replications_for_verification(
+                src_cluster, dest_cluster, rc_name)
             self._diag.log_xdcr_state(rest_src, src_cluster,
                                       "phase1-standard-ref-started")
 
@@ -567,9 +777,10 @@ class XDCRCNGBasicTests(CNGXDCRBaseTest):
                                  end=self._num_items)
             src_cluster.load_all_buckets_from_generator(gen3)
             self._wait_for_replication_to_catchup(timeout=300)
+            self.verify_results()
             self._diag.log_xdcr_state(rest_src, src_cluster,
                                       "phase3-after-load-and-catchup")
-            
+
             self.sleep(180, "Stabilising replication after CNG→standard "
                            "switch before teardown")
             self._diag.log_xdcr_state(rest_src, src_cluster,
@@ -775,6 +986,9 @@ class XDCRCNGBasicTests(CNGXDCRBaseTest):
         self.sleep(15, "Settling pause before resume")
         self._replication.resume(rest_src, sb, db)
         self._wait_for_replication_to_catchup(timeout=300)
+        # Every loaded key matches the '^settings-' filter set in Group 3,
+        # so full value/revid verification is valid here.
+        self.verify_results()
 
     def test_target_awareness(self):
         """Verify CNG cluster reports incoming connections and source shows outgoing."""
@@ -813,6 +1027,7 @@ class XDCRCNGBasicTests(CNGXDCRBaseTest):
                                  "sourceClusterUUID mismatch")
 
         self._wait_for_replication_to_catchup(timeout=300)
+        self.verify_results()
 
     def test_connection_state_cng_nftables(self):
         """Verify RC_DEGRADED/RC_ERROR when network to LB is blocked via nftables."""
@@ -855,6 +1070,7 @@ class XDCRCNGBasicTests(CNGXDCRBaseTest):
                              self._value_size, end=self._num_items // 2)
         src_cluster.load_all_buckets_from_generator(gen2)
         self._wait_for_replication_to_catchup(timeout=300)
+        self.verify_results()
 
     def test_connection_state_cng_process_kill(self):
         """Verify RC_DEGRADED/RC_ERROR when CNG process is killed."""
@@ -897,6 +1113,7 @@ class XDCRCNGBasicTests(CNGXDCRBaseTest):
                              end=self._num_items // 2)
         src_cluster.load_all_buckets_from_generator(gen2)
         self._wait_for_replication_to_catchup(timeout=300)
+        self.verify_results()
 
     def test_variable_vbucket(self):
         """CNG with variable vbucket mode and goxdcr kill/restart cycles."""
@@ -925,6 +1142,7 @@ class XDCRCNGBasicTests(CNGXDCRBaseTest):
             self.sleep(kill_interval, "Wait after kill {0}".format(i + 1))
 
         self._wait_for_replication_to_catchup(timeout=600)
+        self.verify_results()
 
     def test_connection_pre_check(self):
         """Verify the connection pre-check utility works with CNG clusters."""
@@ -948,6 +1166,7 @@ class XDCRCNGBasicTests(CNGXDCRBaseTest):
                             end=self._num_items)
         src_cluster.load_all_buckets_from_generator(gen)
         self._wait_for_replication_to_catchup(timeout=300)
+        self.verify_results()
 
     def _run_connection_pre_check(self, rest_src, dest_ip, dest_port,
                                   username, password, name,
@@ -1059,6 +1278,7 @@ class XDCRCNGBasicTests(CNGXDCRBaseTest):
                                   self._value_size, end=self._num_items)
         src_cluster.load_all_buckets_from_generator(gen_final)
         self._wait_for_replication_to_catchup(timeout=300)
+        self.verify_results()
 
     def test_source_bucket_delete_repl_auto_gc(self):
         """Source bucket deletion auto-GCs replication via CNG.
@@ -1079,6 +1299,9 @@ class XDCRCNGBasicTests(CNGXDCRBaseTest):
                                     self._value_size, end=self._num_items)
         src_cluster.load_all_buckets_from_generator(gen_initial)
         self._wait_for_replication_to_catchup(timeout=300)
+        # Full verification must run BEFORE Phase A deletes the source
+        # bucket — after that the kv_store expectations no longer match.
+        self.verify_results()
 
         # Phase A: Default auto-GC
         self.assertTrue(len(rest_src.get_replications()) > 0,
@@ -1146,6 +1369,14 @@ class XDCRCNGBasicTests(CNGXDCRBaseTest):
         test_scope = self._input.param("test_scope", "xdcr_test_scope")
         test_coll = self._input.param("test_collection", "xdcr_test_col")
 
+        # XDCR does not replicate collection DDL, so while only one side
+        # has dropped/recreated the churned collection its doc counts are
+        # legitimately out of sync — exclude it from those catchups.
+        churn_excludes = [
+            "{0}.{1}.{2}".format(src_cluster.get_name(), src_bucket, test_coll),
+            "{0}.{1}.{2}".format(dest_cluster.get_name(), dest_bucket, test_coll),
+        ]
+
         # Phase 1: Baseline
         gen_baseline = BlobGenerator("sc-base-", "sc-base-",
                                      self._value_size, end=self._num_items)
@@ -1177,7 +1408,8 @@ class XDCRCNGBasicTests(CNGXDCRBaseTest):
         gen_src_del = BlobGenerator("sc-srcdel-", "sc-srcdel-",
                                     self._value_size, end=self._num_items // 4)
         src_cluster.load_all_buckets_from_generator(gen_src_del)
-        self._wait_for_replication_to_catchup(timeout=300)
+        self._wait_for_replication_to_catchup(timeout=300,
+                                              exclude_paths=churn_excludes)
 
         # Phase 4: Recreate on source
         self.create_scope_and_collection(rest_src, src_bucket, test_scope, test_coll)
@@ -1187,7 +1419,8 @@ class XDCRCNGBasicTests(CNGXDCRBaseTest):
         gen_src_recr = BlobGenerator("sc-srcrecr-", "sc-srcrecr-",
                                      self._value_size, end=self._num_items // 4)
         src_cluster.load_all_buckets_from_generator(gen_src_recr)
-        self._wait_for_replication_to_catchup(timeout=300)
+        self._wait_for_replication_to_catchup(timeout=300,
+                                              exclude_paths=churn_excludes)
 
         # Phase 5: Delete and recreate on destination
         rest_dest.delete_collection(dest_bucket, test_scope, test_coll)
@@ -1199,7 +1432,8 @@ class XDCRCNGBasicTests(CNGXDCRBaseTest):
         gen_dest_del = BlobGenerator("sc-destdel-", "sc-destdel-",
                                      self._value_size, end=self._num_items // 4)
         src_cluster.load_all_buckets_from_generator(gen_dest_del)
-        self._wait_for_replication_to_catchup(timeout=300)
+        self._wait_for_replication_to_catchup(timeout=300,
+                                              exclude_paths=churn_excludes)
 
         self.create_scope_and_collection(rest_dest, dest_bucket, test_scope, test_coll)
         self.sleep(15, "Propagating scope/collection recreate on destination")
@@ -1208,7 +1442,8 @@ class XDCRCNGBasicTests(CNGXDCRBaseTest):
         gen_dest_recr = BlobGenerator("sc-destrecr-", "sc-destrecr-",
                                       self._value_size, end=self._num_items // 4)
         src_cluster.load_all_buckets_from_generator(gen_dest_recr)
-        self._wait_for_replication_to_catchup(timeout=300)
+        self._wait_for_replication_to_catchup(timeout=300,
+                                              exclude_paths=churn_excludes)
 
         # Phase 6: Delete scope on both clusters
         self.delete_scope_with_collections(rest_src, src_bucket, test_scope)
@@ -1224,6 +1459,131 @@ class XDCRCNGBasicTests(CNGXDCRBaseTest):
             self.wait_for_connectivity_status(
                 rest_src, CONNECTIVITY_STATUS.RC_OK, rc_name=rc_name, timeout=60),
             "Replication not in RC_OK after all scope/collection operations")
+        # All loads target the default collection; the DDL-churned scope
+        # never holds docs, so full verification is valid throughout.
+        self.verify_results()
+
+    def _assert_doc_value(self, cluster, bucket, key, expected, why,
+                          retries=6, interval=5):
+        """Poll a doc until it matches `expected`; fail with `why` otherwise.
+
+        Routes through sdk_get_raw so reads bypass sdk_client3.get()'s
+        recursive retry path."""
+        actual = None
+        for attempt in range(retries):
+            res = self.sdk_get_raw(cluster, bucket, key)
+            if res is None:
+                actual = None
+            else:
+                try:
+                    actual = res.content_as[dict]
+                except Exception:
+                    actual = res
+            if actual == expected:
+                return
+            self.sleep(interval, "Doc {0} on {1} not at expected value yet "
+                                 "({2}/{3})".format(key, cluster.get_name(),
+                                                    attempt + 1, retries))
+        self.fail("{0}: doc '{1}' on {2} expected {3}, got {4}".format(
+            why, key, cluster.get_name(), expected, actual))
+
+    def _upsert_conflict_docs(self, src_cluster, dest_cluster, sb, db,
+                              write_gap):
+        """Stage the two conflict docs while replication is paused.
+
+        Reaches through to default_collection.upsert directly so write
+        failures raise instead of being swallowed by sdk_client3.upsert."""
+        src_client = self._get_sdk_client(src_cluster, sb)
+        dest_client = self._get_sdk_client(dest_cluster, db)
+        try:
+            # First writes on each side, then the winning writes after a
+            # gap large enough to dominate any residual clock skew.
+            dest_client.default_collection.upsert(
+                "lww-src-wins", {"writer": "target"})
+            src_client.default_collection.upsert(
+                "lww-target-wins", {"writer": "source"})
+            self.sleep(write_gap,
+                       "Ordering conflicting writes across clusters")
+            src_client.default_collection.upsert(
+                "lww-src-wins", {"writer": "source"})
+            dest_client.default_collection.upsert(
+                "lww-target-wins", {"writer": "target"})
+        finally:
+            for client in (src_client, dest_client):
+                try:
+                    client.close()
+                except Exception as e:
+                    log.warning("SDK client close failed: {0}".format(e))
+
+    def test_cng_lww_conflict_resolution(self):
+        """LWW (timestamp/CAS-based) conflict resolution through CNG.
+
+        Requires lww=True in the conf so every bucket is created with
+        conflictResolutionType=lww. Conflicts are staged while replication
+        is paused so the source mutation always arrives AFTER the target's
+        local write — forcing the target-side CAS comparison rather than a
+        plain overwrite:
+          - source-wins: newer source mutation overwrites older target doc
+          - target-wins: older source mutation is rejected by the target
+
+        Plain LWW only — HLV/ECCV is unsupported with CNG refs today.
+        """
+        self.assertTrue(
+            self.get_lww(),
+            "This test needs lww=True in the conf so buckets are created "
+            "with conflictResolutionType=lww")
+        src_cluster, dest_cluster, infra, rest_src = self._setup_single_cng_pair()
+
+        src_bucket = src_cluster.get_buckets()[0]
+        dest_bucket = self.find_matching_bucket(
+            src_bucket, dest_cluster.get_buckets())
+        for cluster, bucket in ((src_cluster, src_bucket),
+                                (dest_cluster, dest_bucket)):
+            info = RestConnection(cluster.get_master_node()).get_bucket_json(
+                bucket.name)
+            self.assertEqual(
+                info.get("conflictResolutionType"), "lww",
+                "Bucket {0} on {1} is not LWW".format(
+                    bucket.name, cluster.get_name()))
+
+        rc_name = "cng_lww"
+        self._setup_cng_replication(
+            src_cluster, dest_cluster, infra.lb_ip, rc_name=rc_name)
+
+        # Baseline: non-conflicting docs replicate through CNG into LWW buckets.
+        gen = BlobGenerator("lww-base-", "lww-base-", self._value_size,
+                            end=self._num_items)
+        src_cluster.load_all_buckets_from_generator(gen)
+        self._wait_for_replication_to_catchup(timeout=300)
+        # Full verification only at baseline: the SDK-written conflict docs
+        # below are not in the kv_store, so verify_results after the
+        # conflict phase would mis-count. The conflict docs get explicit
+        # per-doc value assertions instead.
+        self.verify_results()
+
+        sb, db = src_bucket.name, dest_bucket.name
+        write_gap = self._input.param("conflict_write_gap", 3)
+
+        self._replication.pause(rest_src, sb, db)
+        self.wait_for_replications_paused(rest_src, timeout=90, interval=5)
+        self._upsert_conflict_docs(src_cluster, dest_cluster, sb, db,
+                                   write_gap)
+        self._replication.resume(rest_src, sb, db)
+        self._wait_for_replication_to_catchup(timeout=300)
+
+        self._assert_doc_value(
+            dest_cluster, dest_bucket, "lww-src-wins", {"writer": "source"},
+            "Newer source mutation must win on target through CNG")
+        self._assert_doc_value(
+            dest_cluster, dest_bucket, "lww-target-wins", {"writer": "target"},
+            "Older source mutation must lose to the target's local write")
+        # Unidirectional: the target's win must never flow back.
+        self._assert_doc_value(
+            src_cluster, src_bucket, "lww-src-wins", {"writer": "source"},
+            "Source copy must be untouched")
+        self._assert_doc_value(
+            src_cluster, src_bucket, "lww-target-wins", {"writer": "source"},
+            "Target's winning write must not propagate back to source")
 
 
 class XDCRCNGResiliencyTests(CNGXDCRBaseTest):
@@ -1249,6 +1609,8 @@ class XDCRCNGResiliencyTests(CNGXDCRBaseTest):
                 src_cluster, dest_cluster, infra.lb_ip, rc_name,
                 primary_user, user_password)
             self._replication.start_for_buckets(src_cluster, dest_cluster, rc_name)
+            self._register_replications_for_verification(
+                src_cluster, dest_cluster, rc_name)
 
             load_tasks = self._replication.load_async(src_cluster, count=items)
             self._expect_connectivity(
@@ -1364,8 +1726,17 @@ class XDCRCNGResiliencyTests(CNGXDCRBaseTest):
         for task in all_async_tasks:
             task.result()
 
+        # goxdcr was killed on the source during the cycles, which resets
+        # the successful-checkpoint counter — asserting against the
+        # pre-kill baseline would flag a healthy pipeline. Re-baseline on
+        # the post-recovery counter and require fresh progress from there.
+        ckpt_after_kills = self.get_successful_checkpoint_count(rest_src)
+        if ckpt_after_kills < ckpt_before:
+            log.warning("Checkpoint counter reset by goxdcr kills: "
+                        "before={0}, after-recovery={1}".format(
+                            ckpt_before, ckpt_after_kills))
         self._assert_checkpoints_progress(
-            rest_src, ckpt_before, phase="kill cycles")
+            rest_src, ckpt_after_kills, phase="kill cycles")
 
         self._wait_for_replication_to_catchup(timeout=900)
 
@@ -1678,6 +2049,8 @@ class XDCRCNGResiliencyTests(CNGXDCRBaseTest):
         rest_src.remove_remote_cluster("cng_ephemeral")
         self._refs.add_standard_ref(src_cluster, dest_cluster, "n2n_after_cng")
         self._replication.start_for_buckets(src_cluster, dest_cluster, "n2n_after_cng")
+        self._register_replications_for_verification(
+            src_cluster, dest_cluster, "n2n_after_cng")
         gen_c = BlobGenerator("collision-c-", "collision-c-",
                               self._value_size, end=items)
         src_cluster.load_all_buckets_from_generator(gen_c)
@@ -1729,6 +2102,8 @@ class XDCRCNGResiliencyTests(CNGXDCRBaseTest):
                 src_cluster, dest_cluster, infra.lb_ip, rc_name,
                 primary_user, user_password)
             self._replication.start_for_buckets(src_cluster, dest_cluster, rc_name)
+            self._register_replications_for_verification(
+                src_cluster, dest_cluster, rc_name)
 
             gen_baseline = BlobGenerator("killstage-base-", "killstage-base-",
                                          self._value_size, end=items)
@@ -1868,6 +2243,8 @@ class XDCRCNGResiliencyTests(CNGXDCRBaseTest):
 
         # Sanity: surviving N2N ref must still replicate end-to-end
         self._replication.start_for_buckets(
+            src_cluster, dest_cluster, "n2n_existing")
+        self._register_replications_for_verification(
             src_cluster, dest_cluster, "n2n_existing")
         items = self._input.param("items", 500)
         gen = BlobGenerator("mutex-", "mutex-", self._value_size, end=items)
@@ -2154,6 +2531,7 @@ class XDCRCNGRebalanceFailoverTests(CNGXDCRBaseTest):
         rc_name = "cng_C1_to_C2"
         self._refs.add_cng_ref(src, dst, infra.lb_ip, rc_name)
         self._replication.start_for_buckets(src, dst, rc_name)
+        self._register_replications_for_verification(src, dst, rc_name)
         self._expect_connectivity(
             rest_src, rc_name, CONNECTIVITY_STATUS.RC_OK, timeout=180)
         return src, dst, infra, rest_src, rc_name
