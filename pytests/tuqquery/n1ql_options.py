@@ -120,6 +120,27 @@ class OptionsRestTests(QueryTests):
             actual_result = self.run_cbq_query(query_params={'signature': False})
             self.assertFalse('signature' in actual_result, 'signature are shown!')
 
+    def test_prepared_signature_consistency(self):
+        """MB: Verify signature field is consistent across repeated prepared statement executions with auto_execute."""
+        self.query = "SELECT 1=1"
+        # Prepare the statement first
+        prep_result = self.run_cbq_query(query_params={'auto_execute': True})
+        if 'signature' not in prep_result:
+            self.skipTest("signature not returned in response")
+
+        first_signature = prep_result.get('signature')
+        self.assertIsInstance(first_signature, dict,
+            f"Signature must be a JSON object (dict), got {type(first_signature).__name__}: {first_signature!r}. "
+            f"This indicates the escaped JSON string bug is present.")
+        iterations = 50
+        for i in range(iterations):
+            result = self.run_cbq_query(query_params={'auto_execute': True})
+            sig = result.get('signature')
+            self.assertIsInstance(sig, dict,
+                f"Iteration {i}: signature is {type(sig).__name__} not dict — escaped string bug present: {sig!r}")
+            self.assertEqual(sig, first_signature,
+                f"Iteration {i}: signature value changed. Expected {first_signature}, got {sig}")
+
     def test_timeout(self):
         for query_bucket in self.query_buckets:
             self.query = "SELECT count(name) FROM %s" % query_bucket

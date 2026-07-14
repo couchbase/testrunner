@@ -1,3 +1,4 @@
+import uuid
 from .tuq import QueryTests
 from deepdiff import DeepDiff
 
@@ -526,3 +527,53 @@ class QuerySkipRangeScanTests(QueryTests):
                         "asserts": [self.plan_verifier("index", "idx3", 0)]}
 
         self.query_runner(queries)
+
+    def test_mb71904_kv_range_scan_honours_request_plus(self):
+        """MB-71904: Verify REQUEST_PLUS scan consistency is honoured for KV range scans.
+
+        KV range scan (seq scan) is used when no primary GSI index exists.
+        Before the fix, scan_consistency was dead code in doScanEntries and ignored.
+        """
+        unique_val = str(uuid.uuid4()).replace("-", "")[:16]
+        doc_key = f"mb71904_{unique_val}"
+        bucket_name = self.buckets[0].name
+
+        # Drop primary index so query is forced to use KV range scan (not GSI sequential scan)
+        try:
+            self.query = f"DROP PRIMARY INDEX ON {self.query_bucket} USING GSI"
+            self.run_cbq_query()
+        except Exception:
+            pass  # May not exist
+
+        try:
+            # Insert doc via N1QL — no index needed for INSERT
+            self.query = f"INSERT INTO {self.query_bucket} (KEY, VALUE) VALUES ('{doc_key}', {{'mb71904_marker': '{unique_val}', 'type': 'mb71904_test'}})"
+            self.run_cbq_query()
+
+            select_query = f"SELECT mb71904_marker FROM {self.query_bucket} WHERE mb71904_marker = '{unique_val}'"
+
+            # Verify KV range scan (SequentialScan) is used — not a GSI index scan
+            self.query = f"EXPLAIN {select_query}"
+            explain = self.run_cbq_query()
+            plan_str = str(explain['results'])
+            self.assertIn('SequentialScan', plan_str,
+                          f"MB-71904: Expected KV range scan (SequentialScan) in plan but got: {plan_str}")
+
+            # Query with REQUEST_PLUS — with the fix, KV range scan honours this
+            # and must return the just-inserted document
+            self.query = select_query
+            result = self.run_cbq_query(query_params={'scan_consistency': 'REQUEST_PLUS'})
+            markers = [r.get('mb71904_marker') for r in result['results']]
+            self.assertIn(unique_val, markers,
+                          f"MB-71904: REQUEST_PLUS not honoured for KV range scan — inserted doc not visible. "
+                          f"Results: {result['results']}")
+        finally:
+            # Cleanup doc and restore primary index
+            try:
+                self.query = f"DELETE FROM {self.query_bucket} USE KEYS ['{doc_key}']"
+                self.run_cbq_query()
+            except Exception:
+                pass
+            self.query = f"CREATE PRIMARY INDEX ON {self.query_bucket} USING GSI"
+            self.run_cbq_query()
+            self._wait_for_index_online(self.buckets[0], "#primary")

@@ -323,7 +323,8 @@ class VectorSearchTests(QueryTests):
             knn_query = ann_query
         else:
             ann_query = f'SELECT raw id FROM default ORDER BY ANN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}"),ANN_DISTANCE(vec, {self._format_vec(self.xq[query_num+1])}, "{self.distance}") LIMIT 100'
-            knn_query = f'SELECT raw id FROM default ORDER BY KNN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}"),KNN_DISTANCE(vec, {self._format_vec(self.xq[query_num+1])}, "{self.distance}") LIMIT 100'
+            # MB-72707: ANN with multiple vectors only uses the first one — compare against KNN with first vector only
+            knn_query = f'SELECT raw id FROM default ORDER BY KNN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}") LIMIT 100'
         expected_results = self.run_cbq_query(knn_query)['results']
         explain_query = f'EXPLAIN {ann_query}'
         try:

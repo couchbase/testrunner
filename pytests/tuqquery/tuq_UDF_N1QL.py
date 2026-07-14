@@ -2485,3 +2485,72 @@ class QueryUDFN1QLTests(QueryTests):
         self.assertEqual(actual_result['reason']['code'], expected_result['reason']['code'])
         self.assertEqual(actual_result['reason']['key'], expected_result['reason']['key'])
         self.assertEqual(actual_result['reason']['message'], expected_result['reason']['message'])
+
+    def test_mb72654_udf_transaction_no_memory_leak(self):
+        """MB-72654: JS UDF with transaction should not cause memory leak.
+        Executes a JS UDF containing a DML within a transaction many times
+        and verifies all executions succeed without errors.
+        """
+        function_name = 'mb72654_txn_udf'
+        function_names = [function_name]
+        # Use same pattern as other working tests — start_txn + DML + ROLLBACK
+        # ROLLBACK avoids DurabilityImpossible on single-node clusters
+        functions = f'function {function_name}() {{\
+            var start_txn = {self.start_txn};\
+            var q = SELECT 1 AS n;\
+            var rollback = ROLLBACK;\
+            return "success";\
+        }}'
+
+        self.create_library(self.library_name, functions, function_names)
+        self.run_cbq_query(
+            f'CREATE OR REPLACE FUNCTION {function_name}() LANGUAGE JAVASCRIPT AS "{function_name}" AT "{self.library_name}"')
+
+        def get_rss_mb():
+            """Get query service RSS in MB via admin/vitals."""
+            import json
+            status, vitals = self.rest.get_query_vitals(self.master)
+            if status:
+                if isinstance(vitals, (bytes, bytearray)):
+                    vitals = json.loads(vitals)
+                rss_bytes = vitals.get('memory.usage', 0)
+                return rss_bytes / (1024 * 1024)
+            return 0
+
+        rss_before = get_rss_mb()
+        self.log.info(f"MB-72654: RSS before iterations: {rss_before:.1f} MB")
+
+        iterations = 100
+        errors = []
+        for i in range(iterations):
+            try:
+                result = self.run_cbq_query(f"EXECUTE FUNCTION {function_name}()")
+                res = result.get('results', [None])[0]
+                if res != 'success':
+                    errors.append(f"Iteration {i}: unexpected result {res}")
+            except Exception as e:
+                errors.append(f"Iteration {i}: {str(e)}")
+
+        rss_after = get_rss_mb()
+        rss_growth_mb = rss_after - rss_before
+        self.log.info(f"MB-72654: RSS after {iterations} iterations: {rss_after:.1f} MB "
+                      f"(growth: {rss_growth_mb:.1f} MB)")
+
+        self.assertEqual(len(errors), 0,
+                         f"MB-72654: {len(errors)} failures in {iterations} UDF executions. "
+                         f"First error: {errors[0] if errors else ''}")
+
+        # RSS growth should not exceed 50% of initial RSS.
+        # A real memory leak causes GiB growth; 50% of initial is a generous but meaningful bound.
+        max_allowed_growth_mb = rss_before * 0.5 if rss_before > 0 else 200
+        self.assertLess(rss_growth_mb, max_allowed_growth_mb,
+                        f"MB-72654: RSS grew by {rss_growth_mb:.1f} MB ({rss_growth_mb/rss_before*100:.1f}% of initial) "
+                        f"after {iterations} UDF executions — possible memory leak. "
+                        f"Before: {rss_before:.1f} MB, After: {rss_after:.1f} MB, "
+                        f"Max allowed growth: {max_allowed_growth_mb:.1f} MB")
+
+        # Cleanup
+        try:
+            self.run_cbq_query(f"DROP FUNCTION {function_name} IF EXISTS")
+        except Exception:
+            pass
