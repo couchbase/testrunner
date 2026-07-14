@@ -70,7 +70,8 @@ class EventingAnalytics(EventingBaseTest):
             self.handler_code = HANDLER_CODE_ANALYTICS.ANALYTICS_SUBQUERIES_WITH_CRC
 
         self.load_sample_buckets(self.server, "travel-sample")
-        self.load_data_to_collection(1, "default.scope0.collection0")
+        if self.use_single_bucket:
+            self.load_data_to_collection(1, "default.scope0.collection0")
         self._setup_analytics()
 
     def tearDown(self):
@@ -214,18 +215,15 @@ class EventingAnalytics(EventingBaseTest):
         self.verify_doc_count_collections("default.scope0.collection1", expected_doc_count)
         self._verify_analytics_result_matches_direct_query()
         self.undeploy_and_delete_function(body)
-    
+
     def test_eventing_analytics_dropping_function_scope_when_handler_is_deployed(self):
         '''
-        Dropping the function scope and checking if the function is getting undeployed
+        Dropping the function scope and checking if the function is getting undeployed and deleted
         '''
         body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
-        # drop function scope (drop the source bucket)
-        self.rest.delete_bucket(self.default_bucket_name)
-        self.wait_for_handler_state(body['appname'], "undeployed")
-        # Delete the function
-        self.delete_function(body)
+        self.rest.delete_scope(self.default_bucket_name, self.scope_name)
+        self.wait_for_handler_internal_undeployment_and_deletion(body['appname'])
 
     def test_eventing_analytics_dropping_metadata_keyspace_when_handler_is_deployed(self):
         '''
@@ -233,11 +231,8 @@ class EventingAnalytics(EventingBaseTest):
         '''
         body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
-        # drop metadata keyspace (drop the metadata bucket)
-        self.rest.delete_bucket(self.default_bucket_name)
-        self.wait_for_handler_state(body['appname'], "undeployed")
-        # Delete the function
-        self.delete_function(body)
+        self.rest.delete_bucket(self.metadata_bucket_name)
+        self.wait_for_handler_state(self.function_name, "undeployed")
 
     def test_num_nodes_running(self):
         '''

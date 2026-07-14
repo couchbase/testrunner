@@ -46,7 +46,7 @@ function timerCallback(context) {
     	    dst_bucket[context.docID]=response.body;
     	}
     	else{
-    	    dst_bucket[meta.id] = response.status;
+    	    dst_bucket[context.docID] = response.status;
     	}
     }
     catch (e) {
