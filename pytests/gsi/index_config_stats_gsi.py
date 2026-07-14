@@ -932,7 +932,7 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests, QueryHelperT
         self.buckets = self.rest.get_buckets()
         self.prepare_collection_for_indexing(
             num_scopes=1, num_collections=1,
-            num_of_docs_per_collection=10000,
+            num_of_docs_per_collection=1000000,
             json_template="Hotel",
         )
         query_node = self.get_nodes_from_services_map(service_type="n1ql")

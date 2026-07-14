@@ -3813,7 +3813,8 @@ class BaseSecondaryIndexingTests(QueryTests):
                         raise Exception(
                             f"Index {index_metadata['name']} present on 7.6 node {node.ip} but lacks alternate shard ID")
 
-    def perform_continuous_kv_mutations(self, event, timeout=1800, num_docs_mutating=10000):
+    def perform_continuous_kv_mutations(self, event, timeout=1800, num_docs_mutating=10000,
+                                        ops_rate=5000):
         collection_namespaces = self.namespaces
         time_now = time.time()
         while not event.is_set() and time.time() - time_now < timeout:
@@ -3826,7 +3827,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                                                 collection=collection, json_template=self.json_template,
                                                 output=True, username=self.username, password=self.password,
                                                 create_end=num_docs_mutating, update_end=num_docs_mutating,
-                                                mutate=mutate)
+                                                mutate=mutate, ops_rate=ops_rate)
                 if self.use_magma_loader:
                     task = self.cluster.async_load_gen_docs(self.master, bucket=bucket,
                                                             generator=self.gen_create, pause_secs=1,

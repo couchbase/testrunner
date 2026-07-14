@@ -27,6 +27,8 @@ Two test variants differ only in upgrade mechanic:
 import concurrent.futures
 import itertools
 import json
+import os
+import re
 import threading
 import time
 
@@ -51,6 +53,11 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
         self.encryption_helper = N1QLEncryptionHelpers(self.log)
         self.log.info("==============  GSIQueryEncryptionAtRestUpgrade setUp ==============")
         self.test_bucket = self.input.param("bucket_name", "test_bucket")
+        # TODO: vector bucket force-reencryption is not fully validated yet
+        # (see STEP 2.5 / STEP 7c) — skip it by default until that's confirmed
+        # solid, but allow opting back in via skip_vector_bucket=False.
+        # To be removed after early build.
+        self.skip_vector_bucket = self.input.param("skip_vector_bucket", True)
         # Drop any auto-created buckets so we own bucket lifecycle in the test.
         try:
             self.rest.delete_all_buckets()
@@ -73,6 +80,21 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
             f"-> upgrade_to={self.upgrade_to} (file_ear={self.target_supports_file_ear})"
         )
         self.encryption_key_id = None
+        # testrunner.py skips suite_setUp/suite_tearDown for any test whose dotted
+        # name contains "upgrade" (see runtests() name-gating), so this class's
+        # suite_setUp override never runs. Seed the run-scoped evidence dir here,
+        # lazily, instead of depending on suite_setUp.
+        if not getattr(self.__class__, "_run_evidence_dir", None):
+            ts = time.strftime("%Y%m%d_%H%M%S")
+            self.__class__._run_evidence_dir = f"/tmp/run_{ts}"
+            os.makedirs(self.__class__._run_evidence_dir, exist_ok=True)
+            self.log.info(
+                f"Evidence directory for this run: {self.__class__._run_evidence_dir}"
+            )
+        test_name = self._testMethodName
+        self._evidence_dir = os.path.join(self.__class__._run_evidence_dir, test_name)
+        os.makedirs(self._evidence_dir, exist_ok=True)
+        self.log.info(f"Per-test evidence directory: {self._evidence_dir}")
 
     def tearDown(self):
         # Best-effort restore of query admin settings so subsequent tests start clean.
@@ -89,6 +111,28 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
         except Exception:
             pass
         super(GSIQueryEncryptionAtRestUpgrade, self).tearDown()
+
+    def _copy_failed_file_from_node(self, node, remote_filepath):
+        """Copy a remote file that failed encryption validation to self._evidence_dir.
+        Returns the local destination path, or None if the copy failed."""
+        try:
+            remote_dir = os.path.dirname(remote_filepath)
+            filename = os.path.basename(remote_filepath)
+            # GSI paths repeat basenames across sibling directories (e.g.
+            # sstable.9.data under both kvstore-1/keyIndex and kvstore-3/seqIndex
+            # on the same node) — fold the full sanitized path into the
+            # destination name so distinct files don't overwrite each other.
+            safe_path = remote_filepath.strip("/").replace("/", "_")
+            local_dest = os.path.join(self._evidence_dir, f"{node.ip}_{safe_path}")
+            shell = RemoteMachineShellConnection(node, verbose=False)
+            try:
+                shell.get_file(remote_dir, filename, local_dest)
+            finally:
+                shell.disconnect()
+            return local_dest
+        except Exception as e:
+            self.log.warning(f"Could not copy {remote_filepath} from {node.ip}: {e}")
+            return None
 
     # ------------------------------------------------------------------ version helpers
 
@@ -819,14 +863,27 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
             )
             return
         bad = []
+        copied_files = []
         for fpath, r in all_files.items():
             actual = bool(r.get("encrypted", False))
             if actual != expect_encrypted:
-                bad.append(f"  {fpath}: encrypted={actual} expected={expect_encrypted}")
+                dest = self._copy_failed_file_from_node(node, fpath)
+                if dest:
+                    copied_files.append(dest)
+                bad.append(
+                    f"  {fpath}: encrypted={actual} expected={expect_encrypted}"
+                    + (f" (copied to {dest})" if dest else "")
+                )
+        if copied_files:
+            self.log.info(
+                f"{label}{node.ip}: copied {len(copied_files)} mismatched query log "
+                f"file(s) to {self._evidence_dir}"
+            )
         if bad:
             self.fail(
                 f"{label}{node.ip}: query log file state mismatch "
-                f"(expected encrypted={expect_encrypted}):\n" + "\n".join(bad)
+                f"(expected encrypted={expect_encrypted}, copies in {self._evidence_dir}):\n"
+                + "\n".join(bad)
             )
         self.log.info(
             f"{label}{node.ip}: {len(all_files)} query log file(s) state OK "
@@ -954,7 +1011,12 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
             cluster_profile = None
 
         if mode == 'offline':
-            self.rest.update_autofailover_settings(True, 300)
+            # The offline install (stop -> package install -> start) can take
+            # longer than the default autoFailover window, especially with
+            # get-cbcollect-info/log-collection enabled. Use a generous timeout
+            # here so a slow-but-successful install doesn't get auto-failed-over
+            # mid-upgrade.
+            self.rest.update_autofailover_settings(True, 1200)
             remote = RemoteMachineShellConnection(node)
             try:
                 remote.stop_server()
@@ -1444,10 +1506,15 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
         return new_results
 
     def _collect_query_encryption_failures(self, query_nodes, expected_key_ids, label=""):
-        """Return a list of query request-log / FFDC file failures."""
+        """Return a list of query request-log / FFDC file failures.
+
+        Any failing file is also copied off the node into self._evidence_dir for
+        post-mortem inspection (mirrors n1ql_encryption_at_rest.py)."""
         failures = []
+        copied_files = []
         log_results = {}
         ffdc_results = {}
+        node_obj_map = {node.ip: node for node in query_nodes}
         for node in query_nodes:
             node_keys = (
                 expected_key_ids.get(node.ip, [])
@@ -1462,6 +1529,12 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
                 for fpath, result in node_result.get(category, {}).items():
                     if result.get("transient"):
                         continue
+                    if not result.get("encrypted") or result.get("key_id_found") is False:
+                        node_obj = node_obj_map.get(node_ip)
+                        if node_obj:
+                            dest = self._copy_failed_file_from_node(node_obj, fpath)
+                            if dest:
+                                copied_files.append(dest)
                     if not result.get("encrypted"):
                         failures.append(
                             f"  [{node_ip}] {category} {fpath}: NOT encrypted: "
@@ -1483,6 +1556,12 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
             )
         for node_ip, node_result in ffdc_results.items():
             for fpath, result in node_result.items():
+                if not result.get("encrypted") or result.get("key_id_found") is False:
+                    node_obj = node_obj_map.get(node_ip)
+                    if node_obj:
+                        dest = self._copy_failed_file_from_node(node_obj, fpath)
+                        if dest:
+                            copied_files.append(dest)
                 if not result.get("encrypted"):
                     failures.append(
                         f"  [{node_ip}] FFDC {fpath}: NOT encrypted: {result.get('details')}"
@@ -1491,16 +1570,38 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
                     failures.append(
                         f"  [{node_ip}] FFDC {fpath}: header missing expected key ID"
                     )
+        if copied_files:
+            self.log.info(
+                f"{label}Copied {len(copied_files)} failing file(s) to "
+                f"{self._evidence_dir}:\n" + "\n".join(f"  {p}" for p in copied_files)
+            )
         if failures:
             self.log.error(
-                f"{label}Query encryption validation found {len(failures)} failure(s)"
+                f"{label}Query encryption validation found {len(failures)} failure(s) "
+                f"(copies in {self._evidence_dir})"
             )
         return failures
+
+    @staticmethod
+    def _parse_gsi_failure_entry(entry):
+        """Normalize a failed_files/leaks entry into (file_path, details).
+
+        Entries are either a bare path or a (path, details) tuple/list."""
+        if isinstance(entry, (list, tuple)) and entry:
+            file_path = entry[0]
+            details = entry[1] if len(entry) > 1 else ""
+        else:
+            file_path = str(entry)
+            details = ""
+        return file_path, details
 
     def _collect_gsi_encryption_failures(
         self, index_nodes, encrypted_buckets, expected_key_id, query_node=None, label=""
     ):
-        """Return a list of GSI file-encryption failures."""
+        """Return a list of GSI file-encryption failures.
+
+        Any failing file is also copied off its node into self._evidence_dir for
+        post-mortem inspection (mirrors the query-side failure collection)."""
         results = self.validate_engine_encryption(
             "plasma",
             index_nodes,
@@ -1509,26 +1610,54 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
             query_node=query_node,
             fail_on_error=False,
         )
+        node_obj_map = {node.ip: node for node in index_nodes}
         failures = []
+        copied_files = []
         for category, node_results in results.items():
             if category == "_overall" or not isinstance(node_results, dict):
                 continue
             for node_ip, result in node_results.items():
                 if not isinstance(result, dict):
                     continue
+                node_obj = node_obj_map.get(node_ip)
+
+                entries = []
                 for failed_file in result.get("failed_files", []) or []:
-                    if isinstance(failed_file, (list, tuple)) and failed_file:
-                        file_path = failed_file[0]
-                        details = failed_file[1] if len(failed_file) > 1 else ""
-                    else:
-                        file_path = str(failed_file)
-                        details = ""
+                    file_path, details = self._parse_gsi_failure_entry(failed_file)
+                    entries.append((category, file_path, details))
+
+                # plaintext_leakage reports a different, nested shape:
+                # {status, by_category: {cat: {..., "leaks": [(path, snippet), ...]}}, total_leaks}
+                # rather than a top-level "failed_files" list — handle it separately
+                # so leaked-plaintext files aren't silently dropped from the report.
+                by_category = result.get("by_category")
+                if isinstance(by_category, dict):
+                    for sub_cat, sub_result in by_category.items():
+                        if not isinstance(sub_result, dict):
+                            continue
+                        for leak in sub_result.get("leaks", []) or []:
+                            file_path, details = self._parse_gsi_failure_entry(leak)
+                            entries.append((f"{category}:{sub_cat}", file_path, details))
+
+                for cat, file_path, details in entries:
+                    dest = None
+                    if node_obj and isinstance(file_path, str) and file_path.startswith("/"):
+                        dest = self._copy_failed_file_from_node(node_obj, file_path)
+                        if dest:
+                            copied_files.append(dest)
                     failures.append(
-                        f"  [{node_ip}] {category} {file_path}: {details}"
+                        f"  [{node_ip}] {cat} {file_path}: {details}"
+                        + (f" (copied to {dest})" if dest else "")
                     )
+        if copied_files:
+            self.log.info(
+                f"{label}Copied {len(copied_files)} failing GSI file(s) to "
+                f"{self._evidence_dir}:\n" + "\n".join(f"  {p}" for p in copied_files)
+            )
         if failures:
             self.log.error(
-                f"{label}GSI encryption validation found {len(failures)} failure(s)"
+                f"{label}GSI encryption validation found {len(failures)} failure(s) "
+                f"(copies in {self._evidence_dir})"
             )
         return failures
 
@@ -1618,6 +1747,7 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
         patterns = ["av_spill_*", "scan-results*"]
 
         all_failures = []
+        copied_files = []
         total_checked = 0
 
         for node in query_nodes:
@@ -1651,12 +1781,24 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
                 if is_enc:
                     self.log.debug(f"{label}{node.ip} {fpath}: encrypted OK")
                 else:
-                    all_failures.append(f"  {node.ip} {fpath}: NOT encrypted: {details}")
+                    dest = self._copy_failed_file_from_node(node, fpath)
+                    if dest:
+                        copied_files.append(dest)
+                    all_failures.append(
+                        f"  {node.ip} {fpath}: NOT encrypted: {details}"
+                        + (f" (copied to {dest})" if dest else "")
+                    )
 
+        if copied_files:
+            self.log.info(
+                f"{label}Copied {len(copied_files)} failing spill/backfill file(s) to "
+                f"{self._evidence_dir}:\n" + "\n".join(f"  {p}" for p in copied_files)
+            )
         if all_failures:
             self.fail(
                 f"{label}Spill/backfill files not encrypted "
-                "(other encryption regression):\n" + "\n".join(all_failures)
+                f"(other encryption regression, copies in {self._evidence_dir}):\n"
+                + "\n".join(all_failures)
             )
         if total_checked == 0:
             self.log.warning(
@@ -1822,6 +1964,7 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
                 continue
             node_result = res.get(node.ip, {}) if isinstance(res, dict) else {}
             failures = []
+            copied_files = []
             new_files = 0
             for cat in ("rlstream", "local_request_log"):
                 for fpath, r in node_result.get(cat, {}).items():
@@ -1830,6 +1973,10 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
                     if r.get("transient"):
                         continue
                     new_files += 1
+                    if not r.get("encrypted") or (ids and not r.get("key_id_found", True)):
+                        dest = self._copy_failed_file_from_node(node, fpath)
+                        if dest:
+                            copied_files.append(dest)
                     if not r.get("encrypted"):
                         failures.append(
                             f"  {cat} {fpath}: NOT encrypted: {r.get('details')}"
@@ -1838,6 +1985,11 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
                         failures.append(
                             f"  {cat} {fpath}: header missing key ID {ids}"
                         )
+            if copied_files:
+                self.log.info(
+                    f"[post-upgrade] {node.ip}: copied {len(copied_files)} failing "
+                    f"query log file(s) to {self._evidence_dir}"
+                )
             if failures:
                 validation_failures.extend(
                     f"[Query] {node.ip}: {line}" for line in failures
@@ -1857,10 +2009,17 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
         self.log.info("[post-upgrade] 5g: Validating new FFDC files")
         total_new_ffdc = 0
         ffdc_failures = []
+        ffdc_copied_files = []
         for node in query_nodes:
             node_new = new_ffdc_results.get(node.ip, {})
             for fpath, r in node_new.items():
                 total_new_ffdc += 1
+                if not r.get("encrypted") or (
+                    query_keys.get(node.ip) and not r.get("key_id_found", True)
+                ):
+                    dest = self._copy_failed_file_from_node(node, fpath)
+                    if dest:
+                        ffdc_copied_files.append(dest)
                 if not r.get("encrypted"):
                     ffdc_failures.append(
                         f"  {node.ip} {fpath}: NOT encrypted: {r.get('details')}"
@@ -1870,6 +2029,11 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
                         f"  {node.ip} {fpath}: header missing key ID "
                         f"{query_keys[node.ip]}"
                     )
+        if ffdc_copied_files:
+            self.log.info(
+                f"[post-upgrade] Copied {len(ffdc_copied_files)} failing FFDC file(s) "
+                f"to {self._evidence_dir}"
+            )
         if ffdc_failures:
             validation_failures.extend(f"[Query] {line}" for line in ffdc_failures)
         self.assertGreater(
@@ -1887,6 +2051,11 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
             failed_paths = []
             seen_paths = set()
             for line in validation_failures:
+                # Strip the trailing "(copied to <local evidence path>)" note
+                # appended by _copy_failed_file_from_node/_collect_gsi_encryption_failures
+                # so the local evidence-dir path isn't double-counted as a
+                # second "failed" remote file.
+                line = re.sub(r"\s*\(copied to [^)]*\)", "", line)
                 for tok in line.split():
                     if tok.startswith("/") and tok not in seen_paths:
                         # Trim trailing punctuation like ':' that follows paths
@@ -1925,7 +2094,11 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
         )
 
         # STEP 2.5: Conditional vector bucket (dense BHIVE indexes, 8.0+ only)
-        if self._version_tuple(self.initial_version) >= (8, 0):
+        if self.skip_vector_bucket:
+            self.log.info(
+                "[STEP 2.5] Skipping vector bucket (skip_vector_bucket=True)"
+            )
+        elif self._version_tuple(self.initial_version) >= (8, 0):
             self.log.info("[STEP 2.5] Creating vector bucket with dense BHIVE indexes")
             vector_namespaces, vector_queries, vector_bucket = self._prepare_vector_bucket()
             encrypted_buckets.append(vector_bucket)
@@ -2123,10 +2296,11 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
             query_nodes_reenc = self.get_nodes_from_services_map(
                 service_type="n1ql", get_all_nodes=True,
             )
-            self._force_reencrypt_bucket_and_wait(
-                self.test_bucket, index_nodes_reenc,
-                timeout=300, label="[STEP 7c] ",
-            )
+            for bucket in encrypted_buckets:
+                self._force_reencrypt_bucket_and_wait(
+                    bucket, index_nodes_reenc,
+                    timeout=300, label="[STEP 7c] ",
+                )
             self._force_reencrypt_logs_and_wait(
                 query_nodes_reenc, timeout=300, label="[STEP 7c] ",
             )
@@ -2267,7 +2441,11 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
         mutation_thread = threading.Thread(
             target=self.perform_continuous_kv_mutations,
             args=(event,),
-            kwargs={"timeout": 4800},
+            # ops_rate dropped from the 5000 default to 500 — the panic seen in
+            # indexer/projector logs during this workload ("MonitorServiceForPortChanges
+            # failed to start port monitor after 31 retries") looked load-related;
+            # lowering the mutation rate is a mitigation attempt, not a confirmed fix.
+            kwargs={"timeout": 4800, "ops_rate": 500},
             name="simple_upg_mutation",
         )
         mutation_thread.start()

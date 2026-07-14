@@ -2249,56 +2249,93 @@ class GSIEncryptionHelpers:
             }
         return results
 
+    @staticmethod
+    def _parse_size_path(entries):
+        parsed = []
+        for line in entries:
+            size_str, _, fpath = line.partition(' ')
+            try:
+                size = int(size_str)
+            except ValueError:
+                size = -1  # unknown — treat as non-empty to be safe
+            parsed.append((fpath, size))
+        return parsed
+
     def verify_gsi_metadata_repo_encrypted(self, index_nodes, expected_key_id=None):
         """
         Verify that metadata_repo_v2 wal and sstable files contain the expected key ID.
 
-        Searches for the key ID string in:
+        Searches for any of the expected key IDs in:
           - ``@2i/metadata_repo_v2/wal/wal.*``  (WAL files)
           - ``@2i/metadata_repo_v2/kvstore-*/rev-*/*/sstable.*.data``  (SSTable files)
 
-        Uses ``LC_ALL=C grep -ac`` to search the full file body byte-wise for
-        the key ID string. A non-zero match count indicates the file is
-        encrypted with that key. LC_ALL=C is required so grep does not skip
-        regions with invalid multibyte sequences under a UTF-8 locale (which
-        would produce false negatives on encrypted binary bodies).
+        Delegates to ``verify_file_contains_key_id``, which greps the full file
+        body (binary-as-text) for each candidate key ID in turn using
+        ``LC_ALL=C`` so invalid multibyte sequences in the encrypted binary
+        body don't cause false negatives. A match on any key indicates the
+        file is encrypted with that key.
 
         Args:
             index_nodes: List of index server objects.
-            expected_key_id: Key ID string or int to grep for in each file. Required.
+            expected_key_id: Key ID string/int, or an iterable of those (e.g. the
+                key ID list returned by ``_get_indexer_in_use_key_ids``). Required.
+
+        Empty (0-byte) files — e.g. a WAL segment caught mid-rotation — are
+        skipped rather than verified: an empty file has no body for `xxd` to
+        find a magic header in, so treating it like any other file would
+        always misclassify it as PLAINTEXT regardless of whether encryption
+        is actually working.
 
         Returns:
             dict: ``{node_ip: {"status": "pass"/"fail"/"skipped",
                                "wal_files_checked": int,
                                "sstable_files_checked": int,
-                               "failed_files": list[str]}}``
+                               "skipped_empty_files": list[str],
+                               "failed_files": list[tuple[str, str]]}}``
+                  (path, classification)
         """
         if expected_key_id is None:
             raise ValueError("verify_gsi_metadata_repo_encrypted: expected_key_id is required")
 
-        key_id_str = str(expected_key_id)
+        key_ids = self._normalize_key_ids(expected_key_id)
+        if not key_ids:
+            raise ValueError(
+                "verify_gsi_metadata_repo_encrypted: expected_key_id normalized to an empty list"
+            )
         results = {}
 
         for node in index_nodes:
-            self.log.info(f"[metadata_repo] Checking node {node.ip} for key_id={key_id_str}")
+            self.log.info(f"[metadata_repo] Checking node {node.ip} for key_ids={key_ids}")
             shell = RemoteMachineShellConnection(node, verbose=False)
             try:
                 rest = RestConnection(node)
                 storage_dir = f"{rest.get_index_path()}/@2i"
                 metadata_dir = f"{storage_dir}/metadata_repo_v2"
 
-                # Find WAL files
-                wal_cmd = f"find {metadata_dir}/wal -maxdepth 1 -type f 2>/dev/null"
+                # Find WAL files (with size, so empty/mid-rotation segments
+                # can be skipped below instead of misclassified as PLAINTEXT).
+                wal_cmd = (
+                    f"find {metadata_dir}/wal -maxdepth 1 -type f "
+                    f"-printf '%s %p\\n' 2>/dev/null"
+                )
                 wal_out, _ = shell.execute_command(wal_cmd)
-                wal_files = [f.strip() for f in wal_out if f.strip()]
+                wal_entries = [f.strip() for f in wal_out if f.strip()]
 
-                # Find SSTable files
-                sst_cmd = f"find {metadata_dir} -type f -name 'sstable.*.data' 2>/dev/null"
+                # Find SSTable files (with size)
+                sst_cmd = (
+                    f"find {metadata_dir} -type f -name 'sstable.*.data' "
+                    f"-printf '%s %p\\n' 2>/dev/null"
+                )
                 sst_out, _ = shell.execute_command(sst_cmd)
-                sst_files = [f.strip() for f in sst_out if f.strip()]
+                sst_entries = [f.strip() for f in sst_out if f.strip()]
 
-                all_files = wal_files + sst_files
-                if not all_files:
+                wal_parsed = self._parse_size_path(wal_entries)
+                sst_parsed = self._parse_size_path(sst_entries)
+                wal_files = [p for p, _ in wal_parsed]
+                sst_files = [p for p, _ in sst_parsed]
+                all_parsed = wal_parsed + sst_parsed
+
+                if not all_parsed:
                     self.log.warning(
                         f"[metadata_repo] Node {node.ip}: no wal/sstable files found under {metadata_dir}"
                     )
@@ -2307,40 +2344,78 @@ class GSIEncryptionHelpers:
                         "reason": f"no wal/sstable files found under {metadata_dir}",
                         "wal_files_checked": 0,
                         "sstable_files_checked": 0,
+                        "skipped_empty_files": [],
                         "failed_files": [],
                     }
                     continue
 
                 failed_files = []
-                for fpath in all_files:
-                    # LC_ALL=C grep -ac: byte-wise, count matching lines; exit 0 if >=1 match.
-                    # LC_ALL=C avoids multibyte-locale false negatives on binary bodies.
-                    grep_cmd = f"LC_ALL=C grep -ac '{key_id_str}' {fpath} 2>/dev/null"
-                    grep_out, _ = shell.execute_command(grep_cmd)
-                    count_str = ''.join(grep_out).strip()
-                    try:
-                        count = int(count_str)
-                    except ValueError:
-                        count = 0
-                    if count == 0:
-                        failed_files.append(fpath)
+                skipped_empty_files = []
+                for fpath, size in all_parsed:
+                    if size == 0:
+                        skipped_empty_files.append(fpath)
+                        self.log.info(
+                            f"[metadata_repo] Node {node.ip}: skipping empty (0-byte) "
+                            f"file {fpath} — no content to verify encryption on "
+                            f"(e.g. a WAL segment caught mid-rotation)"
+                        )
+                        continue
+                    # Check every candidate key id (not just a single stringified
+                    # value) — same pattern as verify_gsi_data_files_key_id.
+                    found, matched_key, _details = self.verify_file_contains_key_id(
+                        node, fpath, key_ids
+                    )
+                    if not found:
+                        # A missing expected-key match doesn't tell us WHY it's
+                        # missing — the file could be genuinely plaintext, or
+                        # it could still be encrypted under a previous/stale
+                        # key (e.g. a superseded sstable left behind by a
+                        # compaction that rewrote the "live" data but didn't
+                        # touch every old file). Disambiguate by checking for
+                        # the encryption magic header independently of key ID.
+                        is_encrypted, magic_details = self.verify_file_encryption_magic_bytes(
+                            node, fpath
+                        )
+                        if is_encrypted:
+                            classification = (
+                                f"STALE_KEY (magic header present, but expected "
+                                f"key(s) {key_ids} not found — likely encrypted "
+                                f"under a previous key)"
+                            )
+                        else:
+                            classification = (
+                                f"PLAINTEXT (no encryption magic header found: "
+                                f"{magic_details})"
+                            )
+                        failed_files.append((fpath, classification))
                         self.log.warning(
-                            f"[metadata_repo] Node {node.ip}: key_id '{key_id_str}' NOT found in {fpath}"
+                            f"[metadata_repo] Node {node.ip}: key(s) {key_ids} "
+                            f"NOT found in {fpath} — {classification}"
                         )
                     else:
                         self.log.debug(
-                            f"[metadata_repo] Node {node.ip}: key_id '{key_id_str}' found in {fpath} ({count} lines)"
+                            f"[metadata_repo] Node {node.ip}: key '{matched_key}' found in {fpath}"
                         )
 
-                status = "pass" if not failed_files else "fail"
+                if failed_files:
+                    status = "fail"
+                elif len(skipped_empty_files) == len(all_parsed):
+                    # Every file found was empty — nothing was actually
+                    # verified, so don't report a "pass" that implies
+                    # encryption was confirmed.
+                    status = "skipped"
+                else:
+                    status = "pass"
                 self.log.info(
                     f"[metadata_repo] Node {node.ip}: {status} — "
-                    f"wal={len(wal_files)}, sstable={len(sst_files)}, failed={len(failed_files)}"
+                    f"wal={len(wal_files)}, sstable={len(sst_files)}, "
+                    f"skipped_empty={len(skipped_empty_files)}, failed={len(failed_files)}"
                 )
                 results[node.ip] = {
                     "status": status,
                     "wal_files_checked": len(wal_files),
                     "sstable_files_checked": len(sst_files),
+                    "skipped_empty_files": skipped_empty_files,
                     "failed_files": failed_files,
                 }
             finally:
