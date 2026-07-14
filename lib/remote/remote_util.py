@@ -4190,7 +4190,7 @@ class RemoteMachineShellConnection(KeepRefs):
                     log.info("domain name of this {0} is {1}"
                          .format(self.ip, info.domain[0][0]))
                     domain = info.domain[0][0].replace('sc.couchbase.com', 'qe.couchbase.com') \
-                        if "ip6" in info.domain[0][0] else info.domain[0][0]
+                        if "ip6" in info.hostname[0] else info.domain[0][0]
                     if domain in info.hostname[0]:
                         return "{0}".format(info.hostname[0])
                     else:

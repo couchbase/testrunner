@@ -638,7 +638,7 @@ class QueryTests(BaseTestCase):
 
     def wait_for_fts_indexing_complete(self, fts_index, doc_count):
         indexed_doc_count = 0
-        retry_count = 24
+        retry_count = self.input.param("fts_index_wait_retries", 24)
         while indexed_doc_count < doc_count and retry_count > 0:
             try:
                 self.sleep(10)
