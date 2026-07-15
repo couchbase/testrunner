@@ -408,7 +408,7 @@ class CommunityTests(CommunityBaseTest):
         self.sleep(7, "wait for node reset done")
         self.rest.init_node()
         bucket = "default"
-        self.rest.create_bucket(bucket, ramQuotaMB=256)
+        self.rest.create_bucket(bucket, ramQuotaMB=256, storageBackend='couchstore')
         api = self.rest.query_baseUrl + "query/service"
         param = urllib.parse.urlencode({"statement":"infer `%s` ;" % bucket})
         try:
@@ -427,7 +427,7 @@ class CommunityTests(CommunityBaseTest):
         self.sleep(7, "wait for node reset done")
         self.rest.init_node()
         bucket = "default"
-        self.rest.create_bucket(bucket, ramQuotaMB=256)
+        self.rest.create_bucket(bucket, ramQuotaMB=256, storageBackend='couchstore')
         api = self.rest.query_baseUrl + "admin/settings"
         param = {'profile': 'phases'}
         try:
@@ -451,7 +451,7 @@ class CommunityTests(CommunityBaseTest):
         self.sleep(7, "wait for node reset done")
         self.rest.init_node()
         bucket = "default"
-        self.rest.create_bucket(bucket, ramQuotaMB=256)
+        self.rest.create_bucket(bucket, ramQuotaMB=256, storageBackend='couchstore')
         api = self.rest.query_baseUrl + "query/service"
         param = urllib.parse.urlencode({"statement":"SELECT META(d).id FROM `%s` AS d USE INDEX (USING FTS) WHERE d.f2 = 100;" % bucket})
         try:
@@ -470,7 +470,7 @@ class CommunityTests(CommunityBaseTest):
         self.sleep(7, "wait for node reset done")
         self.rest.init_node()
         bucket = "default"
-        self.rest.create_bucket(bucket, ramQuotaMB=200)
+        self.rest.create_bucket(bucket, ramQuotaMB=200, storageBackend='couchstore')
         api = self.rest.query_baseUrl + "query/service"
         param = urllib.parse.urlencode(
             {"statement": "CREATE INDEX idx ON `%s`(id) PARTITION BY HASH(META().id)" % bucket})
@@ -490,7 +490,7 @@ class CommunityTests(CommunityBaseTest):
         self.sleep(7, "wait for node reset done")
         self.rest.init_node()
         bucket = "default"
-        self.rest.create_bucket(bucket, ramQuotaMB=200)
+        self.rest.create_bucket(bucket, ramQuotaMB=200, storageBackend='couchstore')
         api = self.rest.query_baseUrl + "query/service"
         param = urllib.parse.urlencode(
             {"statement": "UPDATE STATISTICS for `hotel` (type, address, city, country, free_breakfast, id, phone);"})
@@ -510,7 +510,7 @@ class CommunityTests(CommunityBaseTest):
         self.sleep(7, "wait for node reset done")
         self.rest.init_node()
         bucket = "default"
-        self.rest.create_bucket(bucket, ramQuotaMB=200)
+        self.rest.create_bucket(bucket, ramQuotaMB=200, storageBackend='couchstore')
         api = self.rest.query_baseUrl + "query/service"
         param = urllib.parse.urlencode(
             {"statement": "SELECT d.id, d.destinationairport, CUME_DIST() OVER (PARTITION BY d.destinationairport \
