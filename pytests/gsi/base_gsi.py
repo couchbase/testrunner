@@ -4758,14 +4758,28 @@ class BaseSecondaryIndexingTests(QueryTests):
             index_name_only = index_name_in_kv_dict.split('.')[-1]
             if index_name_only in array_indexes:
                 continue
+            # kv names have no replica suffix, so an exact match hits instance-0 (the base replica).
+            # If instance-0 is missing (e.g. its node dropped out mid-build), fall back to any
+            # surviving replica whose name strips to the same base, using it as the representative
+            # instance for the KV comparison. Cross-replica consistency is validated separately in
+            # validate_replica_indexes_item_counts.
+            matched_index_name = index_count_in_index_dict = None
             for index_dict in index_map:
-                if index_name_in_kv_dict == index_dict ['name']:
-                    _, index_count_in_index_dict = index_dict['name'], index_dict['count']
+                base_name = re.sub(r' \(replica \d+\)$', '', index_dict['name'])
+                if index_name_in_kv_dict == index_dict['name']:
+                    matched_index_name, index_count_in_index_dict = index_dict['name'], index_dict['count']
                     break
+                if index_name_in_kv_dict == base_name and index_count_in_index_dict is None:
+                    matched_index_name, index_count_in_index_dict = index_dict['name'], index_dict['count']
+            if index_count_in_index_dict is None:
+                self.log.error(f"Index {index_name_in_kv_dict} present in kv map but missing from index stats map "
+                                f"(likely an incomplete/failed index build or unavailable index node)")
+                error_obj.append({'error': f"Index {index_name_in_kv_dict} not found in index stats map"})
+                continue
             if index_count_in_index_dict != index_count_in_kv_dict:
                 error = {}
-                self.log.error(f"Counts are index map {index_count_in_index_dict} kv map {index_count_in_kv_dict} for index {index_name_in_kv_dict}")
-                error['error'] = f"Counts for index {index_name_in_kv_dict} don't match. index map count {index_count_in_index_dict} kv map count {index_count_in_kv_dict}"
+                self.log.error(f"Counts are index map {index_count_in_index_dict} (instance '{matched_index_name}') kv map {index_count_in_kv_dict} for index {index_name_in_kv_dict}")
+                error['error'] = f"Counts for index {index_name_in_kv_dict} don't match. index map count {index_count_in_index_dict} (instance '{matched_index_name}') kv map count {index_count_in_kv_dict}"
                 error_obj.append(error)
         if error_obj:
             self.log.info(f"{error_obj}")

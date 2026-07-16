@@ -3231,8 +3231,22 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         # drop vector index parallely on different namespaces
 
+        # When skip_default_scope is False the restore also enumerates the bucket's _default._default
+        # collection, which the dataset loader never populates (all docs land in
+        # test_scope_1.test_collection_1). A vector index can only train if its keyspace holds at
+        # least as many documents as the number of centroids (sparse IVF1024 -> 1024 docs), so
+        # creating one on an empty collection fails with "InvalidTrainListSize". Skip such
+        # namespaces and exercise the concurrent drop on the populated collections only.
+        min_docs_for_training = 1024 if self.isSparse else 1
+        kv_nodes = self.get_kv_nodes()
         index_drop_list = []
         for item, namespace in enumerate(self.namespaces):
+            bucket, scope, collection = namespace.split(':', 1)[1].split('.')
+            doc_count = self.stat.get_collection_item_count_cumulative(bucket, scope, collection, node=kv_nodes)
+            if doc_count < min_docs_for_training:
+                self.log.info(f"Skipping namespace {namespace} for vector index creation: it has {doc_count} "
+                              f"documents, fewer than the {min_docs_for_training} required for training")
+                continue
             idx_name = f'idx_{item}'
 
             # Support both sparse and dense vectors
@@ -3254,6 +3268,9 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.run_cbq_query(query=query1, server=self.n1ql_node)
             drop_query_1 = vector_idx.generate_index_drop_query(namespace=namespace)
             index_drop_list.append(drop_query_1)
+
+        self.assertTrue(index_drop_list, "No namespace had enough documents to create a vector index for the "
+                                         "concurrent-drop test")
 
         with ThreadPoolExecutor() as executor:
             for query in index_drop_list:
