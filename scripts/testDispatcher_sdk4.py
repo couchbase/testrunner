@@ -24,7 +24,7 @@ import find_rerun_job
 import httplib2
 from constants.cb_constants.rel_branch_map import CB_VERSION_NAME
 from server_manager import ServerManager
-from lib.table_view import TableView
+from table_view import TableView
 
 # takes an ini template as input, standard out is populated with the server pool
 # need a descriptor as a parameter
@@ -238,12 +238,11 @@ def get_servers_cloud(options, descriptor, how_many, is_addl_pool, os_version,
             descriptor, how_many, os_version, type, ssh_key_path,
             options.architecture), None
     elif options.serverType == AZURE:
-        """Azure provisioning via SSH keypair."""
-        ssh_public_key_path = OS.environ.get("AZURE_SSH_PUBLIC_KEY")
-        ssh_private_key_path = OS.environ.get("AZURE_SSH_PRIVATE_KEY")
+        """ Azure uses template with pw enable login.  No need key """
+        ssh_key_path = ""
         return cloud_provision.az_get_servers(
-            descriptor, how_many, os_version, type, ssh_public_key_path,
-            ssh_private_key_path)
+            descriptor, how_many, os_version, type, ssh_key_path,
+            options.architecture)
     elif options.serverType == SERVERLESS_ONCLOUD:
         return [], []
     elif options.serverType == PROVISIONED_ONCLOUD:

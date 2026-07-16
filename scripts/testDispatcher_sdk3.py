@@ -139,12 +139,9 @@ def get_servers_cloud(options, descriptor, how_many, is_addl_pool, os_version, p
         ssh_key_path = OS.environ.get("GCP_SSH_KEY")
         return cloud_provision.gcp_get_servers(descriptor, how_many, os_version, type, ssh_key_path, options.architecture), None
     elif options.serverType == AZURE:
-        """Azure provisioning via SSH keypair."""
-        ssh_public_key_path = OS.environ.get("AZURE_SSH_PUBLIC_KEY")
-        ssh_private_key_path = OS.environ.get("AZURE_SSH_PRIVATE_KEY")
-        return cloud_provision.az_get_servers(
-            descriptor, how_many, os_version, type, ssh_public_key_path,
-            ssh_private_key_path)
+        """ Azure uses template with pw enable login.  No need key """
+        ssh_key_path = ""
+        return cloud_provision.az_get_servers(descriptor, how_many, os_version, type, ssh_key_path, options.architecture)
     elif options.serverType == SERVERLESS_ONCLOUD:
         return [], []
     elif options.serverType == PROVISIONED_ONCLOUD:

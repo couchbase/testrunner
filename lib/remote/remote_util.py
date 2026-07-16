@@ -3625,7 +3625,7 @@ class RemoteMachineShellConnection(KeepRefs):
         else:
             self.extract_remote_info(verbose=effective_debug)
 
-        if "iptables -F" in command and self.info.distribution_type in ("CBL-Mariner/Linux", "Azure Linux"):
+        if "iptables -F" in command and self.info.distribution_type == "CBL-Mariner/Linux":
             msg = "iptables -F is disabled on Mariner Linux"
             return [msg], [msg]
 
@@ -3932,23 +3932,17 @@ class RemoteMachineShellConnection(KeepRefs):
                         'red': 'rhel', 'suse': 'suse', 'oracle': 'oel', 'openshift' : 'centos',
                         'almalinux': 'alma', 'rocky': 'rocky', 'cbl-mariner/linux': 'CBL-Mariner/Linux'}
                     if os_pretty_name and "Amazon Linux" not in os_pretty_name:
-                        # PRETTY_NAME="Microsoft Azure Linux 3.0"
-                        if "Azure Linux" in os_pretty_name:
-                            os_distro = "Azure Linux"
-                            os_version = "azurelinux " + os_version.split('.')[0]
-                            is_linux_distro = True
+                        os_name = os_pretty_name.split(' ')[0].lower()
+                        os_distro = os_distro_dict[os_name]
+                        if os_name != 'ubuntu':
+                            os_version = os_shortname_dict[os_name] + " " + os_version.split('.')[0]
                         else:
-                            os_name = os_pretty_name.split(' ')[0].lower()
-                            os_distro = os_distro_dict[os_name]
-                            if os_name != 'ubuntu':
-                                os_version = os_shortname_dict[os_name] + " " + os_version.split('.')[0]
-                            else:
-                                os_version = os_shortname_dict[os_name] + " " + os_version
-                            if os_distro:
-                                is_linux_distro = True
+                            os_version = os_shortname_dict[os_name] + " " + os_version
+                        if os_distro:
+                            is_linux_distro = True
                         if verbose:
                             log.info("os_distro: " + os_distro + ", os_version: " + os_version +
-                                    ", is_linux_distro: " + str(is_linux_distro))
+                                     ", is_linux_distro: " + str(is_linux_distro))
                     file.close()
                     # now remove this file
                     os.remove(filename)
@@ -4098,8 +4092,7 @@ class RemoteMachineShellConnection(KeepRefs):
                    'Amazon Linux 2'     : 'rpm',
                    'AlmaLinux OS'       : 'rpm',
                    'Rocky Linux'        : 'rpm',
-                   'CBL-Mariner/Linux'  : 'rpm',
-                   'Azure Linux'        : 'rpm'}.get(os_distro, '')
+                   'CBL-Mariner/Linux'  : 'rpm'}.get(os_distro, '')
             arch = {'i686': "x86",
                     'i386': "x86"}.get(os_arch, os_arch)
 
