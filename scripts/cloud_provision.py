@@ -1,5 +1,4 @@
 from argparse import ArgumentParser
-import base64
 import sys, json, subprocess
 import boto3
 import paramiko
@@ -1428,14 +1427,6 @@ def az_get_servers(name, count, os, type, ssh_public_key_path, ssh_private_key_p
         private_ip_addresses.append(nic_result.ip_configurations[0].private_ip_address)
         log.info("NIC ready for {}".format(vm_name))
 
-    # cloud-init script injected at VM creation time so PubkeyAcceptedAlgorithms
-    # is set before the first SSH connection (post_provisioner) is attempted.
-    az_cloud_init = base64.b64encode("""#cloud-config
-runcmd:
-  - echo 'PubkeyAcceptedAlgorithms +ssh-rsa' >> /etc/ssh/sshd_config
-  - systemctl restart sshd 2>/dev/null || systemctl restart ssh
-""".encode()).decode()
-
     # Phase 3: Submit all VM creations in parallel
     log.info("Phase 3: Creating {} VMs in parallel".format(count))
     vm_pollers = []
@@ -1452,7 +1443,6 @@ runcmd:
                 'osProfile': {
                     'computerName': vm_name,
                     'adminUsername': vm_username,
-                    'customData': az_cloud_init,
                     'linuxConfiguration': {
                         'disablePasswordAuthentication': True,
                         'ssh': {
