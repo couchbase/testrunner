@@ -3774,8 +3774,8 @@ class RestConnection(object):
                 raise Exception("Erroneously able to set bucket settings %s for bucket on time-sync" % (params, bucket_name))
             return status, content
         if not status:
-            raise Exception("Unable to set bucket settings '%s' for bucket %s"
-                            % (params, bucket_name))
+            raise Exception("Unable to set '%s' for bucket %s, reason: %s"
+                            % (params, bucket_name, content))
         return status
 
     # return AutoFailoverSettings

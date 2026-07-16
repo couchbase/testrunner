@@ -194,9 +194,8 @@ class SDKClient(object):
         except CouchbaseException as e:
             raise
 
-    def mutate_in(self, key, scope=None, collection=None, *specs, **kwargs):
+    def mutate_in(self, key, *specs, scope=None, collection=None, **kwargs):
         try:
-            print("collection is {}".format(collection))
             # SDK 4.x requires 'spec' as a positional list argument
             # Handle 'specs' keyword arg (from tests) - this takes precedence
             if 'specs' in kwargs:
@@ -214,7 +213,7 @@ class SDKClient(object):
         except CouchbaseException as e:
             raise
 
-    def lookup_in(self, key, scope=None, collection=None, *specs, **kwargs):
+    def lookup_in(self, key, *specs, scope=None, collection=None, **kwargs):
         try:
             # SDK 4.x requires 'spec' as a positional list argument
             # Handle 'specs' keyword arg (from tests) - this takes precedence
