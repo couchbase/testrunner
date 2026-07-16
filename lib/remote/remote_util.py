@@ -461,7 +461,7 @@ class RemoteMachineShellConnection(KeepRefs):
             if self.is_couchbase_installed():
                 if self.nonroot:
                     log.info("Start Couchbase Server with non root method")
-                    o, r = self.execute_command('%s%scouchbase-server --start '\
+                    o, r = self.execute_command('%s%scouchbase-server \-- -noinput -detached '\
                                               % (self.nr_home_path, LINUX_COUCHBASE_BIN_PATH))
                     self.log_command_output(o, r)
                 else:
@@ -491,7 +491,7 @@ class RemoteMachineShellConnection(KeepRefs):
         elif os == "unix" or "linux" in os:
             if self.is_couchbase_installed():
                 if self.nonroot:
-                    o, r = self.execute_command("%s%scouchbase-server --stop"
+                    o, r = self.execute_command("%s%scouchbase-server -k"
                                                 % (self.nr_home_path,
                                                    LINUX_COUCHBASE_BIN_PATH))
                     self.log_command_output(o, r)
@@ -2351,12 +2351,13 @@ class RemoteMachineShellConnection(KeepRefs):
                     op, er = self.execute_command('cd {0};pwd'.format(self.nr_home_path))
                     self.log_command_output(op, er)
                     """ command to start Couchbase Server in non root
-                        /home/nonroot_user/opt/couchbase/bin/couchbase-server --start
+                        /home/nonroot_user/opt/couchbase/bin/couchbase-server \-- -noinput -detached
                     """
                     output, error = self.execute_command("ls -lh ")
                     self.log_command_output(output, error)
                     if start_server_after_install:
-                        output, error = self.execute_command('%s%scouchbase-server --start '\
+                        output, error = self.execute_command('%s%scouchbase-server '\
+                                                             '\-- -noinput -detached '\
                                                               % (self.nr_home_path,
                                                                  LINUX_COUCHBASE_BIN_PATH))
                 else:
@@ -2412,7 +2413,8 @@ class RemoteMachineShellConnection(KeepRefs):
                         as in centos above
                     """
                     if start_server_after_install:
-                        output, error = self.execute_command('%s%scouchbase-server --start '\
+                        output, error = self.execute_command('%s%scouchbase-server '\
+                                                             '\-- -noinput -detached '\
                                                                % (self.nr_home_path,
                                                                   LINUX_COUCHBASE_BIN_PATH))
                 else:
@@ -4339,11 +4341,8 @@ class RemoteMachineShellConnection(KeepRefs):
         else:
             o, r = self.execute_command("rm -rf {0}/*".format(data_path))
             self.log_command_output(o, r)
-            if self.nonroot:
-                config_path = self.nr_home_path + LINUX_COUCHBASE_OLD_CONFIG_PATH
-            else:
-                config_path = LINUX_COUCHBASE_OLD_CONFIG_PATH
-            o, r = self.execute_command("rm -rf {0}/*".format(config_path))
+            o, r = self.execute_command("rm -rf {0}/*"\
+                                        .format(LINUX_COUCHBASE_OLD_CONFIG_PATH))
             self.log_command_output(o, r)
 
     def check_if_windows_service_stopped(self, service_name=None):
@@ -4374,19 +4373,10 @@ class RemoteMachineShellConnection(KeepRefs):
         if self.info.type.lower() == "linux":
             if self.nonroot:
                 log.info("Stop Couchbase Server with non root method")
-                o, r = self.execute_command('%s%scouchbase-server --stop '\
+                o, r = self.execute_command('%s%scouchbase-server -k '\
                                          % (self.nr_home_path,
                                             LINUX_COUCHBASE_BIN_PATH))
                 self.log_command_output(o, r)
-                retries = num_retries
-                while self.is_couchbase_running() and retries > 0:
-                    self.sleep(10, "Waiting for nonroot couchbase-server to stop")
-                    retries -= 1
-                if self.is_couchbase_running():
-                    error_msg = ("couchbase-server --stop did not stop the server on {0}; "
-                                 "aborting without force killing".format(self.ip))
-                    log.error(error_msg)
-                    raise Exception(error_msg)
             else:
                 fv, sv, bn = self.get_cbversion("linux")
                 if self.info.distribution_version.lower() in SYSTEMD_SERVER:
@@ -4421,7 +4411,7 @@ class RemoteMachineShellConnection(KeepRefs):
             if self.info.type.lower() == "linux":
                 if self.nonroot:
                     log.info("Start Couchbase Server with non root method")
-                    o, r = self.execute_command('%s%scouchbase-server --start '\
+                    o, r = self.execute_command('%s%scouchbase-server \-- -noinput -detached '\
                                                                % (self.nr_home_path,
                                                                   LINUX_COUCHBASE_BIN_PATH))
                     self.log_command_output(o, r)

@@ -209,96 +209,68 @@ class NodeHelper:
         `unattended-upgrade` and the `apt.systemd.daily` wrapper), and recover dpkg
         state via `dpkg --configure -a`. No-op on non-deb.
 
-        Runs all commands as root since nonroot cannot stop system services.
-
         NOTE: the units stay masked on the node afterward -- intended on ephemeral test
         nodes, which should never run background apt activity.
         """
         if self.info.deliverable_type != "deb":
             return
         log.info("Disabling unattended-upgrades on {0}".format(self.ip))
-
-        if self.nonroot:
-            try:
-                self.node.ssh_username = "root"
-                root_shell = RemoteMachineShellConnection(self.node, exit_on_failure=False)
-            except Exception as e:
-                log.warning("disable_unattended_upgrades: cannot connect as root on {0}: {1}".format(self.ip, e))
-                self.node.ssh_username = "nonroot"
-                return
-        else:
-            root_shell = self.shell
-
+        units = (
+            "apt-daily.timer apt-daily-upgrade.timer "
+            "apt-daily.service apt-daily-upgrade.service "
+            "unattended-upgrades.service"
+        )
+        # mask --now: stop the running units AND prevent any re-activation (disable
+        # alone does not stop a running service nor block dependency/socket starts).
+        stop_cmd = (
+            "systemctl mask --now {0} 2>/dev/null; true"
+        ).format(units)
         try:
-            units = (
-                "apt-daily.timer apt-daily-upgrade.timer "
-                "apt-daily.service apt-daily-upgrade.service "
-                "unattended-upgrades.service"
-            )
-            # mask --now: stop the running units AND prevent any re-activation (disable
-            # alone does not stop a running service nor block dependency/socket starts).
-            stop_cmd = (
-                "systemctl mask --now {0} 2>/dev/null; true"
-            ).format(units)
-            root_shell.execute_command(stop_cmd, debug=self.params["debug_logs"])
-
-            iters = max(1, grace // 5)
-            # apt.systemd.daily is the wrapper script apt-daily*.service runs; unattended-upgrade
-            # is the upgrader it invokes. Wait for either to drain on its own first.
-            wait_cmd = (
-                "for i in $(seq 1 {0}); do "
-                "  pgrep -f 'unattended-upgrade|apt.systemd.daily' >/dev/null 2>&1 || exit 0; "
-                "  sleep 5; "
-                "done; exit 1"
-            ).format(iters)
-            root_shell.execute_command(wait_cmd, debug=self.params["debug_logs"])
-
-            recover_cmd = (
-                "flag=clean; "
-                "if pgrep -f 'unattended-upgrade|apt.systemd.daily' >/dev/null 2>&1; then "
-                "  pkill -9 -f 'unattended-upgrade|apt.systemd.daily' 2>/dev/null; "
-                "  sleep 2; flag=killed; "
-                "fi; "
-                "if fuser /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock >/dev/null 2>&1 "
-                "   || pgrep -x dpkg >/dev/null 2>&1; then "
-                "  echo dpkg-busy; exit 1; "
-                "fi; "
-                "rm -f /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock "
-                "      /var/cache/apt/archives/lock; "
-                "DEBIAN_FRONTEND=noninteractive dpkg --configure -a 2>/dev/null; "
-                "echo $flag"
-            )
-            o, _ = root_shell.execute_command(recover_cmd, debug=self.params["debug_logs"])
-            if any("killed" in line for line in (o or [])):
-                log.warning("Force-killed apt-daily/unattended-upgrade on {0} and recovered dpkg state".format(self.ip))
-            else:
-                log.info("apt-daily/unattended-upgrade neutralized cleanly on {0}".format(self.ip))
+            self.shell.execute_command(stop_cmd, debug=self.params["debug_logs"])
         except Exception as e:
-            log.warning("disable_unattended_upgrades failed on {0}: {1}".format(self.ip, e))
-        finally:
-            if self.nonroot:
-                root_shell.disconnect()
-                self.node.ssh_username = "nonroot"
+            log.warning("disable_unattended_upgrades(mask): {0} on {1}".format(e, self.ip))
+
+        iters = max(1, grace // 5)
+        # apt.systemd.daily is the wrapper script apt-daily*.service runs; unattended-upgrade
+        # is the upgrader it invokes. Wait for either to drain on its own first.
+        wait_cmd = (
+            "for i in $(seq 1 {0}); do "
+            "  pgrep -f 'unattended-upgrade|apt.systemd.daily' >/dev/null 2>&1 || exit 0; "
+            "  sleep 5; "
+            "done; exit 1"
+        ).format(iters)
+        try:
+            self.shell.execute_command(wait_cmd, debug=self.params["debug_logs"])
+        except Exception as e:
+            log.warning("disable_unattended_upgrades(wait): {0} on {1}".format(e, self.ip))
+
+        recover_cmd = (
+            "flag=clean; "
+            "if pgrep -f 'unattended-upgrade|apt.systemd.daily' >/dev/null 2>&1; then "
+            "  pkill -9 -f 'unattended-upgrade|apt.systemd.daily' 2>/dev/null; "
+            "  sleep 2; flag=killed; "
+            "fi; "
+            "if fuser /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock >/dev/null 2>&1 "
+            "   || pgrep -x dpkg >/dev/null 2>&1; then "
+            "  echo dpkg-busy; exit 1; "
+            "fi; "
+            "rm -f /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock "
+            "      /var/cache/apt/archives/lock; "
+            "DEBIAN_FRONTEND=noninteractive dpkg --configure -a 2>/dev/null; "
+            "echo $flag"
+        )
+        try:
+            o, _ = self.shell.execute_command(recover_cmd, debug=self.params["debug_logs"])
+        except Exception as e:
+            log.warning("disable_unattended_upgrades(recover): {0} on {1}".format(e, self.ip))
+            return
+        if any("killed" in line for line in (o or [])):
+            log.warning("Force-killed apt-daily/unattended-upgrade on {0} and recovered dpkg state".format(self.ip))
+        else:
+            log.info("apt-daily/unattended-upgrade neutralized cleanly on {0}".format(self.ip))
 
     def pre_install_cb(self):
         self.disable_unattended_upgrades()
-        pre_root_cmd = self.actions_dict[self.info.deliverable_type].get("pre_install_as_root")
-        if self.nonroot and pre_root_cmd:
-            try:
-                self.node.ssh_username = "root"
-                root_shell = RemoteMachineShellConnection(self.node, exit_on_failure=False)
-                root_shell.execute_command(pre_root_cmd, debug=self.params["debug_logs"])
-                root_shell.disconnect()
-            except Exception as e:
-                log.warning(
-                    "pre_install_cb: pre_install_as_root failed on {0}: {1}".format(
-                        self.ip, e
-                    )
-                )
-            finally:
-                self.node.ssh_username = "nonroot"
-                self.shell = RemoteMachineShellConnection(self.node, exit_on_failure=False)
-
         if self.actions_dict[self.info.deliverable_type]["pre_install"]:
             cmd = self.actions_dict[self.info.deliverable_type]["pre_install"]
             duration, event, timeout = install_constants.WAIT_TIMES[self.info.deliverable_type]["pre_install"]
@@ -513,7 +485,7 @@ class NodeHelper:
                 if self.actions_dict[self.info.deliverable_type]["post_install"]:
                     cmd = self.actions_dict[self.info.deliverable_type]["post_install"].replace("buildversion", self.build.version)
                     o, e = self.shell.execute_command(cmd, debug=self.params["debug_logs"])
-                    if o and o[-1] == '1':
+                    if o[-1] == '1':
                         break
                     else:
                         if self.actions_dict[self.info.deliverable_type]["post_install_retry"]:
@@ -700,12 +672,6 @@ class NodeHelper:
                     self.rest.set_alternate_address(self.ip)
 
                 # Make sure that data_path and index_path are writable by couchbase user
-                need_nonroot_relogin = False
-                if self.nonroot:
-                    self.node.ssh_username = "root"
-                    self.shell = RemoteMachineShellConnection(self.node, exit_on_failure=False)
-                    need_nonroot_relogin = True
-
                 for path in set([_f for _f in [self.node.data_path,
                                                self.node.index_path,
                                                self.node.cbas_path] if _f]):
@@ -713,10 +679,6 @@ class NodeHelper:
                                 "rm -rf %s/*" % path,
                                 "chown -R couchbase:couchbase %s" % path):
                         self.shell.execute_command(cmd)
-
-                if need_nonroot_relogin:
-                    self.node.ssh_username = "nonroot"
-                    self.shell = RemoteMachineShellConnection(self.node, exit_on_failure=False)
                 self.rest.set_data_path(data_path=self.node.data_path,
                                         index_path=self.node.index_path,
                                         cbas_path=self.node.cbas_path)
@@ -1492,21 +1454,24 @@ def download_build(node_helpers):
 
 def download_cb_non_package_installer(node_helper):
     log.debug("Downloading install script now")
+    cmd_master = install_constants.DOWNLOAD_CMD[node_helper.info.deliverable_type]
     download_dir = __get_download_dir(node_helper,
                                       disregard_skip_local_download=True)
-    if params["cb_non_package_installer_url"]:
-        url = params["cb_non_package_installer_url"]
-        cb_non_package_installer_name = url.split("/")[-1]
-    else:
-        arch = node_helper.info.architecture_type
-        arch_suffix = "-aarch64" if arch == "aarch64" else "-x86_64"
-        url = install_constants.CB_NON_PACKAGE_INSTALLER_BASE_URL + arch_suffix
-        cb_non_package_installer_name = install_constants.CB_NON_PACKAGE_INSTALLER_NAME
-    # Use curl (with a wget fallback) instead of the deliverable-type download
-    # command, since wget is not installed by default on some distros (e.g. RHEL 10)
-    cmd = install_constants.CB_NON_PACKAGE_INSTALLER_DOWNLOAD_CMD.format(
-        download_dir, cb_non_package_installer_name, url)
-    node_helper.shell.execute_command(cmd, debug=True)
+    url = params["cb_non_package_installer_url"] \
+        if params["cb_non_package_installer_url"] \
+        else install_constants.CB_NON_PACKAGE_INSTALLER_URL
+    cb_non_package_installer_name = params["cb_non_package_installer_url"].split("/")[-1] \
+        if params["cb_non_package_installer_url"] \
+        else install_constants.CB_NON_PACKAGE_INSTALLER_NAME
+    if "curl" in cmd_master:
+        cmd = cmd_master.format(url,
+                                download_dir)
+    elif "wget" in cmd_master:
+        cmd = cmd_master.format(download_dir,
+                                cb_non_package_installer_name,
+                                url)
+    if cmd:
+        node_helper.shell.execute_command(cmd, debug=True)
     node_helper.shell.execute_command("chmod a+x {0}{1}".format(download_dir,
                                                          cb_non_package_installer_name))
 
