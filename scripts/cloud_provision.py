@@ -722,13 +722,6 @@ def post_provisioner(host, username, ssh_key_path, modify_hosts=False):
             "echo 'DEBUG: Current SSH config:' && sudo grep -E '(PermitRootLogin|PasswordAuthentication)' /etc/ssh/sshd_config | tail -10",
             "echo 'DEBUG: SSH config dir contents:' && sudo ls -la /etc/ssh/sshd_config.d/ 2>/dev/null || echo 'No sshd_config.d directory'"])
 
-        # MB-68627/DOC-13818 workaround for Debian 13. 
-        # Debian 13 has the "hosts:  files myhostname resolve [!UNAVAIL=return] dns" in /etc/nsswitch.conf
-        # Entries like 'myhostname' can make the "net" package in golang to force glibc getaddrinfo to lookup DNS instead of Native Go DNS lookup
-        # glibc getaddrinfo will result in SIGSEGV from indexer service of Couchbase. So we will just have "hosts: files dns" in /etc/nsswitch.conf
-        if is_debian13_or_newer:
-            commands.append("sudo sed -i 's/^hosts:.*$/hosts: files dns/' /etc/nsswitch.conf")
-
         # SSH restart with enhanced error handling for modern distributions
         if is_modern_distro:
             if is_debian13_or_newer:
