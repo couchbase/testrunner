@@ -6970,13 +6970,24 @@ class SDKLoadDocumentsTask(Task):
                 command = command + ",".join(arr_fields_to_update)
         self.log.info(command)
         try:
-            proc = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True)
+            proc = subprocess.Popen(command, stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE, shell=True)
             out = proc.communicate(timeout=self.sdk_docloader.timeout)
             if self.sdk_docloader.get_sdk_logs:
                 self.sdk_docloader.set_sdk_results(out)
                 self.log.info(out[0].decode("utf-8"))
             if proc.returncode != 0:
-                raise Exception("Exception in java sdk client to {}:{}\n{}".format(self.server.ip, self.bucket, out))
+                # Capture stderr too: the java client writes its real
+                # failure (stack trace / connection error / missing jar)
+                # to stderr, which was previously inherited to the
+                # console and dropped, leaving only an opaque "(b'', None)".
+                stdout = out[0].decode("utf-8", "replace") if out[0] else ""
+                stderr = out[1].decode("utf-8", "replace") if out[1] else ""
+                raise Exception(
+                    "Exception in java sdk client to {}:{} (rc={})\n"
+                    "STDOUT:\n{}\nSTDERR:\n{}".format(
+                        self.server.ip, self.bucket, proc.returncode,
+                        stdout, stderr))
         except Exception as e:
             proc.terminate()
             self.state = FINISHED
