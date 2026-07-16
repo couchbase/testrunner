@@ -124,6 +124,67 @@ def rreplace(str, pattern, num_replacements):
     return str.rsplit(pattern, num_replacements)[0]
 
 
+def get_dashboard_descriptor(job):
+    """Build the dashboard descriptor for a job.
+
+    RTAF jobs are aggregated (one Jenkins trigger covering every
+    subcomponent for a component), so the descriptor carries the
+    {subcomponent: confFile} map instead of a single subcomponent name.
+    """
+    if job['framework'] == 'RTAF' and 'subcomponent_conf_map' in job:
+        return urllib.parse.quote(json.dumps(job['subcomponent_conf_map']))
+    return urllib.parse.quote(job['subcomponent'])
+
+
+def ensure_rtaf_not_mixed_with_other_frameworks(tests_to_launch):
+    """RTAF jobs get aggregated per (component, iniFile) and dispatched
+    out of original query order (see aggregate_rtaf_jobs). Mixing RTAF
+    with other frameworks in the same dispatch run would silently
+    reorder the non-RTAF jobs relative to the query, so refuse to
+    proceed if both are present."""
+    frameworks = {job['framework'] for job in tests_to_launch}
+    if 'RTAF' in frameworks and len(frameworks) > 1:
+        raise Exception(
+            "RTAF cannot be dispatched together with other frameworks "
+            f"in the same run. Frameworks found: {sorted(frameworks)}. "
+            "Run RTAF components separately from non-RTAF components.")
+
+
+def aggregate_rtaf_jobs(tests_to_launch):
+    """Collapse per-subcomponent RTAF job entries into a single job per
+    (component, iniFile), carrying a {subcomponent: confFile} map. All
+    other frameworks are left untouched.
+
+    Grouping is keyed on iniFile (not just component) because iniFile
+    determines the cluster topology/serverCount that gets booked for the
+    single Jenkins trigger. Jobs needing different topologies (e.g. a
+    1-node vs a 3-node suite) must never share one booking/trigger, since
+    the executor books servers once per trigger and runs the whole map as
+    a train against that one cluster. RTAF subcomponents are unique
+    within a (component, iniFile) group, so grouping on that pair alone
+    is safe.
+    """
+    rtaf_groups = {}
+    other_jobs = []
+    for job in tests_to_launch:
+        if job['framework'] == 'RTAF':
+            rtaf_groups.setdefault(
+                (job['component'], job['iniFile']), []).append(job)
+        else:
+            other_jobs.append(job)
+
+    aggregated_rtaf_jobs = []
+    for (component, ini_file), jobs in rtaf_groups.items():
+        aggregated_job = deepcopy(jobs[0])
+        aggregated_job['subcomponent_conf_map'] = {
+            job['subcomponent']: job['confFile'] for job in jobs}
+        aggregated_job['subcomponent'] = "None"
+        aggregated_job['confFile'] = "None"
+        aggregated_rtaf_jobs.append(aggregated_job)
+
+    return other_jobs + aggregated_rtaf_jobs
+
+
 def fetch_ini_from_github(ini_file, repo, ref):
     """Fetch an ini file from an internal GitHub repo and write it to
     ini_file's path relative to the current working directory."""
@@ -781,13 +842,15 @@ def main():
             log.error((traceback.format_exc()))
             log.error(row)
 
+    ensure_rtaf_not_mixed_with_other_frameworks(testsToLaunch)
+    testsToLaunch = aggregate_rtaf_jobs(testsToLaunch)
+
     if not options.fresh_run:
         # Filter out jobs which have already passed in rerun (not a fresh_run)
         job_index_to_pop = list()
         for t_job_index, test_to_launch in enumerate(testsToLaunch):
             # build the dashboard descriptor
-            dashboard_desc = urllib.parse.quote(
-                test_to_launch['subcomponent'])
+            dashboard_desc = get_dashboard_descriptor(test_to_launch)
             if options.dashboardReportedParameters is not None:
                 for o in options.dashboardReportedParameters.split(','):
                     dashboard_desc += '_' + o.split('=')[1]
@@ -970,7 +1033,7 @@ def main():
                               curr_job['framework'],))
 
                 # build the dashboard descriptor
-                dashboardDescriptor = urllib.parse.quote(curr_job['subcomponent'])
+                dashboardDescriptor = get_dashboard_descriptor(curr_job)
                 if options.dashboardReportedParameters is not None:
                     for o in options.dashboardReportedParameters.split(','):
                         dashboardDescriptor += '_' + o.split('=')[1]
