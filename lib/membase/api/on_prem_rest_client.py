@@ -6839,7 +6839,7 @@ class RestConnection(object):
     '''
     def start_eventing_debugger(self, name, function_scope=None):
         authorization = self.get_authorization(self.username, self.password)
-        url = "startDebugger?name=" + name
+        url = "startDebugger/?name=" + name
         if function_scope is not None:
             url += "&bucket={0}&scope={1}".format(function_scope["bucket"],
                                                   function_scope["scope"])
@@ -6855,7 +6855,7 @@ class RestConnection(object):
     '''
     def stop_eventing_debugger(self, name, function_scope=None):
         authorization = self.get_authorization(self.username, self.password)
-        url = "stopDebugger?name=" + name
+        url = "stopDebugger/?name=" + name
         if function_scope is not None:
             url += "&bucket={0}&scope={1}".format(function_scope["bucket"],
                                                   function_scope["scope"])
@@ -6871,7 +6871,7 @@ class RestConnection(object):
     '''
     def get_eventing_debugger_url(self, name, function_scope=None):
         authorization = self.get_authorization(self.username, self.password)
-        url = "getDebuggerUrl?name=" + name
+        url = "getDebuggerUrl/?name=" + name
         if function_scope is not None:
             url += "&bucket={0}&scope={1}".format(function_scope["bucket"],
                                                   function_scope["scope"])

@@ -143,7 +143,7 @@ class EventingLifeCycle(EventingBaseTest):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
         body = self.import_function_from_directory(EXPORTED_FUNCTION.N1QL_INSERT_ON_UPDATE_WITH_CRON_TIMER)
-        self.deploy_function(body)
+        self.wait_for_handler_state(body['appname'], "deployed")
         # Wait for eventing to catch up with all the create mutations and verify results
         self.verify_eventing_results(body['appname'], self.docs_per_day * 2016)
         self.undeploy_delete_all_functions()
@@ -392,8 +392,8 @@ class EventingLifeCycle(EventingBaseTest):
         log.info("imported function")
         log.info(body)
         # Validate that exported function data matches with the function that we created
-        self.assertTrue(output['depcfg']['curl'][0]['password'] == "", msg="password is not empty")
-        self.assertTrue(output['depcfg']['curl'][0]['username'] == "", msg="username is not empty")
+        self.assertTrue(output['depcfg']['curl'][0]['password'] == "*****", msg="password is not masked")
+        self.assertTrue(output['depcfg']['curl'][0]['username'] == self.curl_username, msg="username does not match")
         self.undeploy_and_delete_function(body)
 
     def test_eventing_debugger_ABO(self):
