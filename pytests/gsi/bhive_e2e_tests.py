@@ -470,6 +470,133 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
             self._rebalance_and_validate(nodes_out_list=out_nodes_list, nodes_in_list=None, swap_rebalance=False, services_in=None, select_queries=None, scan_results_check=False, skip_shard_validations=True)
             stats_thread.result()
 
+    def _get_prometheus_metric(self, prometheus_text, metric_substring):
+        """Parse the indexer _prometheusMetrics text and return the integer value
+        of the first metric line whose name contains metric_substring.
+        Handles both 'name value' and 'name{labels} value' formats.
+        Returns None if the metric is not present.
+        """
+        for line in prometheus_text.splitlines():
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            name = line.split('{')[0].split(' ')[0]
+            if metric_substring in name:
+                try:
+                    return int(float(line.split()[-1]))
+                except (ValueError, IndexError):
+                    continue
+        return None
+
+    def test_vector_index_count_metrics(self):
+        """
+        MB-72620: Validate the GSI indexer stats/prometheus metrics that report the
+        number of vector indexes (num_bhive_dense_indexes,
+        num_composite_dense_indexes), added so fleet tooling can count customer
+        vector indexes without calling /indexStatus on customer clusters.
+
+        Validates the two per-node vector-index gauges (added in 8.1.0), counted
+        per index instance in getIndexStorageStats:
+          num_bhive_dense_indexes, num_composite_dense_indexes
+        In /stats these keys are unprefixed; in _prometheusMetrics they carry the
+        'index_' prefix (e.g. index_num_bhive_dense_indexes).
+
+        Steps:
+        1. Create a single bucket/collection and load vector docs (siftBigANN).
+        2. Create dense BHIVE and dense composite vector indexes, plus scalar
+           indexes as a negative control.
+        3. Wait for indexes to come online.
+        4. Read the two counters from the indexer /stats endpoint and from
+           _prometheusMetrics.
+        5. Assert both sources, summed across all index nodes, agree with the
+           cluster-wide ground-truth counts from getIndexStatus (scalar indexes
+           are counted in neither).
+
+        Uses no replicas so each vector index is a single instance; the counters
+        are per-node, so they are summed across all index nodes.
+        """
+        self.log.info("Setting up bucket and loading vector docs")
+        buckets = self._create_test_buckets(num_buckets=1)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        for bucket in buckets:
+            self.prepare_collection_for_indexing(bucket_name=bucket, num_scopes=1, num_collections=1,
+                                                 num_of_docs_per_collection=self.num_of_docs_per_collection,
+                                                 json_template=self.json_template, load_default_coll=False)
+
+        self.log.info("Creating dense BHIVE, dense composite and scalar indexes")
+        create_queries = []
+        for namespace in self.namespaces:
+            bhive_def, scalar_def, composite_def = self._get_query_definitions()
+            # Exclude partitioned indexes: a partitioned index has an instance on
+            # every index node holding a partition, so the per-node counters would
+            # count it once per node and the sum would exceed the getIndexStatus
+            # (logical) count. With no partitions and no replicas each vector index
+            # is a single instance on a single node.
+            bhive_def = [d for d in bhive_def if not getattr(d, 'partition_by_fields', None)]
+            composite_def = [d for d in composite_def if not getattr(d, 'partition_by_fields', None)]
+            create_queries.extend(self.gsi_util_obj.get_create_index_list(
+                definition_list=bhive_def, namespace=namespace, num_replica=0, bhive_index=True))
+            create_queries.extend(self.gsi_util_obj.get_create_index_list(
+                definition_list=composite_def, namespace=namespace, num_replica=0))
+            create_queries.extend(self.gsi_util_obj.get_create_index_list(
+                definition_list=scalar_def, namespace=namespace, num_replica=0))
+
+        for query in create_queries:
+            self.log.info(f"Running create query: {query}")
+            self.run_cbq_query(query=query, server=query_node)
+        self.wait_until_indexes_online()
+        self.sleep(10, "Indexes online")
+
+        # Cluster-wide ground truth from getIndexStatus (no replicas)
+        expected_bhive = len(self.get_all_bhive_index_names())
+        expected_composite = len(self.get_all_composite_index_names())
+        self.log.info(f"Ground truth from getIndexStatus: bhive={expected_bhive}, "
+                      f"composite={expected_composite}")
+        self.assertGreater(expected_bhive, 0, "Test setup error: no BHIVE indexes were created")
+        self.assertGreater(expected_composite, 0, "Test setup error: no composite indexes were created")
+
+        expected = {
+            'num_bhive_dense_indexes': expected_bhive,
+            'num_composite_dense_indexes': expected_composite,
+        }
+
+        # The counters are per-node (counted per index instance in
+        # getIndexStorageStats), so sum them across every index node and compare
+        # to the cluster-wide getIndexStatus counts. Correct on any topology.
+        stats_total = {name: 0 for name in expected}
+        prom_total = {name: 0 for name in expected}
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        for node in index_nodes:
+            node_rest = RestConnection(node)
+
+            # 1. Raw indexer /stats top-level keys (unprefixed)
+            node_stats = node_rest.get_all_index_stats()
+
+            # 2. _prometheusMetrics endpoint (metrics carry the 'index_' prefix)
+            status, content, _ = node_rest.urllib_request(node_rest.index_baseUrl + '_prometheusMetrics')
+            self.assertTrue(status, f"Failed to scrape _prometheusMetrics on index node {node.ip}")
+            prometheus_text = content.decode('utf8') if isinstance(content, bytes) else content
+
+            for name in expected:
+                s = node_stats.get(name)
+                p = self._get_prometheus_metric(prometheus_text, name)
+                self.assertIsNotNone(s, f"/stats {name} missing on index node {node.ip}")
+                self.assertIsNotNone(p, f"prometheus index_{name} missing on index node {node.ip}")
+                self.log.info(f"index node {node.ip}: {name} /stats={s} prometheus={p}")
+                stats_total[name] += s
+                prom_total[name] += p
+
+        self.log.info(f"cluster totals -> /stats: {stats_total}, prometheus: {prom_total}, "
+                      f"expected: {expected}")
+
+        # 3. Per-node sums from both /stats and prometheus must match getIndexStatus
+        for name, exp in expected.items():
+            self.assertEqual(stats_total[name], exp,
+                             f"/stats {name} summed across nodes ({stats_total[name]}) != "
+                             f"getIndexStatus count ({exp})")
+            self.assertEqual(prom_total[name], exp,
+                             f"prometheus index_{name} summed across nodes ({prom_total[name]}) != "
+                             f"getIndexStatus count ({exp})")
 
     def test_backup_failure_status_code(self):
         """

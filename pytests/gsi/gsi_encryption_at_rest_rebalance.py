@@ -2493,6 +2493,276 @@ class GSIEncryptionAtRestRebalance(GSIEncryptionAtRestBase, BaseSecondaryIndexin
                       f"with encryption at rest")
         self.log.info("=" * 80)
 
+    def _fetch_index_names_set(self):
+        """Return the set of index names currently present in the cluster.
+
+        Mirrors FileBasedRebalance.fetch_index_names_list (gsi_file_based_rebalance.py)
+        which is not inherited by this class. Reads indexer metadata from any index node.
+        """
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        rest = RestConnection(index_nodes[0])
+        index_resp = rest.get_indexer_metadata()
+        if 'status' not in index_resp:
+            raise Exception(f"No index metadata seen in response {index_resp}")
+        return set(index['indexName'] for index in index_resp['status'])
+
+    def test_replica_repair_missing_encryption_key_file_based(self):
+        """
+        Regression test for MB-72480 — encryption keys missing during file-based
+        rebalance replica repair (TransferMode: Copy).
+
+        Bug: during file-based (shard) rebalance the source resolved each shard
+        DEK's on-disk path by deriving buckets from the transfer token and
+        intersecting shard keys with each bucket's in-use key IDs. For a replica
+        repair token (mode: Copy) the token references only a SUBSET of indexes,
+        yet the ENTIRE shard is copied. The shard therefore carries keys from
+        indexes on a DIFFERENT bucket that are not part of the transfer, and
+        path-finding for those keys fails -> rebalance fails with a
+        "missing encryption key" error. The fix resolves each shard key directly
+        by keyID instead of via the bucket intersection.
+
+        Reproduction (from the MB verification steps):
+          - 2 index nodes, shard affinity ON, forced to exactly 2 shards per node
+            so all indexes share a single alternate shard pair.
+          - bucket b1 ENCRYPTED, bucket b2 NON-encrypted.
+          - multiple indexes on b2 WITH 1 replica.
+          - multiple indexes on b1 WITHOUT replicas, pinned (nodes clause) to
+            node A so that node B ends up holding ONLY b2's replica copies.
+          - hard-failover node B (the node holding only replica indexes).
+          - rebalance out the failed node -> lost replicas now exist.
+          - add a fresh node and rebalance -> replica repair (Copy) fires.
+
+        Without the fix the final add-node rebalance fails with
+        "missing encryption key"; with the fix it succeeds and encryption stays
+        intact. Requires gsi_type=plasma and rebalance_mode=file.
+        """
+        # Log string that identifies the replica-repair Copy transfer token in
+        # indexer.log. Kept as a tunable constant — adjust if the indexer token
+        # wording changes in a future build.
+        COPY_TOKEN_LOG_STRING = "ShardTransferToken.*TransferMode: Copy"
+        MISSING_KEY_LOG_STRING = "missing encryption key"
+
+        self.log.info("=" * 80)
+        self.log.info("STARTING TEST: test_replica_repair_missing_encryption_key_file_based")
+        self.log.info(f"Test parameters: gsi_type={self.gsi_type}, rebalance_mode={self.rebalance_mode}")
+        self.log.info("=" * 80)
+
+        # ========== STEP 1: Verify prerequisites ==========
+        index_nodes = self.verify_prerequisites(min_index_nodes=2)
+        if self.gsi_type != "plasma":
+            self.skipTest("File-based (shard) rebalance requires gsi_type=plasma")
+        if self.rebalance_mode != "file":
+            self.skipTest("This test targets file-based rebalance. Set rebalance_mode=file")
+
+        # ========== STEP 2: Enable file-based rebalance + force 2 shards per node ==========
+        # enable_shard_based_rebalance flips indexer.settings.enable_shard_affinity.
+        # The remaining keys force exactly one alternate shard pair in the cluster
+        # (identical dict to gsi_file_based_rebalance.py) so that b1 and b2 indexes
+        # share a shard and honourNodesInDefn lets the nodes clause pin b1.
+        self.log.info("[STEP 2] Enabling shard-based rebalance and forcing 2 shards per node...")
+        self.enable_shard_based_rebalance()
+        forced_shard_settings = {
+            "indexer.settings.enable_shard_affinity": True,
+            "indexer.plasma.minShardsPerNode": 2,
+            "indexer.plasma.shardLimitPerNode": 2,
+            "indexer.planner.internal.min_shards_per_node": 2,
+            "indexer.planner.honourNodesInDefn": True,
+        }
+        index_rest = RestConnection(index_nodes[0])
+        for setting, value in forced_shard_settings.items():
+            index_rest.set_index_settings({setting: value})
+        self.sleep(10, "[STEP 2] Waiting for shard-affinity settings to take effect")
+        self.log.info("[STEP 2] PASSED - Shard-based rebalance enabled with forced 2 shards per node")
+
+        # ========== STEP 3: Create b1 (encrypted) + b2 (non-encrypted) buckets ==========
+        self.log.info("[STEP 3] Creating buckets: b1 encrypted, b2 non-encrypted...")
+        bucket_names, encrypted_bucket_names = self._create_encrypted_test_buckets(
+            num_buckets=2, encrypt_all=False
+        )
+        b1_encrypted = bucket_names[0]
+        b2_non_encrypted = bucket_names[1]
+        encrypted_bucket_names = self.get_current_encrypted_bucket_names(bucket_names)
+        self.assertIn(b1_encrypted, encrypted_bucket_names,
+                      f"Bucket '{b1_encrypted}' should be encrypted")
+        self.assertNotIn(b2_non_encrypted, encrypted_bucket_names,
+                         f"Bucket '{b2_non_encrypted}' should NOT be encrypted")
+        b1_namespace = f"default:{b1_encrypted}._default._default"
+        b2_namespace = f"default:{b2_non_encrypted}._default._default"
+        self.log.info(f"[STEP 3] PASSED - b1(encrypted)={b1_encrypted}, b2(non-encrypted)={b2_non_encrypted}")
+
+        # ========== STEP 4: Pick node A (pin target) and node B (failover target) ==========
+        # node A hosts b1's non-replica indexes plus one b2 replica; node B ends up
+        # with only a b2 replica copy. Both must be non-master so the failover of B
+        # never removes the orchestrator.
+        self.log.info("[STEP 4] Selecting node A (pin target) and node B (failover target)...")
+        non_master_index_nodes = [n for n in index_nodes if n.ip != self.master.ip]
+        self.assertGreaterEqual(
+            len(non_master_index_nodes), 2,
+            f"Need at least 2 non-master index nodes; found {[n.ip for n in non_master_index_nodes]}"
+        )
+        node_a = non_master_index_nodes[0]
+        node_b = non_master_index_nodes[1]
+        self.log.info(f"[STEP 4] PASSED - node A (pin b1 here)={node_a.ip}, "
+                      f"node B (failover, holds only b2 replica)={node_b.ip}")
+
+        # ========== STEP 5: Create indexes ==========
+        # b2 (non-encrypted): multiple indexes WITH 1 replica -> one copy on A, one on B.
+        # b1 (encrypted): multiple indexes WITHOUT replicas, pinned to node A.
+        self.log.info("[STEP 5] Creating indexes on b2 (replica 1) and b1 (0 replica, pinned to node A)...")
+        query_node = self.get_nodes_from_services_map(service_type="n1ql")
+        b2_fields = ["country", "city", "avg_rating"]
+        b1_fields = ["name", "price", "free_parking"]
+        create_queries = []
+        for i, field in enumerate(b2_fields):
+            create_queries.append(
+                f'CREATE INDEX idx_b2_{i} ON {b2_namespace}({field}) '
+                f'USING GSI WITH {{"num_replica": 1}}'
+            )
+        for i, field in enumerate(b1_fields):
+            create_queries.append(
+                f'CREATE INDEX idx_b1_{i} ON {b1_namespace}({field}) '
+                f'USING GSI WITH {{"nodes": ["{node_a.ip}:{self.node_port}"]}}'
+            )
+        for query in create_queries:
+            self.log.info(f"[STEP 5] Running: {query}")
+            self.run_cbq_query(query=query, server=query_node)
+        self.wait_until_indexes_online(timeout=1200)
+        self.sleep(30, "[STEP 5] Waiting for index placement to settle")
+        self.log.info("[STEP 5] PASSED - Indexes created on both buckets")
+
+        # ========== STEP 6: Baseline validation ==========
+        self.log.info("[STEP 6] Baseline: shard affinity, scans, and file encryption...")
+        self.validate_shard_affinity()
+        select_queries = [
+            f'SELECT COUNT(*) FROM {b2_namespace} WHERE country IS NOT NULL',
+            f'SELECT COUNT(*) FROM {b2_namespace} WHERE city IS NOT NULL',
+            f'SELECT COUNT(*) FROM {b1_namespace} WHERE name IS NOT NULL',
+            f'SELECT COUNT(*) FROM {b1_namespace} WHERE price IS NOT NULL',
+        ]
+        for query in select_queries:
+            self.run_cbq_query(query=query, scan_consistency='request_plus', server=query_node)
+        baseline_key_ids = self.get_indexer_in_use_key_ids(index_nodes)
+        self.log.info(f"[STEP 6] Baseline in-use indexer key IDs: {baseline_key_ids}")
+        self.assertTrue(
+            self.validate_file_encryption_with_key(
+                index_nodes, expected_key_id=baseline_key_ids,
+                step_prefix="[STEP 6] ", encrypted_bucket_names=[b1_encrypted]
+            ),
+            "[STEP 6] Baseline file encryption validation failed"
+        )
+        index_names_before = self._fetch_index_names_set()
+        self.log.info(f"[STEP 6] Index names before failover: {index_names_before}")
+        self.log.info("[STEP 6] PASSED - Baseline validation completed")
+
+        # ========== STEP 7: Hard-failover node B (holds only b2 replica) ==========
+        self.log.info(f"[STEP 7] Hard-failing over node B ({node_b.ip})...")
+        failover_task = self.cluster.async_failover(
+            servers=[self.master],
+            failover_nodes=[node_b],
+            graceful=False
+        )
+        failover_task.result()
+        self.sleep(30, "[STEP 7] Waiting for failover to complete")
+        self.log.info(f"[STEP 7] PASSED - Node {node_b.ip} failed over")
+
+        # ========== STEP 8: Rebalance out the failed node -> creates lost replicas ==========
+        self.log.info("[STEP 8] Rebalancing out the failed node (lost replicas expected after this)...")
+        rebalance = self.cluster.async_rebalance(
+            self.servers[:self.nodes_init], [], [],
+            cluster_config=self.cluster_config if hasattr(self, 'cluster_config') else None
+        )
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=250)
+        self.assertTrue(reached, "[STEP 8] Rebalance-out of failed node did not complete")
+        rebalance.result()
+        self.sleep(30, "[STEP 8] Waiting after rebalance-out")
+        self.log.info("[STEP 8] PASSED - Failed node rebalanced out; lost replicas now present")
+
+        # ========== STEP 9: Add a fresh node and rebalance -> replica repair (Copy) ==========
+        # This is the assertion point. Pre-fix, this rebalance fails with
+        # "missing encryption key" while resolving b1's (encrypted) keys carried
+        # in the shard copied for b2's replica repair.
+        current_index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        used_ips = {n.ip for n in current_index_nodes} | {self.master.ip}
+        spare_nodes = [s for s in self.servers[self.nodes_init:] if s.ip not in used_ips]
+        if not spare_nodes:
+            spare_nodes = [s for s in self.servers if s.ip not in used_ips]
+        self.assertTrue(spare_nodes, "[STEP 9] No spare node available to add for replica repair")
+        node_c = spare_nodes[0]
+        self.log.info(f"[STEP 9] Adding fresh node {node_c.ip} (index) and rebalancing to trigger replica repair...")
+        rebalance = self.cluster.async_rebalance(
+            self.servers[:self.nodes_init], [node_c], [],
+            services=["index"],
+            cluster_config=self.cluster_config if hasattr(self, 'cluster_config') else None
+        )
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=250)
+        self.assertTrue(
+            reached,
+            "[STEP 9] Replica-repair rebalance did not complete — likely the "
+            "MB-72480 'missing encryption key' failure"
+        )
+        rebalance.result()
+        self.sleep(60, "[STEP 9] Waiting after replica-repair rebalance for shard validations")
+        self.log.info("[STEP 9] PASSED - Replica-repair rebalance completed successfully")
+
+        # ========== STEP 10: Confirm the Copy path fired and NO missing-key error ==========
+        self.log.info("[STEP 10] Validating replica-repair Copy path and encryption in logs...")
+        # File-based shard transfer must have occurred at all.
+        self.assertTrue(
+            self.check_gsi_logs_for_shard_transfer(),
+            "[STEP 10] File-based shard transfer was not detected in indexer logs"
+        )
+        # The replica-repair Copy token must be present (the exact bug path).
+        self.assertTrue(
+            self.check_gsi_logs_for_shard_transfer(
+                log_string=COPY_TOKEN_LOG_STRING,
+                msg="Replica repair (TransferMode: Copy) shard transfer "
+            ),
+            "[STEP 10] Replica-repair Copy transfer token not detected in indexer logs "
+            f"(pattern: {COPY_TOKEN_LOG_STRING})"
+        )
+        # Negative assertion: the MB-72480 error must NOT appear anywhere.
+        missing_key_seen = self.check_gsi_logs_for_shard_transfer(
+            log_string=MISSING_KEY_LOG_STRING,
+            msg="'missing encryption key' error "
+        )
+        self.assertFalse(
+            missing_key_seen,
+            "[STEP 10] Found 'missing encryption key' in indexer logs — MB-72480 regression"
+        )
+        self.log.info("[STEP 10] PASSED - Copy path confirmed and no missing-key error")
+
+        # ========== STEP 11: Post-rebalance validation ==========
+        self.log.info("[STEP 11] Post-rebalance: index presence, shard affinity, scans, encryption...")
+        self.wait_until_indexes_online(timeout=1200)
+        self.validate_shard_affinity()
+        index_names_after = self._fetch_index_names_set()
+        self.log.info(f"[STEP 11] Index names after replica repair: {index_names_after}")
+        missing_indexes = index_names_before - index_names_after
+        self.assertEqual(
+            missing_indexes, set(),
+            f"[STEP 11] Indexes lost after replica repair. Missing: {missing_indexes}. "
+            f"Before: {index_names_before}, After: {index_names_after}"
+        )
+        for query in select_queries:
+            self.run_cbq_query(query=query, scan_consistency='request_plus', server=query_node)
+        updated_index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        expected_key_ids = self.get_indexer_in_use_key_ids(updated_index_nodes)
+        self.assertTrue(
+            self.validate_file_encryption_with_key(
+                updated_index_nodes, expected_key_id=expected_key_ids,
+                step_prefix="[STEP 11] ", encrypted_bucket_names=[b1_encrypted]
+            ),
+            "[STEP 11] Post-rebalance file encryption validation failed"
+        )
+        self.log.info("[STEP 11] PASSED - Post-rebalance validation completed")
+
+        # ========== TEST COMPLETE ==========
+        self.log.info("=" * 80)
+        self.log.info("TEST PASSED: test_replica_repair_missing_encryption_key_file_based")
+        self.log.info("MB-72480 verified — file-based replica repair copied a shard "
+                      "spanning an encrypted bucket without a missing-key failure")
+        self.log.info("=" * 80)
+
     def test_rebalance_mixed_encryption_failover_toggle(self):
         """
         Rebalance test with mixed encryption buckets, failover, and encryption toggle.
