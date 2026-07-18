@@ -125,14 +125,19 @@ class EventingRebalance(EventingBaseTest):
             self.jwt_utils = JWTUtils(log=self.log)
 
     def tearDown(self):
+        log.info("==============  EventingRebalance tearDown has started ==============")
+        # self.rest may still be bound to an eventing node that this test rebalanced
+        # out of the cluster; use self.master, which stays in the cluster, for
+        # cluster-wide encryption-at-rest cleanup instead.
+        master_rest = RestConnection(self.master)
         if getattr(self, '_log_encryption_enabled', False):
             try:
-                self.rest.configure_encryption_at_rest({"log.encryptionMethod": "disabled"})
+                master_rest.configure_encryption_at_rest({"log.encryptionMethod": "disabled"})
             except Exception as e:
                 log.warning("Failed to disable log encryption in tearDown: {}".format(e))
         for secret_id in getattr(self, 'created_secret_ids', []):
             try:
-                self.rest.delete_secret(secret_id)
+                master_rest.delete_secret(secret_id)
             except Exception as e:
                 log.warning("Failed to delete encryption secret {}: {}".format(secret_id, e))
         if getattr(self, 'is_fts', False) and getattr(self, 'fts_index_name', None):
@@ -150,6 +155,7 @@ class EventingRebalance(EventingBaseTest):
             except Exception as e:
                 log.exception("Analytics teardown cleanup failed: %s", str(e))
         super(EventingRebalance, self).tearDown()
+        log.info("==============  EventingRebalance tearDown has completed ==============")
 
     def test_eventing_rebalance_in_when_existing_eventing_node_is_processing_mutations(self):
         # Setup JWT configuration if enabled
