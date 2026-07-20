@@ -213,66 +213,84 @@ class CommunityTests(CommunityBaseTest):
         else:
             self.fail("maybe bug in node initialization")
 
+    def _cbbackupmgr_latest_backup_items(self, repo):
+        """ Returns (backup_type, item_count) for the most recent backup
+        in repo, using cbbackupmgr's structured --json output. """
+        output, error = self.remote.execute_command(
+            "{0}cbbackupmgr info -a {1} -r {2} --json"
+            .format(self.bin_path, self.backup_c_location, repo))
+        self.remote.log_command_output(output, error)
+        info = json.loads("".join(output))
+        latest = info["backups"][-1]
+        return latest["type"], latest["buckets"][0]["items"]
+
     def check_full_backup_only(self):
         """ for windows vm, ask IT to put uniq.exe at
-            /cygdrive/c/Program Files (x86)/ICW/bin directory """
+            /cygdrive/c/Program Files (x86)/ICW/bin directory
+
+        NOTE: migrated from the legacy cbbackup/cbtransfer tools (removed
+        from the 8.1 packaging) to cbbackupmgr. cbbackupmgr's architecture
+        (post-7.0) always performs true incremental backups by default on
+        every edition -- there is no CE-vs-EE distinction to test there
+        (confirmed with the Storage & Backup team). What *is* still
+        EE-only is `cbbackupmgr merge`, used to roll incrementals back
+        into a full backup, so that's what this test verifies instead of
+        the old (now-obsolete) backup_option=diff/accu mode-enforcement
+        check. `backup_option` is accepted but no longer used -- kept so
+        existing conf lines don't need editing. """
 
         self.remote = RemoteMachineShellConnection(self.master)
+        repo = "repo"
         """ put params items=0 in test param so that init items = 0 """
         self.remote.execute_command("{0}cbworkloadgen -n {1}:8091 -j -i 1000 " \
                                     "-u Administrator -p password" \
                                             .format(self.bin_path, self.master.ip))
         """ delete backup location before run backup """
         self.remote.execute_command("rm -rf {0}*".format(self.backup_location))
-        output, error = self.remote.execute_command("ls -lh {0}"
-                                                     .format(self.backup_location))
+
+        output, error = self.remote.execute_command(
+            "{0}cbbackupmgr config -a {1} -r {2}"
+            .format(self.bin_path, self.backup_c_location, repo))
         self.remote.log_command_output(output, error)
 
-        """ first full backup """
-        self.remote.execute_command("{0}cbbackup http://{1}:8091 {2} -m full " \
-                                    "-u Administrator -p password"\
-                                    .format(self.bin_path,
-                                            self.master.ip,
-                                            self.backup_c_location))
-        output, error = self.remote.execute_command("ls -lh {0}*/"
-                                        .format(self.backup_location))
+        """ first (full) backup """
+        output, error = self.remote.execute_command(
+            "{0}cbbackupmgr backup -a {1} -r {2} -c http://{3}:8091 "
+            "-u Administrator -p password"
+            .format(self.bin_path, self.backup_c_location, repo, self.master.ip))
         self.remote.log_command_output(output, error)
-        output, error = self.remote.execute_command("{0}cbtransfer -u Administrator "\
-                                           "-p password {1}*/*-full/ " \
-                                           "stdout: | grep set | uniq | wc -l"\
-                                           .format(self.bin_path,
-                                                   self.backup_c_location))
-        self.remote.log_command_output(output, error)
-        if int(output[0]) != 1000:
+
+        backup_type, items = self._cbbackupmgr_latest_backup_items(repo)
+        if items != 1000:
             self.fail("full backup did not work in CE. "
-                      "Expected 1000, actual: {0}".format(output[0]))
+                      "Expected 1000, actual: {0}".format(items))
+
+        """ load more data, then take a second (incremental) backup """
         self.remote.execute_command("{0}cbworkloadgen -n {1}:8091 -j -i 1000 "\
                                     " -u Administrator -p password --prefix=t_"
                                     .format(self.bin_path, self.master.ip))
-        """ do different backup mode """
-        self.remote.execute_command("{0}cbbackup -u Administrator -p password "\
-                                    "http://{1}:8091 {2} -m {3}"\
-                                    .format(self.bin_path,
-                                            self.master.ip,
-                                            self.backup_c_location,
-                                            self.backup_option))
-        output, error = self.remote.execute_command("ls -lh {0}"
-                                                     .format(self.backup_location))
+        output, error = self.remote.execute_command(
+            "{0}cbbackupmgr backup -a {1} -r {2} -c http://{3}:8091 "
+            "-u Administrator -p password"
+            .format(self.bin_path, self.backup_c_location, repo, self.master.ip))
         self.remote.log_command_output(output, error)
-        output, error = self.remote.execute_command("{0}cbtransfer -u Administrator "\
-                                           "-p password {1}*/*-{2}/ stdout: "\
-                                           "| grep set | uniq | wc -l"\
-                                           .format(self.bin_path,
-                                                   self.backup_c_location,
-                                                   self.backup_option))
+
+        backup_type, items = self._cbbackupmgr_latest_backup_items(repo)
+        if backup_type != "INCR" or items != 1000:
+            self.fail("incremental backup did not capture the expected new "
+                      "items in CE. Expected type INCR/1000 new items, "
+                      "actual type: {0}, items: {1}".format(backup_type, items))
+
+        """ merging incrementals into a full backup is EE-only """
+        output, error = self.remote.execute_command(
+            "{0}cbbackupmgr merge -a {1} -r {2}"
+            .format(self.bin_path, self.backup_c_location, repo))
         self.remote.log_command_output(output, error)
-        if int(output[0]) == 2000:
-            self.log.info("backup option 'diff' is enforced in CE")
-        elif int(output[0]) == 1000:
-            self.fail("backup option 'diff' is not enforced in CE. "
-                      "Expected 2000, actual: {0}".format(output[0]))
-        else:
-            self.fail("backup failed to backup correct items")
+        mesg = "Enterprise Edition feature"
+        combined = str(output) + str(error)
+        if mesg not in combined:
+            self.fail("cbbackupmgr merge should not be available in "
+                      "Community Edition")
         self.remote.disconnect()
 
     def check_ent_backup(self):
@@ -446,24 +464,66 @@ class CommunityTests(CommunityBaseTest):
             curl -H "Content-Type: application/json" -X POST
                  -d '{"statement":"infer `bucket_name`;"}'
                        http://localhost:8093/query/service
-            test params: new_services=kv-index-n1ql,default_bucket=False """
+            test params: new_services=kv-index-n1ql,default_bucket=False
+
+            NOTE: USE INDEX (USING FTS) is a hint, not a directive -- N1QL's
+            standard behavior for any unsatisfiable hint (on any edition) is
+            to fall back to a different valid access path rather than fail
+            the query, so the overall query status is "success" on CE too
+            (confirmed with the Query team; not a CE/EE gating bug). The
+            actual EE/CE boundary is that the FTS index is never considered
+            as a candidate access path on CE -- verified via EXPLAIN, which
+            reports the hint as not followed. """
         self.rest.force_eject_node()
         self.sleep(7, "wait for node reset done")
         self.rest.init_node()
         bucket = "default"
         self.rest.create_bucket(bucket, ramQuotaMB=256, storageBackend='couchstore')
+        # FTS index creation needs the bucket's vbucket map to be
+        # populated first, or it fails with "vbucket map not available
+        # yet" (a race that's fast enough not to matter for a plain KV
+        # bucket, but does matter here).
+        RestHelper(self.rest).vbucket_map_ready(bucket)
+
+        # A real FTS index (with matching data) has to exist for the
+        # planner to actually attempt the FTS access path and reject it --
+        # without one, the hint is trivially marked "followed" (nothing to
+        # try), which would make this check pass on CE for the wrong reason.
+        index_name = "ce_flex_test_idx"
+        index_def = json.dumps({
+            "type": "fulltext-index",
+            "name": index_name,
+            "sourceType": "couchbase",
+            "sourceName": bucket,
+            "params": {"mapping": {"default_mapping": {"enabled": True, "dynamic": True},
+                                   "default_analyzer": "standard"}}
+        })
+        self.rest._http_request(self.rest.fts_baseUrl + "api/index/" + index_name,
+                                'PUT', index_def,
+                                headers=self.rest._create_headers_encoded_prepared())
+        self.sleep(3, "wait for FTS index to be created")
+
         api = self.rest.query_baseUrl + "query/service"
-        param = urllib.parse.urlencode({"statement":"SELECT META(d).id FROM `%s` AS d USE INDEX (USING FTS) WHERE d.f2 = 100;" % bucket})
+        insert_query = 'INSERT INTO `%s` (KEY, VALUE) VALUES ("doc1", {"f2": 100});' % bucket
+        insert_param = urllib.parse.urlencode({"statement": insert_query})
+        self.rest._http_request(api, 'POST', insert_param)
+
+        query = "EXPLAIN SELECT META(d).id FROM `%s` AS d USE INDEX (USING FTS) WHERE d.f2 = 100;" % bucket
+        param = urllib.parse.urlencode({"statement": query})
         try:
             status, content, header = self.rest._http_request(api, 'POST', param)
             json_parsed = json.loads(content)
         except Exception as ex:
             if ex:
                 print(ex)
-        if json_parsed["status"] == "success":
-            self.fail("CE should not allow to run flex index !")
-        elif json_parsed["status"] == "fatal":
-            self.log.info("Flex index is enforced in CE! ")
+        hints_not_followed = json_parsed["results"][0].get(
+            "optimizer_hints", {}).get("hints_not_followed", [])
+        fts_hint_rejected = any("INDEX_FTS" in hint for hint in hints_not_followed)
+        if not fts_hint_rejected:
+            self.fail("CE should not honor the USE INDEX (USING FTS) "
+                      "flex-index hint !")
+        else:
+            self.log.info("Flex index (FTS) hint correctly not followed in CE")
 
     def check_index_partitioning(self):
         self.rest.force_eject_node()
@@ -634,8 +694,12 @@ class CommunityTests(CommunityBaseTest):
         conn = RemoteMachineShellConnection(self.master)
         output, error = conn.execute_command(cmd)
         conn.log_command_output(output, error)
-        mesg = "Auto failover on Data Service disk issues can only be " + \
-               "configured on enterprise edition"
+        # REST /settings/autoFailover has no validator at all for maxCount /
+        # failoverOnDataDiskIssues[*] / failoverServerGroup on CE (see
+        # menelaus_web_auto_failover.erl:settings_extras_validators/0), so the
+        # generic key-validation framework rejects all of them uniformly with
+        # "Unsupported key" rather than a bespoke per-feature EE message.
+        mesg = "Unsupported key"
         if not self.cli_test:
             if self.failover_disk_period or \
                                    self.failover_server_group:
@@ -643,9 +707,16 @@ class CommunityTests(CommunityBaseTest):
                     self.fail("setting autofailover disk issues feature\
                                should not in Community Edition")
         else:
-            if self.failover_server_group:
-                mesg = "--enable-failover-of-server-groups can only be " + \
-                       "configured on enterprise edition"
+            # NOTE: --enable-failover-of-server-group(s) no longer exists as
+            # a couchbase-cli flag on setting-autofailover (verified against
+            # `couchbase-cli setting-autofailover --help` on 8.1.0-2452 --
+            # the only "server group" reference left in the whole CLI is the
+            # unrelated `group-manage` topology command). The
+            # cli_test+failover_server_group combination can't be
+            # meaningfully validated against the current CLI and needs a
+            # product/test decision (drop those conf lines, or find the
+            # current equivalent) rather than a string-match fix here.
+            mesg = "can only be configured on Enterprise Edition"
 
         if output and mesg not in str(output[0]):
             self.fail("Setting EE autofailover features \
@@ -786,8 +857,12 @@ class CommunityTests(CommunityBaseTest):
         conn = RemoteMachineShellConnection(self.master)
         output, error = conn.execute_command(cmd)
         conn.log_command_output(output, error)
-        mesg = "nodeEncryption - Supported in enterprise edition only"
-        if output and mesg not in str(output[0]):
+        # Current CLI (8.1.0-2452) rejects this on CE with
+        # "nodeEncryption - The value must be one of the following: [off]"
+        # rather than the older bespoke "Supported in enterprise edition
+        # only" wording -- verified live against a CE node.
+        mesg = "nodeEncryption - The value must be one of the following: [off]"
+        if output and mesg not in str(output):
             self.fail("Encrypted network access should not be in CE")
         conn.disconnect()
 

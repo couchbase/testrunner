@@ -1,3 +1,5 @@
+import time
+
 import testconstants
 from basetestcase import BaseTestCase
 from xdcr.xdcrbasetests import XDCRReplicationBaseTest
@@ -70,6 +72,30 @@ class CommunityXDCRBaseTest(XDCRReplicationBaseTest):
     def setup(self):
         super(CommunityXDCRBaseTest, self).setUp()
 
+    def setup_extended(self):
+        # goxdcr refuses to link two Community Edition clusters at all
+        # (base.ErrCERestrictionsBreached) -- these CE XDCR tests are
+        # meant to check individual EE-only *features* (filter, priority,
+        # lww, compression), not this blanket connectivity restriction, so
+        # disable it via ns_server's documented diag/eval backdoor before
+        # the parent class links the two clusters together.
+        self._disable_ce_restrictions(self.src_master)
+        self._disable_ce_restrictions(self.dest_master)
+        super(CommunityXDCRBaseTest, self).setup_extended()
+
+    def _disable_ce_restrictions(self, server):
+        code = "ns_config:set(disable_ce_restrictions, true)."
+        status, content = RestConnection(server).diag_eval(code)
+        self.assertTrue(
+            status, "diag/eval failed on %s setting %s: %s"
+            % (server.ip, code, content))
+        shell = RemoteMachineShellConnection(server)
+        try:
+            shell.kill_goxdcr()
+        finally:
+            shell.disconnect()
+        # babysitter needs a moment to respawn goxdcr with the new flag
+        time.sleep(5)
 
     def tearDown(self):
         super(CommunityXDCRBaseTest, self).tearDown()

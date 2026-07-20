@@ -5930,6 +5930,14 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
 
         self.backup_create()
 
+        if coll_restore:
+            # coll_restore exercises the `restore` sub-command, which
+            # requires the repository to already contain a real backup --
+            # otherwise cbbackupmgr rejects it with "doesn't contain any
+            # backups" before ever reaching the EE-only --include-data
+            # collection-filter check this branch is meant to validate.
+            self.backup_cluster()
+
         if examine:
             sub_command = 'examine -a archive -r repo -k asdf --collection-string asdf.asdf.asdf'
         elif merge:
