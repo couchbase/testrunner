@@ -58,7 +58,7 @@ class QueryBucketDDLTests(QueryTests):
 
     def _drop_bucket_and_wait(self, drop_statement):
         self.run_cbq_query(drop_statement)
-        self.sleep(10)
+        self.sleep(60)
 
     def _cleanup_test_buckets(self):
         """Clean up test buckets created during tests"""
