@@ -53,11 +53,15 @@ ELIXIR_ONPREM = "ELIXIR_ONPREM"
 ON_PREM_PROVISIONED = "ON_PREM_PROVISIONED"
 SERVERLESS_COLUMNAR = "SERVERLESS_COLUMNAR"
 
-# Frameworks whose ini file lives in an internal/private GitHub repo rather
-# than this repo's b/resources/, keyed by the doc's "framework" value.
+# Frameworks whose ini file may need to be fetched from GitHub, keyed by
+# the doc's "framework" value. RTAF's ini never lives in this repo's
+# b/resources/, so it's always fetched. Others (e.g. TAF) normally have
+# their ini committed here already, and are only fetched as a fallback
+# when a branch (e.g. TAF's "trinity") adds a new ini that hasn't been
+# ported into this repo's master yet.
 FRAMEWORK_GITHUB_REPO_MAP = {
     # "testrunner": "couchbase/testrunner",
-    # "TAF": "couchbaselabs/TAF",
+    "TAF": "couchbaselabs/TAF",
     "RTAF": "couchbaselabs/RTAF",
 }
 
@@ -413,7 +417,7 @@ def extract_individual_tests_from_query_result(col_rel_version,
     conf_file = str(data['confFile']).strip()
     component = str(data["component"]).strip()
     framework = data["framework"] if "framework" in data else "testrunner"
-    if framework in FRAMEWORK_GITHUB_REPO_MAP:
+    if framework in FRAMEWORK_GITHUB_REPO_MAP and not OS.path.isfile(ini_file):
         fetch_ini_from_github(
             ini_file, FRAMEWORK_GITHUB_REPO_MAP[framework], options.branch)
     jenkins_server_url = data['jenkins_server_url'] \
