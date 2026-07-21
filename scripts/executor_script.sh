@@ -10,6 +10,31 @@ py_executable=python3
 # Block was prev. in a separate shell block before
 echo Desc: $descriptor
 
+echo "###########################################"
+echo "  Populating env file for downstream jobs"
+echo "1/4 Extracting is_dynamic_vms value"
+export is_dynamic_vms=`echo $dispatcher_params| sed -n 's/.*"use_dynamic_vms": *\([^,]*\).*/\1/p' | tr -d ' '`
+echo "is_dynamic_vms value: $is_dynamic_vms"
+
+echo "2/4 Creating file: savejoblogs_job_params"
+echo "test_job_url=${JOB_URL}" > savejoblogs_job_params
+echo "test_job_build=${BUILD_NUMBER}" >> savejoblogs_job_params
+echo "test_name=${descriptor}" >> savejoblogs_job_params
+echo "addPoolServers=$addPoolServers" >> savejoblogs_job_params
+echo "version_number=$version_number" >> savejoblogs_job_params
+echo "is_dynamic_vms=$is_dynamic_vms" >> savejoblogs_job_params
+
+echo "3/4 Creating file: cleanup_job_params"
+echo "descriptor=$descriptor" > cleanup_job_params
+echo "UPSTREAM_BUILD_NUMBER=${BUILD_NUMBER}" >> cleanup_job_params
+echo "addPoolServers=$addPoolServers" >> cleanup_job_params
+echo "version_number=$version_number" >> cleanup_job_params
+echo "is_dynamic_vms=$is_dynamic_vms" >> cleanup_job_params
+
+echo "4/4 Creating file: aws_cleanup_job_params"
+echo "servers=${servers}" > aws_cleanup_job_params
+echo "###########################################"
+
 if [ "${slave}" == "deb12_P0_slave" ]; then
   # Component - backup_recovery / xdcr needs Couchbase SDK4 slave to run
   export PYENV_VERSION="3.10.13"
