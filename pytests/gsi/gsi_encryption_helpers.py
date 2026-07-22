@@ -957,9 +957,15 @@ class GSIEncryptionHelpers:
         """
         Check whether any of the given key IDs appears anywhere in the file body.
 
-        Uses `grep -aF` so binary content is treated as text with a fixed-string
-        match. Intended for files whose header does NOT carry the key ID (Plasma
-        and BHIVE .data files).
+        Uses `LC_ALL=C grep -aF` so binary content is treated as raw single
+        bytes with a fixed-string match. Intended for files whose header does
+        NOT carry the key ID (Plasma and BHIVE .data files).
+
+        LC_ALL=C is required: under a UTF-8 (or other multibyte) locale, grep
+        decodes each newline-delimited "line" as multibyte text and can silently
+        skip regions containing invalid byte sequences — which encrypted block
+        bodies are full of — missing the ASCII key ID even when it is present.
+        LC_ALL=C forces byte-wise matching and eliminates those false negatives.
 
         Returns:
             tuple: (found: bool, matched_key_id: str|None, details: str)
@@ -971,11 +977,25 @@ class GSIEncryptionHelpers:
         shell = RemoteMachineShellConnection(node, verbose=False)
         try:
             for key_id in key_ids:
-                cmd = f"grep -aFl -e {shlex.quote(key_id)} {shlex.quote(file_path)} 2>/dev/null"
+                cmd = f"LC_ALL=C grep -aFl -e {shlex.quote(key_id)} {shlex.quote(file_path)} 2>/dev/null"
                 output, _ = shell.execute_command(cmd)
                 if output and any(line.strip() for line in output):
                     return True, key_id, f"matched {key_id}"
             return False, None, f"none of {key_ids} present in file body"
+        finally:
+            shell.disconnect()
+
+    def _remote_file_size(self, node, file_path):
+        """Return the size of a remote file in bytes, or -1 if it can't be read."""
+        shell = RemoteMachineShellConnection(node, verbose=False)
+        try:
+            cmd = f"stat -c %s {shlex.quote(file_path)} 2>/dev/null"
+            output, _ = shell.execute_command(cmd)
+            for line in output:
+                line = line.strip()
+                if line.isdigit():
+                    return int(line)
+            return -1
         finally:
             shell.disconnect()
 
@@ -1087,6 +1107,9 @@ class GSIEncryptionHelpers:
             sample_files = data_files[:30]
             passed_count = 0
             failed_files = []
+            # Zero-length segment files genuinely cannot carry a key ID and are
+            # tracked separately rather than counted as encryption failures.
+            empty_files = []
             for file_path in sample_files:
                 allowed_keys = self._allowed_keys_for_path(
                     file_path, effective_bkm, fallback_keys
@@ -1104,23 +1127,42 @@ class GSIEncryptionHelpers:
                     self.log.debug(
                         f"Node {node.ip}: {file_path} contains key id {matched}"
                     )
+                    continue
+
+                # grep found no key ID. Distinguish a genuinely empty segment
+                # (nothing to encrypt yet) from a non-empty file that is missing
+                # its key ID (a real encryption gap). Annotate the byte size so
+                # triage can spot suspiciously small / header-only segments.
+                size = self._remote_file_size(node, file_path)
+                if size == 0:
+                    empty_files.append(
+                        (file_path, "zero-length segment (no data to encrypt)")
+                    )
+                    self.log.info(
+                        f"Node {node.ip}: {file_path} is zero-length; "
+                        "no key id expected"
+                    )
                 else:
-                    failed_files.append((file_path, details))
+                    failed_files.append(
+                        (file_path, f"{details} (file_size={size} bytes)")
+                    )
                     self.log.warning(
-                        f"Node {node.ip}: {file_path} missing key id: {details}"
+                        f"Node {node.ip}: {file_path} missing key id "
+                        f"(file_size={size} bytes): {details}"
                     )
 
-            if passed_count and not failed_files:
-                status = "passed"
-            elif not passed_count and not failed_files:
-                status = "skipped"
-            else:
+            if failed_files:
                 status = "failed"
+            elif passed_count:
+                status = "passed"
+            else:
+                status = "skipped"
             results[node.ip] = {
                 "status": status,
                 "passed_count": passed_count,
                 "total_checked": len(sample_files),
                 "failed_files": failed_files,
+                "empty_files": empty_files,
             }
         return results
 
@@ -2067,7 +2109,7 @@ class GSIEncryptionHelpers:
                             # Single-quoted shell arg; escape any embedded
                             # single quotes in the token itself.
                             safe = token.replace("'", "'\"'\"'")
-                            cmd = f"grep -aFl -e '{safe}' {file_path} 2>/dev/null"
+                            cmd = f"LC_ALL=C grep -aFl -e '{safe}' {file_path} 2>/dev/null"
                             out, _ = shell.execute_command(cmd)
                             if out and any(line.strip() for line in out):
                                 leaks.append((file_path, token))
@@ -2215,9 +2257,11 @@ class GSIEncryptionHelpers:
           - ``@2i/metadata_repo_v2/wal/wal.*``  (WAL files)
           - ``@2i/metadata_repo_v2/kvstore-*/rev-*/*/sstable.*.data``  (SSTable files)
 
-        Uses ``grep -ac`` to search the full file body (binary-as-text) for the
-        key ID string. A non-zero match count indicates the file is encrypted
-        with that key.
+        Uses ``LC_ALL=C grep -ac`` to search the full file body byte-wise for
+        the key ID string. A non-zero match count indicates the file is
+        encrypted with that key. LC_ALL=C is required so grep does not skip
+        regions with invalid multibyte sequences under a UTF-8 locale (which
+        would produce false negatives on encrypted binary bodies).
 
         Args:
             index_nodes: List of index server objects.
@@ -2269,8 +2313,9 @@ class GSIEncryptionHelpers:
 
                 failed_files = []
                 for fpath in all_files:
-                    # grep -ac: binary-as-text, count matching lines; exit 0 if >=1 match
-                    grep_cmd = f"grep -ac '{key_id_str}' {fpath} 2>/dev/null"
+                    # LC_ALL=C grep -ac: byte-wise, count matching lines; exit 0 if >=1 match.
+                    # LC_ALL=C avoids multibyte-locale false negatives on binary bodies.
+                    grep_cmd = f"LC_ALL=C grep -ac '{key_id_str}' {fpath} 2>/dev/null"
                     grep_out, _ = shell.execute_command(grep_cmd)
                     count_str = ''.join(grep_out).strip()
                     try:
