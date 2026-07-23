@@ -102,3 +102,126 @@ class ReplicaRepair(BaseSecondaryIndexingTests):
                 rest.set_index_planner_settings(index_setting)
                 value = rest.get_exclude_node_value()
                 self.log.info(f"Setting planner value on {node} to {value}")
+
+    def test_replica_repair_ignore_resource_constraint_on_empty_node(self):
+        """
+        MB-65821: Ignore resource constraints when an empty node is added back
+        for replica repair.
+
+        Steps:
+          1. Cluster with >= 2 index nodes, indexes created with replicas,
+             loaded with enough data that the planner's resource estimates are
+             non-trivial.
+          2. Record placement via GET /indexStatus.
+          3. Failover + rebalance out one index node -> its replicas go missing.
+          4. Add an empty node back and rebalance with redistributeIndexes=false.
+          5. Verify GET /indexStatus shows the missing replicas rebuilt on the
+             new node.
+        """
+        def placement(index_map):
+            # {(bucket, index_name_without_replica_suffix): sorted([host_ips])}.
+            # Replicas are grouped under the base name because the planner may renumber
+            # them across a repair; partitioned indexes are left out since a partitioned
+            # instance spans several nodes and its host list shrinks on partition
+            # placement, not on replica loss.
+            hosts_by_index = {}
+            for bucket, indexes in index_map.items():
+                for index_name, index_info in indexes.items():
+                    if index_info.get('partitioned', False):
+                        continue
+                    hosts = index_info['hosts']
+                    if isinstance(hosts, str):
+                        hosts = [hosts]
+                    key = (bucket, index_name.split(' (replica ')[0])
+                    hosts_by_index.setdefault(key, []).extend(host.split(':')[0] for host in hosts)
+            return {key: sorted(hosts) for key, hosts in hosts_by_index.items()}
+
+        # ---- 1. Load data and create indexes with replicas ----
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        self.assertGreaterEqual(len(index_nodes), 2,
+                                f"This test needs at least 2 index nodes, found {len(index_nodes)}")
+
+        # Every index must occupy ALL index nodes, i.e. num_replica == num_index_nodes - 1.
+        # Otherwise the rebalance-out itself relocates the lost replicas onto the surviving
+        # nodes, nothing stays under-replicated, and the add-back rebalance has no repair
+        # work left to exercise.
+        num_replica = len(index_nodes) - 1
+        self.log.info(f"Creating indexes with num_replica={num_replica} across {len(index_nodes)} index nodes "
+                      f"so removing one node leaves the indexes under-replicated")
+
+        self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
+                                             num_of_docs_per_collection=self.num_of_docs_per_collection,
+                                             json_template='Hotel')
+        query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
+        for namespace in self.namespaces:
+            queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
+                                                              namespace=namespace, num_replica=num_replica)
+            self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace)
+        self.wait_until_indexes_online()
+
+        # ---- 2. Record placement before the topology change ----
+        placement_before = placement(self.get_index_map())
+        self.log.info(f"Index placement before failover: {placement_before}")
+
+        node_out = index_nodes[-1]
+        indexes_on_node_out = [key for key, hosts in placement_before.items() if node_out.ip in hosts]
+        self.assertTrue(indexes_on_node_out,
+                        f"Expected some index replicas on {node_out.ip} before failover")
+        self.log.info(f"Indexes with a replica on {node_out.ip} before failover: {indexes_on_node_out}")
+
+        # ---- 3. Failover + rebalance out one index node ----
+        failover_task = self.cluster.async_failover(self.servers[:self.nodes_init],
+                                                    failover_nodes=[node_out], graceful=self.graceful)
+        failover_task.result()
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [node_out],
+                                                 services=['index'], cluster_config=self.cluster_config)
+        rebalance.result()
+        self.assertTrue(RestHelper(self.rest).rebalance_reached(), "Rebalance-out did not complete")
+
+        # Replicas that lived on the removed node are now missing
+        placement_after_out = placement(self.get_index_map())
+        self.log.info(f"Index placement after rebalance-out: {placement_after_out}")
+        missing_replicas = [key for key in indexes_on_node_out
+                            if len(placement_after_out.get(key, [])) < len(placement_before[key])]
+        self.assertTrue(missing_replicas,
+                        f"No index was left under-replicated after failover/rebalance-out of {node_out.ip} -- "
+                        f"the rebalance-out relocated every replica onto the surviving nodes, so there is no "
+                        f"replica repair for the add-back rebalance to perform. Placement after rebalance-out: "
+                        f"{placement_after_out}")
+        self.log.info(f"Under-replicated indexes after rebalance-out: {missing_replicas}")
+
+        # ---- 4. Add the empty node back with redistributeIndexes=false ----
+        # This makes the rebalance a pure replica-repair plan: numDeletedNode=0,
+        # numNewNode=1, and only optional (missing replica) indexes are eligible.
+        self.disable_redistribute_indexes()
+        self.sleep(30, "Waiting for indexer to pick up redistribute_indexes=false")
+        redistribute = self.index_rest.get_index_settings()["indexer.settings.rebalance.redistribute_indexes"]
+        self.assertFalse(redistribute, "redistributeIndexes must be false for the replica-repair path")
+
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [node_out], [],
+                                                 services=['index'], cluster_config=self.cluster_config)
+        rebalance.result()
+        self.assertTrue(RestHelper(self.rest).rebalance_reached(), "Rebalance-in of empty node did not complete")
+        self.wait_until_indexes_online()
+
+        # ---- 5. Verify the missing replicas were rebuilt on the new node ----
+        placement_after_repair = placement(self.get_index_map())
+        self.log.info(f"Index placement after replica repair: {placement_after_repair}")
+
+        not_repaired, not_on_new_node = [], []
+        for key in missing_replicas:
+            hosts = placement_after_repair.get(key, [])
+            if len(hosts) < len(placement_before[key]):
+                not_repaired.append((key, hosts))
+            elif node_out.ip not in hosts:
+                not_on_new_node.append((key, hosts))
+
+        self.assertFalse(not_repaired,
+                         f"Replica repair did not restore all replicas after adding the empty node "
+                         f"back: {not_repaired}")
+        self.assertFalse(not_on_new_node,
+                         f"Resource constraint was NOT ignored: replicas were not placed on the incoming "
+                         f"empty node {node_out.ip}: {not_on_new_node}")
+
+        self.assertEqual(sorted(placement_after_repair.keys()), sorted(placement_before.keys()),
+                         "Index instance set changed across the failover/repair cycle")
