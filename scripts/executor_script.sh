@@ -1,5 +1,10 @@
 #!/bin/bash
 
+# Heartbeat marking this workspace as in-use for the disk-cleanup sweep below -
+# refreshed at the start of every run, so a workspace this job is (or very
+# recently was) actively using never gets reclaimed as "abandoned".
+touch "$WORKSPACE/.executor_lock" 2>/dev/null
+
 cleanup_workspace() {
   # Remove any installers downloaded locally
   rm -rf *.deb *.rpm *.msi
@@ -241,10 +246,33 @@ if [ -f /etc/lsb-release ]; then
   apt install maven
 fi
 ###### Added on 4/April/2018 to fix issues related to disk full on slaves.
-find /data/workspace/*/logs/* -type d -ctime +10 -exec rm -rf {} \;
-find /data/workspace/ -type d -ctime +10 -exec rm -rf {} \;
-find /root/workspace/*/logs/* -type d -ctime +10 -exec rm -rf {} \;
-find /root/workspace/ -type d -ctime +10 -exec rm -rf {} \;
+# Clean this build's own old per-run log dirs - each run gets a freshly
+# timestamped logs/testrunner-<ts>/ (testrunner.py os.makedirs), so only
+# genuinely completed runs of THIS job ever match; the live run's own dir
+# always has a fresh ctime.
+find "$WORKSPACE/logs" -mindepth 1 -maxdepth 1 -type d -ctime +10 -exec rm -rf {} \;
+
+# Reclaim whole workspaces of jobs that haven't run in 10+ days, node-wide.
+# logs/ itself only gets a new entry when testrunner.py actually starts a
+# run, so its own ctime is a reliable "last ran" signal - unlike checking
+# ctime on arbitrary directories, which previously let one job's cleanup
+# delete a different, concurrently running job's live workspace (its cwd
+# would vanish mid-test, ending the build with zero artifacts archived
+# since allowEmptyArchive/allowEmptyResults are both true). Layered guards
+# against catching a workspace still in use: never touch this build's own
+# $WORKSPACE, skip anything with a recent .executor_lock heartbeat
+# (touched at the top of every run), and skip anything with an open file
+# handle.
+for base in /data/workspace /root/workspace; do
+  [ -d "$base" ] || continue
+  find "$base" -mindepth 2 -maxdepth 2 -type d -name logs -ctime +10 2>/dev/null | while IFS= read -r logdir; do
+    parent="$(dirname "$logdir")"
+    [ "$parent" = "$WORKSPACE" ] && continue
+    [ -n "$(find "$parent/.executor_lock" -mtime -1 2>/dev/null)" ] && continue
+    lsof +D "$parent" >/dev/null 2>&1 && continue
+    rm -rf "$parent"
+  done
+done
 ######
 
 ##Added on August 2nd 2017 to kill all python processes older than 10days, comment if it causes any failures
