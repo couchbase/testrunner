@@ -11,6 +11,7 @@ from pytests.security.ntonencryptionBase import ntonencryptionBase
 from pytests.security.jwt_utils import JWTUtils
 from pytests.fts.fts_callable import FTSCallable
 from lib.Cb_constants.CBServer import CbServer
+from TestInput import TestInputSingleton
 
 from upgrade.newupgradebasetest import NewUpgradeBaseTest
 
@@ -20,6 +21,8 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
     def setUp(self):
         """Initialize upgrade test: REST connections, bucket names, handler tracking, FTS setup."""
         log.info("==============  EventingUpgrade setup has started ==============")
+        TestInputSingleton.input.test_params.setdefault('bucket_size', 100)
+        TestInputSingleton.input.test_params.setdefault('bucket_storage', 'couchstore')
         super(EventingUpgrade, self).setUp()
         self.init_nodes = False
         self.rest = RestConnection(self.master)
@@ -41,6 +44,7 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
         self.upgrade_version = self.input.param("upgrade_version")
         #self.exported_handler_version = self.input.param("exported_handler_version", '6.6.1')
         self.enable_n2n_encryption_and_tls = self.input.param("enable_n2n_encryption_and_tls", False)
+        self.kill_eventing_producer = self.input.param("kill_eventing_producer", False)
         self.failover_type = self.input.param("failover_type", "hard")
         self.recovery_type = self.input.param("recovery_type", "delta")
         self.rebalance_settle_time = self.input.param("sleep_before_rebalance", 60)
@@ -123,6 +127,7 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
         self.print_eventing_stats_from_all_eventing_nodes()
         # Online upgrade: rebalance in new nodes, rebalance out old nodes
         self._perform_online_upgrade_regular_rebalance()
+        self._kill_eventing_producer_if_configured()
         # Post-upgrade infra
         self._enable_tls_if_configured()
         self._verify_pre_upgrade_handlers_survived()
@@ -155,6 +160,7 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
         self.print_eventing_stats_from_all_eventing_nodes()
         # Online upgrade: swap rebalance nodes one at a time
         self._perform_online_upgrade_swap_rebalance()
+        self._kill_eventing_producer_if_configured()
         # Post-upgrade infra
         self._enable_tls_if_configured()
         self._verify_pre_upgrade_handlers_survived()
@@ -196,6 +202,7 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
         self.print_eventing_stats_from_all_eventing_nodes()
         # Online upgrade: failover eventing node, recover it, then swap to new version
         self._perform_online_upgrade_with_failover(recovery_type=self.recovery_type)
+        self._kill_eventing_producer_if_configured()
         # Post-upgrade infra
         self._enable_tls_if_configured()
         self._verify_pre_upgrade_handlers_survived()
@@ -211,6 +218,204 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
         self._run_pause_resume_cycle()
         self._verify_jwt_auth()
         self._verify_rbac()
+        self.print_eventing_stats_from_all_eventing_nodes()
+        self.skip_metabucket_check = True
+
+
+    def test_killing_eventing_producer_and_rebalance_in_after_upgrade(self):
+        """
+        MB-71327, CBSE-22907 -  Scenario 1
+        Online upgrade: (kv, eventing) -> (kv:eventing, eventing)
+          - After upgrade remove 2nd eventing node
+          - kill eventing producer on the surviving node
+          - rebalance in a new eventing node.
+        (nodes_init=2, num_servers>=5):
+        servers[0]           = pre-8.x kv node
+        servers[1]           = pre-8.x eventing node
+        servers[nodes_init]  = post-upgrade kv+eventing (node1)
+        servers[nodes_init+1]= post-upgrade eventing only (node2)
+        servers[nodes_init+2]= spare node for final rebalance-in
+        """
+        if self.nodes_init < 2 or len(self.servers) < self.nodes_init + 3:
+            self.fail("Test requires nodes_init=2 and at least 5 servers total")
+
+        node1 = self.servers[self.nodes_init]  # post-upgrade kv+eventing
+        node2 = self.servers[self.nodes_init + 1]  # post-upgrade eventing only
+        new_eventing_node = self.servers[self.nodes_init + 2]  # spare for step 6
+
+        # Install pre-8.x on initial nodes
+        log.info("Installing pre-8.x on initial nodes")
+        self._install(self.servers[:self.nodes_init])
+        self.initial_version = self.upgrade_version
+        self._install(self.servers[self.nodes_init:self.num_servers])
+
+        # Initialize 2-node pre-8.x cluster (kv, kv+eventing)
+        log.info("Initializing 2-node pre-8.x cluster (kv, kv+eventing)")
+        self.operations(self.servers[:self.nodes_init], services="kv-kv,eventing")
+        self._create_minimal_upgrade_buckets()
+
+        # Load data and deploy handler on the pre-8.x cluster
+        log.info("Loading data on the pre-8.x cluster")
+        self._load_pre_upgrade_data()
+        self.restServer = self.get_nodes_from_services_map(service_type="eventing")
+        self.rest = RestConnection(self.restServer)
+        log.info("Deploying handler on pre-8.x cluster")
+        self._create_pre_upgrade_handler("bucket_op", "handler_code/ABO/insert.js")
+        self.deploy_handler_by_name("bucket_op")
+        self.wait_for_handler_state("bucket_op", "deployed")
+        self.print_eventing_stats_from_all_eventing_nodes()
+
+        # Rebalance in both post-upgrade nodes, rebalance out both pre-8.x nodes
+        log.info("Upgrade rebalance: adding post-upgrade nodes and removing pre-8.x nodes")
+        self.cluster.rebalance(
+            list(self.servers[:self.nodes_init]),
+            [node1, node2],
+            list(self.servers[:self.nodes_init]),
+            services=["kv,eventing", "eventing"]
+        )
+        self.sleep(300)
+        self._switch_master(node1)
+        self.add_built_in_server_user()
+        self.wait_for_handler_state("bucket_op", "deployed")
+        self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * 2016)
+
+        # Remove node2 (second eventing node) from the cluster
+        log.info("Removing second eventing node (node2) from cluster")
+        rebalance = self.cluster.async_rebalance([node1, node2], [], [node2])
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance-out of node2 failed or did not complete")
+        rebalance.result()
+        self.wait_for_handler_state("bucket_op", "deployed")
+
+        # Kill eventing producer on node1 (sole remaining eventing node)
+        log.info("Killing eventing producer on node1")
+        self.kill_producer(node1)
+        self.sleep(120)
+        # self.wait_for_handler_state("bucket_op", "deployed")
+
+        # Rebalance in a new eventing node
+        log.info("Rebalancing in new eventing node after producer kill")
+        try:
+            rebalance = self.cluster.async_rebalance(
+                [node1],
+                [new_eventing_node],
+                [],
+                services=["eventing"]
+            )
+            self.sleep(5)
+            reached = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(reached, "rebalance-in of new eventing node failed or did not complete")
+            rebalance.result()
+        except Exception as ex:
+            log.info("Rebalance-in failed: {0}".format(str(ex)))
+            self.fail("Rebalance-in of new eventing node should succeed after eventing producer recovered")
+
+        self.wait_for_handler_state("bucket_op", "deployed")
+        self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * 2016)
+
+        self.undeploy_function_by_name("bucket_op")
+        self.rest.delete_single_function("bucket_op", self.function_scope)
+        self.print_eventing_stats_from_all_eventing_nodes()
+        self.skip_metabucket_check = True
+
+    def test_rebalance_eventing_node_swap_post_upgrade(self):
+        """
+        MB-71327, CBSE-22907 -  Scenario 2
+        Create a 2-node cluster with (kv, kv+eventing)
+        Upgrade the cluster to 8.x
+        Add a new Eventing node -> rebalance hangs here if eventing functions are present
+        Remove the old Eventing node
+        Add another Eventing node (or perform a swap rebalance) -> rebalance hangs here
+        """
+        if self.nodes_init < 2 or len(self.servers) < self.nodes_init + 4:
+            self.fail("Test requires nodes_init=2 and at least 6 servers total")
+
+        deploy_functions = self.input.param("deploy_functions", False)
+
+        upgraded_kv = self.servers[self.nodes_init]
+        upgraded_eventing = self.servers[self.nodes_init + 1]
+        new_eventing_1 = self.servers[self.nodes_init + 2]
+        new_eventing_2 = self.servers[self.nodes_init + 3]
+
+        log.info("Installing pre-8.x on initial nodes")
+        self._install(self.servers[:self.nodes_init])
+        self.initial_version = self.upgrade_version
+        self._install(self.servers[self.nodes_init:self.num_servers])
+
+        log.info("Initializing 2-node pre-8.x cluster (kv, kv+eventing)")
+        self.operations(self.servers[:self.nodes_init], services="kv-kv,eventing")
+        self._create_minimal_upgrade_buckets()
+        self.restServer = self.get_nodes_from_services_map(service_type="eventing")
+        self.rest = RestConnection(self.restServer)
+
+        if deploy_functions:
+            log.info("Deploying handler on pre-8.x cluster")
+            self._load_pre_upgrade_data()
+            self._create_pre_upgrade_handler("bucket_op", "handler_code/ABO/insert.js")
+            self.deploy_handler_by_name("bucket_op")
+            self.wait_for_handler_state("bucket_op", "deployed")
+
+        # Upgrade rebalance
+        log.info("Upgrade rebalance: swapping pre-8.x nodes for 8.x nodes")
+        self.cluster.rebalance(
+            list(self.servers[:self.nodes_init]),
+            [upgraded_kv, upgraded_eventing],
+            list(self.servers[:self.nodes_init]),
+            services=["kv", "eventing"]
+        )
+        self.sleep(300)
+        self._switch_master(upgraded_kv)
+        self.add_built_in_server_user()
+        self.rest = RestConnection(upgraded_eventing)
+
+        if deploy_functions:
+            self.wait_for_handler_state("bucket_op", "deployed")
+            self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * 2016)
+
+        # Add a new eventing node - hangs if functions are present
+        log.info("Step 3: adding new eventing node")
+        self.cluster.rebalance(
+            [upgraded_kv, upgraded_eventing],
+            [new_eventing_1],
+            [],
+            services=["eventing"]
+        )
+        if deploy_functions:
+            self.wait_for_handler_state("bucket_op", "deployed")
+
+        # Remove the old eventing node
+        log.info("Step 4: removing old eventing node")
+        self.cluster.rebalance(
+            [upgraded_kv, upgraded_eventing, new_eventing_1],
+            [],
+            [upgraded_eventing]
+        )
+        self.rest = RestConnection(new_eventing_1)
+        if deploy_functions:
+            self.wait_for_handler_state("bucket_op", "deployed")
+
+        # Add another eventing node - hangs here if functions are not present
+        log.info("Step 5: adding another eventing node (deploy_functions={0})".format(deploy_functions))
+        try:
+            rebalance = self.cluster.async_rebalance(
+                [upgraded_kv, new_eventing_1],
+                [new_eventing_2],
+                [],
+                services=["eventing"]
+            )
+            reached = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(reached, "Rebalance failed or hung when adding eventing node")
+            rebalance.result()
+        except Exception as ex:
+            log.info("Rebalance failed: {0}".format(str(ex)))
+            self.fail("Rebalance of new eventing node should succeed")
+
+        if deploy_functions:
+            self.wait_for_handler_state("bucket_op", "deployed")
+            self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * 2016)
+            self.undeploy_function_by_name("bucket_op")
+            self.rest.delete_single_function("bucket_op", self.function_scope)
+
         self.print_eventing_stats_from_all_eventing_nodes()
         self.skip_metabucket_check = True
 
@@ -284,6 +489,36 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
         """Load generated docs into source bucket before upgrade."""
         self.load(self.gens_load, buckets=self.src_bucket, verify_data=False)
 
+    def _create_minimal_upgrade_buckets(self):
+        """Create only src_bucket, dst_bucket and metadata — for chaos tests
+        that deploy a single non-collection handler and don't need the full
+        upgrade bucket set."""
+        self.bucket_size = 100
+        log.info("Creating minimal buckets (src, dst, metadata) for chaos test")
+        bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
+                                                   replicas=self.num_replicas,
+                                                   bucket_storage='couchstore')
+        bucket_names = [self.src_bucket_name, self.dst_bucket_name, self.metadata_bucket_name]
+        for i, name in enumerate(bucket_names):
+            self.cluster.create_standard_bucket(name=name, port=STANDARD_BUCKET_PORT + 1 + i,
+                                                bucket_params=bucket_params)
+            self.sleep(30)
+        self.buckets = RestConnection(self.master).get_buckets()
+        self.src_bucket = [b for b in self.buckets if b.name == self.src_bucket_name]
+        if not self.src_bucket:
+            self.fail("src_bucket '{0}' not found in cluster buckets: {1}".format(
+                self.src_bucket_name, [b.name for b in self.buckets]))
+
+    def _kill_eventing_producer_if_configured(self):
+        """Kill the eventing producer on the current eventing node post-upgrade,
+        if kill_eventing_producer=True — chaos coverage for producer crash/restart
+        recovery immediately after an online upgrade rebalance."""
+        if self.kill_eventing_producer:
+            eventing_node = self.get_nodes_from_services_map(service_type="eventing")
+            log.info("Killing eventing producer post-upgrade on node: {0}".format(eventing_node))
+            self.kill_producer(eventing_node)
+            self.sleep(120, "Waiting for eventing producer to restart")
+
     def _create_pre_upgrade_handler(self, appname, appcode, meta_bucket="metadata",
                                     src_bucket="src_bucket",
                                     bucket_bindings=None,
@@ -336,7 +571,8 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
     def _install_travel_sample(self):
         log.info("Loading travel-sample bucket on pre-upgrade cluster")
         EventingBaseTest.load_sample_buckets(self, self.master, "travel-sample")
-        self.sleep(120, "Waiting for travel-sample bucket to load")
+        rest = RestConnection(self.master)
+        self.assertTrue(self._wait_for_travel_sample(rest), "travel-sample did not finish loading on pre-upgrade cluster.")
 
     def _load_travel_sample_post_upgrade(self):
         """Load travel-sample on the upgraded cluster via the sample loader.
