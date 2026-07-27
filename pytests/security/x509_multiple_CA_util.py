@@ -566,7 +566,7 @@ class x509main:
             if ".com" in node_ip and self.wildcard_dns is None:
                 fin.write("\nsubjectAltName = DNS:{0}".format(node_ip))
             elif self.wildcard_dns:
-                fin.write("\nsubjectAltName = DNS:{0}".format(self.wildcard_dns))
+                fin.write("\nsubjectAltName = DNS:{0},IP:{1}".format(self.wildcard_dns, node_ip))
             else:
                 fin.write("\nsubjectAltName = IP:{0}".format(node_ip))
         # print file contents for easy debugging

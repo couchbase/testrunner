@@ -15,7 +15,7 @@ import time, os
 from security.ntonencryptionBase import ntonencryptionBase
 from lib.couchbase_helper.tuq_helper import N1QLHelper
 from cbas.cbas_base import *
-# from fts.fts_callable import *
+from pytests.fts.fts_callable import FTSCallable
 import logger
 from .x509main import x509main
 from remote.remote_util import RemoteMachineShellConnection
@@ -473,8 +473,8 @@ class ntonencryptionTest(BaseTestCase):
         x509main().setup_cluster_nodes_ssl(self.servers, reload_cert=True)
         ntonencryptionBase().ntonencryption_cli(self.servers, 'enable')
         ntonencryptionBase().change_cluster_encryption_cli(self.servers,self.ntonencrypt_level)
-        
-        
+
+        self.sleep(15, "wait for indexer to come back up after cert reload before creating index")
         self.check_all_services(self.servers)
         
         #ntonencryptionBase().get_ntonencryption_status(self.servers)
@@ -526,7 +526,8 @@ class ntonencryptionTest(BaseTestCase):
         
         ntonencryptionBase().ntonencryption_cli(self.servers, 'enable')
         ntonencryptionBase().change_cluster_encryption_cli(self.servers, self.ntonencrypt_level)
-        
+
+        self.sleep(15, "wait for indexer to come back up after cert reload before creating index")
         self.check_all_services(self.servers)
         
         #ntonencryptionBase().get_ntonencryption_status(self.servers)

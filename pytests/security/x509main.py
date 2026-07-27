@@ -138,6 +138,7 @@ class x509main:
                     fin.write("\nDNS.0 = {0}".format(server.ip))
                 elif wildcard_dns:
                     fin.write("\nDNS.0 = {0}".format(wildcard_dns))
+                    fin.write("\nIP.0 = {0}".format(server.ip.replace('[', '').replace(']', '')))
                 else:
                     fin.write("\nIP.0 = {0}".format(server.ip.replace('[', '').replace(']', '')))
 
