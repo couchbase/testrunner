@@ -1,4 +1,7 @@
 from argparse import ArgumentParser
+# NOTE: aws_get_servers() has a parameter named `os`, which would shadow the os
+# module inside it — so import environ directly to read the PoC cost-tag env vars.
+from os import environ
 import sys, json, subprocess
 import boto3
 import paramiko
@@ -923,6 +926,13 @@ AWS_AMI_MAP = {
         "debian13nonroot": {
             "x86_64": "ami-041cdfd075e0148d5"
         },
+        # os=debian -> Debian 12 (bookworm) node AMI with root SSH pre-baked
+        # (packer/deb12_cbnode.pkr.hcl): root/couchbase + key, PasswordAuthentication
+        # yes, sftp. Because root is baked in, post_provisioner's runtime sshd surgery
+        # is SKIPPED for os=="debian" (see the cpu_ips loop). Matches the on-prem deb12 fleet.
+        "debian": {
+            "x86_64": "ami-0bf014d1c7d2838eb"
+        },
         "rocky10": {
             "x86_64": "ami-09e2e4303c332efc1"
         },
@@ -962,7 +972,9 @@ AWS_OS_USERNAME_MAP = {
     "rhel10": "ec2-user",
     "rhel10nonroot": "ec2-user",
     "debian13": "admin",
-    "debian13nonroot": "admin"
+    "debian13nonroot": "admin",
+    # deb12 node AMI has root SSH baked in -> connect straight as root.
+    "debian": "root"
 }
 
 # GPU-enabled instances for tests that need NVIDIA hardware (e.g. FTS GPU vector
@@ -1016,29 +1028,42 @@ def aws_get_servers(name, count, os, type, ssh_key_path, architecture=None, gpu_
             instance_type = "t4g.xlarge"
 
     if type == "elastic-fts":
-        '''
-        The elastic-fts Instances are created with the following config
-        OS - Centos7
-        Architecture - x86
-        Instance Type - t2.large
-        Elastic Search Version - 1.7.3
-        '''
-        instance_type = "t2.large"
-        os = "centos7"
+        # ES node: pre-baked Debian 12 + Elasticsearch 8.17.0 AMI (packer/deb12_es.pkr.hcl),
+        # mirroring the on-prem ES reference (172.23.104.175): ES via .deb, xpack security
+        # off, http.host 0.0.0.0, /etc/init.d/elasticsearch shim, ES enabled on boot, root
+        # SSH baked. So post_provisioner, install_elastic_search, and the CBQE-8153 reboot
+        # are all skipped for this type. m5.large (not the old burstable t2.large) so ES
+        # indexing isn't network/CPU-credit throttled.
+        instance_type = "m5.large"
+        os = "debian"
         architecture = "x86_64"
-        ssh_username = AWS_OS_USERNAME_MAP[os]
-        image_id = AWS_AMI_MAP["couchbase"][os][architecture]
+        ssh_username = "root"
+        image_id = "ami-0d4988398ac9866fb"
 
     ec2_resource = boto3.resource('ec2', region_name='us-east-1')
     ec2_client = boto3.client('ec2', region_name='us-east-1')
 
+    role = "es" if type == "elastic-fts" else "cb"
     base_tags = [
         {'Key': 'Name', 'Value': name},
         {'Key': 'Owner', 'Value': 'ServerRegression'},
+        {'Key': 'Role', 'Value': role},
     ]
-    # GPU instances get an extra Workload=GPU tag so AWS Cost Explorer can
-    # break out GPU spend from the rest of the test fleet.
-    gpu_tags = base_tags + [{'Key': 'Workload', 'Value': 'GPU'}]
+    # PoC cost attribution: opt-in via env (set by the AWS_ONDEMAND dispatch path)
+    # so regular AWS / os_cert runs are unaffected. poc_cost_tracker.py filters on
+    # the Project tag and breaks down by Role / RunID.
+    poc_project = environ.get('AWS_POC_PROJECT')
+    if poc_project:
+        base_tags.append({'Key': 'Project', 'Value': poc_project})
+    poc_runid = environ.get('AWS_POC_RUNID')
+    if poc_runid:
+        base_tags.append({'Key': 'RunID', 'Value': poc_runid})
+    # GPU instances: Role=gpu + Workload=GPU so Cost Explorer / poc_cost_tracker
+    # can break out GPU spend from the rest of the test fleet.
+    gpu_tags = [t for t in base_tags if t['Key'] != 'Role'] + [
+        {'Key': 'Role', 'Value': 'gpu'},
+        {'Key': 'Workload', 'Value': 'GPU'},
+    ]
 
     common_kwargs = dict(
         LaunchTemplate={
@@ -1047,6 +1072,16 @@ def aws_get_servers(name, count, os, type, ssh_key_path, architecture=None, gpu_
         },
         InstanceInitiatedShutdownBehavior='terminate'
     )
+    # AWS_ONDEMAND (PoC): the shared qe-al-template attaches the wide-open
+    # sg-8e42a4f5 (0.0.0.0/0 on ~19 port ranges, incl. auth-less ES 9200). Override
+    # it with the dedicated locked-down SG (self-referencing for all intra-cluster
+    # traffic -- intra-VPC DNS resolves to private IPs so this covers slave<->node<->ES
+    # -- plus SSH from corp/VPN/Jenkins only; NO 0.0.0.0/0). Gated on the same
+    # AWS_POC_PROJECT env as the PoC cost tags, so regular AWS / os_cert runs keep the
+    # shared template SG untouched. Safe as a top-level override: the template sets
+    # SecurityGroupIds at top level and has no NetworkInterfaces block (verified).
+    if poc_project:
+        common_kwargs['SecurityGroupIds'] = ['sg-047904836f93f3d3e']
 
     cpu_instance_ids = []
     if cpu_count > 0:
@@ -1088,9 +1123,22 @@ def aws_get_servers(name, count, os, type, ssh_key_path, architecture=None, gpu_
     if gpu_ips:
         log.info("EC2 GPU Instances : " + str(gpu_ips))
     for ip in cpu_ips:
-        post_provisioner(ip, ssh_username, ssh_key_path)
         if type == "elastic-fts":
-            install_elastic_search(ip)
+            # The ES node AMI (packer/deb12_es.pkr.hcl) has Elasticsearch 8.17 + root
+            # SSH baked in and ES enabled on boot (mirrors the on-prem ES reference),
+            # so skip post_provisioner AND the old runtime install_elastic_search
+            # (which fetched a dead ES 1.7.3 tarball) -- just confirm root is reachable.
+            if not check_root_login(ip):
+                log.error("root login failed on pre-baked ES node {}".format(ip))
+            continue
+        if os == "debian":
+            # The deb12 CB node AMI (packer/deb12_cbnode.pkr.hcl) already has root SSH
+            # baked in, so skip post_provisioner's runtime sshd-enablement surgery --
+            # just verify root is reachable.
+            if not check_root_login(ip):
+                log.error("root login failed on pre-baked deb12 node {}".format(ip))
+        else:
+            post_provisioner(ip, ssh_username, ssh_key_path)
         if "suse" not in os:
             install_zip_unzip(ip)
         else:
@@ -1110,15 +1158,22 @@ def aws_get_servers(name, count, os, type, ssh_key_path, architecture=None, gpu_
         post_provisioner(ip, gpu_ssh_username, ssh_key_path)
         install_zip_unzip(ip)
 
-    # Rebooting due to CBQE-8153
-    # It was observed that all the ports were reachable when the instances were stopped and started
-    # It was observed that all the ports were reachable on reboot
-    # The temporary fix now is to reboot instances before passing onto tests
-    # TODO - Investigate the reason for failures and fix it
-    log.info("Rebooting instances : " + str(instance_ids))
-    ec2_client.reboot_instances(InstanceIds=instance_ids)
-    ec2_client.get_waiter('instance_status_ok').wait(InstanceIds=instance_ids)
-    time.sleep(180)
+    # Rebooting due to CBQE-8153: an un-diagnosed issue where ports weren't reachable
+    # on a fresh launch but were after a reboot. It is very likely a side-effect of
+    # post_provisioner's runtime SSH/network surgery (restarting sshd, rewriting
+    # configs). The pre-baked AMIs skip that surgery -- SSH/network are correct from
+    # first boot -- so they don't need the reboot + 180s settle:
+    #   os == "debian"        -> deb12 CB node AMI (packer/deb12_cbnode.pkr.hcl)
+    #   type == "elastic-fts" -> ES node AMI      (packer/deb12_es.pkr.hcl)
+    # Keep the workaround for every other OS.
+    # TODO - root-cause CBQE-8153 and drop the reboot for all OSes.
+    if os == "debian" or type == "elastic-fts":
+        log.info("Skipping CBQE-8153 reboot for pre-baked AMI (os=%s, type=%s)" % (os, type))
+    else:
+        log.info("Rebooting instances : " + str(instance_ids))
+        ec2_client.reboot_instances(InstanceIds=instance_ids)
+        ec2_client.get_waiter('instance_status_ok').wait(InstanceIds=instance_ids)
+        time.sleep(180)
 
     cpu_ips = _describe_ips_ordered(ec2_client, cpu_instance_ids)
     gpu_ips = _describe_ips_ordered(ec2_client, gpu_instance_ids)

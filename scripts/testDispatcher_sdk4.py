@@ -42,6 +42,11 @@ QE_SERVER_POOL_BUCKET = 'QE-server-pool'
 
 DOCKER = "DOCKER"
 AWS = "AWS"
+# AWS_ONDEMAND = same as AWS for CB/ES provisioning, but the Jenkins slave is
+# also spun up on-demand in AWS (via the EC2 cloud plugin) instead of a static
+# on-prem slave, and the build is pulled from S3 (latestbuilds is unreachable
+# from AWS). See aws-poc-estimation/FTS_AWS_OnDemand_Design.md.
+AWS_ONDEMAND = "AWS_ONDEMAND"
 AZURE = "AZURE"
 GCP = "GCP"
 KUBERNETES = "KUBERNETES"
@@ -53,19 +58,15 @@ ELIXIR_ONPREM = "ELIXIR_ONPREM"
 ON_PREM_PROVISIONED = "ON_PREM_PROVISIONED"
 SERVERLESS_COLUMNAR = "SERVERLESS_COLUMNAR"
 
-# Frameworks whose ini file may need to be fetched from GitHub, keyed by
-# the doc's "framework" value. RTAF's ini never lives in this repo's
-# b/resources/, so it's always fetched. Others (e.g. TAF) normally have
-# their ini committed here already, and are only fetched as a fallback
-# when a branch (e.g. TAF's "trinity") adds a new ini that hasn't been
-# ported into this repo's master yet.
+# Frameworks whose ini file lives in an internal/private GitHub repo rather
+# than this repo's b/resources/, keyed by the doc's "framework" value.
 FRAMEWORK_GITHUB_REPO_MAP = {
     # "testrunner": "couchbase/testrunner",
-    "TAF": "couchbaselabs/TAF",
+    # "TAF": "couchbaselabs/TAF",
     "RTAF": "couchbaselabs/RTAF",
 }
 
-CLOUD_SERVER_TYPES = [AWS, AZURE, GCP, SERVERLESS_ONCLOUD,
+CLOUD_SERVER_TYPES = [AWS, AWS_ONDEMAND, AZURE, GCP, SERVERLESS_ONCLOUD,
                       PROVISIONED_ONCLOUD, SERVERLESS_COLUMNAR]
 
 DEFAULT_ARCHITECTURE = "x86_64"
@@ -128,67 +129,6 @@ def rreplace(str, pattern, num_replacements):
     return str.rsplit(pattern, num_replacements)[0]
 
 
-def get_dashboard_descriptor(job):
-    """Build the dashboard descriptor for a job.
-
-    RTAF jobs are aggregated (one Jenkins trigger covering every
-    subcomponent for a component), so the descriptor carries the
-    {subcomponent: confFile} map instead of a single subcomponent name.
-    """
-    if job['framework'] == 'RTAF' and 'subcomponent_conf_map' in job:
-        return urllib.parse.quote(json.dumps(job['subcomponent_conf_map']))
-    return urllib.parse.quote(job['subcomponent'])
-
-
-def ensure_rtaf_not_mixed_with_other_frameworks(tests_to_launch):
-    """RTAF jobs get aggregated per (component, iniFile) and dispatched
-    out of original query order (see aggregate_rtaf_jobs). Mixing RTAF
-    with other frameworks in the same dispatch run would silently
-    reorder the non-RTAF jobs relative to the query, so refuse to
-    proceed if both are present."""
-    frameworks = {job['framework'] for job in tests_to_launch}
-    if 'RTAF' in frameworks and len(frameworks) > 1:
-        raise Exception(
-            "RTAF cannot be dispatched together with other frameworks "
-            f"in the same run. Frameworks found: {sorted(frameworks)}. "
-            "Run RTAF components separately from non-RTAF components.")
-
-
-def aggregate_rtaf_jobs(tests_to_launch):
-    """Collapse per-subcomponent RTAF job entries into a single job per
-    (component, iniFile), carrying a {subcomponent: confFile} map. All
-    other frameworks are left untouched.
-
-    Grouping is keyed on iniFile (not just component) because iniFile
-    determines the cluster topology/serverCount that gets booked for the
-    single Jenkins trigger. Jobs needing different topologies (e.g. a
-    1-node vs a 3-node suite) must never share one booking/trigger, since
-    the executor books servers once per trigger and runs the whole map as
-    a train against that one cluster. RTAF subcomponents are unique
-    within a (component, iniFile) group, so grouping on that pair alone
-    is safe.
-    """
-    rtaf_groups = {}
-    other_jobs = []
-    for job in tests_to_launch:
-        if job['framework'] == 'RTAF':
-            rtaf_groups.setdefault(
-                (job['component'], job['iniFile']), []).append(job)
-        else:
-            other_jobs.append(job)
-
-    aggregated_rtaf_jobs = []
-    for (component, ini_file), jobs in rtaf_groups.items():
-        aggregated_job = deepcopy(jobs[0])
-        aggregated_job['subcomponent_conf_map'] = {
-            job['subcomponent']: job['confFile'] for job in jobs}
-        aggregated_job['subcomponent'] = "None"
-        aggregated_job['confFile'] = "None"
-        aggregated_rtaf_jobs.append(aggregated_job)
-
-    return other_jobs + aggregated_rtaf_jobs
-
-
 def fetch_ini_from_github(ini_file, repo, ref):
     """Fetch an ini file from an internal GitHub repo and write it to
     ini_file's path relative to the current working directory."""
@@ -231,7 +171,7 @@ def get_servers_cloud(options, descriptor, how_many, is_addl_pool, os_version,
     type = "couchbase"
     if is_addl_pool:
         type = pool_id
-    if options.serverType == AWS:
+    if options.serverType in (AWS, AWS_ONDEMAND):
         ssh_key_path = OS.environ.get("AWS_SSH_KEY")
         return cloud_provision.aws_get_servers(
             descriptor, how_many, os_version, type, ssh_key_path,
@@ -417,7 +357,7 @@ def extract_individual_tests_from_query_result(col_rel_version,
     conf_file = str(data['confFile']).strip()
     component = str(data["component"]).strip()
     framework = data["framework"] if "framework" in data else "testrunner"
-    if framework in FRAMEWORK_GITHUB_REPO_MAP and not OS.path.isfile(ini_file):
+    if framework in FRAMEWORK_GITHUB_REPO_MAP:
         fetch_ini_from_github(
             ini_file, FRAMEWORK_GITHUB_REPO_MAP[framework], options.branch)
     jenkins_server_url = data['jenkins_server_url'] \
@@ -643,13 +583,21 @@ def main():
     parser.add_option('-e', '--extraParameters', dest='extraParameters', default=None)
     parser.add_option('-y', '--serverType', dest='serverType', type="choice",
                       default=DEFAULT_SERVER_TYPE,
-                      choices=[VM, AWS, DOCKER, GCP, AZURE, CAPELLA_LOCAL,
-                               ELIXIR_ONPREM, SERVERLESS_ONCLOUD,
+                      choices=[VM, AWS, AWS_ONDEMAND, DOCKER, GCP, AZURE,
+                               CAPELLA_LOCAL, ELIXIR_ONPREM, SERVERLESS_ONCLOUD,
                                PROVISIONED_ONCLOUD, ON_PREM_PROVISIONED,
                                SERVERLESS_COLUMNAR])  # or could be Docker
     # override server type passed to executor job e.g. CAPELLA_LOCAL
     parser.add_option('--server_type_name', dest='server_type_name', default=None)
     parser.add_option('-u', '--url', dest='url', default=None)
+    # AWS_ONDEMAND: S3 bucket the build is mirrored to (latestbuilds is
+    # unreachable from AWS); the executor's build URL is rewritten to s3://<bucket>/...
+    parser.add_option('--s3_build_bucket', dest='s3_build_bucket',
+                      default='cb-qe-build-cache')
+    # Pin the testrunner git ref the executor job checks out. Needed for
+    # AWS_ONDEMAND so the executor runs the branch that has the s3:// install
+    # handler (install_utils). Left unset -> executor uses its own default.
+    parser.add_option('--testrunner_tag', dest='testrunner_tag', default=None)
     parser.add_option('-j', '--jenkins', dest='jenkins', default=None)
     parser.add_option('-b', '--branch', dest='branch', default='master')
     parser.add_option('-g', '--cherrypick', dest='cherrypick', default=None)
@@ -846,15 +794,13 @@ def main():
             log.error((traceback.format_exc()))
             log.error(row)
 
-    ensure_rtaf_not_mixed_with_other_frameworks(testsToLaunch)
-    testsToLaunch = aggregate_rtaf_jobs(testsToLaunch)
-
     if not options.fresh_run:
         # Filter out jobs which have already passed in rerun (not a fresh_run)
         job_index_to_pop = list()
         for t_job_index, test_to_launch in enumerate(testsToLaunch):
             # build the dashboard descriptor
-            dashboard_desc = get_dashboard_descriptor(test_to_launch)
+            dashboard_desc = urllib.parse.quote(
+                test_to_launch['subcomponent'])
             if options.dashboardReportedParameters is not None:
                 for o in options.dashboardReportedParameters.split(','):
                     dashboard_desc += '_' + o.split('=')[1]
@@ -924,14 +870,53 @@ def main():
         launchString = launchString + '&include_tests='+urllib.parse.quote(options.include_tests.replace("'", " ").strip())
     launchString = launchString + '&fresh_run=' + urllib.parse.quote(
         str(options.fresh_run).lower())
+    # AWS_ONDEMAND: tag all provisioned CB/ES/GPU nodes for PoC cost attribution
+    # (cloud_provision reads these env vars; regular AWS runs leave them unset).
+    if options.serverType == AWS_ONDEMAND:
+        OS.environ['AWS_POC_PROJECT'] = 'FTS-AWS-PoC'
+        OS.environ.setdefault('AWS_POC_RUNID', str(options.version))
+
+    # AWS_ONDEMAND: the build is mirrored to S3 by the BUILD/REGRESSION PIPELINE (in
+    # test_infra_runner), NOT here -- latestbuilds is unreachable from AWS. The dispatcher
+    # only DERIVES the s3:// URL (same <codename>/<build>/<file> key the pipeline uploads to)
+    # and hands it to the executor; the slave pulls it via `aws s3 cp`
+    # (skip_local_download=False) and SCPs to the CB nodes. s3:// has no '&', so appending
+    # raw below is safe. No upload/boto3 -> mirror_build_to_s3.py lives in test_infra_runner.
+    if options.serverType == AWS_ONDEMAND and not str(options.url or "").startswith("s3://"):
+        if options.url:
+            from urllib.parse import urlparse
+            s3_key = "/".join(urlparse(options.url).path.strip("/").split("/")[-3:])
+        else:
+            import testconstants
+            base, build_num = options.version.split("-", 1)
+            major_minor = ".".join(base.split(".")[:2])
+            codename = testconstants.CB_VERSION_NAME[major_minor]
+            if options.os.lower().startswith(("ubuntu", "debian")):
+                arch = "arm64" if options.architecture in ("aarch64", "arm64") else "amd64"
+                fname = "couchbase-server-enterprise_{}-linux_{}.deb".format(options.version, arch)
+            else:
+                arch = "aarch64" if options.architecture in ("aarch64", "arm64") else "x86_64"
+                fname = "couchbase-server-enterprise-{}-linux.{}.rpm".format(options.version, arch)
+            s3_key = "{}/{}/{}".format(codename, build_num, fname)
+        options.url = "s3://{}/{}".format(options.s3_build_bucket, s3_key)
+        log.info("AWS_ONDEMAND: referencing pipeline-mirrored build at %s", options.url)
     if options.url is not None:
         launchString = launchString + '&url=' + options.url
+    # Pin the executor's testrunner checkout (e.g. our AWS_ONDEMAND branch) so it
+    # runs the install_utils that understands s3:// build URLs.
+    if options.testrunner_tag is not None:
+        launchString = launchString + '&testrunner_tag=' + options.testrunner_tag
     if options.cherrypick is not None:
         launchString = launchString + '&cherrypick=' + urllib.parse.quote(options.cherrypick)
     if options.architecture != DEFAULT_ARCHITECTURE:
         launchString = launchString + '&arch=' + options.architecture
     if options.serverType != DEFAULT_SERVER_TYPE or options.server_type_name is not None:
         server_type = options.serverType if options.server_type_name is None else options.server_type_name
+        # AWS_ONDEMAND behaves like AWS from the executor/testrunner's point of
+        # view (install onto AWS nodes); the on-demand slave is a Jenkins/EC2-cloud
+        # concern the executor doesn't need to know about.
+        if server_type == AWS_ONDEMAND:
+            server_type = AWS
         launchString = launchString + '&server_type=' + server_type
 
     # Block to pass dispatcher job / build num for backtracking purpose
@@ -1037,7 +1022,7 @@ def main():
                               curr_job['framework'],))
 
                 # build the dashboard descriptor
-                dashboardDescriptor = get_dashboard_descriptor(curr_job)
+                dashboardDescriptor = urllib.parse.quote(curr_job['subcomponent'])
                 if options.dashboardReportedParameters is not None:
                     for o in options.dashboardReportedParameters.split(','):
                         dashboardDescriptor += '_' + o.split('=')[1]
@@ -1077,7 +1062,7 @@ def main():
                     # GCP labels are limited to 63 characters which might be too small.
                     # Must also start with a lowercase letter. Just use a UUID which is 32 characters.
                     descriptor = "testrunner-" + str(uuid4())
-                elif options.serverType == AWS:
+                elif options.serverType in (AWS, AWS_ONDEMAND):
                     # A stack name can contain only alphanumeric characters (case-sensitive) and hyphens
                     descriptor = descriptor.replace("_", "-")
                     descriptor = "".join(filter(lambda char: str.isalnum(char) or char == "-", descriptor))
@@ -1128,7 +1113,23 @@ def main():
                         curr_job['target_jenkins'] = 'http://172.23.120.81'
                         slave_to_use = "P3XDCR"
 
-                if not is_executor_available_for_label(
+                # AWS_ONDEMAND: route to a dedicated AWS-only label "<label>_aws"
+                # so AWS jobs never land on the shared on-prem slaves that carry
+                # the original label (and vice-versa). Each _aws label maps to its
+                # own golden AMI, which keeps per-component tracking clean as the
+                # migration expands.
+                if options.serverType == AWS_ONDEMAND:
+                    slave_to_use = slave_to_use + "_aws"
+                    # Run the AWS on-demand executor on the qa master (Jenkins 2.516.1),
+                    # where the AWS-only slaves live and the EC2 automation will run --
+                    # NOT the old qe-jenkins1 (172.23.121.80 / 2.332.4). Overrides any
+                    # force-to-qe target_jenkins set above.
+                    curr_job['target_jenkins'] = 'http://qa.sc.couchbase.com'
+
+                # AWS_ONDEMAND: the EC2 cloud plugin auto-provisions an agent for
+                # the label and queues if none is free, so skip the on-prem
+                # executor-availability gate entirely.
+                if options.serverType != AWS_ONDEMAND and not is_executor_available_for_label(
                         curr_job['target_jenkins'], slave_to_use):
                     log.warning(
                         f"Adding job {curr_job['component']}-{curr_job['subcomponent']} "
@@ -1423,7 +1424,7 @@ def update_url_with_job_params(url, job_params):
 
 
 def release_servers_cloud(options, descriptor):
-    if options.serverType == AWS:
+    if options.serverType in (AWS, AWS_ONDEMAND):
         cloud_provision.aws_terminate(descriptor)
     elif options.serverType == GCP:
         cloud_provision.gcp_terminate(descriptor)

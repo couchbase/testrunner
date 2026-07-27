@@ -975,7 +975,9 @@ def _parse_user_input():
             if re.match('^[0-9\.\-]*$', value) and len(value) > 5:
                 params["version"] = value
         if key == "url":
-            if value.startswith("http"):
+            # Accept s3:// too (AWS_ONDEMAND mirrors the build to S3 and passes an
+            # s3:// URL; the slave fetches it via `aws s3 cp`).
+            if value.startswith("http") or value.startswith("s3://"):
                 params["url"] = value
             else:
                 log.warning('URL:{0} is not valid, will use version to locate build'.format(value))
@@ -1152,7 +1154,11 @@ def pre_install_steps(node_helpers):
 
     if any_node_needs_download_or_install:
         if params["url"] is not None:
-            if node_helpers[0].shell.is_url_live(params["url"]):
+            # AWS_ONDEMAND: an s3:// build URL can't be liveness-checked from the
+            # node (curl/wget don't speak s3://; nodes may lack S3 access). Trust it
+            # and let the slave-local `aws s3 cp` download surface any real error.
+            if str(params["url"]).startswith("s3://") \
+                    or node_helpers[0].shell.is_url_live(params["url"]):
                 params["all_nodes_same_os"] = True
                 for node in node_helpers:
                     if "download_build" in node.install_tasks or "install" in node.install_tasks:
@@ -1514,6 +1520,33 @@ def install_tools(node_helpers):
         node_helper.shell.execute_command(cmd, debug=True)
         node_helper.shell.execute_command(f"rm {download_dir}/{node_helper.admin_tools_name}")
 
+def _local_download_cmd(local_dir, name, url):
+    # AWS_ONDEMAND: builds are mirrored to S3 because latestbuilds is unreachable
+    # from AWS. For an s3:// URL use `aws s3 cp` (the slave needs an IAM
+    # instance-profile with s3:GetObject); otherwise fall back to the normal wget.
+    if str(url).startswith("s3://"):
+        # --only-show-errors is REQUIRED, not cosmetic. _execute_local runs this via
+        # subprocess.Popen(stdout=PIPE).wait() and NEVER reads the pipe. aws s3 cp's
+        # default progress meter prints hundreds of "Completed X MiB/Y MiB" lines to
+        # stdout; the 64KB pipe buffer fills, and aws blocks forever on write() AFTER
+        # the file has fully downloaded — so the build lands on disk in ~3s but the
+        # process hangs until killed, the exit code is non-zero, and the retry loop
+        # treats a perfectly good download as a failure. (Interactive shells drain
+        # stdout, which is why it only reproduced under the Jenkins executor.)
+        # --only-show-errors emits nothing on success, so the pipe never fills and aws
+        # exits 0. Verified on the m5 slave: piped+undrained aws s3 cp hangs 90s (rc
+        # 124) vs 3.4s (rc 0) with this flag, same 685MB file both times.
+        #
+        # Also: pass the region explicitly; CLEAR any inherited HTTP(S)_PROXY (Jenkins
+        # injects an on-prem proxy that would bypass the VPC's S3 gateway endpoint);
+        # and wrap in `timeout` (-k SIGKILLs after 15s) as a backstop so any *other*
+        # hang is killed and retried within the 300s budget instead of wedging forever.
+        return ("timeout -k 15 120 env https_proxy= HTTPS_PROXY= http_proxy= HTTP_PROXY= "
+                "aws s3 cp --only-show-errors --region us-east-1 {0} {1}{2}").format(
+                    url, local_dir, name)
+    return install_constants.WGET_CMD.format(local_dir, name, url)
+
+
 def check_and_retry_download_binary_local(node):
     # The build's path attribute is the *remote* destination (still /tmp/<name>).
     # Locally on the dispatcher we write to $WORKSPACE (or /tmp/ if not set) so
@@ -1526,15 +1559,11 @@ def check_and_retry_download_binary_local(node):
         log.info("Downloading debug binary to {0}..".format(local_debug_path))
     duration, event, timeout = install_constants.WAIT_TIMES[node.info.deliverable_type][
         "download_binary"]
-    cmd = install_constants.WGET_CMD.format(local_dir,
-                                            node.build.name,
-                                            node.build.url)
+    cmd = _local_download_cmd(local_dir, node.build.name, node.build.url)
     cmd_debug = None
     if node.build.debug_build_present:
-        cmd_debug = install_constants.WGET_CMD.format(
-            local_dir,
-            node.build.debug_name,
-            node.build.debug_url)
+        cmd_debug = _local_download_cmd(
+            local_dir, node.build.debug_name, node.build.debug_url)
     start_time = time.time()
     while time.time() < start_time + timeout:
         try:
@@ -1604,6 +1633,20 @@ def get_local_build_size(node, debug_build=False):
 
 def check_file_size(node, debug_build=False):
     try:
+        # AWS_ONDEMAND: s3:// builds can't have their remote size read via
+        # urlopen(s3://). But this function doubles as the "is the correct file
+        # already on the node? then skip the SCP" gate in _copy_to_nodes, so it must
+        # NOT blanket-return True (that skips the copy, leaving nodes with no build).
+        # Instead compare the node's copy against the SLAVE-local file the aws s3 cp
+        # just wrote (same dir _copy_to_nodes SCPs from). Missing on the node ->
+        # get_local_build_size raises -> return False -> the copy proceeds; after a
+        # correct copy the sizes match -> True.
+        url = node.build.debug_url if debug_build else node.build.url
+        if str(url).startswith("s3://"):
+            fname = node.build.debug_name if debug_build else node.build.name
+            expected_size = os.path.getsize(_get_local_download_dir() + fname)
+            actual_size = get_local_build_size(node, debug_build)
+            return expected_size == actual_size
         expected_size = get_remote_build_size(node, debug_build)
         actual_size = get_local_build_size(node, debug_build)
         return expected_size == actual_size

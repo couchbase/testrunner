@@ -39,6 +39,10 @@ SSH_POLL_INTERVAL = 20
 
 DOCKER = "DOCKER"
 AWS = "AWS"
+# AWS_ONDEMAND = same as AWS for CB/ES provisioning, but the Jenkins slave is also
+# spun up on-demand in AWS (dedicated <label>_aws node / EC2 plugin) and the build
+# is pulled from S3 (latestbuilds unreachable from AWS).
+AWS_ONDEMAND = "AWS_ONDEMAND"
 AZURE = "AZURE"
 GCP = "GCP"
 KUBERNETES = "KUBERNETES"
@@ -50,7 +54,7 @@ ELIXIR_ONPREM = "ELIXIR_ONPREM"
 ON_PREM_PROVISIONED = "ON_PREM_PROVISIONED"
 SERVERLESS_COLUMNAR = "SERVERLESS_COLUMNAR"
 
-CLOUD_SERVER_TYPES = [AWS, AZURE, GCP, SERVERLESS_ONCLOUD,
+CLOUD_SERVER_TYPES = [AWS, AWS_ONDEMAND, AZURE, GCP, SERVERLESS_ONCLOUD,
                       PROVISIONED_ONCLOUD, SERVERLESS_COLUMNAR]
 
 DEFAULT_ARCHITECTURE = "x86_64"
@@ -122,7 +126,7 @@ def get_servers_cloud(options, descriptor, how_many, is_addl_pool, os_version, p
     type = "couchbase"
     if is_addl_pool:
         type = pool_id
-    if options.serverType == AWS:
+    if options.serverType in (AWS, AWS_ONDEMAND):
         ssh_key_path = OS.environ.get("AWS_SSH_KEY")
         return cloud_provision.aws_get_servers(descriptor, how_many, os_version, type, ssh_key_path, options.architecture, gpu_count=int(options.gpu_count)), None
     elif options.serverType == GCP:
@@ -452,13 +456,19 @@ def main():
     parser.add_option('-e', '--extraParameters', dest='extraParameters', default=None)
     parser.add_option('-y', '--serverType', dest='serverType', type="choice",
                       default=DEFAULT_SERVER_TYPE,
-                      choices=[VM, AWS, DOCKER, GCP, AZURE, CAPELLA_LOCAL,
-                               ELIXIR_ONPREM, SERVERLESS_ONCLOUD,
+                      choices=[VM, AWS, AWS_ONDEMAND, DOCKER, GCP, AZURE,
+                               CAPELLA_LOCAL, ELIXIR_ONPREM, SERVERLESS_ONCLOUD,
                                PROVISIONED_ONCLOUD, ON_PREM_PROVISIONED,
                                SERVERLESS_COLUMNAR])  # or could be Docker
     # override server type passed to executor job e.g. CAPELLA_LOCAL
     parser.add_option('--server_type_name', dest='server_type_name', default=None)
     parser.add_option('-u', '--url', dest='url', default=None)
+    # AWS_ONDEMAND: S3 bucket the build is mirrored to (latestbuilds unreachable
+    # from AWS); the executor's build URL is rewritten to s3://<bucket>/...
+    parser.add_option('--s3_build_bucket', dest='s3_build_bucket',
+                      default='cb-qe-build-cache')
+    # Pin the testrunner git ref the executor checks out (unset -> executor default).
+    parser.add_option('--testrunner_tag', dest='testrunner_tag', default=None)
     parser.add_option('-j', '--jenkins', dest='jenkins', default=None)
     parser.add_option('-b', '--branch', dest='branch', default='master')
     parser.add_option('-g', '--cherrypick', dest='cherrypick', default=None)
@@ -671,14 +681,55 @@ def main():
         launchString = launchString + '&include_tests='+urllib.parse.quote(options.include_tests.replace("'", " ").strip())
     launchString = launchString + '&fresh_run=' + urllib.parse.quote(
         str(options.fresh_run).lower())
+    # AWS_ONDEMAND: tag all provisioned CB/ES/GPU nodes for PoC cost attribution
+    # (cloud_provision reads these env vars; regular AWS runs leave them unset).
+    if options.serverType == AWS_ONDEMAND:
+        OS.environ['AWS_POC_PROJECT'] = 'FTS-AWS-PoC'
+        OS.environ.setdefault('AWS_POC_RUNID', str(options.version))
+
+    # AWS_ONDEMAND: the build is mirrored to S3 by the BUILD/REGRESSION PIPELINE (in
+    # test_infra_runner: server_build_weekly_pipeline.groovy / the regression dispatcher
+    # Jenkinsfile), NOT here -- latestbuilds is unreachable from AWS. The dispatcher only
+    # DERIVES the s3:// URL (deterministic <codename>/<build>/<file>, same key the pipeline
+    # uploads to) and hands it to the executor; the slave pulls it via `aws s3 cp`
+    # (skip_local_download=False) and SCPs to the CB nodes. s3:// has no '&', so appending
+    # raw below is safe. No upload / no boto3 here -> mirror_build_to_s3.py lives in
+    # test_infra_runner, not testrunner.
+    if options.serverType == AWS_ONDEMAND and not str(options.url or "").startswith("s3://"):
+        if options.url:
+            # an http(s) latestbuilds URL was given -> its last 3 path segments are the key
+            from urllib.parse import urlparse
+            s3_key = "/".join(urlparse(options.url).path.strip("/").split("/")[-3:])
+        else:
+            # derive <codename>/<build>/<file> from --version + --os (like the install flow)
+            import testconstants
+            base, build_num = options.version.split("-", 1)
+            major_minor = ".".join(base.split(".")[:2])
+            codename = testconstants.CB_VERSION_NAME[major_minor]
+            if options.os.lower().startswith(("ubuntu", "debian")):
+                arch = "arm64" if options.architecture in ("aarch64", "arm64") else "amd64"
+                fname = "couchbase-server-enterprise_{}-linux_{}.deb".format(options.version, arch)
+            else:
+                arch = "aarch64" if options.architecture in ("aarch64", "arm64") else "x86_64"
+                fname = "couchbase-server-enterprise-{}-linux.{}.rpm".format(options.version, arch)
+            s3_key = "{}/{}/{}".format(codename, build_num, fname)
+        options.url = "s3://{}/{}".format(options.s3_build_bucket, s3_key)
+        print("AWS_ONDEMAND: referencing pipeline-mirrored build at {}".format(options.url))
     if options.url is not None:
         launchString = launchString + '&url=' + options.url
+    # Pin the executor's testrunner checkout so it runs the install_utils that
+    # understands s3:// build URLs.
+    if options.testrunner_tag is not None:
+        launchString = launchString + '&testrunner_tag=' + options.testrunner_tag
     if options.cherrypick is not None:
         launchString = launchString + '&cherrypick=' + urllib.parse.quote(options.cherrypick)
     if options.architecture != DEFAULT_ARCHITECTURE:
         launchString = launchString + '&arch=' + options.architecture
     if options.serverType != DEFAULT_SERVER_TYPE or options.server_type_name is not None:
         server_type = options.serverType if options.server_type_name is None else options.server_type_name
+        # AWS_ONDEMAND behaves like AWS from the executor's point of view.
+        if server_type == AWS_ONDEMAND:
+            server_type = AWS
         launchString = launchString + '&server_type=' + server_type
     currentDispatcherJobUrl = OS.getenv("BUILD_URL")
     currentExecutorParams = get_jenkins_params.get_params(
@@ -876,7 +927,7 @@ def main():
                     # GCP labels are limited to 63 characters which might be too small.
                     # Must also start with a lowercase letter. Just use a UUID which is 32 characters.
                     descriptor = "testrunner-" + str(uuid4())
-                elif options.serverType == AWS:
+                elif options.serverType in (AWS, AWS_ONDEMAND):
                     # A stack name can contain only alphanumeric characters (case-sensitive) and hyphens
                     descriptor = descriptor.replace("_", "-")
                     descriptor = "".join(filter(lambda char: str.isalnum(char) or char == "-", descriptor))
@@ -951,11 +1002,6 @@ def main():
                             # TAF::analytics and 8.1 or greater and EA is None
                             # Force to use this branch
                             branch_to_trigger = "master_jython"
-                        elif testsToLaunch[i]["component"] == "capella_fusion":
-                            # TAF::capella_fusion honors the slave configured
-                            # in the QE-Test-Suites DB row (e.g. aws) instead
-                            # of being forced onto deb12_jython_slave
-                            pass
                         else:
                             # TAF and 8.1 or greater
                             slave_to_use = "deb12_jython_slave"
@@ -982,6 +1028,18 @@ def main():
                         else:
                             # If nothing matches, fallback to default slave
                             slave_to_use = "deb12_P0_slave"
+
+                # AWS_ONDEMAND: route to a dedicated AWS-only label "<label>_aws" so
+                # AWS jobs never land on the shared on-prem slaves (and vice-versa).
+                # Each _aws label maps to its own golden AMI.
+                if options.serverType == AWS_ONDEMAND:
+                    slave_to_use = slave_to_use + "_aws"
+                    # Run the AWS on-demand executor on the qa master (Jenkins 2.516.1),
+                    # where the AWS-only slaves live and where the EC2 automation will run
+                    # -- NOT the old qe-jenkins1 (172.23.121.80 / 2.332.4). This overrides
+                    # the 8.1 "force to qe jenkins" target_jenkins set just above; AWS
+                    # on-demand is a self-contained pipeline on qa.
+                    testsToLaunch[i]['target_jenkins'] = 'http://qa.sc.couchbase.com'
 
                 if (options.launch_job == 'test_suite_executor_cloud'
                         and testsToLaunch[i]['component'] == 'smoke_capella'
@@ -1191,7 +1249,7 @@ def update_url_with_job_params(url, job_params):
 
 
 def release_servers_cloud(options, descriptor):
-    if options.serverType == AWS:
+    if options.serverType in (AWS, AWS_ONDEMAND):
         cloud_provision.aws_terminate(descriptor)
     elif options.serverType == GCP:
         cloud_provision.gcp_terminate(descriptor)
