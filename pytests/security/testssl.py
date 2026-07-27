@@ -234,7 +234,11 @@ class TestSSLTests(BaseTestCase):
                                                       format(line, node_port, node.ip))
                     elif "LUCKY13 (CVE-2013-0169)" in line:
                         scan_count = scan_count + 1
-                        if "VULNERABLE" in line:
+                        # testssl.sh marks this check "experimental" and reports
+                        # "potentially VULNERABLE" as a heuristic hedge whenever any
+                        # CBC cipher is offered, not a confirmed exploit - only a
+                        # bare "VULNERABLE" verdict is an actual finding.
+                        if "VULNERABLE" in line and "potentially" not in line:
                             vulnerability_list.append("\"{0}\" is detected in port {1} node {2}".
                                                       format(line, node_port, node.ip))
                     elif "Winshock" in line:
@@ -284,16 +288,28 @@ class TestSSLTests(BaseTestCase):
         Scanning the ports to test vulnerabilities with certificates
         """
         self.x509 = x509main(host=self.master)
-        self.x509.generate_multiple_x509_certs(servers=self.servers)
-        for server in self.servers:
-            _ = self.x509.upload_root_certs(server)
-        self.x509.upload_node_certs(servers=self.servers)
-        self.x509.delete_unused_out_of_the_box_CAs(server=self.master)
-        self.x509.upload_client_cert_settings(server=self.servers[0])
-        CbServer.use_https = True
-        ntonencryptionBase().setup_nton_cluster(servers=self.servers,
-                                                clusterEncryptionLevel="strict")
-        self.test_port_security()
+        try:
+            self.x509.generate_multiple_x509_certs(servers=self.servers)
+            for server in self.servers:
+                _ = self.x509.upload_root_certs(server)
+            self.x509.upload_node_certs(servers=self.servers)
+            self.x509.delete_unused_out_of_the_box_CAs(server=self.master)
+            self.x509.upload_client_cert_settings(server=self.servers[0])
+            CbServer.use_https = True
+            ntonencryptionBase().setup_nton_cluster(servers=self.servers,
+                                                    clusterEncryptionLevel="strict")
+            self.test_port_security()
+        finally:
+            # Revert node-to-node encryption, custom certs and the client-cert
+            # -auth state set up above. Without this, every later test in the
+            # suite inherits strict n2n encryption + custom certs with no way
+            # to rejoin nodes using default settings, and fails with unrelated
+            # "unknown CA" errors during add_node/rebalance.
+            ntonencryptionBase().disable_nton_cluster(self.servers)
+            CbServer.use_https = False
+            for server in self.servers:
+                RestConnection(server).client_cert_auth(state="disable", prefixes=[])
+            self.x509.teardown_certs(self.servers)
 
     def test_tls_1_dot_3_ciphers(self):
         """
