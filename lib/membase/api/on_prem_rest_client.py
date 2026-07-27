@@ -7544,6 +7544,158 @@ class RestConnection(object):
         status, content, header = self._http_request(api, method, params, headers=headers)
         return status, content, header
 
+    # ── CRL (Certificate Revocation List) — see CRL_INFO.md ─────────────────
+
+    def get_crl_settings(self):
+        """GET /settings/crl — current cluster-wide CRL config (defaults merged in)."""
+        api = self.baseUrl + "settings/crl"
+        status, content, header = self._http_request(api, 'GET')
+        return status, content, header
+
+    def post_crl_settings(self, payload):
+        """
+        POST /settings/crl — partial update (SET semantics, omitted fields keep
+        their existing value). Returns the full merged config on success.
+
+        Args:
+            payload: dict, any subset of policyPerScope/directory/
+                dirPollIntervalMs/checkIntermediateCerts/urls/urlPollIntervalMs
+        """
+        api = self.baseUrl + "settings/crl"
+        params = json.dumps(payload)
+        status, content, header = self._http_request(api, 'POST', params,
+                                                      headers=self._create_capi_headers())
+        return status, content, header
+
+    def get_crl_files(self):
+        """GET /settings/crl/files — list uploaded CRL file metadata."""
+        api = self.baseUrl + "settings/crl/files"
+        status, content, header = self._http_request(api, 'GET')
+        return status, content, header
+
+    def upload_crl_file(self, filename, content_bytes, timeout=300):
+        """
+        POST /settings/crl/files — upload one CRL file, multipart/form-data.
+
+        _http_request() can't do multipart, so this issues its own request
+        with a bounded retry loop (mirrors _http_request's own resilience
+        pattern) instead of a single bare call — a hardcoded/absent timeout
+        would otherwise fail a legitimate large-CRL upload (up to ~10 minutes
+        for 200k+ revoked entries, see CRL_INFO.md) before the server ever
+        responded.
+
+        Args:
+            filename: str, 1-255 chars of [a-zA-Z0-9._-], not "." or ".."
+            content_bytes: bytes, PEM or DER CRL content
+            timeout: seconds; also the retry deadline for transient
+                connection errors
+
+        Returns:
+            tuple: (status_bool, content, response)
+        """
+        api = self.baseUrl + "settings/crl/files"
+        files = {"file": (filename, content_bytes, "application/pkix-crl")}
+        end_time = time.time() + timeout
+        last_err = None
+        while time.time() <= end_time:
+            try:
+                response = requests.post(
+                    api, files=files, auth=(self.username, self.password),
+                    verify=False, timeout=timeout,
+                )
+                status = response.ok
+                content = response.content
+                try:
+                    content = response.json()
+                except ValueError:
+                    pass
+                return status, content, response
+            except requests.exceptions.RequestException as err:
+                log.error("Error uploading CRL file {0}: {1}".format(filename, err))
+                last_err = err
+                time.sleep(3)
+        raise ServerUnavailableException(ip=self.ip)
+
+    def delete_crl_file(self, filename):
+        """DELETE /settings/crl/files/:filename."""
+        api = self.baseUrl + "settings/crl/files/" + urllib.parse.quote(filename, safe='')
+        status, content, header = self._http_request(api, 'DELETE')
+        return status, content, header
+
+    def get_diagnostics_status(self, nodes=None):
+        """
+        GET /settings/crl/diagnostics/status[?nodes=host1,host2] — per-node
+        CRL cache/file status. Omit nodes for all active nodes.
+
+        Args:
+            nodes: optional list of "host:port" strings
+        """
+        api = self.baseUrl + "settings/crl/diagnostics/status"
+        if nodes:
+            api = "{0}?nodes={1}".format(api, urllib.parse.quote(','.join(nodes), safe=''))
+        status, content, header = self._http_request(api, 'GET')
+        return status, content, header
+
+    def post_diagnostics_status(self, nodes=None):
+        """
+        POST /settings/crl/diagnostics/status — same as GET, node list as a
+        JSON array in the body (use when the list is too long for a query string).
+        """
+        api = self.baseUrl + "settings/crl/diagnostics/status"
+        params = json.dumps({"nodes": nodes} if nodes else {})
+        status, content, header = self._http_request(api, 'POST', params,
+                                                      headers=self._create_capi_headers())
+        return status, content, header
+
+    def post_diagnostics_validate(self, policy=None, certs=None):
+        """
+        POST /settings/crl/diagnostics/validate — admin diagnostic endpoint,
+        bypasses the configured policy in favor of a caller-supplied test policy.
+
+        Args:
+            policy: "Permissive" or "Require" (defaults server-side to "Require";
+                "Disabled" is rejected — nothing to test)
+            certs: optional list of PEM strings or base64-encoded DER strings;
+                omit for cluster-cert mode (checks every node's own cert chains)
+        """
+        api = self.baseUrl + "settings/crl/diagnostics/validate"
+        payload = {}
+        if policy is not None:
+            payload["policy"] = policy
+        if certs is not None:
+            payload["certs"] = certs
+        params = json.dumps(payload)
+        status, content, header = self._http_request(api, 'POST', params,
+                                                      headers=self._create_capi_headers())
+        return status, content, header
+
+    def reload_crl(self):
+        """
+        POST /node/controller/reloadCrl — force immediate reload on the local
+        node only (not cluster-wide). No body.
+        """
+        api = self.baseUrl + "node/controller/reloadCrl"
+        status, content, header = self._http_request(api, 'POST')
+        return status, content, header
+
+    def cbauth_crls_validate(self, certs, scope):
+        """
+        POST /_cbauth/crlsValidate — internal endpoint used by cbauth-registered
+        GO services (query, analytics, indexer, goxdcr). Validates against the
+        currently configured policy (unlike post_diagnostics_validate, which
+        bypasses it). Requires {[admin, internal], all} — Administrator creds
+        satisfy it.
+
+        Args:
+            certs: list of base64-encoded DER strings, leaf first, chain after
+            scope: "clientAuth" or "nodeToNode"
+        """
+        api = self.baseUrl + "_cbauth/crlsValidate"
+        params = json.dumps({"certs": certs, "scope": scope})
+        status, content, header = self._http_request(api, 'POST', params,
+                                                      headers=self._create_capi_headers())
+        return status, content, header
+
     def load_trusted_CAs(self):
         """
         Instructs the cluster to load trusted CAs(.pem files) from the node's inbox/CA folder
