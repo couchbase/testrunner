@@ -92,6 +92,11 @@ NUM_ERLANG_THREADS = 16
 MIN_KV_QUOTA = 256
 INDEX_QUOTA = 256
 FTS_QUOTA = 512
+""" quota the FTS suites need to index their datasets; FTS_QUOTA above is only the
+    cluster-init default. Anything less starves indexing, so it is a floor - a node
+    that cannot back it needs fts on a node of its own rather than a smaller quota.
+"""
+FTS_SERVICE_QUOTA = 3000
 EVENTING_QUOTA = 512
 CBAS_QUOTA = 1024
 """ when we run with small server, it needs to increase cluster quota so that small

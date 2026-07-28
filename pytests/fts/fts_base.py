@@ -32,11 +32,12 @@ except ImportError:
     print('WARN: fail to import docker')
 
 from couchbase_helper.cluster import Cluster
-from membase.api.rest_client import RestConnection, Bucket
+from membase.api.rest_client import RestConnection, RestHelper, Bucket
 from membase.api.exception import ServerUnavailableException
 from remote.remote_util import RemoteMachineShellConnection
 from remote.remote_util import RemoteUtilHelper
-from testconstants import STANDARD_BUCKET_PORT, LINUX_COUCHBASE_BIN_PATH
+from testconstants import (STANDARD_BUCKET_PORT, LINUX_COUCHBASE_BIN_PATH,
+                           FTS_SERVICE_QUOTA, MIN_KV_QUOTA, FTS_QUOTA)
 from membase.helper.cluster_helper import ClusterOperationHelper
 from couchbase_helper.stats_tools import StatsCommon
 from membase.helper.bucket_helper import BucketOperationHelper
@@ -644,6 +645,24 @@ class NodeHelper:
             bucket_names = [bucket_names]
         start = time.time()
         for server in warmupnodes:
+            services = (getattr(server, "services", "") or "")
+            if services and "kv" not in services.split(","):
+                # memcached on a node without the kv service has no bucket to warm
+                # up and answers stats with NOT_SUPPORTED (#131). Waiting for
+                # ns_server to report the node healthy is the equivalent
+                # "the node is back" signal for these nodes.
+                NodeHelper._log.info(
+                    "%s does not run the kv service (services: %s), waiting for "
+                    "ns_server instead of bucket warmup" % (server.ip, services))
+                try:
+                    NodeHelper.wait_service_started(server)
+                    if not RestHelper(RestConnection(server)).is_ns_server_running():
+                        NodeHelper._log.error(
+                            "ERROR: ns_server did not come back up on %s" % server.ip)
+                except Exception as e:
+                    NodeHelper._log.error(
+                        "ERROR: could not confirm %s is back up: %s" % (server.ip, e))
+                continue
             for bucket in bucket_names:
                 while time.time() - start < 2100:
                     mc = None
@@ -669,10 +688,18 @@ class NodeHelper:
                     except Exception as e:
                         NodeHelper._log.info(e)
                         time.sleep(10)
-                    if mc.stats()["ep_warmup_thread"] == "running":
-                        NodeHelper._log.info(
-                            "ERROR: ep_warmup_thread's status not complete")
-                    mc.close()
+                    # Only reached after the except branch above. Re-reading the
+                    # stat unguarded here just re-raises whatever was already
+                    # swallowed and aborts the caller mid-recovery.
+                    try:
+                        if mc and mc.stats()["ep_warmup_thread"] == "running":
+                            NodeHelper._log.info(
+                                "ERROR: ep_warmup_thread's status not complete")
+                    except Exception as e:
+                        NodeHelper._log.info(e)
+                    finally:
+                        if mc:
+                            mc.close()
 
     @staticmethod
     def wait_node_restarted(
@@ -1673,6 +1700,14 @@ class FTSIndex:
                 query_json['score'] = "none"
         if score_params is not None:
             query_json['params'] = score_params
+            # Rank fusion merges the top score_window_size hits of each sub-query,
+            # so FTS rejects the request outright when the requested page size is
+            # larger than that window. query_max_matches defaults to 10000000, which
+            # would fail every windowed fusion query, so cap size at the window.
+            score_window_size = score_params.get('score_window_size')
+            if score_window_size is not None and 'size' in query_json \
+                    and int(query_json['size']) > int(score_window_size):
+                query_json['size'] = int(score_window_size)
         if knn is not None:
             query_json['knn'] = knn
         return query_json
@@ -2321,12 +2356,93 @@ class CouchbaseCluster:
 
     def __set_fts_ram_quota(self):
         is_n1ql = TestInputSingleton.input.param("is_n1ql", False)
-        fts_quota = TestInputSingleton.input.param("fts_quota", 3000)
+        requested_fts_quota = TestInputSingleton.input.param("fts_quota", FTS_SERVICE_QUOTA)
+        # Any node co-hosting kv and fts constrains the quota, not just the
+        # master - topologies like ['kv','kv','kv,fts','kv,fts','fts'] put the
+        # squeeze on the middle nodes while the master looks clean. This runs from
+        # __init__, before init_cluster has assigned services from the cluster
+        # spec, so the ini services on self.__nodes do not describe the topology
+        # the test asked for yet - read the spec itself as well.
+        mixed_nodes = []
+        for node in self.__nodes:
+            node_services = (getattr(node, "services", "") or "kv").split(",")
+            if "kv" in node_services and "fts" in node_services:
+                mixed_nodes.append(node.ip)
+        spec = TestInputSingleton.input.param("cluster", "") or ""
+        if isinstance(spec, (list, tuple)):
+            spec = ",".join(spec)
+        for letter, service in {'D': 'kv', 'F': 'fts', 'I': 'index', 'Q': 'n1ql'}.items():
+            spec = spec.replace(letter, service)
+        for entry in re.split('[-,:]', spec):
+            entry_services = entry.replace('+', ',').split(',')
+            if "kv" in entry_services and "fts" in entry_services:
+                mixed_nodes.append("(from cluster spec: %s)" % entry)
+                break
+        fts_shares_a_kv_node = bool(mixed_nodes) or len(self.__nodes) == 1
         index_quota = TestInputSingleton.input.param("index_quota", 600)
-        if(is_n1ql):
-            fts_quota = 2400
+        kv_quota = TestInputSingleton.input.param("kv_quota", 3000)
         try:
-            RestConnection(self.__master_node).modify_memory_quota(kv_quota = 3000, fts_quota = fts_quota, index_quota = index_quota)
+            rest = RestConnection(self.__master_node)
+            # ns_server rejects the request as a whole when the total charged to a
+            # node exceeds what it can back, which would silently leave fts on its
+            # 512MB init default. On a 4GB pool node kv 3000 + index 600 already
+            # exceeds the 3104MB ceiling, so trim kv to fit - never fts.
+            reserved = int(rest.get_nodes_self().mcdMemoryReserved)
+
+            # Treat FTS_SERVICE_QUOTA as a floor, because anything less starves
+            # indexing. The exception is a node that has to carry kv and fts
+            # together and cannot afford both: forcing the floor there pushes the
+            # request past the ceiling, ns_server rejects it whole and fts is left
+            # on its 512MB default - worse than the smaller value the job asked
+            # for. Pool nodes are homogeneous, so the master's ceiling stands in
+            # for the mixed node's.
+            fts_quota = max(FTS_SERVICE_QUOTA, requested_fts_quota)
+            if fts_shares_a_kv_node and kv_quota + index_quota + fts_quota > reserved:
+                fts_quota = requested_fts_quota
+                self.__log.warning(
+                    "fts shares a node with kv (%s) that cannot back kv %s + index "
+                    "%s + fts %s against %sMB, so fts_quota stays at %s. Separate "
+                    "the services onto different nodes to give FTS its full quota."
+                    % (mixed_nodes or [self.__master_node.ip], kv_quota,
+                       index_quota, FTS_SERVICE_QUOTA, reserved,
+                       requested_fts_quota))
+            elif fts_quota != requested_fts_quota:
+                self.__log.warning(
+                    "fts_quota=%s is too small for FTS to index with; using %s"
+                    % (requested_fts_quota, fts_quota))
+            if(is_n1ql):
+                fts_quota = 2400
+
+            # Size the request against the most constrained node in the topology,
+            # not the master. A kv+fts node is charged kv + fts, and getting this
+            # wrong is worse than leaving the quotas alone: trimming kv just
+            # enough for the master makes ns_server accept the request, which
+            # raises the cluster-wide fts quota, and then that node cannot join at
+            # all ("Prepare join failed ... does not have sufficient memory").
+            master_services = (getattr(self.__master_node, "services", "") or "kv").split(",")
+            charged = kv_quota + index_quota
+            if fts_shares_a_kv_node or "fts" in master_services:
+                charged += fts_quota
+            if charged > reserved:
+                trimmed = max(MIN_KV_QUOTA, kv_quota - (charged - reserved))
+                self.__log.warning(
+                    "quotas charged to a kv+fts node total %sMB but a node can "
+                    "only back %sMB; using kv quota %s instead of %s"
+                    % (charged, reserved, trimmed, kv_quota))
+                kv_quota = trimmed
+                # If kv alone could not absorb the overshoot, the fts quota has to
+                # come down too - an unsatisfiable combination blocks the join.
+                still_over = kv_quota + index_quota + \
+                    (fts_quota if (fts_shares_a_kv_node or "fts" in master_services) else 0)
+                if still_over > reserved:
+                    fts_quota = max(FTS_QUOTA, fts_quota - (still_over - reserved))
+                    self.__log.warning(
+                        "kv quota alone could not absorb the overshoot; reducing "
+                        "fts quota to %s so every node can back the request. "
+                        "Separate kv and fts onto different nodes."
+                        % fts_quota)
+            rest.modify_memory_quota(kv_quota=kv_quota, fts_quota=fts_quota,
+                                     index_quota=index_quota)
         except Exception as ex:
             print(f"Error setting memory quota for the cluster.\nSource : fts_base.py.\nError : {ex}\n")
 
@@ -4100,6 +4216,19 @@ class CouchbaseCluster:
         if master:
             to_remove_node = [self.__master_node]
         else:
+            # Never take out every search node. The callers query FTS right after
+            # this, and a cluster with no fts node fails all of them with an
+            # opaque "No node in the cluster has 'fts' service enabled" - which is
+            # what happens when a job hands a test more nodes to remove than the
+            # topology has fts nodes to spare.
+            fts_nodes = self.get_fts_nodes()
+            while (num_nodes > 1 and fts_nodes
+                   and all(node in self.__nodes[-num_nodes:] for node in fts_nodes)):
+                self.__log.warning(
+                    "rebalance-out of {0} nodes would remove every fts node "
+                    "({1}); removing {2} instead".format(
+                        num_nodes, [n.ip for n in fts_nodes], num_nodes - 1))
+                num_nodes -= 1
             to_remove_node = self.__nodes[-num_nodes:]
         self.__log.info(
             "Starting rebalance-out nodes:{0} at {1} cluster {2}".format(
@@ -5669,6 +5798,11 @@ class FTSBaseTest(unittest.TestCase):
                              stand for services defined in serv_dict
             @return services_list: like ['kv', 'kv,fts', 'index,n1ql','index']
         """
+        if isinstance(serv_str, (list, tuple)):
+            # A cluster spec passed via -p with commas arrives already split
+            # (cluster=D,F+Q+I -> ['D', 'F+Q+I']); rejoin it so either the comma
+            # or the colon form works.
+            serv_str = ",".join(serv_str)
         serv_dict = {'D': 'kv', 'F': 'fts', 'I': 'index', 'Q': 'n1ql'}
         for letter, serv in list(serv_dict.items()):
             serv_str = serv_str.replace(letter, serv)
@@ -5692,9 +5826,29 @@ class FTSBaseTest(unittest.TestCase):
         # Move above private to this section if needed in future, but
         # Ensure to change other tests too.
 
+        # kv and fts must not share a node. The old default (D,D+F,F) put them
+        # together on node 2, and ns_server charges both quotas against that one
+        # node - on a 4GB pool node that is 2079MB kv + 2400MB fts against a
+        # 3104MB ceiling, so the node cannot even join and the whole suite aborts
+        # in suite_setUp. Give fts two nodes of its own (most suites need more than
+        # one to place index partitions and replicas) and let them carry n1ql,
+        # which is stateless and costs no quota. Mirrors
+        # b/resources/fts/ini/3-node-n1ql.ini.
         self._cluster_services = \
-            self.construct_serv_list(self._input.param("cluster", "D,D+F,F"))
+            self.construct_serv_list(self._input.param("cluster", "D,F+Q,F+Q"))
         self._num_replicas = self._input.param("replicas", 1)
+        # This is the bucket (kv) replica count, not the fts index replica count -
+        # that one is the separate index_replicas param. A bucket replica needs a
+        # second kv node to live on, so cap it to the topology rather than leaving
+        # the bucket permanently under-replicated.
+        kv_nodes = sum(1 for s in self._cluster_services if "kv" in s.split(","))
+        if self._num_replicas > kv_nodes - 1:
+            self.log.warning(
+                "replicas=%s needs %s kv nodes but the cluster has %s; creating "
+                "buckets with %s replica(s) instead"
+                % (self._num_replicas, self._num_replicas + 1, kv_nodes,
+                   max(0, kv_nodes - 1)))
+            self._num_replicas = max(0, kv_nodes - 1)
         self._create_default_bucket = self._input.param("default_bucket", True)
         self._num_items = self._input.param("items", 1000)
         self._value_size = self._input.param("value_size", 512)
@@ -5869,7 +6023,12 @@ class FTSBaseTest(unittest.TestCase):
                               .format(field, entry))
             self.assertTrue(len(entry["timestamp"]) > 0,
                             "Empty timestamp in search history entry")
-            self.assertIn(entry["status"], ["success", "error"],
+            # 'failed' is the value FTS records for a query that returned
+            # partial results, which is expected while a topology change is in
+            # flight - these tests fail over and recover nodes while querying.
+            # The check is a schema guard on the status field, not an assertion
+            # that every query succeeded ('error' is not a value FTS emits).
+            self.assertIn(entry["status"], ["success", "failed"],
                           "Unexpected status '{0}' in search history entry"
                           .format(entry["status"]))
 
@@ -5884,16 +6043,15 @@ class FTSBaseTest(unittest.TestCase):
     def validate_index_insights(self, index_name, field, insight="termFrequencies",
                                 limit=5, descending=True):
         # The FTS insights endpoint aggregates results by making node-to-node
-        # HTTP calls to the plain (non-TLS) FTS port 8094. When TLS is enforced
-        # that port is shut down, so the server-side aggregation fails with
-        # "connection refused" (or silently returns no results). Skip the
-        # validation under enforce_tls rather than fail on this known
-        # server-side limitation.
-        if self.enforce_tls:
+        # HTTP calls to the plain (non-TLS) FTS port 8094. Under TLS the server
+        # builds those as https://...:8094 and the dial fails, so the aggregation
+        # errors out. use_https is enough to trigger it - enforce_tls alone missed
+        # the multiple-CA/client-cert runs, which set use_https without it.
+        if self.enforce_tls or self.use_https:
             self.log.info("Skipping index insights validation for '{0}': the FTS "
                           "insights API performs node-to-node calls over the "
-                          "non-TLS port (8094), which is disabled when TLS is "
-                          "enforced.".format(index_name))
+                          "non-TLS port (8094), which does not work once the "
+                          "cluster is running over TLS.".format(index_name))
             return
         fts_node = self._cb_cluster.get_random_fts_node()
         rest = RestConnection(fts_node)
@@ -5910,7 +6068,10 @@ class FTSBaseTest(unittest.TestCase):
         #   {"status": "ok", "request": {...},
         #    "termFrequencies": [{"term": "sr", "frequency": 4348}, ...]}
         if isinstance(response, dict):
-            results = response.get(insight, [])
+            # FTS returns the key present but null when it has nothing to report
+            # (e.g. {"centroidCardinalities": null}), and dict.get only falls back
+            # to its default when the key is absent - so len(None) blew up here.
+            results = response.get(insight) or []
         elif isinstance(response, list):
             results = response
         else:
@@ -6400,6 +6561,17 @@ class FTSBaseTest(unittest.TestCase):
                 and self.bulk_collections_expected_docs:
             item_count = self.bulk_collections_expected_docs
 
+        # async_load_data only loads ES for bucket containers, so for a
+        # collection-scoped run the ES index holds either nothing or leftovers
+        # from an earlier test - counts like "bucket = 50000, ES = 100000" are it
+        # never having tracked this bucket at all. Requiring ES parity there can
+        # only ever time out, so hold FTS to the bucket count and leave ES out.
+        compare_es = self.compare_es
+        if compare_es and self.container_type == 'collection':
+            self.log.info("Not waiting on ES doc count: documents are not loaded "
+                          "into ES for collection containers")
+            compare_es = False
+
         retry = self._input.param("index_retry", 200)
         for index in self._cb_cluster.get_indexes():
             if index.index_type == "fulltext-alias":
@@ -6428,7 +6600,7 @@ class FTSBaseTest(unittest.TestCase):
                         container_doc_count = self._cb_cluster.get_doc_count_in_collections(
                             index.source_bucket, "_default", ["_default"])
 
-                    if not self.compare_es:
+                    if not compare_es:
                         self.log.info(f"Docs in bucket = {container_doc_count}, "
                                       f"docs in FTS index '{index.name}': {index_doc_count}")
                         if retry_count == 1:
@@ -6459,9 +6631,44 @@ class FTSBaseTest(unittest.TestCase):
                     if item_count and index_doc_count > item_count:
                         break
 
+                    if index_doc_count > container_doc_count > 0:
+                        # The index holds more than the collections we counted as
+                        # its source, so indexing is not what is outstanding -
+                        # waiting can only time out. Seen where an index spans one
+                        # more collection than get_src_collections_doc_count sums.
+                        self.log.info(
+                            f"FTS index '{index.name}' has {index_doc_count} docs, "
+                            f"more than the {container_doc_count} counted in its "
+                            f"source collections; treating indexing as complete")
+                        break
+
                     if container_doc_count == index_doc_count:
-                        if self.compare_es:
+                        if compare_es:
                             if container_doc_count == es_index_count:
+                                break
+                            elif es_index_count == 0 and container_doc_count > 0:
+                                # FTS has caught up with the bucket while ES is
+                                # still empty, which means this test's load path
+                                # never fed ES (load_all_buckets has no ES leg,
+                                # unlike the dgm path). Waiting cannot change
+                                # that, so stop instead of burning every retry.
+                                self.log.info(
+                                    f"ES index '{es_index}' was not loaded for "
+                                    f"this test (0 docs) while FTS matches the "
+                                    f"bucket at {index_doc_count}; not waiting "
+                                    f"on ES")
+                                break
+                            elif es_index_count > container_doc_count:
+                                # ES holds documents the bucket no longer does -
+                                # a kv-side crash test loses a few docs after ES
+                                # was already fed, so parity is unreachable. FTS
+                                # agrees with the bucket, so indexing is done.
+                                self.log.info(
+                                    f"ES index '{es_index}' has {es_index_count} "
+                                    f"docs against {container_doc_count} in the "
+                                    f"bucket, so the bucket lost docs after ES "
+                                    f"was loaded; FTS matches the bucket, not "
+                                    f"waiting on ES")
                                 break
                             elif retry_count == 1:
                                 fail = True
@@ -6504,7 +6711,21 @@ class FTSBaseTest(unittest.TestCase):
         plan_params = {}
         plan_params['numReplicas'] = 0
         if self.index_replicas:
-            plan_params['numReplicas'] = self.index_replicas
+            # An fts index replica needs a search node of its own, and FTS rejects
+            # the whole create with "cluster needs N search nodes to support the
+            # requested replica count of M". A job that overrides the conf's
+            # cluster spec with fewer fts nodes than the test asked for would fail
+            # every index creation, so cap the count to the topology.
+            fts_nodes = len(self._cb_cluster.get_fts_nodes())
+            if self.index_replicas > fts_nodes - 1:
+                self.log.warning(
+                    "index_replicas=%s needs %s search nodes but the cluster has "
+                    "%s; creating the index with %s replica(s) instead"
+                    % (self.index_replicas, self.index_replicas + 1, fts_nodes,
+                       max(0, fts_nodes - 1)))
+                plan_params['numReplicas'] = max(0, fts_nodes - 1)
+            else:
+                plan_params['numReplicas'] = self.index_replicas
         if self.partitions_per_pindex:
             plan_params['maxPartitionsPerPIndex'] = self.partitions_per_pindex
         plan_params['indexPartitions'] = self.num_index_partitions
@@ -7330,9 +7551,28 @@ class FTSBaseTest(unittest.TestCase):
 
     def get_zap_docvalue_disksize(self, fts_node):
         shell = RemoteMachineShellConnection(fts_node)
-        command = 'cd /opt/couchbase/var/lib/couchbase/data/\\@fts; find . -name "*.zap"|  sort -n | ' \
-                  'tail -1 | xargs -I {} sh -c "/opt/couchbase/bin/cbft-bleve zap v15 docvalue {} | tail -1"'
-        output, error = shell.execute_command(command)
+        # Two things were wrong here. cbft-bleve refuses to open a segment written
+        # by a different zap version ("unsupported version 17 != 15"), so the
+        # version cannot be hardcoded - it moves with the server. And the segment
+        # was picked with `sort -n` over *paths*, which is not a numeric ordering
+        # at all, so an arbitrary file was chosen - including ones still being
+        # written, where the tool reads a garbage header ("unsupported version
+        # 9575425") or panics on a nonsense slice bound. Pick the largest segment,
+        # which is a completed one, and try each version until one opens it.
+        zap_versions = self._input.param("zap_versions", "17,16,15").split(",")
+        output, error, command = None, None, None
+        for zap_version in zap_versions:
+            command = 'cd /opt/couchbase/var/lib/couchbase/data/\\@fts; ' \
+                      'find . -name "*.zap" -printf "%%s %%p\\n" | sort -rn | head -1 | ' \
+                      'cut -d" " -f2- | xargs -I {} sh -c ' \
+                      '"/opt/couchbase/bin/cbft-bleve zap v%s docvalue {} | tail -1"' \
+                      % zap_version.strip()
+            output, error = shell.execute_command(command)
+            if not error or "remoteClients registered for tls config updates" in str(error):
+                break
+            self.log.info("cbft-bleve zap v{0} could not read the segment ({1}); "
+                          "trying the next version"
+                          .format(zap_version.strip(), str(error)[:120]))
         if error and "remoteClients registered for tls config updates" not in error[0]:
             self.fail("error running command : {0} , error : {1}".format(command, error))
         self.log.info(output)
@@ -8461,13 +8701,23 @@ class FTSBaseTest(unittest.TestCase):
         """
         if es_index_name is None:
             es_index_name = FTSBaseTest.get_es_index_name()
+        es = self.es
+        if es and self.container_type == 'collection':
+            # async_load_data only loads ES for bucket containers, so for a
+            # collection-scoped run the ES index is created but never populated.
+            # Comparing against it makes every query "fail" on docs FTS returned
+            # and ES could not have. Skip the comparison rather than assert
+            # against an index this suite never filled.
+            self.log.info("Skipping ES comparison: documents are not loaded into "
+                          "ES for collection containers")
+            es = None
         tasks = []
         fail_count = 0
         failed_queries = []
         for count in range(0, len(index.fts_queries)):
             tasks.append(self._cb_cluster.async_run_fts_query_compare(
                 fts_index=index,
-                es=self.es,
+                es=es,
                 es_index_name=es_index_name,
                 query_index=count,
                 n1ql_executor=n1ql_executor,

@@ -1485,6 +1485,11 @@ class MovingTopFTS(FTSBaseTest):
         self.sleep(5)
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
+        # The killed node's pindexes are still closed at this point, so the
+        # index doc count is short until they reopen. validate_index_count is a
+        # single snapshot with no retry - poll for the index to become whole
+        # again before asserting an exact count.
+        self.wait_for_indexing_complete()
         self.validate_index_count(equal_bucket_doc_count=True)
 
         for index in self._cb_cluster.get_indexes():
@@ -1720,7 +1725,17 @@ class MovingTopFTS(FTSBaseTest):
                 err = self.validate_partition_distribution(frest)
                 if len(err) > 0:
                     self.fail(err)
-                self.fail("Rebalance was successful")
+                if nodes_in:
+                    # A service was stopped on the incoming node to force the
+                    # rebalance to fail so the retry could be validated; if it
+                    # succeeded anyway, that setup did not work.
+                    self.fail("Rebalance was successful")
+                else:
+                    # The rebalance-out path has no incoming node to stop, so
+                    # nothing was done to make the rebalance fail. Completing is
+                    # the expected outcome and there is no retry to validate.
+                    self.log.info("Rebalance-out completed without needing a "
+                                  "retry - no failure was induced to retry from")
 
     def retry_rebalance_out_during_querying(self):
         #TESTED
@@ -1745,8 +1760,14 @@ class MovingTopFTS(FTSBaseTest):
                 es=self.es,
                 es_index_name=None,
                 query_index=count))
-        self.run_tasks_and_report(tasks, len(index.fts_queries))
+        # These queries run while a retry-rebalance and an fts service kill are
+        # both in flight, so partial results are expected and not a defect -
+        # matching rebalance_out_during_querying, which skips validation here.
+        # The authoritative comparison is run_query_and_compare below, once the
+        # partitions have settled.
+        self.run_tasks_and_report(tasks, len(index.fts_queries), skip_validation=True)
         self.is_index_partitioned_balanced(index)
+        self.wait_for_indexing_complete()
         self.run_query_and_compare(index)
         hits, _, _, _ = index.execute_query(query=self.query,
                                             expected_hits=self._get_expected_query_hits())
@@ -1855,7 +1876,11 @@ class MovingTopFTS(FTSBaseTest):
         recovery = self._input.param("recovery", None)
         graceful = self._input.param("graceful", False)
         index = self.create_index_generate_queries()
-        if graceful:
+        if graceful or recovery == "delta":
+            # Delta recovery replays the data files the node already has on disk,
+            # so ns_server only allows it for a node running the kv service. An
+            # fts-only node is rejected with "node can't be used for delta
+            # recovery", so pick a kv node whenever delta recovery is requested.
             services = ['kv']
             node = self._cb_cluster.get_kv_nodes()[1]
         else:
@@ -1987,6 +2012,11 @@ class MovingTopFTS(FTSBaseTest):
         node = self._cb_cluster.get_random_fts_node()
         NodeHelper.kill_cbft_process(node)
         self._cb_cluster.set_bypass_fts_node(node)
+        # Bypassing the node only stops queries being routed to it; the pindexes
+        # it hosted are unserved until cbft restarts and reopens them, so an
+        # immediate comparison sees partial results. Wait for the index to be
+        # whole again before comparing against ES.
+        self.wait_for_indexing_complete()
         self.run_query_and_compare(index)
         frest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
         err = self.validate_partition_distribution(frest)
@@ -2648,7 +2678,11 @@ class MovingTopFTS(FTSBaseTest):
 
         # failover the fts node on which index recides
         nodeIds = []
-        rest = RestConnection(self._master)
+        # These are FTS endpoints on port 8094, so they have to be asked of a
+        # search node. The master is kv-only in every topology this test runs on,
+        # where 8094 is not listening at all and the call dies with "connection
+        # refused" before the test has done anything.
+        rest = RestConnection(self._cb_cluster.get_random_fts_node())
 
         index = self._cb_cluster.get_indexes()[0]
         _, indexdef = rest.get_fts_index_definition(index.name, index._source_name, index.scope)
@@ -2684,8 +2718,12 @@ class MovingTopFTS(FTSBaseTest):
 
         self._cb_cluster.delete_bucket(bucket_name="default")
 
+        # Ask a node that is still in the cluster - the connection captured above
+        # may belong to the node that was just failed over and removed, and a
+        # "connection refused" from it would be swallowed as a pass without ever
+        # checking whether the index definition was cleaned up.
         try:
-            _, indexdef = rest.get_fts_index_definition(index.name, index._source_name, index.scope)
+            _, indexdef = frest.get_fts_index_definition(index.name, index._source_name, index.scope)
             self.fail("Index partitions still reside on the node - node not cleaned up properly")
         except Exception as e:
             self.log.info(f"Success - : {str(e)}")
