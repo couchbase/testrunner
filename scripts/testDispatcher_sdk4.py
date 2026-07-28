@@ -1080,6 +1080,11 @@ def main():
                             # TAF::analytics and 8.1 or greater and EA is None
                             # Force to use this branch
                             branch_to_trigger = "master_jython"
+                        elif curr_job["component"] == "capella_fusion":
+                            # TAF::capella_fusion honors the slave configured
+                            # in the QE-Test-Suites DB row (e.g. aws) instead
+                            # of being forced onto deb12_jython_slave
+                            pass
                         elif curr_job["component"] == "fusion":
                             slave_to_use = "fusion_slave"
                             curr_job['target_jenkins'] = 'http://172.23.121.80'
