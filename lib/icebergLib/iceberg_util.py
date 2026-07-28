@@ -97,6 +97,27 @@ from pyspark.sql import SparkSession
 from typing import Any, List, Dict
 
 
+# Iceberg runtime jar sets keyed by the Spark line they must be paired with. VARIANT columns
+# (parse_json()/to_json(), format-version=3) only exist in Spark 4.0 + iceberg-spark-runtime-4.0 —
+# there is no way to get real Iceberg VARIANT support on the 3.5 stack used everywhere else.
+_ICEBERG_RUNTIME_PACKAGES = {
+    "3.5": (
+        "org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.6.1,"
+        "software.amazon.s3tables:s3-tables-catalog-for-iceberg-runtime:0.1.4,"
+        "software.amazon.awssdk:bundle:2.29.26,"
+        "software.amazon.awssdk:url-connection-client:2.29.26,"
+        "org.apache.iceberg:iceberg-gcp-bundle:1.6.1"
+    ),
+    "4.0": (
+        "org.apache.iceberg:iceberg-spark-runtime-4.0_2.13:1.10.1,"
+        "software.amazon.s3tables:s3-tables-catalog-for-iceberg-runtime:0.1.4,"
+        "software.amazon.awssdk:bundle:2.29.26,"
+        "software.amazon.awssdk:url-connection-client:2.29.26,"
+        "org.apache.iceberg:iceberg-gcp-bundle:1.10.1"
+    ),
+}
+
+
 class IcebergUtil:
     """
     Main utility class for Iceberg catalog operations with PySpark.
@@ -295,6 +316,48 @@ class IcebergUtil:
             writer.createOrReplace()
         print(f"Data successfully written to Iceberg Table via {catalog_type}!")
 
+    def create_iceberg_variant_table(self, catalog_type, data, variant_fields=("variant_col", "variant_array", "variant_object")):
+        """
+        Create an Iceberg table (format-version=3) with one or more genuine VARIANT columns.
+
+        Requires a Spark session created with create_spark_session(..., iceberg_runtime="4.0") —
+        parse_json()/VARIANT do not exist on the iceberg-spark-runtime-3.5 stack that
+        create_iceberg_table() uses.
+
+        `data` is a list of dicts shaped like create_iceberg_table()'s input, except every
+        field named in `variant_fields` must already be a JSON *string* (e.g. via
+        json.dumps(...)) rather than a native Python value. Different rows may encode
+        different underlying JSON types (string/number/bool/null/object/array) in the same
+        field — that heterogeneity is the entire point of a VARIANT column, and is exactly
+        what breaks create_iceberg_table()'s createDataFrame(), which requires one fixed
+        Spark type per column across all rows.
+        """
+        variant_fields = [f for f in variant_fields if data and f in data[0]]
+        non_variant_fields = [k for k in data[0].keys() if k not in variant_fields]
+
+        rows = [{k: doc[k] for k in non_variant_fields + variant_fields} for doc in data]
+        df = self.spark.createDataFrame(rows)
+
+        temp_view = f"tmp_variant_src_{self.state.table_name}"
+        df.createOrReplaceTempView(temp_view)
+
+        select_cols = list(non_variant_fields)
+        select_cols += [f"parse_json({f}) AS {f}" for f in variant_fields]
+        select_clause = ", ".join(select_cols)
+
+        table_path = f"{catalog_type}.{self.state.database_name}.{self.state.table_name}"
+        try:
+            self.spark.sql(f"DROP TABLE IF EXISTS {table_path}")
+        except Exception as e:
+            print(f"No existing table to drop or drop failed: {e}")
+
+        self.spark.sql(f"""
+            CREATE TABLE {table_path}
+            TBLPROPERTIES ('format-version'='3')
+            AS SELECT {select_clause} FROM {temp_view}
+        """)
+        print(f"Variant Iceberg table created at {table_path} (fields: {variant_fields})")
+
     def infer_spark_type(self, value: Any) -> DataType:
         """Infer Spark SQL type from a Python value."""
         if isinstance(value, bool):
@@ -364,8 +427,27 @@ class IcebergUtil:
         except Exception as e:
             print(f"Warning: Error clearing Py4J state: {e}")
 
-    def create_spark_session(self, catalog_type=None):
-        """Create a Spark session configured for the specified catalog type."""
+    def create_spark_session(self, catalog_type=None, iceberg_runtime="3.5"):
+        """
+        Create a Spark session configured for the specified catalog type.
+
+        iceberg_runtime: "3.5" (default, all existing tests) or "4.0" (required for
+        real Iceberg VARIANT columns via create_iceberg_variant_table()). "4.0" requires
+        the test process itself to be running under pyspark>=4.0 — PySpark's Python
+        API is tied to the JVM Spark version it drives, so a 3.5.x pyspark install can
+        never talk to a Spark-4.0-only feature like parse_json()/VARIANT no matter what
+        jars are on the classpath. Run variant tests from a separate venv
+        (pip install "pyspark>=4.0,<5.0") rather than the shared 3.5.x test venv.
+        """
+        if iceberg_runtime == "4.0":
+            import pyspark
+            if not pyspark.__version__.startswith("4."):
+                raise RuntimeError(
+                    f"iceberg_runtime='4.0' requires pyspark>=4.0 (found pyspark {pyspark.__version__}). "
+                    "Run variant tests from a venv with 'pip install \"pyspark>=4.0,<5.0\"' installed — "
+                    "the 3.5.x venv used for the other Iceberg catalog tests cannot drive Spark 4.0 features."
+                )
+
         # Aggressively stop any existing Spark session to ensure fresh configuration
         self._stop_spark_session_safely()
 
@@ -393,7 +475,7 @@ class IcebergUtil:
         
         for attempt in range(max_retries):
             try:
-                return self._create_spark_session_internal(catalog_type)
+                return self._create_spark_session_internal(catalog_type, iceberg_runtime=iceberg_runtime)
             except ConnectionRefusedError as e:
                 last_error = e
                 print(f"ConnectionRefusedError on attempt {attempt + 1}/{max_retries}: {e}")
@@ -421,7 +503,7 @@ class IcebergUtil:
         
         raise last_error or Exception("Failed to create Spark session after retries")
     
-    def _create_spark_session_internal(self, catalog_type=None):
+    def _create_spark_session_internal(self, catalog_type=None, iceberg_runtime="3.5"):
         """Internal method to actually create the Spark session."""
         # Force clear any cached session so getOrCreate() always creates a fresh one
         try:
@@ -455,14 +537,7 @@ class IcebergUtil:
             .config("spark.memory.fraction", "0.8")
             .config("spark.memory.storageFraction", "0.3")
             .config("spark.task.maxFailures", "1")
-            .config(
-                "spark.jars.packages",
-                "org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.6.1,"
-                "software.amazon.s3tables:s3-tables-catalog-for-iceberg-runtime:0.1.4,"
-                "software.amazon.awssdk:bundle:2.29.26,"
-                "software.amazon.awssdk:url-connection-client:2.29.26,"
-                "org.apache.iceberg:iceberg-gcp-bundle:1.6.1",
-            )
+            .config("spark.jars.packages", _ICEBERG_RUNTIME_PACKAGES[iceberg_runtime])
             .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions")
             .config(f"spark.sql.catalog.{catalog_type}", "org.apache.iceberg.spark.SparkCatalog")
         )
