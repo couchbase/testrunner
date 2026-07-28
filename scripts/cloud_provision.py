@@ -2,6 +2,7 @@ from argparse import ArgumentParser
 # NOTE: aws_get_servers() has a parameter named `os`, which would shadow the os
 # module inside it — so import environ directly to read the PoC cost-tag env vars.
 from os import environ
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import sys, json, subprocess
 import boto3
 import paramiko
@@ -1122,7 +1123,7 @@ def aws_get_servers(name, count, os, type, ssh_key_path, architecture=None, gpu_
     log.info("EC2 CPU Instances : " + str(cpu_ips))
     if gpu_ips:
         log.info("EC2 GPU Instances : " + str(gpu_ips))
-    for ip in cpu_ips:
+    def _provision_cpu_host(ip):
         if type == "elastic-fts":
             # The ES node AMI (packer/deb12_es.pkr.hcl) has Elasticsearch 8.17 + root
             # SSH baked in and ES enabled on boot (mirrors the on-prem ES reference),
@@ -1130,7 +1131,7 @@ def aws_get_servers(name, count, os, type, ssh_key_path, architecture=None, gpu_
             # (which fetched a dead ES 1.7.3 tarball) -- just confirm root is reachable.
             if not check_root_login(ip):
                 log.error("root login failed on pre-baked ES node {}".format(ip))
-            continue
+            return
         if os == "debian":
             # The deb12 CB node AMI (packer/deb12_cbnode.pkr.hcl) already has root SSH
             # baked in, so skip post_provisioner's runtime sshd-enablement surgery --
@@ -1154,9 +1155,20 @@ def aws_get_servers(name, count, os, type, ssh_key_path, architecture=None, gpu_
 
     # GPU nodes run on the Ubuntu 22 NVIDIA DL AMI: same apt-based post-provision
     # as ubuntu22, no SUSE/Debian13/nonroot variants.
-    for ip in gpu_ips:
+    def _provision_gpu_host(ip):
         post_provisioner(ip, gpu_ssh_username, ssh_key_path)
         install_zip_unzip(ip)
+
+    # Per-host provisioning is blocking SSH I/O with no cross-host dependency, so
+    # fan it out across threads instead of doing one host at a time. Ordering of
+    # commands *within* a host is unchanged; only the across-host serialization
+    # is removed. The pool waits for every submitted host before propagating any
+    # exception, so one bad host doesn't stop the rest from being provisioned.
+    with ThreadPoolExecutor(max_workers=max(len(cpu_ips) + len(gpu_ips), 1)) as executor:
+        futures = [executor.submit(_provision_cpu_host, ip) for ip in cpu_ips]
+        futures += [executor.submit(_provision_gpu_host, ip) for ip in gpu_ips]
+        for future in as_completed(futures):
+            future.result()
 
     # Rebooting due to CBQE-8153: an un-diagnosed issue where ports weren't reachable
     # on a fresh launch but were after a reboot. It is very likely a side-effect of
