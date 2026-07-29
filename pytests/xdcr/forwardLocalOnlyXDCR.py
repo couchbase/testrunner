@@ -24,6 +24,7 @@ import json
 import time
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import timedelta
 
 import couchbase.subdocument as SD
 from couchbase_helper.documentgenerator import BlobGenerator
@@ -103,6 +104,7 @@ class ForwardLocalOnlyXDCRBase(XDCRNewBaseTest):
     _SETUP_RETRY_BACKOFF = 10
     _BULK_BATCH_SIZE = 1000
     _BULK_THREADS = 8
+    _FLO_PROBE_DEFAULT = 200
 
     def setUp(self):
         NodeHelper.raise_fd_soft_limit()
@@ -133,6 +135,12 @@ class ForwardLocalOnlyXDCRBase(XDCRNewBaseTest):
         if last_err is not None:
             raise last_err
         self._sdk_client_cache = {}
+        # Clusters where a test flipped the GLOBAL
+        # disableHlvBasedShortCircuit setting. Global
+        # /settings/replications params survive bucket recreation, so
+        # tearDown must reset them or the residue silently changes the
+        # preconditions of whatever runs next on the same cluster.
+        self._shortcircuit_dirty = {}
         self.src_cluster = self.get_cb_cluster_by_name("C1")
         self.src_master = self.src_cluster.get_master_node()
         self.dest_cluster = self.get_cb_cluster_by_name("C2")
@@ -202,10 +210,39 @@ class ForwardLocalOnlyXDCRBase(XDCRNewBaseTest):
                 "{0} tearDown FLO reset raised (non-fatal): {1}".format(
                     self._tag(), e))
 
+        # Reset the cluster-global disableHlvBasedShortCircuit on any
+        # cluster this test touched. Unlike per-replication settings
+        # (recreated with the buckets), the global default persists
+        # across tests and would leak into the next test's premises.
+        for cname, cluster in list(
+                (getattr(self, "_shortcircuit_dirty", {}) or {}).items()):
+            try:
+                self._set_and_verify_global_xdcr_param(
+                    cluster, "disableHlvBasedShortCircuit", "false",
+                    settle=0, assert_match=False)
+                self.log.info(
+                    "{0} tearDown: reset disableHlvBasedShortCircuit="
+                    "false on {1}".format(self._tag(), cname))
+            except Exception as e:
+                self.log.warning(
+                    "{0} tearDown: could not reset "
+                    "disableHlvBasedShortCircuit on {1}: {2}".format(
+                        self._tag(), cname, e))
+        if hasattr(self, "_shortcircuit_dirty"):
+            self._shortcircuit_dirty.clear()
+
         for cluster, bucket, key in getattr(self, "_sentinel_docs", []):
             try:
                 client = self._borrow_sdk_client(cluster, bucket.name)
-                client.remove(key)
+                # Direct collection remove: the sdk_client3 `remove`
+                # wrapper retries recursively on ANY CouchbaseException,
+                # so an already-absent sentinel burns ~100 futile KV
+                # ops before RecursionError. Absent == already clean.
+                try:
+                    client.default_collection.remove(key)
+                except Exception as e:
+                    if not self._is_absent_exception(e):
+                        raise
             except Exception as e:
                 self.log.warning(
                     "{0} tearDown: sentinel remove failed for "
@@ -622,6 +659,181 @@ class ForwardLocalOnlyXDCRBase(XDCRNewBaseTest):
                 self._tag(), cluster.get_name(),
                 SKIPPED_METRIC, total, series_count))
         return total
+
+    def _wait_for_skip_delta(self, cluster, baseline, min_delta,
+                              timeout=None, poll_interval=15,
+                              max_consecutive_scrape_errors=3):
+        """Poll the cluster-wide skipped counter until it advances by
+        at least `min_delta` over `baseline`, or timeout elapses.
+        Returns the final observed delta; caller asserts.
+
+        Scrape-error semantics: the FIRST read failing propagates
+        `MetricsScrapeError` (no delta was ever observed). Once a
+        read has succeeded, later scrape blips are logged and the
+        poll continues with the last good value -- but only for up
+        to `max_consecutive_scrape_errors` in a row; a persistent
+        outage re-raises instead of silently returning a stale
+        sub-threshold delta at the deadline (which would read as a
+        product regression rather than a stats outage).
+
+        A delta that goes negative (counter reset, or the series
+        dropping out of the query window) also re-raises: the
+        baseline is meaningless once that happens, so it must not be
+        asserted against as a product signal."""
+        timeout = timeout or self.metric_settle_timeout
+        deadline = time.time() + timeout
+        last_delta = None
+        consecutive_errors = 0
+        while True:
+            try:
+                total = self._get_skipped_total(cluster)
+            except MetricsScrapeError as e:
+                consecutive_errors += 1
+                if last_delta is None or \
+                        consecutive_errors >= max_consecutive_scrape_errors:
+                    raise
+                self.log.warning(
+                    "{0} skip-counter scrape blip on {1} (keeping "
+                    "last delta {2}): {3}".format(
+                        self._tag(), cluster.get_name(),
+                        last_delta, e))
+            else:
+                consecutive_errors = 0
+                delta = total - baseline
+                if delta < 0:
+                    raise MetricsScrapeError(
+                        "{0} on {1} went BACKWARDS vs baseline ({2} "
+                        "-> {3}); counter reset or series lost, "
+                        "baseline no longer meaningful.".format(
+                            SKIPPED_METRIC, cluster.get_name(),
+                            baseline, total))
+                last_delta = delta
+            if last_delta is not None and last_delta >= min_delta:
+                self.log.info(
+                    "{0} skip delta on {1} reached {2} (>= {3})"
+                    .format(self._tag(), cluster.get_name(),
+                            last_delta, min_delta))
+                return last_delta
+            if time.time() >= deadline:
+                self.log.warning(
+                    "{0} skip delta on {1} only reached {2} after "
+                    "{3}s (wanted >= {4})".format(
+                        self._tag(), cluster.get_name(), last_delta,
+                        timeout, min_delta))
+                return last_delta if last_delta is not None else 0
+            time.sleep(poll_interval)
+
+    def _assert_flo_enforcement_active(self, writer_cluster=None,
+                                        observer_cluster=None,
+                                        probe_count=None, label=""):
+        """Post-scenario guard: prove FLO enforcement is ACTIVE and
+        not a silent no-op. Doc-count convergence alone cannot catch
+        a disabled skip path under symmetric bidirectional load
+        (echoes do not change curr_items; missing skips do not
+        change counts), so scenario tests append this probe.
+
+        Mechanism -- verified against goxdcr sendOrNotBasedOnHLV:
+        the forwardLocalOnly check takes precedence over
+        DisableHlvBasedShortCircuit, so NO global-setting changes
+        are needed for the skip counter to advance:
+          1. Drain, then baseline the observer's
+             `xdcr_non_local_mutations_skipped_total`.
+          2. Write `probe_count` fresh docs on `writer_cluster`.
+             These are local Type-1 mutations and MUST replicate.
+          3. Drain; assert a probe doc landed on the observer
+             (forward path still alive after the scenario).
+          4. The observer's outbound sees the probe docs as
+             foreign-HLV and must SKIP each one: poll until the
+             counter delta reaches `probe_count`.
+
+        Requires FLO=true on the observer's outbound (true at the
+        end of every scenario test that calls this).
+
+        Infra tolerance: a MetricsScrapeError degrades to a warning
+        and returns None without failing -- the scenario's own
+        assertions stand; only the extra no-op detection is lost. A
+        successfully-read flat counter IS a product signal and
+        fails the test."""
+        writer = writer_cluster or self.src_cluster
+        observer = observer_cluster or self.dest_cluster
+        if probe_count is None:
+            probe_count = self._input.param(
+                "flo_probe_count", self._FLO_PROBE_DEFAULT)
+        label = label or "post-scenario"
+        tag = self._tag()
+        stem = (getattr(self, "_testMethodName", "") or "flo")
+        prefix = "flo-vrf-{0}".format(stem[-40:])
+
+        self._wait_for_replication_drain()
+        try:
+            baseline = self._get_skipped_total(observer)
+        except MetricsScrapeError as e:
+            self.log.warning(
+                "{0} FLO-enforcement probe SKIPPED ({1}): baseline "
+                "scrape failed on {2}: {3}".format(
+                    tag, label, observer.get_name(), e))
+            return None
+
+        bucket = writer.get_buckets()[0]
+        sent, total = self._sdk_upsert_docs(
+            writer, bucket, prefix, probe_count)
+        if sent < total:
+            # Probe writes failing is a post-scenario SDK/infra
+            # problem, not FLO behavior -- don't let the presence
+            # assertion below re-brand it as a product failure.
+            self.log.warning(
+                "{0} FLO-enforcement probe SKIPPED ({1}): only "
+                "{2}/{3} probe writes succeeded on {4}; TEST INFRA, "
+                "not asserting".format(
+                    tag, label, sent, total, writer.get_name()))
+            return None
+        self._wait_for_replication_drain()
+
+        probe_key = "{0}-0".format(prefix)
+        res = self._wait_for_doc_present(
+            observer, bucket, probe_key,
+            timeout=self.replication_drain_timeout,
+            poll_interval=5)
+        self.assertIsNotNone(
+            res,
+            "{0} FLO-enforcement probe ({1}): local probe doc {2} "
+            "did not replicate {3}->{4} (all {5} probe writes "
+            "succeeded). Local mutations MUST replicate under "
+            "forwardLocalOnly, so either the forward path broke "
+            "during this scenario (PRODUCT) or reads on {4} are "
+            "persistently erroring (TEST INFRA -- check for SDK "
+            "errors above).".format(
+                tag, label, probe_key, writer.get_name(),
+                observer.get_name(), total))
+
+        try:
+            delta = self._wait_for_skip_delta(
+                observer, baseline, probe_count)
+        except MetricsScrapeError as e:
+            self.log.warning(
+                "{0} FLO-enforcement probe SKIPPED ({1}): counter "
+                "scrape failed on {2}: {3}".format(
+                    tag, label, observer.get_name(), e))
+            return None
+        self.log.info(
+            "{0} FLO-enforcement probe ({1}): {2} skip delta={3} "
+            "(expected >= {4})".format(
+                tag, label, observer.get_name(), delta, probe_count))
+        self.assertGreaterEqual(
+            delta, probe_count,
+            "{0} PRODUCT BUG ({1}): forwardLocalOnly enforcement is "
+            "INACTIVE after this scenario. {2} probe docs written "
+            "on {3} replicated to {4} as foreign-HLV mutations; "
+            "{4}'s outbound has FLO=true and must skip each one, "
+            "advancing {5} by >= {2}; observed delta={6}. A zero "
+            "delta means the skip path never ran (FLO no-op); a "
+            "partial delta means some pipelines are not enforcing "
+            "(e.g. a pipeline restarted without the setting). "
+            "Cross-check nonLocalMutationsSkipped= in the xmem "
+            "state dumps in {4}'s goxdcr.log before filing.".format(
+                tag, label, probe_count, writer.get_name(),
+                observer.get_name(), SKIPPED_METRIC, delta))
+        return delta
     def _borrow_sdk_client(self, cluster, bucket_name):
         """Return a cached SDK client for (cluster, bucket). Callers
         MUST NOT call .close() on the returned client; tearDown owns
@@ -732,6 +944,7 @@ class ForwardLocalOnlyXDCRBase(XDCRNewBaseTest):
             "{5:.1f}s".format(
                 self._tag(), sent, total,
                 cluster.get_name(), bucket.name, time.time() - t0))
+        return sent, total
 
     def _sdk_update_docs(self, cluster, bucket, key_prefix, count, start=0):
         """Force a Type-1 mutation on existing docs by upserting a new
@@ -813,14 +1026,225 @@ class ForwardLocalOnlyXDCRBase(XDCRNewBaseTest):
             "{5:.1f}s".format(
                 self._tag(), ok, count,
                 cluster.get_name(), bucket.name, time.time() - t0))
+
+    def _sdk_delete_docs(self, cluster, bucket, key_prefix, count,
+                          start=0, scope=None, collection=None):
+        """Bulk SDK delete of `<prefix>-<i>` docs. A local delete is
+        a Type-1 mutation (tombstone CAS bump past cvCas).
+
+        Reaches through to the collection object directly: the
+        sdk_client3 `remove` wrapper retries recursively on ANY
+        CouchbaseException, which infinite-loops on persistent
+        errors. Doc-not-found is reported separately from an actual
+        delete -- both leave the key absent, but a caller relying on
+        this to have CREATED a tombstone (rather than merely
+        confirming absence) needs to tell the two apart. Returns
+        (removed_count, already_absent_count, errors)."""
+        client = self._borrow_sdk_client(cluster, bucket.name)
+        if scope or collection:
+            client.collection_connect(scope, collection)
+            coll = client.collection
+        else:
+            coll = client.default_collection
+        thread_count = self._input.param(
+            "bulk_threads", self._BULK_THREADS)
+        self.log.info(
+            "{0} SDK delete: cluster={1} bucket={2} prefix={3} "
+            "range=[{4},{5})".format(
+                self._tag(), cluster.get_name(), bucket.name,
+                key_prefix, start, start + count))
+        t0 = time.time()
+
+        def _remove_one(i):
+            key = "{0}-{1}".format(key_prefix, i)
+            try:
+                coll.remove(key)
+                return "removed", None
+            except Exception as e:
+                if self._is_absent_exception(e):
+                    return "absent", None
+                return None, "{0}: {1}".format(key, e)
+
+        removed = 0
+        already_absent = 0
+        errors = []
+        with ThreadPoolExecutor(max_workers=thread_count) as pool:
+            futures = [pool.submit(_remove_one, i)
+                       for i in range(start, start + count)]
+            for fut in as_completed(futures):
+                outcome, err = fut.result()
+                if outcome == "removed":
+                    removed += 1
+                elif outcome == "absent":
+                    already_absent += 1
+                else:
+                    errors.append(err)
+        if errors:
+            self.log.warning(
+                "{0} SDK delete had {1} errors (first 3): {2}".format(
+                    self._tag(), len(errors), errors[:3]))
+        self.log.info(
+            "{0} SDK delete complete: {1} removed, {2} already "
+            "absent, {3} errors, of {4} on {5}/{6} in {7:.1f}s".format(
+                self._tag(), removed, already_absent, len(errors),
+                count, cluster.get_name(), bucket.name,
+                time.time() - t0))
+        return removed, already_absent, errors
+
+    def _sdk_upsert_docs_with_ttl(self, cluster, bucket, key_prefix,
+                                   count, ttl_seconds, start=0):
+        """Bulk SDK upsert with a per-doc TTL. Reaches through to the
+        collection object; passes expiry as a timedelta (SDK 4.x
+        kwarg) with a TypeError fallback to the legacy `ttl=` form.
+        Returns (upserted_count, errors)."""
+        client = self._borrow_sdk_client(cluster, bucket.name)
+        coll = client.default_collection
+        thread_count = self._input.param(
+            "bulk_threads", self._BULK_THREADS)
+        self.log.info(
+            "{0} SDK upsert TTL={1}s: cluster={2} bucket={3} "
+            "prefix={4} range=[{5},{6})".format(
+                self._tag(), ttl_seconds, cluster.get_name(),
+                bucket.name, key_prefix, start, start + count))
+        t0 = time.time()
+
+        def _upsert_one(i):
+            key = "{0}-{1}".format(key_prefix, i)
+            value = {"idx": i, "src": cluster.get_name(),
+                     "ttl": ttl_seconds}
+            try:
+                try:
+                    coll.upsert(
+                        key, value,
+                        expiry=timedelta(seconds=ttl_seconds))
+                except TypeError:
+                    coll.upsert(key, value, ttl=ttl_seconds)
+                return True, None
+            except Exception as e:
+                return False, "{0}: {1}".format(key, e)
+
+        upserted = 0
+        errors = []
+        with ThreadPoolExecutor(max_workers=thread_count) as pool:
+            futures = [pool.submit(_upsert_one, i)
+                       for i in range(start, start + count)]
+            for fut in as_completed(futures):
+                ok, err = fut.result()
+                if ok:
+                    upserted += 1
+                else:
+                    errors.append(err)
+        if errors:
+            self.log.warning(
+                "{0} SDK TTL upsert had {1} errors (first 3): "
+                "{2}".format(self._tag(), len(errors), errors[:3]))
+        self.log.info(
+            "{0} SDK TTL upsert complete: {1}/{2} docs on {3}/{4} "
+            "in {5:.1f}s".format(
+                self._tag(), upserted, count, cluster.get_name(),
+                bucket.name, time.time() - t0))
+        return upserted, errors
+
+    def _wait_for_doc_absent(self, cluster, bucket, key, timeout=None,
+                              poll_interval=5, scope=None,
+                              collection=None):
+        """Poll until a GET for `key` returns None (deleted or
+        expired). Returns True when absent, False if still present
+        at the deadline. The GET itself triggers KV lazy expiry for
+        past-TTL docs, so this is also the deterministic way to
+        force expiry conversion without touching exp_pager_stime.
+
+        Transient non-DNF SDK errors (timeouts, brief connection
+        blips) are logged and retried within the deadline instead
+        of erroring the test -- a single blip must not nuke an
+        absence poll. A key that never reads cleanly returns False
+        (NOT absent), so absence assertions cannot pass on the back
+        of read errors."""
+        timeout = timeout or self.replication_drain_timeout
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            try:
+                res = self._sdk_get_raw(
+                    cluster, bucket, key,
+                    scope=scope, collection=collection)
+            except Exception as e:
+                self.log.warning(
+                    "{0} absent-poll GET error on {1}/{2}/{3} "
+                    "(retrying until deadline): {4}".format(
+                        self._tag(), cluster.get_name(),
+                        bucket.name, key, e))
+                time.sleep(poll_interval)
+                continue
+            if res is None:
+                return True
+            time.sleep(poll_interval)
+        return False
+
+    def _count_docs_present(self, cluster, bucket, key_prefix, count,
+                             start=0, scope=None, collection=None):
+        """Count how many `<prefix>-<i>` docs currently GET-resolve
+        on `cluster`. Each GET on a past-TTL doc also forces its
+        lazy expiry, so a sweep doubles as an expiry trigger.
+
+        Transient non-DNF SDK errors get one bounded retry; a key
+        that still won't read is counted as PRESENT (conservative:
+        absence assertions can't pass on the back of read errors)
+        and logged. Callers that poll in a loop self-heal transient
+        blips on the next sweep."""
+        present = 0
+        read_errors = 0
+        last_err = None
+        for i in range(start, start + count):
+            key = "{0}-{1}".format(key_prefix, i)
+            res = None
+            got = False
+            for attempt in (1, 2):
+                try:
+                    res = self._sdk_get_raw(
+                        cluster, bucket, key,
+                        scope=scope, collection=collection)
+                    got = True
+                    break
+                except Exception as e:
+                    last_err = e
+                    if attempt == 1:
+                        time.sleep(2)
+            if not got:
+                read_errors += 1
+                present += 1
+                continue
+            if res is not None:
+                present += 1
+        if read_errors:
+            self.log.warning(
+                "{0} present-sweep on {1}/{2} prefix={3}: {4}/{5} "
+                "keys unreadable after retry (counted as PRESENT); "
+                "last error: {6}".format(
+                    self._tag(), cluster.get_name(), bucket.name,
+                    key_prefix, read_errors, count, last_err))
+        return present
     def _wait_for_replication_drain(self, timeout=None):
-        """Block until outbound mutations on every cluster reach 0."""
+        """Block until outbound mutations on every cluster reach 0.
+
+        `wait_for_outbound_mutations` returns False on timeout
+        rather than raising; keep that behavior (the stable suite
+        depends on it) but log LOUDLY so a strict assertion that
+        fails right after an un-drained pipeline is triaged as
+        TEST INFRA, not product."""
         timeout = timeout or self.replication_drain_timeout
         for cluster in self.get_cb_clusters():
             self.log.info(
                 "Waiting up to {0}s for outbound mutations to drain on {1}"
                 .format(timeout, cluster.get_name()))
-            cluster.wait_for_outbound_mutations(timeout=timeout)
+            drained = cluster.wait_for_outbound_mutations(
+                timeout=timeout)
+            if drained is False:
+                self.log.warning(
+                    "{0} DRAIN TIMEOUT: outbound mutations on {1} "
+                    "did NOT reach 0 within {2}s. Any strict "
+                    "assertion failing after this line is a TEST "
+                    "INFRA suspect first.".format(
+                        self._tag(), cluster.get_name(), timeout))
 
     def _assert_doc_count_synced(self, timeout=None):
         """For each bucket, assert curr_items matches between every pair
@@ -854,7 +1278,14 @@ class ForwardLocalOnlyXDCRBase(XDCRNewBaseTest):
     def _set_disable_hlv_short_circuit(self, cluster, value):
         """Set the global xdcr setting disableHlvBasedShortCircuit on a
         cluster. Verifies persistence via readback. Propagates any
-        REST error; caller is expected to fail or skip explicitly."""
+        REST error; caller is expected to fail or skip explicitly.
+
+        The cluster is recorded as dirty so tearDown resets the
+        global back to false -- it is not per-bucket state and would
+        otherwise leak into subsequent tests."""
+        if not hasattr(self, "_shortcircuit_dirty"):
+            self._shortcircuit_dirty = {}
+        self._shortcircuit_dirty[cluster.get_name()] = cluster
         self._set_and_verify_global_xdcr_param(
             cluster, "disableHlvBasedShortCircuit",
             str(value).lower(),
@@ -878,6 +1309,73 @@ class ForwardLocalOnlyXDCRBase(XDCRNewBaseTest):
         if not status:
             raise Exception(
                 "Failed to set filterExpression: {0}".format(content))
+
+    def _remote_ref_name_to_peer(self, cluster, peer_cluster):
+        """Name of the remote-cluster reference on `cluster` whose
+        destination is `peer_cluster` -- the `toCluster` value
+        required by controller/createReplication."""
+        for ref in cluster.get_remote_clusters():
+            try:
+                if ref.get_dest_cluster() is peer_cluster:
+                    return ref.get_name()
+            except Exception as e:
+                self.log.warning(
+                    "{0} remote-ref inspect raised on {1}: {2}".format(
+                        self._tag(), cluster.get_name(), e))
+        self.fail(
+            "{0} no remote-cluster ref on {1} targets {2}; cannot "
+            "create replications by ref name".format(
+                self._tag(), cluster.get_name(),
+                peer_cluster.get_name()))
+
+    def _cancel_replications_to_peer(self, cluster, peer_cluster):
+        """Cancel (delete) every replication on `cluster` targeting
+        `peer_cluster` via its cancelURI. Returns the number
+        cancelled. Recreating the same bucket pair later yields the
+        SAME replication id (<targetUuid>/<src>/<dst>), so base
+        teardown's cached replication objects stay valid."""
+        rest = RestConnection(cluster.get_master_node())
+        cancelled = 0
+        for repl, _src in self._replications_to_peer(
+                cluster, peer_cluster):
+            uri = repl.get("cancelURI")
+            if not uri:
+                continue
+            self.log.info(
+                "{0} cancelling replication {1} on {2}".format(
+                    self._tag(), repl.get("id"), cluster.get_name()))
+            rest.stop_replication(uri)
+            cancelled += 1
+        return cancelled
+
+    def _create_replication_raw(self, cluster, peer_cluster,
+                                 from_bucket, to_bucket=None,
+                                 xdcr_params=None):
+        """POST controller/createReplication directly and return
+        (ok, content). No retries and no exception on rejection --
+        the creation-time validation tests need the raw 400 body to
+        match product error messages, and the rest_client helper
+        both retries and raises."""
+        ref_name = self._remote_ref_name_to_peer(cluster, peer_cluster)
+        rest = RestConnection(cluster.get_master_node())
+        api = rest.baseUrl + "controller/createReplication"
+        params = {
+            "replicationType": "continuous",
+            "fromBucket": from_bucket,
+            "toBucket": to_bucket or from_bucket,
+            "toCluster": ref_name,
+            "type": "xmem",
+        }
+        params.update(xdcr_params or {})
+        self.log.info(
+            "{0} createReplication on {1}: {2}".format(
+                self._tag(), cluster.get_name(), params))
+        status, content, _ = rest._http_request(
+            api, "POST", urllib.parse.urlencode(params))
+        self.log.info(
+            "{0} createReplication result on {1}: ok={2} body={3}"
+            .format(self._tag(), cluster.get_name(), status, content))
+        return status, content
     def _node_version(self, server):
         return self.node_version(server)
 
@@ -2856,6 +3354,7 @@ class ForwardLocalOnlyXDCRTests(ForwardLocalOnlyXDCRBase):
             prev_checkpoints = curr_checkpoints
 
         self._assert_doc_count_synced()
+        self._assert_flo_enforcement_active(label="post-pause-resume")
 
     def test_forward_local_only_with_collections_migration(self):
         """forwardLocalOnly with collectionsMigrationMode=true and
@@ -2981,6 +3480,7 @@ class ForwardLocalOnlyXDCRTests(ForwardLocalOnlyXDCRBase):
 
         self._wait_for_replication_drain()
         self._assert_doc_count_synced()
+        self._assert_flo_enforcement_active(label="priority+nwusage")
 
     def test_forward_local_only_bucket_storage_durability(self):
         """forwardLocalOnly across the bucket-storage / durability /
@@ -3054,6 +3554,7 @@ class ForwardLocalOnlyXDCRTests(ForwardLocalOnlyXDCRBase):
 
         self._wait_for_replication_drain()
         self._assert_doc_count_synced()
+        self._assert_flo_enforcement_active(label="storage/durability")
 
     def test_forward_local_only_no_hlv_docs_replicate_local(self):
         """Per spec (design CALLOUT): mutations *without* an HLV qualify
@@ -3193,6 +3694,9 @@ class ForwardLocalOnlyXDCRTests(ForwardLocalOnlyXDCRBase):
 
         self._wait_for_replication_drain()
         self._assert_doc_count_synced()
+        # Probe while encryption is still ON -- the point is FLO
+        # enforcement over the TLS transport, not after the revert.
+        self._assert_flo_enforcement_active(label="full-encryption")
 
         self.log.info("Reverting tls level to control to leave cluster clean")
         for cluster in self.get_cb_clusters():
@@ -3245,6 +3749,10 @@ class ForwardLocalOnlyXDCRTests(ForwardLocalOnlyXDCRBase):
                 self.src_cluster, bucket, "flo-rb-out", sdk_count)
         self._wait_for_replication_drain()
         self._assert_doc_count_synced()
+        # Rebalance restarts pipelines on new/remaining nodes -- the
+        # exact spot where a lost FLO setting would go unnoticed by
+        # doc-count convergence alone.
+        self._assert_flo_enforcement_active(label="post-rebalance")
 
     def test_forward_local_only_failover_recovery(self):
         """Failover a non-master node on src cluster, run mutations
@@ -3288,6 +3796,7 @@ class ForwardLocalOnlyXDCRTests(ForwardLocalOnlyXDCRBase):
 
         self._wait_for_replication_drain()
         self._assert_doc_count_synced()
+        self._assert_flo_enforcement_active(label="post-failover")
 
     # ------------------------------------------------------------------
     # Variable vbucket mode
@@ -3328,6 +3837,7 @@ class ForwardLocalOnlyXDCRTests(ForwardLocalOnlyXDCRBase):
 
         self._wait_for_replication_drain()
         self._assert_doc_count_synced()
+        self._assert_flo_enforcement_active(label="variable-vbucket")
 
     def test_forward_local_only_remote_then_local_mutation(self):
         """A doc lands on B via XDCR (CAS==cvCAS, HLV.src=A on B).
@@ -3568,6 +4078,9 @@ class ForwardLocalOnlyXDCRTests(ForwardLocalOnlyXDCRBase):
                 self.src_cluster, bucket, "flo-recover", sdk_count)
         self._wait_for_replication_drain()
         self._assert_doc_count_synced()
+        # Setting persistence (verified above) is not enforcement:
+        # prove the restarted goxdcr actually skips again.
+        self._assert_flo_enforcement_active(label="post-process-kill")
 
     def test_forward_local_only_many_replications(self):
         """forwardLocalOnly applied to a cluster with many bucket pairs
@@ -3601,6 +4114,9 @@ class ForwardLocalOnlyXDCRTests(ForwardLocalOnlyXDCRBase):
 
         self._wait_for_replication_drain()
         self._assert_doc_count_synced()
+        # Cluster-wide counter covers all bucket pairs; a probe via
+        # the first bucket proves the skip path is live.
+        self._assert_flo_enforcement_active(label="many-replications")
 
     def test_forward_local_only_pv_not_local_after_overwrite(self):
         """Design open-item resolved: CV.src in PV is NOT considered
@@ -4274,6 +4790,754 @@ class ForwardLocalOnlyXDCRTests(ForwardLocalOnlyXDCRBase):
             "(failed reads={3})".format(
                 self._tag(), changed, sdk_count, failed))
 
+    def test_forward_local_only_delete_tombstone_semantics(self):
+        """Deletes under forwardLocalOnly. Verified against goxdcr
+        source (sendOrNotBasedOnHLV -> CRMetadata.IsLocalMutation):
+        deletions flow through the SAME local/non-local
+        classification as sets -- tombstones keep the `_vv` system
+        xattr, so the HLV is available to the outbound pipeline.
+
+        Phase 1 -- A deletes its own docs:
+          * The tombstone is a local Type-1 mutation on A
+            (CAS > cvCAS): A's outbound under FLO=true MUST
+            replicate it; the docs disappear on B.
+          * On B those tombstones carry HLV.src=A with CAS == cvCAS
+            (foreign): B's outbound under FLO=true must SKIP each
+            one and advance the skip counter by >= K.
+          * No resurrection: the deleted keys stay absent on A
+            across an echo window (an echo would recreate them).
+
+        Phase 2 -- B locally deletes A-originated docs:
+          * B's delete of a replicated doc bumps CAS past cvCAS ->
+            local Type-1 on B -> MUST replicate B->A; the docs
+            disappear on A. This is the delete flavor of
+            `remote_then_local_mutation`."""
+        self._standard_flo_setup()
+        sample_bucket = self.src_cluster.get_buckets()[0]
+        sdk_count = self._input.param("sdk_count", 500)
+        sample_indices = sorted({0, sdk_count // 2, sdk_count - 1})
+
+        # --- Phase 1: seed on A, docs must reach B with HLV -------
+        for bucket in self.src_cluster.get_buckets():
+            self._sdk_upsert_docs(
+                self.src_cluster, bucket, "flo-del-a", sdk_count)
+        self._wait_for_replication_drain()
+
+        seed_key = "flo-del-a-0"
+        res = self._wait_for_doc_present(
+            self.dest_cluster, sample_bucket, seed_key)
+        self.assertIsNotNone(
+            res,
+            "{0} TEST INFRA: seed doc {1} did not replicate A->B; "
+            "cannot exercise delete semantics".format(
+                self._tag(), seed_key))
+        hlv_on_b = self._doc_hlv_src(
+            self.dest_cluster, sample_bucket, seed_key)
+        self.assertIsNotNone(
+            hlv_on_b,
+            "{0} TEST INFRA: seed doc on B carries no HLV stamp; "
+            "the tombstone-skip branch needs foreign-HLV state on "
+            "B".format(self._tag()))
+
+        # Quiesce so B's outbound has consumed (skipped) the seed
+        # upserts BEFORE the tombstone baseline -- otherwise late
+        # upsert-skips would inflate the tombstone delta.
+        time.sleep(self.flo_settle_timeout)
+        self._wait_for_replication_drain()
+        try:
+            skip_baseline_b = self._get_skipped_total(
+                self.dest_cluster)
+        except MetricsScrapeError as e:
+            skip_baseline_b = None
+            self.log.warning(
+                "{0} baseline scrape failed; the strict tombstone "
+                "skip-count assertion will be SKIPPED (deletion-"
+                "propagation assertions still run): {1}".format(
+                    self._tag(), e))
+
+        self.log.info(
+            "{0} CHECKPOINT Phase 1: deleting {1} docs on A (local "
+            "tombstones must replicate)".format(
+                self._tag(), sdk_count))
+        for bucket in self.src_cluster.get_buckets():
+            removed, already_absent, errors = self._sdk_delete_docs(
+                self.src_cluster, bucket, "flo-del-a", sdk_count)
+            if errors:
+                self.fail(
+                    "{0} TEST INFRA: {1} SDK delete errors on A/{2}; "
+                    "first 3: {3}".format(
+                        self._tag(), len(errors), bucket.name,
+                        errors[:3]))
+            self.assertEqual(
+                already_absent, 0,
+                "{0} TEST INFRA: {1}/{2} keys were already absent on "
+                "A/{3} before the delete -- no tombstone was created "
+                "for them, so the absence/skip assertions below "
+                "would pass vacuously for those keys (only {4} were "
+                "real deletes)".format(
+                    self._tag(), already_absent, sdk_count,
+                    bucket.name, removed))
+        self._wait_for_replication_drain()
+
+        for i in sample_indices:
+            key = "flo-del-a-{0}".format(i)
+            absent = self._wait_for_doc_absent(
+                self.dest_cluster, sample_bucket, key)
+            self.assertTrue(
+                absent,
+                "{0} PRODUCT BUG: doc {1} still present on B after "
+                "A deleted it. A's tombstone is a LOCAL mutation "
+                "(CAS > cvCAS) and MUST replicate under "
+                "forwardLocalOnly=true.".format(self._tag(), key))
+        self._assert_doc_count_synced()
+
+        if skip_baseline_b is not None:
+            try:
+                delta = self._wait_for_skip_delta(
+                    self.dest_cluster, skip_baseline_b, sdk_count)
+            except MetricsScrapeError as e:
+                delta = None
+                self.log.warning(
+                    "{0} skip-counter scrape failed mid-poll; "
+                    "skipping the strict tombstone-skip assertion: "
+                    "{1}".format(self._tag(), e))
+            if delta is not None:
+                self.assertGreaterEqual(
+                    delta, sdk_count,
+                    "{0} PRODUCT BUG: B received {1} A-origin "
+                    "tombstones (foreign HLV, CAS == cvCAS) and its "
+                    "outbound has FLO=true, so it must skip each "
+                    "one and advance {2} by >= {1}; observed "
+                    "delta={3}. Deletions must flow through the "
+                    "same non-local classification as sets. Cross-"
+                    "check nonLocalMutationsSkipped= in B's "
+                    "goxdcr.log xmem state dumps before "
+                    "filing.".format(
+                        self._tag(), sdk_count, SKIPPED_METRIC,
+                        delta))
+
+        # No resurrection on A: an echoed tombstone-or-set would
+        # recreate state; keys must remain absent after a settle.
+        time.sleep(self.flo_settle_timeout)
+        self._wait_for_replication_drain()
+        for i in sample_indices:
+            key = "flo-del-a-{0}".format(i)
+            self.assertIsNone(
+                self._sdk_get_raw(
+                    self.src_cluster, sample_bucket, key),
+                "{0} PRODUCT BUG: deleted doc {1} RESURRECTED on A "
+                "-- B echoed a foreign mutation back instead of "
+                "skipping it".format(self._tag(), key))
+
+        # --- Phase 2: B locally deletes A-originated docs ----------
+        self.log.info(
+            "{0} CHECKPOINT Phase 2: fresh seed on A, local delete "
+            "on B (tombstone CAS > cvCAS -> must replicate B->A)"
+            .format(self._tag()))
+        for bucket in self.src_cluster.get_buckets():
+            self._sdk_upsert_docs(
+                self.src_cluster, bucket, "flo-del-b", sdk_count)
+        self._wait_for_replication_drain()
+        res = self._wait_for_doc_present(
+            self.dest_cluster, sample_bucket, "flo-del-b-0")
+        self.assertIsNotNone(
+            res,
+            "{0} TEST INFRA: phase-2 seed doc did not replicate "
+            "A->B".format(self._tag()))
+
+        for bucket in self.dest_cluster.get_buckets():
+            removed, already_absent, errors = self._sdk_delete_docs(
+                self.dest_cluster, bucket, "flo-del-b", sdk_count)
+            if errors:
+                self.fail(
+                    "{0} TEST INFRA: {1} SDK delete errors on B/{2}; "
+                    "first 3: {3}".format(
+                        self._tag(), len(errors), bucket.name,
+                        errors[:3]))
+            self.assertEqual(
+                already_absent, 0,
+                "{0} TEST INFRA: {1}/{2} keys were already absent on "
+                "B/{3} before the delete -- no tombstone was created "
+                "for them, so the absence/skip assertions below "
+                "would pass vacuously for those keys (only {4} were "
+                "real deletes)".format(
+                    self._tag(), already_absent, sdk_count,
+                    bucket.name, removed))
+        self._wait_for_replication_drain()
+
+        for i in sample_indices:
+            key = "flo-del-b-{0}".format(i)
+            absent = self._wait_for_doc_absent(
+                self.src_cluster, sample_bucket, key)
+            self.assertTrue(
+                absent,
+                "{0} PRODUCT BUG: doc {1} still present on A after "
+                "B deleted it. B's tombstone of a remote-origin doc "
+                "is a LOCAL mutation on B (CAS > cvCAS) and MUST "
+                "replicate under forwardLocalOnly=true.".format(
+                    self._tag(), key))
+        self._assert_doc_count_synced()
+
+    def test_forward_local_only_expiry_convergence(self):
+        """TTL / expiry under forwardLocalOnly. Expiry tombstones are
+        server-generated mutations that flow through the same DCP ->
+        outbound path (IsExpirationEvent in goxdcr); their exact
+        local/foreign classification is timing-dependent on both
+        sides, so this test asserts the invariants that must hold
+        regardless of which side expires first:
+
+          1. TTL docs replicate BEFORE expiry, with the absolute
+             expiry preserved on the target copy
+             ($document.exptime > 0).
+          2. After the TTL elapses, the docs converge to ABSENT on
+             BOTH clusters (GET sweep forces lazy expiry
+             deterministically -- no exp_pager_stime dependency).
+          3. No resurrection: keys stay absent on both sides across
+             a settle window (a foreign echo re-creating an expired
+             doc would surface here).
+          4. Control docs without TTL survive untouched, and fresh
+             post-expiry mutations still replicate (pipeline
+             health)."""
+        self._standard_flo_setup()
+        sample_bucket = self.src_cluster.get_buckets()[0]
+        exp_count = self._input.param("expiry_count", 500)
+        doc_ttl = self._input.param("flo_doc_ttl", 90)
+        skew_buffer = self._input.param("expiry_skew_buffer", 30)
+        absent_timeout = self._input.param(
+            "expiry_absent_timeout", 600)
+
+        t_write = time.time()
+        _, errors = self._sdk_upsert_docs_with_ttl(
+            self.src_cluster, sample_bucket, "flo-exp",
+            exp_count, doc_ttl)
+        if errors:
+            self.fail(
+                "{0} TEST INFRA: {1} TTL upsert errors on A; first "
+                "3: {2}".format(self._tag(), len(errors), errors[:3]))
+        self._sdk_upsert_docs(
+            self.src_cluster, sample_bucket, "flo-noexp", exp_count)
+        self._wait_for_replication_drain()
+
+        # 1. Pre-expiry: docs present on B with exptime preserved.
+        # Presence window runs nearly to the TTL: arriving late is
+        # fine (the exptime read has an already-expired ambiguity
+        # guard), whereas a narrow window turns slow-drain runs into
+        # silent skips that erode coverage.
+        sample_key = "flo-exp-0"
+        res = self._wait_for_doc_present(
+            self.dest_cluster, sample_bucket, sample_key,
+            timeout=max(doc_ttl - 30, 30), poll_interval=5)
+        if res is None:
+            self.skipTest(
+                "{0} TEST INFRA: TTL doc did not reach B before its "
+                "TTL ({1}s) elapsed; increase flo_doc_ttl for this "
+                "environment".format(self._tag(), doc_ttl))
+        exptime = self._doc_hlv_xattr_path(
+            self.dest_cluster, sample_bucket, sample_key,
+            paths=("$document.exptime",))
+        self.log.info(
+            "{0} $document.exptime on B/{1}: {2!r}".format(
+                self._tag(), sample_key, exptime))
+        if exptime is None:
+            # Ambiguity guard: the doc may have expired on B between
+            # the presence check and this read -- which itself proves
+            # the TTL travelled. Only a PRESENT doc with exptime=0 is
+            # the "TTL lost" product bug.
+            if self._sdk_get_raw(
+                    self.dest_cluster, sample_bucket,
+                    sample_key) is None:
+                self.log.info(
+                    "{0} sample TTL doc already expired on B before "
+                    "the exptime read -- TTL evidently preserved; "
+                    "continuing".format(self._tag()))
+            else:
+                self.log.warning(
+                    "{0} exptime read returned None for a PRESENT "
+                    "doc; ambiguous virtual-xattr read, skipping "
+                    "the TTL-preserved assertion (convergence "
+                    "assertions below still run)".format(self._tag()))
+        else:
+            self.assertGreater(
+                int(exptime), 0,
+                "{0} PRODUCT BUG: TTL doc replicated to B WITHOUT "
+                "its expiry ($document.exptime={1!r} on a present "
+                "doc); XDCR must preserve doc TTLs under "
+                "forwardLocalOnly".format(self._tag(), exptime))
+
+        # 2. Wait out the TTL, then GET-sweep both clusters until
+        # every TTL doc is absent (each GET lazily expires its doc).
+        wait_until = t_write + doc_ttl + skew_buffer
+        remaining = wait_until - time.time()
+        if remaining > 0:
+            self.log.info(
+                "{0} waiting {1:.0f}s for TTL+skew to elapse".format(
+                    self._tag(), remaining))
+            time.sleep(remaining)
+
+        deadline = time.time() + absent_timeout
+        present_a = present_b = None
+        while time.time() < deadline:
+            present_a = self._count_docs_present(
+                self.src_cluster, sample_bucket, "flo-exp", exp_count)
+            present_b = self._count_docs_present(
+                self.dest_cluster, sample_bucket, "flo-exp",
+                exp_count)
+            self.log.info(
+                "{0} expiry sweep: {1} still on A, {2} still on B "
+                "(of {3})".format(
+                    self._tag(), present_a, present_b, exp_count))
+            if present_a == 0 and present_b == 0:
+                break
+            time.sleep(15)
+        self.assertEqual(
+            (present_a, present_b), (0, 0),
+            "{0} PRODUCT BUG: expired docs did not converge to "
+            "absent on both clusters within {1}s: {2} left on A, "
+            "{3} left on B (of {4})".format(
+                self._tag(), absent_timeout, present_a, present_b,
+                exp_count))
+
+        # 3. No resurrection across a settle window.
+        self._wait_for_replication_drain()
+        time.sleep(self.flo_settle_timeout)
+        self._wait_for_replication_drain()
+        for cluster in (self.src_cluster, self.dest_cluster):
+            for i in (0, exp_count // 2, exp_count - 1):
+                key = "flo-exp-{0}".format(i)
+                self.assertIsNone(
+                    self._sdk_get_raw(cluster, sample_bucket, key),
+                    "{0} PRODUCT BUG: expired doc {1} RESURRECTED "
+                    "on {2} -- an echo re-created a doc past its "
+                    "TTL under forwardLocalOnly".format(
+                        self._tag(), key, cluster.get_name()))
+
+        # 4. Collateral + health: non-TTL docs survive on both
+        # sides; fresh mutations still replicate.
+        for cluster in (self.src_cluster, self.dest_cluster):
+            self.assertIsNotNone(
+                self._sdk_get_raw(
+                    cluster, sample_bucket, "flo-noexp-0"),
+                "{0} control doc flo-noexp-0 missing on {1}; expiry "
+                "handling clobbered unrelated docs".format(
+                    self._tag(), cluster.get_name()))
+        self._sdk_upsert_docs(
+            self.src_cluster, sample_bucket, "flo-exp-post", 10)
+        self._wait_for_replication_drain()
+        res = self._wait_for_doc_present(
+            self.dest_cluster, sample_bucket, "flo-exp-post-0")
+        self.assertIsNotNone(
+            res,
+            "{0} replication unhealthy after expiry cycle: fresh "
+            "doc flo-exp-post-0 did not reach B".format(self._tag()))
+        try:
+            skipped = self._get_skipped_total(self.dest_cluster)
+            self.log.info(
+                "{0} DIAGNOSTIC: B {1}={2} after expiry cycle "
+                "(informational; expiry-tombstone classification is "
+                "timing-dependent)".format(
+                    self._tag(), SKIPPED_METRIC, skipped))
+        except MetricsScrapeError as e:
+            self.log.warning(
+                "{0} DIAGNOSTIC scrape failed (non-fatal): "
+                "{1}".format(self._tag(), e))
+
+    def test_forward_local_only_create_replication_validation(self):
+        """Creation-time forwardLocalOnly. Every other test in this
+        suite live-updates FLO on an existing replication; this one
+        exercises controller/createReplication with
+        forwardLocalOnly=true in the create body, where goxdcr runs
+        validations the update path does not:
+
+          * validateReplicationSettingsLocal: reject when the
+            SOURCE bucket has ECCV off.
+          * validateReplicationSettingsRemote (creation path):
+            reject when the TARGET bucket has ECCV off.
+          * ValidateSpecSettings: FLO and mobile are mutually
+            exclusive.
+          * Positive: with ECCV on both sides the create succeeds,
+            the setting reads back true, and enforcement is
+            IMMEDIATE (no live-update involved).
+
+        Order matters: ECCV enable is irreversible, so both
+        negative branches run off one asymmetric state (C1 on,
+        C2 off) before C2 is enabled for the positive branch."""
+        self.setup_xdcr_and_load()
+        self._post_setup_settle()
+
+        sample_bucket = self.src_cluster.get_buckets()[0]
+        bucket_name = sample_bucket.name
+
+        # Asymmetric ECCV: C1 on, C2 off.
+        self._set_eccv_on_cluster(self.src_cluster, True)
+        time.sleep(self.eccv_settle_timeout)
+
+        self.log.info(
+            "{0} CHECKPOINT: cancelling the setup-created "
+            "replications so they can be re-created with FLO in "
+            "the create body".format(self._tag()))
+        self._cancel_replications_to_peer(
+            self.src_cluster, self.dest_cluster)
+        self._cancel_replications_to_peer(
+            self.dest_cluster, self.src_cluster)
+        time.sleep(10)
+
+        # NEGATIVE 1: source ECCV on, TARGET ECCV off -> reject.
+        ok, content = self._create_replication_raw(
+            self.src_cluster, self.dest_cluster, bucket_name,
+            xdcr_params={FORWARD_LOCAL_ONLY: "true"})
+        if ok:
+            self._cancel_replications_to_peer(
+                self.src_cluster, self.dest_cluster)
+            self.fail(
+                "{0} PRODUCT BUG: createReplication with "
+                "forwardLocalOnly=true was ACCEPTED although the "
+                "TARGET bucket has enableCrossClusterVersioning="
+                "false. The creation-path target check "
+                "(validateReplicationSettingsRemote) must reject "
+                "it.".format(self._tag()))
+        self.assertIn(
+            "enableCrossClusterVersioning", str(content),
+            "{0} createReplication was rejected but not for the "
+            "expected reason (target-bucket ECCV); body: {1}".format(
+                self._tag(), content))
+        self.log.info(
+            "{0} target-ECCV-off create rejected as expected: "
+            "{1}".format(self._tag(), content))
+
+        # NEGATIVE 2: SOURCE ECCV off (C2's bucket) -> reject.
+        ok, content = self._create_replication_raw(
+            self.dest_cluster, self.src_cluster, bucket_name,
+            xdcr_params={FORWARD_LOCAL_ONLY: "true"})
+        if ok:
+            self._cancel_replications_to_peer(
+                self.dest_cluster, self.src_cluster)
+            self.fail(
+                "{0} PRODUCT BUG: createReplication with "
+                "forwardLocalOnly=true was ACCEPTED although the "
+                "SOURCE bucket has enableCrossClusterVersioning="
+                "false; validateReplicationSettingsLocal must "
+                "reject it.".format(self._tag()))
+        self.assertIn(
+            "enableCrossClusterVersioning", str(content),
+            "{0} createReplication was rejected but not for the "
+            "expected reason (source-bucket ECCV); body: {1}".format(
+                self._tag(), content))
+        self.log.info(
+            "{0} source-ECCV-off create rejected as expected: "
+            "{1}".format(self._tag(), content))
+
+        # POSITIVE: ECCV everywhere -> creates with FLO=true succeed.
+        self._set_eccv_on_cluster(self.dest_cluster, True)
+        time.sleep(self.eccv_settle_timeout)
+
+        for cluster, peer in (
+                (self.src_cluster, self.dest_cluster),
+                (self.dest_cluster, self.src_cluster)):
+            ok, content = self._create_replication_raw(
+                cluster, peer, bucket_name,
+                xdcr_params={FORWARD_LOCAL_ONLY: "true"})
+            self.assertTrue(
+                ok,
+                "{0} PRODUCT BUG: createReplication with "
+                "forwardLocalOnly=true REJECTED although ECCV is "
+                "on for source and target buckets: {1}".format(
+                    self._tag(), content))
+            # Pipeline-updater breather (same reason as
+            # XDCReplication.start's post-create sleep).
+            time.sleep(10)
+        time.sleep(self.flo_settle_timeout)
+
+        self._verify_forward_local_only_setting(self.src_cluster, True)
+        self._verify_forward_local_only_setting(
+            self.dest_cluster, True)
+        self._log_state("post creation-time FLO")
+
+        # Mobile exclusion (ValidateSpecSettings): mobile=Active on
+        # an FLO=true replication must be rejected -- or at minimum
+        # must NOT persist alongside FLO=true.
+        rest = RestConnection(self.src_cluster.get_master_node())
+        repl = rest.get_replication_for_buckets(
+            bucket_name, bucket_name)
+        api = rest.baseUrl[:-1] + repl["settingsURI"]
+        status, content, _ = rest._http_request(
+            api, "POST", urllib.parse.urlencode({"mobile": "Active"}))
+        if status:
+            status2, content2, _ = rest._http_request(api)
+            self.assertTrue(
+                status2,
+                "{0} could not read back replication settings after "
+                "mobile POST: {1}".format(self._tag(), content2))
+            settings = json.loads(content2)
+            mobile_now = str(settings.get("mobile", "Off"))
+            flo_now = str(settings.get(FORWARD_LOCAL_ONLY)).lower()
+            self.log.info(
+                "{0} mobile POST accepted; readback mobile={1!r} "
+                "FLO={2!r}".format(
+                    self._tag(), mobile_now, flo_now))
+            self.assertFalse(
+                mobile_now.lower() != "off" and flo_now == "true",
+                "{0} PRODUCT BUG: mobile={1} and forwardLocalOnly="
+                "true are BOTH active on one replication; "
+                "ValidateSpecSettings declares them mutually "
+                "exclusive".format(self._tag(), mobile_now))
+        else:
+            self.log.info(
+                "{0} mobile=Active rejected on FLO replication as "
+                "expected: {1}".format(self._tag(), content))
+
+        # Immediate enforcement: creation-time FLO must skip from
+        # the first mutation, with no live-update involved.
+        self._assert_flo_enforcement_active(label="creation-time")
+
+    def test_forward_local_only_full_mesh_exactly_once(self):
+        """FLO's intended production deployment: 3-cluster full-mesh
+        Active-Active (conf: ctopology=ring + rdirection=bidirection
+        + chain_length=3 -- a bidirectional 3-ring IS the full
+        mesh). With FLO=true on all 6 legs, every mutation reaches
+        every peer EXACTLY ONCE, via the direct leg from its origin:
+
+          1. Convergence: all three origin sets present everywhere
+             (doc-count sync + per-origin presence sampling).
+          2. Origin attribution: a replicated doc carries the SAME
+             HLV.src on both peers, and the three origins have
+             pairwise-distinct source ids.
+          3. Delivery + no-forwarding, per ordered leg X->Y:
+             docs_written delta >= K (X ships its own set) and
+             < 2K (a wholesale-forwarded foreign set doubles the
+             delta). Partial forwarding between K+slack and 2K is
+             logged, not asserted -- classification is per-doc
+             deterministic, so partial forwarding is implausible,
+             and a tighter bound would trade retry-noise
+             flakiness for it. This is the exactly-once property
+             the ring data-loss callout is the flip side of.
+          4. Skip accounting: each cluster's skip counter advances
+             by >= 2K (each outbound leg skips both foreign sets,
+             ~2K per leg / ~4K cluster-wide expected; the bound is
+             half the true total to leave headroom for scrape
+             timing without losing the ability to catch a cluster
+             where one of its two skip paths is silently dead)."""
+        if len(self.get_cb_clusters()) < 3:
+            self.skipTest(
+                "{0} requires >=3 clusters; got {1}".format(
+                    self._tag(), len(self.get_cb_clusters())))
+        if self._input.param("ctopology", "chain") != "ring" or \
+                self._input.param("rdirection", "") != "bidirection":
+            self.skipTest(
+                "{0} requires ctopology=ring,rdirection=bidirection "
+                "(= full mesh for 3 clusters)".format(self._tag()))
+
+        self._log_state("test entry")
+        self.setup_xdcr_and_load()
+        self._post_setup_settle()
+
+        clusters = self.get_cb_clusters()[:3]
+        for x in clusters:
+            for y in clusters:
+                if x is y:
+                    continue
+                # UUID resolution MUST work: replications_to_peer
+                # falls back to yielding ALL replications when the
+                # peer UUID can't be resolved, which would make every
+                # per-leg docs_written read sum both outbound legs
+                # (delta ~2K) and false-fail the no-forwarding bound.
+                if self._remote_cluster_uuid_for_peer(x, y) is None:
+                    self.skipTest(
+                        "{0} TEST INFRA: cannot resolve remote-"
+                        "cluster UUID for leg {1}->{2}; per-leg "
+                        "accounting would over-count via the "
+                        "replications_to_peer fallback".format(
+                            self._tag(), x.get_name(), y.get_name()))
+                if not list(self._replications_to_peer(x, y)):
+                    self.skipTest(
+                        "{0} TEST INFRA: no replication {1}->{2}; "
+                        "base setup did not produce a full "
+                        "mesh".format(
+                            self._tag(), x.get_name(), y.get_name()))
+
+        self._enable_eccv_on_all_clusters()
+        self._enable_forward_local_only_everywhere()
+        self._log_state("post-ECCV+FLO (full mesh)")
+        self._wait_for_replication_drain()
+
+        sdk_count = self._input.param("sdk_count", 1000)
+
+        def _leg_written(x, y):
+            """(docs_written, failed_reads) for leg x->y. A partial
+            stat read silently under-counts (read_repl_stat failures
+            sum as 0), which would corrupt both accounting bounds --
+            surface it instead."""
+            stats = self.get_docs_processed_to_peer(x, y)
+            return (stats.get("docs_written", 0),
+                    stats.get("_failed_reads") or [])
+
+        written_pre = {}
+        for x in clusters:
+            for y in clusters:
+                if x is y:
+                    continue
+                written, failed = _leg_written(x, y)
+                if failed:
+                    self.skipTest(
+                        "{0} TEST INFRA: per-leg stat baseline reads "
+                        "failed for {1}->{2} (an under-counted "
+                        "baseline corrupts both accounting bounds): "
+                        "{3}".format(
+                            self._tag(), x.get_name(), y.get_name(),
+                            failed[:3]))
+                written_pre[(x.get_name(), y.get_name())] = written
+        skip_pre = {}
+        for c in clusters:
+            try:
+                skip_pre[c.get_name()] = self._get_skipped_total(c)
+            except MetricsScrapeError as e:
+                skip_pre[c.get_name()] = None
+                self.log.warning(
+                    "{0} skip baseline scrape failed on {1} "
+                    "(skip-accounting assertion degraded to log): "
+                    "{2}".format(self._tag(), c.get_name(), e))
+
+        for c in clusters:
+            self._sdk_upsert_docs(
+                c, c.get_buckets()[0],
+                "flo-mesh-{0}".format(c.get_name()), sdk_count)
+
+        self._wait_for_replication_drain()
+        time.sleep(self.flo_settle_timeout)
+        self._wait_for_replication_drain()
+
+        # 1. Convergence.
+        self._assert_doc_count_synced()
+
+        # 2. Presence + origin attribution.
+        origin_src_ids = {}
+        for origin in clusters:
+            key = "flo-mesh-{0}-0".format(origin.get_name())
+            peer_srcs = []
+            for peer in clusters:
+                if peer is origin:
+                    continue
+                bucket = peer.get_buckets()[0]
+                res = self._wait_for_doc_present(peer, bucket, key)
+                self.assertIsNotNone(
+                    res,
+                    "{0} PRODUCT BUG: {1}-origin doc {2} missing on "
+                    "{3}; full-mesh convergence under FLO is "
+                    "broken".format(
+                        self._tag(), origin.get_name(), key,
+                        peer.get_name()))
+                src = self._doc_hlv_src(peer, bucket, key)
+                self.assertIsNotNone(
+                    src,
+                    "{0} replicated doc {1} on {2} has no HLV "
+                    "stamp".format(
+                        self._tag(), key, peer.get_name()))
+                peer_srcs.append((peer.get_name(), src))
+            distinct = {s for _, s in peer_srcs}
+            self.assertEqual(
+                len(distinct), 1,
+                "{0} {1}-origin doc shows DIFFERENT HLV.src on "
+                "different peers: {2}".format(
+                    self._tag(), origin.get_name(), peer_srcs))
+            origin_src_ids[origin.get_name()] = peer_srcs[0][1]
+        self.assertEqual(
+            len(set(origin_src_ids.values())), len(origin_src_ids),
+            "{0} distinct origin clusters must have distinct HLV "
+            "source ids: {1}".format(self._tag(), origin_src_ids))
+        self.log.info(
+            "{0} origin HLV source ids: {1}".format(
+                self._tag(), origin_src_ids))
+
+        # 3. Per-leg exactly-once accounting. The @xdcr stats samples
+        # refresh periodically, so a low or partially-failed first
+        # read gets a short re-poll before anything fires (stats
+        # lag, not product).
+        fwd_slack = max(100, sdk_count // 10)
+        for x in clusters:
+            for y in clusters:
+                if x is y:
+                    continue
+                legkey = (x.get_name(), y.get_name())
+                stat_deadline = time.time() + 90
+                while True:
+                    written_now, failed = _leg_written(x, y)
+                    delta = written_now - written_pre[legkey]
+                    if not failed and delta >= sdk_count:
+                        break
+                    if time.time() >= stat_deadline:
+                        break
+                    time.sleep(15)
+                if failed:
+                    self.skipTest(
+                        "{0} TEST INFRA: per-leg stat reads still "
+                        "failing for {1}->{2} at accounting time "
+                        "(an under-counted read would misattribute "
+                        "either bound): {3}".format(
+                            self._tag(), legkey[0], legkey[1],
+                            failed[:3]))
+                self.log.info(
+                    "{0} leg {1}->{2}: docs_written delta={3} "
+                    "(expected ~{4}, hard bounds [{4}, {5}))".format(
+                        self._tag(), legkey[0], legkey[1], delta,
+                        sdk_count, 2 * sdk_count))
+                self.assertGreaterEqual(
+                    delta, sdk_count,
+                    "{0} PRODUCT BUG: leg {1}->{2} must deliver "
+                    "{1}'s own {3}-doc set directly; docs_written "
+                    "delta={4}".format(
+                        self._tag(), legkey[0], legkey[1],
+                        sdk_count, delta))
+                self.assertLess(
+                    delta, 2 * sdk_count,
+                    "{0} PRODUCT BUG: leg {1}->{2} shipped "
+                    "docs_written delta={3} >= 2x its own set "
+                    "({4}); {1} FORWARDED a third cluster's "
+                    "foreign-HLV set instead of skipping it -- "
+                    "exactly-once delivery is broken".format(
+                        self._tag(), legkey[0], legkey[1], delta,
+                        sdk_count))
+                if delta > sdk_count + fwd_slack:
+                    # Below the wholesale-forwarding hard bound but
+                    # above retry-noise slack: not assertion-worthy
+                    # (deterministic classification makes partial
+                    # forwarding implausible), yet worth eyeballing.
+                    self.log.warning(
+                        "{0} leg {1}->{2} delta {3} exceeds own set "
+                        "+ slack ({4}); below the 2x hard bound but "
+                        "unusually high".format(
+                            self._tag(), legkey[0], legkey[1],
+                            delta, sdk_count + fwd_slack))
+
+        # 4. Skip accounting (each of the 2 outbound legs skips both
+        # foreign sets: ~2K per leg, ~4K cluster-wide true total).
+        # Assert only half that (2K): still catches a cluster where
+        # one of its two skip paths is silently dead, without
+        # pinning the bound to the full 4x figure.
+        for c in clusters:
+            base = skip_pre.get(c.get_name())
+            if base is None:
+                continue
+            expected_min = 2 * sdk_count
+            try:
+                sdelta = self._wait_for_skip_delta(
+                    c, base, expected_min)
+            except MetricsScrapeError as e:
+                self.log.warning(
+                    "{0} skip-counter scrape failed on {1} "
+                    "(non-fatal): {2}".format(
+                        self._tag(), c.get_name(), e))
+                continue
+            self.assertGreaterEqual(
+                sdelta, expected_min,
+                "{0} PRODUCT BUG: {1} received 2x{2} foreign-HLV "
+                "docs across its 2 outbound legs, each of which "
+                "must skip BOTH foreign sets (~{5} typical "
+                "cluster-wide), yet {3} only advanced by {4} "
+                "(expected >= {6}). The skip path is not running "
+                "or not counting on at least one leg.".format(
+                    self._tag(), c.get_name(), sdk_count,
+                    SKIPPED_METRIC, sdelta, 4 * sdk_count,
+                    expected_min))
+
     def test_forward_local_only_ring_topology_data_loss_callout(self):
         """Spec callout: enabling FLO in a daisy-chain / ring (non-full-
         mesh) topology CAUSES intentional data loss. This test
@@ -4318,6 +5582,17 @@ class ForwardLocalOnlyXDCRTests(ForwardLocalOnlyXDCRBase):
         sample_bucket = cluster_a.get_buckets()[0]
         sdk_count = self._input.param("sdk_count", 100)
 
+        # Skip-counter baseline on B: the A-set must be dropped by
+        # B's outbound SKIP path (counted), not lost to a dead leg.
+        try:
+            b_skip_baseline = self._get_skipped_total(cluster_b)
+        except MetricsScrapeError as e:
+            b_skip_baseline = None
+            self.log.warning(
+                "{0} B skip baseline scrape failed; counter "
+                "attribution degraded to the control-doc check "
+                "only: {1}".format(self._tag(), e))
+
         self.log.info(
             "{0} CHECKPOINT: writing {1} docs on {2}".format(
                 self._tag(), sdk_count, cluster_a.get_name()))
@@ -4344,6 +5619,54 @@ class ForwardLocalOnlyXDCRTests(ForwardLocalOnlyXDCRBase):
             "docs missing on B".format(
                 self._tag(), missing_on_b, sdk_count))
 
+        # CONTROL: prove the B->C leg is alive and passes B-LOCAL
+        # docs before asserting the A-set's absence on C. Without
+        # this, a plainly broken/stalled B->C replication produces
+        # the identical "all A-docs missing on C" observation and
+        # the data-loss assertion passes vacuously.
+        ctrl_count = self._input.param(
+            "flo_ring_ctrl_count", min(sdk_count, 1000))
+        self.log.info(
+            "{0} CONTROL: writing {1} B-local docs on {2}; they "
+            "MUST traverse the B->C leg under FLO=true".format(
+                self._tag(), ctrl_count, cluster_b.get_name()))
+        self._sdk_upsert_docs(
+            cluster_b, sample_bucket, "flo-ring-ctrl", ctrl_count)
+        self._wait_for_replication_drain()
+        first_ctrl = self._wait_for_doc_present(
+            cluster_c, sample_bucket, "flo-ring-ctrl-0",
+            timeout=self.replication_drain_timeout, poll_interval=5)
+        missing_ctrl = ctrl_count
+        if first_ctrl is not None:
+            # Re-sweep for stragglers a few seconds behind the
+            # stats-based drain before declaring the control failed.
+            ctrl_deadline = time.time() + 120
+            while True:
+                missing_ctrl = ctrl_count - self._count_docs_present(
+                    cluster_c, sample_bucket, "flo-ring-ctrl",
+                    ctrl_count)
+                if missing_ctrl == 0 or time.time() >= ctrl_deadline:
+                    break
+                self.log.info(
+                    "{0} CONTROL: {1}/{2} ctrl docs still missing "
+                    "on C; re-sweeping".format(
+                        self._tag(), missing_ctrl, ctrl_count))
+                time.sleep(15)
+        if missing_ctrl:
+            self.fail(
+                "{0} CONTROL FAILED: {1}/{2} B-local docs did not "
+                "reach C over the B->C leg. Either the leg is "
+                "broken/stalled (TEST INFRA -- and the data-loss "
+                "assertion below would pass vacuously) or FLO is "
+                "blocking LOCAL mutations (PRODUCT BUG). The ring "
+                "data-loss callout cannot be attributed either "
+                "way.".format(self._tag(), missing_ctrl, ctrl_count))
+        self.log.info(
+            "{0} CONTROL OK: all {1} B-local docs reached C; the "
+            "B->C leg is alive and passes local mutations. A-set "
+            "absence on C is now attributable to the FLO skip "
+            "path.".format(self._tag(), ctrl_count))
+
         missing_on_c = 0
         for i in range(sdk_count):
             if self._sdk_get_raw(
@@ -4361,3 +5684,28 @@ class ForwardLocalOnlyXDCRTests(ForwardLocalOnlyXDCRBase):
             "{0} ring-topology data-loss callout NOT observed: only "
             "{1}/{2} docs missing on C (expected all {2} missing)"
             .format(self._tag(), missing_on_c, sdk_count))
+
+        # Counter attribution: the A-set must have been dropped by
+        # B's SKIP path (each A-origin doc counted as non-local on
+        # the B->C leg), not silently lost some other way.
+        if b_skip_baseline is not None:
+            try:
+                b_skip_delta = self._wait_for_skip_delta(
+                    cluster_b, b_skip_baseline, sdk_count)
+            except MetricsScrapeError as e:
+                b_skip_delta = None
+                self.log.warning(
+                    "{0} B skip-counter scrape failed mid-poll "
+                    "(non-fatal; control-doc attribution above "
+                    "stands): {1}".format(self._tag(), e))
+            if b_skip_delta is not None:
+                self.assertGreaterEqual(
+                    b_skip_delta, sdk_count,
+                    "{0} PRODUCT BUG: C is missing all {1} A-origin "
+                    "docs and the B->C leg is provably alive "
+                    "(control passed), yet B's {2} only advanced "
+                    "by {3} (expected >= {1}). The docs were "
+                    "dropped without being counted as non-local "
+                    "skips.".format(
+                        self._tag(), sdk_count, SKIPPED_METRIC,
+                        b_skip_delta))
