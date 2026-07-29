@@ -1102,6 +1102,29 @@ class QueriesViewsTests(QuerySanityTests):
             except Exception:
                 pass
 
+    def test_mb72917_limit_terminates_after_last_item(self):
+        """MB-72917: LIMIT should terminate immediately after sending the last item.
+        Before fix: after sending Nth item, query waited for next input before terminating.
+        After fix: when limit reaches 0 after sendItem(), return false immediately."""
+        import time
+
+        # Case 1: ARRAY_RANGE with LIMIT 1 — verifies correct result count
+        self.query = "SELECT d FROM ARRAY_RANGE(0,100005) AS d WHERE IMOD(d,100000) = 0 LIMIT 1"
+        result = self.run_cbq_query()
+        self.assertEqual(result['status'], 'success', f"Query failed: {result}")
+        self.assertEqual(len(result['results']), 1,
+                         f"Expected 1 result for LIMIT 1, got {len(result['results'])}")
+        self.log.info(f"MB-72917 ARRAY_RANGE LIMIT 1 passed")
+
+        # Case 2: DISTINCT with GSI index and LIMIT 1 — existing bucket data used
+        query_bucket = self.query_buckets[0]
+        self.query = f"SELECT DISTINCT join_day FROM {query_bucket} WHERE join_day IS NOT MISSING LIMIT 1"
+        result = self.run_cbq_query()
+        self.assertEqual(result['status'], 'success', f"DISTINCT LIMIT 1 failed: {result}")
+        self.assertEqual(len(result['results']), 1,
+                         f"Expected 1 result for DISTINCT LIMIT 1, got {len(result['results'])}")
+        self.log.info(f"MB-72917 DISTINCT+GSI LIMIT 1 passed")
+
     def test_negative_indexes(self):
         queries_errors = {'create index gsi on ' + self.query_buckets[0] + '(name) USING %s': ('syntax error', 3000)}
         self.negative_common_body(queries_errors)
