@@ -6507,7 +6507,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
             )
             failed_nodes = [
                 ip for ip, r in meta_results.items()
-                if r.get("status") not in ("pass", "skipped")
+                if r.get("status") not in ("passed", "skipped")
             ]
             if failed_nodes:
                 details = {ip: meta_results[ip] for ip in failed_nodes}
@@ -6541,7 +6541,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
             )
             failed_nodes_post = [
                 ip for ip, r in meta_results_post.items()
-                if r.get("status") not in ("pass", "skipped")
+                if r.get("status") not in ("passed", "skipped")
             ]
             if failed_nodes_post:
                 details = {ip: meta_results_post[ip] for ip in failed_nodes_post}

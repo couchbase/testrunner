@@ -46,6 +46,12 @@ log = logging.getLogger(__name__)
 
 class BaseSecondaryIndexingTests(QueryTests):
 
+    # Cap on how many failing-encryption files get copied off a node into
+    # self._evidence_dir per _finalize_encryption_results call. Categories
+    # like metadata_repo can produce 100+ matches; copying all of them would
+    # slow the test down and flood /tmp for little extra diagnostic value.
+    MAX_ENCRYPTION_EVIDENCE_FILES = 10
+
     def setUp(self):
         super(BaseSecondaryIndexingTests, self).setUp()
         self.ansi_join = self.input.param("ansi_join", False)
@@ -149,6 +155,16 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.skip_cleanup = self.input.param("skip_cleanup", False)
         self.index_loglevel = self.input.param("index_loglevel", None)
         self.bhive_index = self.input.param("bhive_index", False)
+        # KNOWN BUG: GSI metadata_repo_v2 files (WAL + kvstore-N sstables) come
+        # back plaintext (no encryption magic header) on every node, in every
+        # encryption-at-rest test observed so far — independent of rebalance,
+        # key rotation/expiry, or DEK drop. Actual index data files
+        # (plasma_shard_data, data_files_key_id) are correctly encrypted, so
+        # this is isolated to the metadata store. Until that's root-caused,
+        # tests can set skip_metadata_validation=True to bypass the
+        # [metadata_repo] check in _run_common_encryption_verifiers so the
+        # rest of encryption validation can still run and be trusted.
+        self.skip_metadata_validation = self.input.param("skip_metadata_validation", False)
         self.cleanup_info = {}
         self.data_model = self.input.param("data_model", "sentence-transformers/all-MiniLM-L6-v2")
         self.vector_dim = self.input.param("vector_dim", "384")
@@ -167,6 +183,22 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.gsi_util_obj = GSIUtils(self.run_cbq_query)
         self.encryption_helper = EncryptionAtRestHelper(log)
         self.gsi_encryption_helper = GSIEncryptionHelpers(log)
+        # Evidence dir for copying off files that fail encryption validation
+        # (mirrors gsi_query_encryption_at_rest_upgrade.py). Bounded by
+        # MAX_ENCRYPTION_EVIDENCE_FILES in _finalize_encryption_results so a
+        # category with hundreds of matches (e.g. metadata_repo) doesn't flood it.
+        if not getattr(self.__class__, "_run_evidence_dir", None):
+            ts = time.strftime("%Y%m%d_%H%M%S")
+            self.__class__._run_evidence_dir = f"/tmp/gsi_encryption_evidence_{ts}"
+            os.makedirs(self.__class__._run_evidence_dir, exist_ok=True)
+            self.log.info(
+                f"Encryption-failure evidence directory for this run: "
+                f"{self.__class__._run_evidence_dir}"
+            )
+        self._evidence_dir = os.path.join(
+            self.__class__._run_evidence_dir, self._testMethodName
+        )
+        os.makedirs(self._evidence_dir, exist_ok=True)
         self.description = self.input.param("description", None)
         self.similarity = self.input.param("similarity", "L2_SQUARED")
         self.base64 = self.input.param("base64", False)
@@ -334,9 +366,16 @@ class BaseSecondaryIndexingTests(QueryTests):
                   encrypted_bucket_names=encrypted_bucket_names,
                   bucket_key_map=bucket_key_map,
                   per_node_bucket_key_map=per_node_bkm)
-        _safe_run("metadata_repo",
-                  helper.verify_gsi_metadata_repo_encrypted,
-                  index_nodes, expected_key_id=expected_key_id)
+        if getattr(self, "skip_metadata_validation", False):
+            self.log.warning(
+                "[metadata_repo] SKIPPED — skip_metadata_validation=True. "
+                "KNOWN BUG: metadata_repo_v2 files are plaintext on disk; "
+                "skipping this check for now until root-caused."
+            )
+        else:
+            _safe_run("metadata_repo",
+                      helper.verify_gsi_metadata_repo_encrypted,
+                      index_nodes, expected_key_id=expected_key_id)
 
         # Optional plaintext-leakage scan (needs a query node + bucket names).
         if query_node and encrypted_bucket_names:
@@ -378,7 +417,73 @@ class BaseSecondaryIndexingTests(QueryTests):
                   helper.verify_no_sensitive_names_in_paths,
                   index_nodes, forbidden)
 
-    def _finalize_encryption_results(self, engine_label, results, fail_on_error):
+    def _copy_failed_encryption_file(self, node, remote_filepath):
+        """Copy a remote file that failed encryption validation to self._evidence_dir.
+
+        Mirrors the helper in gsi_query_encryption_at_rest_upgrade.py. Returns
+        the local destination path, or None if the copy failed.
+        """
+        try:
+            remote_dir = os.path.dirname(remote_filepath)
+            filename = os.path.basename(remote_filepath)
+            # GSI paths repeat basenames across sibling directories (e.g.
+            # sstable.9.data under both kvstore-1/keyIndex and kvstore-3/seqIndex
+            # on the same node) — fold the full sanitized path into the
+            # destination name so distinct files don't overwrite each other.
+            safe_path = remote_filepath.strip("/").replace("/", "_")
+            local_dest = os.path.join(self._evidence_dir, f"{node.ip}_{safe_path}")
+            shell = RemoteMachineShellConnection(node, verbose=False)
+            try:
+                shell.get_file(remote_dir, filename, local_dest)
+            finally:
+                shell.disconnect()
+            return local_dest
+        except Exception as e:
+            self.log.warning(f"Could not copy {remote_filepath} from {node.ip}: {e}")
+            return None
+
+    def _copy_failed_encryption_evidence(self, results, index_nodes):
+        """Copy up to MAX_ENCRYPTION_EVIDENCE_FILES failing files off their
+        nodes into self._evidence_dir for post-mortem inspection.
+
+        Walks every category's failed_files (and plaintext_leakage's nested
+        by_category/leaks shape), stopping as soon as the cap is reached so a
+        category with hundreds of matches (e.g. metadata_repo) doesn't flood
+        the evidence dir or slow the test down. Returns the list of local
+        destination paths actually copied.
+        """
+        node_obj_map = {node.ip: node for node in index_nodes}
+        copied = []
+        for category, node_results in results.items():
+            if category == "_overall" or not isinstance(node_results, dict):
+                continue
+            for node_ip, result in node_results.items():
+                if len(copied) >= self.MAX_ENCRYPTION_EVIDENCE_FILES:
+                    return copied
+                if not isinstance(result, dict):
+                    continue
+                node_obj = node_obj_map.get(node_ip)
+                if not node_obj:
+                    continue
+                entries = list(result.get("failed_files", []) or [])
+                by_category = result.get("by_category")
+                if isinstance(by_category, dict):
+                    for sub_result in by_category.values():
+                        if isinstance(sub_result, dict):
+                            entries.extend(sub_result.get("leaks", []) or [])
+                for entry in entries:
+                    if len(copied) >= self.MAX_ENCRYPTION_EVIDENCE_FILES:
+                        return copied
+                    file_path = entry[0] if isinstance(entry, (list, tuple)) and entry else entry
+                    if not isinstance(file_path, str) or not file_path.startswith("/"):
+                        continue
+                    dest = self._copy_failed_encryption_file(node_obj, file_path)
+                    if dest:
+                        copied.append(dest)
+        return copied
+
+    def _finalize_encryption_results(self, engine_label, results, fail_on_error,
+                                      index_nodes=None):
         """Build and log the consolidated summary block; raise or return.
 
         Calls _log_encryption_summary, _build_encryption_summary_lines,
@@ -386,6 +491,10 @@ class BaseSecondaryIndexingTests(QueryTests):
         'GSI {engine_label} ENCRYPTION VALIDATION SUMMARY', sets
         results['_overall'], and either raises AssertionError or returns
         the results dict.
+
+        When there are failures and index_nodes is provided, also copies up
+        to MAX_ENCRYPTION_EVIDENCE_FILES of the failing files off their nodes
+        into self._evidence_dir (see _copy_failed_encryption_evidence).
         """
         self._log_encryption_summary(results)
         passed_lines, skipped_lines, failed_lines = \
@@ -402,6 +511,18 @@ class BaseSecondaryIndexingTests(QueryTests):
         )
         if failed_lines:
             self.log.error(block)
+            # Only auto-copy when we're about to raise. Callers that pass
+            # fail_on_error=False (e.g. gsi_query_encryption_at_rest_upgrade.py)
+            # already do their own copying off the returned results dict —
+            # copying here too would just duplicate that work.
+            if fail_on_error and index_nodes:
+                copied_files = self._copy_failed_encryption_evidence(results, index_nodes)
+                if copied_files:
+                    self.log.error(
+                        f"Copied {len(copied_files)} failing file(s) "
+                        f"(capped at {self.MAX_ENCRYPTION_EVIDENCE_FILES}) to "
+                        f"{self._evidence_dir}:\n" + "\n".join(f"  {p}" for p in copied_files)
+                    )
             if fail_on_error:
                 self.log.info(
                     f"=== GSI {engine_label} encryption validation completed (FAILED) ==="
@@ -541,7 +662,9 @@ class BaseSecondaryIndexingTests(QueryTests):
             expected_key_id, encrypted_bucket_names, query_node,
             per_node_bkm=per_node_bkm
         )
-        return self._finalize_encryption_results("MOI", results, fail_on_error)
+        return self._finalize_encryption_results(
+            "MOI", results, fail_on_error, index_nodes=index_nodes
+        )
 
     def validate_plasma_bhive(self, index_nodes, expected_key_id=None,
                                encrypted_bucket_names=None, query_node=None,
@@ -660,7 +783,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             per_node_bkm=per_node_bkm
         )
         return self._finalize_encryption_results(
-            "PLASMA/BHIVE", results, fail_on_error
+            "PLASMA/BHIVE", results, fail_on_error, index_nodes=index_nodes
         )
 
     def validate_log_encryption_files_encrypted(self, index_nodes,

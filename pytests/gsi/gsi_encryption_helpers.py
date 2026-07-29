@@ -1198,7 +1198,8 @@ class GSIEncryptionHelpers:
             dict: ``{node_ip: {"status": "passed"|"failed"|"skipped",
                                 "passed_count": int,
                                 "total_checked": int,
-                                "failed_files": list[(path, details)]}}``
+                                "failed_files": list[(path, details)],
+                                "empty_files": list[(path, details)]}}``
         """
         results = {}
         fallback_keys = self._normalize_key_ids(expected_key_id)
@@ -1282,6 +1283,9 @@ class GSIEncryptionHelpers:
             sample_files = data_files[:30]
             passed_count = 0
             failed_files = []
+            # Zero-length segment files genuinely cannot carry a key ID and are
+            # tracked separately rather than counted as encryption failures.
+            empty_files = []
             for file_path in sample_files:
                 allowed_keys = self._allowed_keys_for_path(
                     file_path, effective_bkm, fallback_keys
@@ -1299,23 +1303,42 @@ class GSIEncryptionHelpers:
                     self.log.debug(
                         f"Node {node.ip}: {file_path} contains key id {matched}"
                     )
+                    continue
+
+                # grep found no key ID. Distinguish a genuinely empty segment
+                # (nothing to encrypt yet) from a non-empty file that is missing
+                # its key ID (a real encryption gap). Annotate the byte size so
+                # triage can spot suspiciously small / header-only segments.
+                size = self._remote_file_size(node, file_path)
+                if size == 0:
+                    empty_files.append(
+                        (file_path, "zero-length segment (no data to encrypt)")
+                    )
+                    self.log.info(
+                        f"Node {node.ip}: {file_path} is zero-length; "
+                        "no key id expected"
+                    )
                 else:
-                    failed_files.append((file_path, details))
+                    failed_files.append(
+                        (file_path, f"{details} (file_size={size} bytes)")
+                    )
                     self.log.warning(
-                        f"Node {node.ip}: {file_path} missing key id: {details}"
+                        f"Node {node.ip}: {file_path} missing key id "
+                        f"(file_size={size} bytes): {details}"
                     )
 
-            if passed_count and not failed_files:
-                status = "passed"
-            elif not passed_count and not failed_files:
-                status = "skipped"
-            else:
+            if failed_files:
                 status = "failed"
+            elif passed_count:
+                status = "passed"
+            else:
+                status = "skipped"
             results[node.ip] = {
                 "status": status,
                 "passed_count": passed_count,
                 "total_checked": len(sample_files),
                 "failed_files": failed_files,
+                "empty_files": empty_files,
             }
         return results
 
@@ -1353,7 +1376,8 @@ class GSIEncryptionHelpers:
             dict: ``{node_ip: {"status": "passed"|"failed"|"skipped",
                                 "passed_count": int,
                                 "total_checked": int,
-                                "failed_files": list[(path, details)]}}``
+                                "failed_files": list[(path, details)],
+                                "empty_files": list[(path, details)]}}``
         """
         results = {}
         fallback_keys = self._normalize_key_ids(expected_key_id)
@@ -1428,6 +1452,9 @@ class GSIEncryptionHelpers:
             sample_files = data_files[:30]
             passed_count = 0
             failed_files = []
+            # Zero-length segment files genuinely cannot carry a key ID and are
+            # tracked separately rather than counted as encryption failures.
+            empty_files = []
             for file_path in sample_files:
                 allowed_keys = self._allowed_keys_for_path(
                     file_path, effective_bkm, fallback_keys
@@ -1445,23 +1472,42 @@ class GSIEncryptionHelpers:
                     self.log.debug(
                         f"Node {node.ip}: {file_path} contains key id {matched}"
                     )
+                    continue
+
+                # grep found no key ID. Distinguish a genuinely empty segment
+                # (nothing to encrypt yet) from a non-empty file that is missing
+                # its key ID (a real encryption gap). Annotate the byte size so
+                # triage can spot suspiciously small / header-only segments.
+                size = self._remote_file_size(node, file_path)
+                if size == 0:
+                    empty_files.append(
+                        (file_path, "zero-length segment (no data to encrypt)")
+                    )
+                    self.log.info(
+                        f"Node {node.ip}: {file_path} is zero-length; "
+                        "no key id expected"
+                    )
                 else:
-                    failed_files.append((file_path, details))
+                    failed_files.append(
+                        (file_path, f"{details} (file_size={size} bytes)")
+                    )
                     self.log.warning(
-                        f"Node {node.ip}: {file_path} missing key id: {details}"
+                        f"Node {node.ip}: {file_path} missing key id "
+                        f"(file_size={size} bytes): {details}"
                     )
 
-            if passed_count and not failed_files:
-                status = "passed"
-            elif not passed_count and not failed_files:
-                status = "skipped"
-            else:
+            if failed_files:
                 status = "failed"
+            elif passed_count:
+                status = "passed"
+            else:
+                status = "skipped"
             results[node.ip] = {
                 "status": status,
                 "passed_count": passed_count,
                 "total_checked": len(sample_files),
                 "failed_files": failed_files,
+                "empty_files": empty_files,
             }
         return results
 
@@ -1496,7 +1542,8 @@ class GSIEncryptionHelpers:
             dict: ``{node_ip: {"status": "passed"|"failed"|"skipped",
                                 "passed_count": int,
                                 "total_checked": int,
-                                "failed_files": list[(path, details)]}}``
+                                "failed_files": list[(path, details)],
+                                "empty_files": list[(path, details)]}}``
         """
         results = {}
         fallback_keys = self._normalize_key_ids(expected_key_id)
@@ -1550,6 +1597,9 @@ class GSIEncryptionHelpers:
             sample_files = data_files[:30]
             passed_count = 0
             failed_files = []
+            # Zero-length segment files genuinely cannot carry a key ID and are
+            # tracked separately rather than counted as encryption failures.
+            empty_files = []
             for file_path in sample_files:
                 allowed_keys = self._allowed_keys_for_path(
                     file_path, effective_bkm, fallback_keys
@@ -1567,23 +1617,42 @@ class GSIEncryptionHelpers:
                     self.log.debug(
                         f"Node {node.ip}: {file_path} contains key id {matched}"
                     )
+                    continue
+
+                # grep found no key ID. Distinguish a genuinely empty segment
+                # (nothing to encrypt yet) from a non-empty file that is missing
+                # its key ID (a real encryption gap). Annotate the byte size so
+                # triage can spot suspiciously small / header-only segments.
+                size = self._remote_file_size(node, file_path)
+                if size == 0:
+                    empty_files.append(
+                        (file_path, "zero-length segment (no data to encrypt)")
+                    )
+                    self.log.info(
+                        f"Node {node.ip}: {file_path} is zero-length; "
+                        "no key id expected"
+                    )
                 else:
-                    failed_files.append((file_path, details))
+                    failed_files.append(
+                        (file_path, f"{details} (file_size={size} bytes)")
+                    )
                     self.log.warning(
-                        f"Node {node.ip}: {file_path} missing key id: {details}"
+                        f"Node {node.ip}: {file_path} missing key id "
+                        f"(file_size={size} bytes): {details}"
                     )
 
-            if passed_count and not failed_files:
-                status = "passed"
-            elif not passed_count and not failed_files:
-                status = "skipped"
-            else:
+            if failed_files:
                 status = "failed"
+            elif passed_count:
+                status = "passed"
+            else:
+                status = "skipped"
             results[node.ip] = {
                 "status": status,
                 "passed_count": passed_count,
                 "total_checked": len(sample_files),
                 "failed_files": failed_files,
+                "empty_files": empty_files,
             }
         return results
 
@@ -2287,7 +2356,7 @@ class GSIEncryptionHelpers:
         is actually working.
 
         Returns:
-            dict: ``{node_ip: {"status": "pass"/"fail"/"skipped",
+            dict: ``{node_ip: {"status": "passed"/"failed"/"skipped",
                                "wal_files_checked": int,
                                "sstable_files_checked": int,
                                "skipped_empty_files": list[str],
@@ -2398,14 +2467,14 @@ class GSIEncryptionHelpers:
                         )
 
                 if failed_files:
-                    status = "fail"
+                    status = "failed"
                 elif len(skipped_empty_files) == len(all_parsed):
                     # Every file found was empty — nothing was actually
-                    # verified, so don't report a "pass" that implies
+                    # verified, so don't report a "passed" that implies
                     # encryption was confirmed.
                     status = "skipped"
                 else:
-                    status = "pass"
+                    status = "passed"
                 self.log.info(
                     f"[metadata_repo] Node {node.ip}: {status} — "
                     f"wal={len(wal_files)}, sstable={len(sst_files)}, "
