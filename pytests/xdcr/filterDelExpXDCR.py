@@ -8,6 +8,39 @@ from .xdcrnewbasetests import XDCRNewBaseTest, REPL_PARAM
 from pytests.xdcr.tenK_collection_helper import TenKCollectionHelper
 
 
+# Every REST-visible boolean that goxdcr folds into the internal
+# filterExpDelType bitmask, plus the two "WithExpression" flags gated on
+# them. Each entry is POSTed from an all-false baseline so the bitmask
+# value under test is deterministic -- the blank-key regression only
+# surfaced for particular bit combinations.
+FILTER_FLAG_COMBOS = [
+    {"filterDeletion": True},
+    {"filterExpiration": True},
+    {"filterBypassExpiry": True},
+    {"filterBypassUncommittedTxn": True},
+    {"filterBinary": True},
+    {"filterDeletion": True, "filterDeletionsWithExpression": True},
+    {"filterExpiration": True, "filterExpirationsWithExpression": True},
+    {"filterDeletion": True, "filterDeletionsWithExpression": True,
+     "filterExpiration": True, "filterExpirationsWithExpression": True},
+    {"filterDeletion": True, "filterDeletionsWithExpression": True,
+     "filterExpiration": True, "filterExpirationsWithExpression": True,
+     "filterBypassExpiry": True, "filterBypassUncommittedTxn": True,
+     "filterBinary": True},
+]
+
+# "WithExpression" flag -> the base flag goxdcr requires alongside it.
+WITH_EXPRESSION_PREREQS = {
+    "filterDeletionsWithExpression": "filterDeletion",
+    "filterExpirationsWithExpression": "filterExpiration",
+}
+
+ALL_FILTER_FLAGS = ["filterDeletion", "filterDeletionsWithExpression",
+                    "filterExpiration", "filterExpirationsWithExpression",
+                    "filterBypassExpiry", "filterBypassUncommittedTxn",
+                    "filterBinary"]
+
+
 class XDCRFilterDelExpTests(XDCRNewBaseTest):
     """
     Tests for filterDeletionsWithExpression and filterExpirationsWithExpression
@@ -26,6 +59,9 @@ class XDCRFilterDelExpTests(XDCRNewBaseTest):
 
     def tearDown(self):
         XDCRNewBaseTest.tearDown(self)
+
+    def _log_tag(self):
+        return "[FilterDelExp]"
 
     def get_cluster_objects_for_input(self, input):
         """Returns a list of cluster objects for input. 'input' is a string
@@ -591,3 +627,193 @@ class XDCRFilterDelExpTests(XDCRNewBaseTest):
                                     "than without the filter")
 
         self.log.info("Deletion/expiry filter 10K collections test passed")
+
+    # ---- Settings REST-payload integrity ----
+    #
+    # goxdcr folds filterDeletion/filterExpiration/filterBypassExpiry and
+    # friends into one internal filterExpDelType bitmask and expands it back
+    # into named booleans when answering /settings/replications. A bit with
+    # no reverse name mapping leaks the raw bitmask under an empty key --
+    # POSTing filterDeletion + filterDeletionsWithExpression once returned
+    # `{"": 5, ...}`. These tests assert the response shape, so they need no
+    # data load; only the per-replication one sets up XDCR.
+
+    def _reset_global_filter_flags(self):
+        """Return every filter flag on the source cluster to false so the
+        next POST starts from a known bitmask. Ordered so the gated
+        "WithExpression" flags clear before their prerequisites."""
+        ok, body = self.post_global_xdcr_params(
+            self.src_cluster, {flag: False for flag in ALL_FILTER_FLAGS})
+        self.assertTrue(
+            ok, "Could not reset filter flags to false: {0!r}".format(body))
+        return body
+
+    def _assert_flags_echoed(self, body, expected, context):
+        """Assert the POST response echoed each flag under its own name with
+        the value just set -- the counterpart to the blank-key check, since
+        a leaked bitmask means the named flag is missing."""
+        for flag, value in expected.items():
+            self.assertIn(
+                flag, body,
+                "{0}: {1} missing from settings payload: {2!r}".format(
+                    context, flag, body))
+            self.assertEqual(
+                str(body[flag]).lower(), str(value).lower(),
+                "{0}: {1} echoed as {2!r}, expected {3}".format(
+                    context, flag, body[flag], value))
+
+    def test_global_settings_no_blank_key_for_deletion_with_expression(self):
+        """
+        Regression for the blank-key leak in the global replication settings
+        response. POST the exact combination that triggered it and assert:
+          1. the POST response carries no blank key,
+          2. both flags come back under their own names as true,
+          3. a follow-up GET is equally clean.
+        """
+        params = {"filterDeletion": True, "filterDeletionsWithExpression": True}
+        self._reset_global_filter_flags()
+        try:
+            ok, body = self.post_global_xdcr_params(self.src_cluster, params)
+            self.assertTrue(
+                ok, "POST {0} to global settings was rejected: {1!r}".format(
+                    params, body))
+            self.assert_no_blank_setting_keys(body, "global settings POST")
+            self._assert_flags_echoed(body, params, "global settings POST")
+
+            get_body = self.src_rest.get_global_xdcr_params()
+            self.assert_no_blank_setting_keys(get_body, "global settings GET")
+            self._assert_flags_echoed(get_body, params, "global settings GET")
+            self.log.info(
+                "Global settings payload clean for {0}".format(params))
+        finally:
+            self._reset_global_filter_flags()
+
+    def test_global_settings_no_blank_key_for_filter_flag_matrix(self):
+        """
+        Widen the regression across every filter flag that feeds the
+        filterExpDelType bitmask, individually and combined. Each combination
+        is applied from an all-false baseline so its bitmask is deterministic,
+        and both the POST response and the follow-up GET are checked.
+        """
+        for combo in FILTER_FLAG_COMBOS:
+            context = "combo {0}".format(sorted(combo))
+            self._reset_global_filter_flags()
+            ok, body = self.post_global_xdcr_params(self.src_cluster, combo)
+            self.assertTrue(
+                ok, "{0} was rejected: {1!r}".format(context, body))
+            self.assert_no_blank_setting_keys(body, context + " POST")
+            self._assert_flags_echoed(body, combo, context + " POST")
+
+            get_body = self.src_rest.get_global_xdcr_params()
+            self.assert_no_blank_setting_keys(get_body, context + " GET")
+            self._assert_flags_echoed(get_body, combo, context + " GET")
+            self.log.info("{0}: settings payload clean".format(context))
+
+        self._reset_global_filter_flags()
+
+    def test_with_expression_flags_rejected_without_prerequisite(self):
+        """
+        A "WithExpression" flag is only meaningful with its base flag on, so
+        goxdcr rejects it alone. Assert the rejection happens, that the
+        rejection payload is itself free of blank keys, and that the flag did
+        not get applied anyway.
+        """
+        for flag, prereq in WITH_EXPRESSION_PREREQS.items():
+            self._reset_global_filter_flags()
+            ok, body = self.post_global_xdcr_params(
+                self.src_cluster, {flag: True})
+            self.assertFalse(
+                ok, "{0}=true was accepted without {1}=true; goxdcr should "
+                    "reject it: {2!r}".format(flag, prereq, body))
+            self.assert_no_blank_setting_keys(
+                body, "{0} rejection payload".format(flag))
+            self.assertIn(
+                flag, body,
+                "{0} rejection should name the offending param: {1!r}".format(
+                    flag, body))
+            self.assertIn(
+                prereq, str(body[flag]),
+                "{0} rejection should say {1} is required, got {2!r}".format(
+                    flag, prereq, body[flag]))
+
+            applied = self.get_global_xdcr_param(self.src_cluster, flag)
+            self.assertEqual(
+                str(applied).lower(), "false",
+                "{0} was persisted as {1!r} despite the rejection".format(
+                    flag, applied))
+            self.log.info(
+                "{0} correctly rejected without {1}".format(flag, prereq))
+
+        self._reset_global_filter_flags()
+
+    def test_per_replication_settings_no_blank_key_for_filter_flags(self):
+        """
+        Same regression against the per-replication endpoint
+        (/settings/replications/<id>), which marshals settings through the
+        same expansion path as the global one but a different handler.
+
+        That endpoint enforces two prerequisites the global one cannot:
+        a "WithExpression" flag needs the replication's filterExpression
+        set (the flag exists to apply that expression to deletions and
+        expirations), and setting filterExpression on a live replication
+        needs filterSkipRestream alongside it. There is no filterExpression
+        in global settings, so the global endpoint accepts the same flags
+        without either. Both the rejection and the accepted payload are
+        checked for blank keys.
+        """
+        filter_expression = "REGEXP_CONTAINS(META().id,'^doc')"
+        flags = {"filterDeletion": True, "filterDeletionsWithExpression": True}
+
+        self.setup_xdcr()
+        self.sleep(30, "Waiting for replication to stabilize")
+
+        replication = self.src_rest.get_replication_for_buckets(
+            "default", "default")
+        if not replication.get('filterExpression'):
+            ok, body = self.post_xdcr_params(
+                self.src_cluster, "default", "default", flags)
+            self.assertFalse(
+                ok, "{0} was accepted on a replication with no "
+                    "filterExpression: {1!r}".format(flags, body))
+            self.assert_no_blank_setting_keys(
+                body, "per-replication rejection payload")
+            self.assertIn(
+                "filterExpression", str(body),
+                "rejection should say filterExpression is required, got "
+                "{0!r}".format(body))
+            self.log.info(
+                "filterDeletionsWithExpression correctly rejected without "
+                "filterExpression")
+
+        # filterSkipRestream is mandatory whenever filterExpression is set;
+        # true so the replication does not restream from scratch for what is
+        # only a settings-payload assertion.
+        params = dict(flags, filterExpression=filter_expression,
+                      filterSkipRestream=True)
+        ok, body = self.post_xdcr_params(
+            self.src_cluster, "default", "default", params)
+        self.assertTrue(
+            ok, "POST {0} to per-replication settings was rejected: "
+                "{1!r}".format(params, body))
+        self.assert_no_blank_setting_keys(body, "per-replication POST")
+
+        replication = self.src_rest.get_replication_for_buckets(
+            "default", "default")
+        status, content, _ = self.src_rest._http_request(
+            self.src_rest.baseUrl[:-1] + replication['settingsURI'])
+        self.assertTrue(
+            status, "Could not GET per-replication settings: {0!r}".format(
+                content))
+        get_body = self._parse_settings_body(content, replication['settingsURI'])
+        self.assert_no_blank_setting_keys(get_body, "per-replication GET")
+
+        # Read back through get_xdcr_param, which falls back to global
+        # settings for params a replication leaves at the default.
+        for flag in flags:
+            actual = self.src_rest.get_xdcr_param("default", "default", flag)
+            self.assertEqual(
+                str(actual).lower(), "true",
+                "{0} did not persist on the replication; got {1!r}".format(
+                    flag, actual))
+        self.log.info(
+            "Per-replication settings payload clean for {0}".format(params))

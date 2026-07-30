@@ -11,7 +11,7 @@ XDCR (Cross Data Center Replication) test suite validates Couchbase replication 
 | **Replication Direction** | `uniXDCR.py`, `biXDCR.py` | Unidirectional and bidirectional replication |
 | **Topologies** | `xdcrTopologyTests.py` | Chain, star, ring cluster topologies |
 | **Collections** | `collectionsXDCR.py`, `collectionsMappingXDCR.py` | Scope/collection mapping, mirroring mode, migration mode |
-| **Filtering** | `filterXDCR.py`, `advFilteringXDCR.py`, `filterDelExpXDCR.py`, `xdcrFilterChangeTests.py`, `testXdcrFilterSkipRestream.py` | Key/regex filtering, deletion/expiration filtering, filter changes |
+| **Filtering** | `filterXDCR.py`, `advFilteringXDCR.py`, `filterDelExpXDCR.py`, `xdcrFilterChangeTests.py`, `testXdcrFilterSkipRestream.py` | Key/regex filtering, deletion/expiration filtering, filter changes; `filterDelExpXDCR.py` also asserts `/settings/replications` payload integrity — no blank key leaked from the internal `filterExpDelType` bitmask, and `filterDeletionsWithExpression`/`filterExpirationsWithExpression` rejected without their base flag (`-p GROUP=settings`) |
 | **LWW (Last Writer Wins)** | `lww.py`, `lwwXDCR.py` | Conflict resolution with timestamp-based LWW |
 | **CCV (Custom Conflict Resolution)** | `ccvTestXDCR.py` | Custom conflict resolution with mobile import simulation |
 | **Conflict Logging** | `conflictLoggingTests.py` | Logging conflicts to specified collections |
@@ -29,7 +29,8 @@ XDCR (Cross Data Center Replication) test suite validates Couchbase replication 
 | **Target Awareness** | `targetAwarenessXDCR.py` | Target cluster awareness and incoming/outgoing replication tracking |
 | **Variable vBuckets** | `variableVbucketXDCR.py` | Dynamic vBucket configuration |
 | **XATTR** | `xdcr_xattr_sdk.py` | Extended attributes replication |
-| **forwardLocalOnly** | `forwardLocalOnlyXDCR.py` | AA bidirectional ECCV replication of local-only mutations; covers Type-1/2/3 mutation classification, foreign-HLV skip, `disableHlvBasedShortCircuit`, advanced filtering, 3-cluster mixed-ECCV, SGW/mobile negative case, mixed-mode setting persistence; verifies `xdcr_non_local_mutations_skipped_total` Prometheus counter |
+| **forwardLocalOnly** | `forwardLocalOnlyXDCR.py` | AA bidirectional ECCV replication of local-only mutations; covers Type-1/2/3 mutation classification, foreign-HLV skip, `disableHlvBasedShortCircuit`, deletes/tombstones/expiry, advanced filtering, creation-time validation (source/target ECCV checks, FLO+mobile mutual exclusion), 3-cluster mixed-ECCV, full-mesh exactly-once delivery, ring-topology data-loss callout (with leg-liveness control), mixed-mode setting persistence; verifies `xdcr_non_local_mutations_skipped_total` and appends a post-scenario FLO-enforcement probe to lifecycle/topology tests |
+| **JWT Auth** | `xdcr_jwt_auth.py` | JWT bearer-token auth for XDCR's REST admin surface (create/pause/resume/delete replication, remote cluster reference CRUD), delegated entirely to cbauth; RBAC-negative, malformed-token, Basic/JWT coexistence, and P2P non-interference coverage |
 | **Statistics** | `statsXDCR.py` | XDCR replication statistics and metrics |
 | **Memory** | `memoryTestXDCR.py` | Memory usage during replication |
 | **xdcrDiffer** | `xdcrDiffer.py` | Data comparison tool with encryption support |
@@ -76,6 +77,7 @@ INI files in `b/resources/` define cluster topology with dynamic IP placeholders
 - `rebalanceXDCR.py` - Replication during cluster rebalance
 - `compressionXDCR.py` - Compression over XDCR
 - `forwardLocalOnlyXDCR.py` - forwardLocalOnly replication setting tests (AA bidirectional ECCV)
+- `xdcr_jwt_auth.py` - JWT bearer-token auth coverage for the XDCR REST admin surface
 - `xdcrDiffer.py` - xdcrDiffer binary tests
 - `conf/xdcr/*.conf` - 40+ test configuration files
 

@@ -6363,6 +6363,85 @@ class XDCRNewBaseTest(unittest.TestCase):
             return None
 
     # ------------------------------------------------------------------
+    # Body-returning settings POSTs. `RestConnection.set_global_xdcr_params`
+    # and `set_xdcr_param` discard the response body and raise on a 4xx,
+    # which is right for callers that only want the setting applied. These
+    # two hand back `(ok, body)` instead, so a test can assert on what
+    # goxdcr echoed and can inspect a rejection payload without catching.
+    # ------------------------------------------------------------------
+    def post_global_xdcr_params(self, cluster, param_value_map):
+        """POST `param_value_map` to global /settings/replications.
+
+        @return: (ok, body) -- ok is False for a 4xx/5xx, body is the
+                 parsed JSON response in either case.
+        """
+        tag = self._log_tag()
+        rest = RestConnection(cluster.get_master_node())
+        api = rest.baseUrl[:-1] + "/settings/replications"
+        coerced = {p: self._coerce_xdcr_value(v)
+                   for p, v in param_value_map.items()}
+        self.log.info(
+            "{0} POST global xdcr_params: cluster={1} {2}".format(
+                tag, cluster.get_name(), coerced))
+        ok, content, _ = rest._http_request(
+            api, "POST", urllib.parse.urlencode(coerced))
+        return ok, self._parse_settings_body(content, api)
+
+    def post_xdcr_params(self, cluster, src_bucket, dest_bucket,
+                          param_value_map):
+        """POST `param_value_map` to a replication's settingsURI.
+
+        @return: (ok, body) -- same contract as `post_global_xdcr_params`.
+        """
+        tag = self._log_tag()
+        rest = RestConnection(cluster.get_master_node())
+        replication = rest.get_replication_for_buckets(src_bucket, dest_bucket)
+        api = rest.baseUrl[:-1] + replication['settingsURI']
+        coerced = {p: self._coerce_xdcr_value(v)
+                   for p, v in param_value_map.items()}
+        self.log.info(
+            "{0} POST xdcr_params: cluster={1} {2}->{3} {4}".format(
+                tag, cluster.get_name(), src_bucket, dest_bucket, coerced))
+        ok, content, _ = rest._http_request(
+            api, "POST", urllib.parse.urlencode(coerced))
+        return ok, self._parse_settings_body(content, api)
+
+    def _parse_settings_body(self, content, api):
+        """Parse a replication-settings response body into a dict. Fails the
+        test on anything that is not a JSON object -- a settings endpoint
+        that stops returning one is itself the bug."""
+        try:
+            body = json.loads(content)
+        except (ValueError, TypeError) as e:
+            self.fail("{0} returned a non-JSON body ({1}): {2!r}".format(
+                api, e, content))
+        if not isinstance(body, dict):
+            self.fail("{0} returned {1}, expected a JSON object: {2!r}".format(
+                api, type(body).__name__, body))
+        return body
+
+    def assert_no_blank_setting_keys(self, settings, context):
+        """Assert no key in a replication-settings payload is blank.
+
+        goxdcr folds several REST-visible booleans into one internal
+        bitmask (filterExpDelType) and expands it back out on the way to
+        the client. A bit with no reverse name mapping leaks the raw
+        bitmask into the response under an empty key: POSTing
+        `filterDeletion` + `filterDeletionsWithExpression` once returned
+        `{"": 5, "cLogConnPoolGCIntervalMs": 60000, ...}` (5 being the
+        composite of those two bits). A blank key is never valid in any
+        /settings/replications payload, so assert it centrally rather than
+        per-parameter.
+        """
+        tag = self._log_tag()
+        blank = {k: v for k, v in settings.items() if not str(k).strip()}
+        self.assertFalse(
+            blank,
+            "{0} {1}: settings payload contains blank key(s) {2!r} -- an "
+            "internal composite setting leaked under an empty name. Full "
+            "payload: {3!r}".format(tag, context, blank, settings))
+
+    # ------------------------------------------------------------------
     # Prometheus metric readers.
     #
     # Endpoint semantics (verified on 8.1.0-2452): the :8091 REST
