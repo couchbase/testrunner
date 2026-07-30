@@ -45,6 +45,7 @@ class EventingCollections(EventingBaseTest):
         allowed_col = self.src_bucket_name
         excluded_col = "rbac_excl_col"
         meta_col = "rbac_excl_meta"
+        fn_scope = {"bucket": bucket_name, "scope": scope_name}
         col_created = False
         meta_created = False
         try:
@@ -75,6 +76,7 @@ class EventingCollections(EventingBaseTest):
                             "deployment_status": False,
                             "processing_status": False,
                         },
+                        "function_scope": fn_scope,
                     }
 
                 # 1. CREATE on allowed collection — should succeed
@@ -82,7 +84,7 @@ class EventingCollections(EventingBaseTest):
                 try:
                     rest.create_function(
                         fn_allowed, _make_body(fn_allowed, allowed_col),
-                        function_scope=None, username=u, password=p)
+                        function_scope=fn_scope, username=u, password=p)
                     fn_allowed_created = True
                     self.log.info(
                         "Eventing: create function on allowed collection '%s' "
@@ -96,7 +98,7 @@ class EventingCollections(EventingBaseTest):
                 if fn_allowed_created:
                     try:
                         rest.delete_single_function(
-                            fn_allowed, function_scope=None, username=u, password=p)
+                            fn_allowed, function_scope=fn_scope, username=u, password=p)
                         self.log.info(
                             "Eventing: delete function on allowed collection '%s' "
                             "succeeded" % allowed_col)
@@ -105,30 +107,53 @@ class EventingCollections(EventingBaseTest):
                             "Eventing: delete function on allowed collection '%s' "
                             "failed: %s" % (allowed_col, str(e)))
 
-                # 3. Try CREATE on excluded collection — should be denied
+                # 3. Excluded collection as source — must be denied. Eventing only
+                # checks source/metadata keyspace permissions on deploy/resume, so an
+                # undeployed create may succeed; the deploy must then be rejected.
                 fn_excluded_created = False
                 try:
                     rest.create_function(
                         fn_excluded, _make_body(fn_excluded, excluded_col),
-                        function_scope=None, username=u, password=p)
+                        function_scope=fn_scope, username=u, password=p)
                     fn_excluded_created = True
                 except Exception as e:
                     self.log.info(
                         "Eventing service validation passed: create function on "
                         "excluded collection denied: %s" % str(e))
                 if fn_excluded_created:
+                    fn_excluded_deployed = False
                     try:
-                        rest.delete_single_function(fn_excluded)
+                        rest.deploy_function_by_name(
+                            fn_excluded, function_scope=fn_scope, username=u, password=p)
+                        fn_excluded_deployed = True
+                    except Exception as e:
+                        self.log.info(
+                            "Eventing service validation passed: deploy function on "
+                            "excluded collection denied: %s" % str(e))
+                    if fn_excluded_deployed:
+                        try:
+                            self.wait_for_handler_state(fn_excluded, "deployed")
+                            rest.lifecycle_operation(fn_excluded, "undeploy",
+                                                     function_scope=fn_scope)
+                            self.wait_for_handler_state(fn_excluded, "undeployed")
+                        except Exception:
+                            pass
+                    try:
+                        rest.delete_single_function(fn_excluded, function_scope=fn_scope)
                     except Exception:
                         pass
-                    self.fail(
-                        "Eventing: create function on excluded collection '%s' "
-                        "should be denied but succeeded" % excluded_col)
+                    if fn_excluded_deployed:
+                        self.fail(
+                            "Eventing: deploy function on excluded collection '%s' "
+                            "should be denied but succeeded" % excluded_col)
 
             verify_rbac_exclusion_syntax(
                 self, rest, bucket_name, scope_name, allowed_col, excluded_col,
                 "eventing", runtype=self.input.param("runtype", "default"),
-                service_validator=eventing_service_validator)
+                service_validator=eventing_service_validator,
+                extra_roles="eventing_manage_functions[{b}:{s}],"
+                            "data_dcp_reader[{b}],data_reader[{b}],"
+                            "data_writer[{b}]".format(b=bucket_name, s=scope_name))
         finally:
             if meta_created:
                 try:
@@ -296,4 +321,4 @@ class EventingCollections(EventingBaseTest):
             self.rest.create_function(body['appname'], body, self.function_scope)
         except Exception as e:
             self.log.info(e)
-            assert "ERR_SRC_MB_SAME" in str(e) and "source keyspace same as metadata keyspace" in str(e), True
+            assert "ERR_INVALID_REQUEST" in str(e) and "source keyspace same as metadata keyspace" in str(e), True
