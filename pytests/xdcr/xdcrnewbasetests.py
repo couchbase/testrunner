@@ -2823,6 +2823,47 @@ class CouchbaseCluster:
         task = self.async_rebalance_in(num_nodes)
         task.result()
 
+    def rebalance_in_with_services(self, services):
+        """Rebalance-in spare nodes with an explicit service list per node.
+
+        `rebalance_in` always adds data nodes; this variant lets a test add
+        service-only nodes (e.g. "index,n1ql"), which several features have to
+        treat differently from data nodes - XDCR, for instance, must keep them
+        out of the source node list it advertises to a target cluster.
+        @param services: one comma-separated service string per node to add,
+                         e.g. ["index,n1ql"]. One node is added per entry.
+        @return: list of added server objects.
+        """
+        num_nodes = len(services)
+        raise_if(
+            num_nodes < 1,
+            XDCRException("services list must name at least one node")
+        )
+        raise_if(
+            len(FloatingServers._serverlist) + len(self.__reserved_nodes) < num_nodes,
+            XDCRException(
+                "Number of free nodes: {0} is not preset to add {1} nodes.".
+                format(len(FloatingServers._serverlist) + len(self.__reserved_nodes),
+                       num_nodes))
+        )
+        to_add_node = []
+        for _ in range(num_nodes):
+            if self.__reserved_nodes:
+                to_add_node.append(self.__reserved_nodes.pop())
+            else:
+                to_add_node.append(FloatingServers._serverlist.pop())
+        self.__log.info(
+            "Starting rebalance-in nodes:{0} with services:{1} at {2} cluster "
+            "{3}".format(to_add_node, services, self.__name,
+                         self.__master_node.ip))
+        task = self.__clusterop.async_rebalance(
+            self.__nodes, to_add_node, [], services=services)
+        # Track the new nodes before waiting: teardown has to clean them up
+        # even if the rebalance itself fails midway.
+        self.__nodes.extend(to_add_node)
+        task.result()
+        return to_add_node
+
     def __async_swap_rebalance(self, master=False):
         """Swap-rebalance nodes on Cluster
         @param master: True if swap-rebalance master node else False.
@@ -4634,6 +4675,99 @@ class XDCRNewBaseTest(unittest.TestCase):
         if status:
             return json.loads(content)
         return None
+
+    def get_live_rest(self, cluster, timeout=120):
+        """Return a RestConnection to the first node of `cluster` that answers.
+
+        Cluster-level lookups must not assume the master node is up: tests stop,
+        crash and fail over nodes, node 1 included, and `RestConnection` itself
+        raises when its node is unreachable.
+        """
+        end_time = time.time() + timeout
+        last_err = None
+        while True:
+            for node in [cluster.get_master_node()] + cluster.get_nodes():
+                try:
+                    rest = RestConnection(node)
+                    status, _, _ = rest._http_request(
+                        rest.baseUrl + "pools/default", timeout=15)
+                    if status:
+                        return rest
+                except Exception as e:
+                    last_err = e
+            if time.time() >= end_time:
+                break
+            time.sleep(5)
+        raise XDCRException(
+            "No node of cluster {0} answered REST within {1}s: {2}".format(
+                cluster.get_name(), timeout, last_err))
+
+    def get_orchestrator_node(self, cluster, timeout=120):
+        """Return the cluster's ns_server orchestrator as a server object.
+
+        The orchestrator is the only node that sends topology heartbeats to
+        target clusters, so it - not the cluster's master node (node 1 of the
+        ini) - is the node a heartbeat test has to poke. Leadership is elected
+        by ns_server and moves on its own after restarts, rebalances and
+        failovers, and reads as "undefined" while a rebalance is in flight,
+        hence the polling.
+        """
+        end_time = time.time() + timeout
+        otp_node = None
+        while time.time() < end_time:
+            rest = self.get_live_rest(cluster, timeout=timeout)
+            api = rest.baseUrl + "pools/default/terseClusterInfo"
+            status, content, _ = rest._http_request(api, timeout=30)
+            if status:
+                otp_node = json.loads(content).get("orchestrator") or ""
+                node = self.__resolve_otp_node(cluster, otp_node)
+                if node:
+                    return node
+            time.sleep(5)
+        raise XDCRException(
+            "Could not resolve orchestrator {0!r} of cluster {1} to one of its "
+            "nodes {2} within {3}s".format(
+                otp_node, cluster.get_name(),
+                [node.ip + ":" + str(node.port) for node in cluster.get_nodes()],
+                timeout))
+
+    def __resolve_otp_node(self, cluster, otp_node):
+        """Map an otpNode string ("<name>@<host>") to one of `cluster`'s
+        server objects, or None if it names no known node."""
+        node_name, _, host = (otp_node or "").partition("@")
+        for node in cluster.get_nodes():
+            # Clusters renamed to hostnames (use_hostnames) report the hostname
+            # in the otpNode, not the ip the ini carries.
+            if host not in (node.ip, getattr(node, "hostname", None)):
+                continue
+            if not self.__is_cluster_run():
+                return node
+            # On cluster_run every node shares 127.0.0.1 and only the otpNode
+            # prefix tells them apart: n_0 is port 9000, n_1 is 9001, ...
+            try:
+                if 9000 + int(node_name.split("_")[-1]) == int(node.port):
+                    return node
+            except ValueError:
+                continue
+        return None
+
+    def get_active_kv_nodes(self, cluster):
+        """Return the management addresses ("<host>:<port>") of every active
+        data-service node of `cluster`, sorted.
+
+        This is the form XDCR advertises source nodes in - the heartbeat's
+        `SourceClusterNodes` - so it can be compared directly with what a
+        target cluster reports. Nodes without the kv service and nodes that are
+        not active members (inactiveAdded/inactiveFailed) are excluded, mirror-
+        ing goxdcr's own filtering. Clusters running with encryption level
+        strict/all advertise their secure admin port instead and need a
+        different expectation.
+        """
+        rest = self.get_live_rest(cluster)
+        return sorted(
+            node["hostname"] for node in rest.get_pools_default()["nodes"]
+            if "kv" in node["services"]
+            and node.get("clusterMembership") == "active")
 
     def load_docs_with_pillowfight(self, server, items, bucket, batch=1000, docsize=100, rate_limit=100000, scope="_default", collection="_default", command_timeout=10):
         server_shell = RemoteMachineShellConnection(server)
@@ -6479,6 +6613,56 @@ class XDCRNewBaseTest(unittest.TestCase):
         Raises `MetricsScrapeError` if the request fails or the stats
         backend reports errors (e.g. a node's Prometheus unreachable),
         so partial reads never masquerade as low totals."""
+        series = self.__query_stats_range(cluster, metric_name, window, step)
+        total = 0.0
+        for entry in series:
+            values = entry.get("values") or []
+            if not values:
+                continue
+            try:
+                total += float(values[-1][1])
+            except (TypeError, ValueError, IndexError):
+                self.log.warning(
+                    "{0} Could not parse stats/range sample for {1}: "
+                    "{2}".format(
+                        self._log_tag(), metric_name, values[-1]))
+        return total, len(series)
+
+    def query_prometheus_metric_series(self, cluster, metric_name,
+                                       window=60, step=15):
+        """Per-series read of `metric_name` through the same stats query
+        API as `query_prometheus_metric`, for gauges whose sum is
+        meaningless.
+
+        Returns a list of `{"labels": {...}, "value": float}` - one entry
+        per matched series, with `labels` carrying everything the metric
+        is broken down by (`nodes`, `sourceClusterUUID`, `status`, ...).
+        Cluster-level goxdcr gauges are exported by *every* node, so the
+        same logical value appears once per node: summing
+        `xdcr_number_of_source_nodes_total` over a 2-node target doubles
+        it. Callers that need "what does each node think" must read the
+        series, not the total.
+
+        Raises `MetricsScrapeError` on the same infra failures."""
+        out = []
+        for entry in self.__query_stats_range(cluster, metric_name,
+                                             window, step):
+            values = entry.get("values") or []
+            if not values:
+                continue
+            labels = {k: v for k, v in (entry.get("metric") or {}).items()}
+            try:
+                out.append({"labels": labels, "value": float(values[-1][1])})
+            except (TypeError, ValueError, IndexError):
+                self.log.warning(
+                    "{0} Could not parse stats/range sample for {1}: "
+                    "{2}".format(
+                        self._log_tag(), metric_name, values[-1]))
+        return out
+
+    def __query_stats_range(self, cluster, metric_name, window, step):
+        """POST /pools/default/stats/range for `metric_name` and return the
+        raw list of matched series. Shared by the readers above."""
         rest = RestConnection(cluster.get_master_node())
         api = rest.baseUrl + "pools/default/stats/range"
         payload = json.dumps([{
@@ -6509,20 +6693,7 @@ class XDCRNewBaseTest(unittest.TestCase):
             raise MetricsScrapeError(
                 "stats/range reported errors for {0} on {1}: {2}".format(
                     metric_name, cluster.get_name(), errors))
-        total = 0.0
-        series = result.get("data") or []
-        for entry in series:
-            values = entry.get("values") or []
-            if not values:
-                continue
-            try:
-                total += float(values[-1][1])
-            except (TypeError, ValueError, IndexError):
-                self.log.warning(
-                    "{0} Could not parse stats/range sample for {1}: "
-                    "{2}".format(
-                        self._log_tag(), metric_name, values[-1]))
-        return total, len(series)
+        return result.get("data") or []
 
     def scrape_prometheus_metric(self, server, metric_name,
                                    sum_across_labels=True,

@@ -26,7 +26,7 @@ XDCR (Cross Data Center Replication) test suite validates Couchbase replication 
 | **Pause/Resume** | `pauseResumeXDCR.py` | Replication pause and resume lifecycle |
 | **Rebalance** | `rebalanceXDCR.py` | Replication during cluster rebalance/failover |
 | **Upgrade** | `upgradeXDCR.py` | XDCR upgrade path validation |
-| **Target Awareness** | `targetAwarenessXDCR.py` | Target cluster awareness and incoming/outgoing replication tracking |
+| **Target Awareness** | `targetAwarenessXDCR.py` | Topology heartbeats: incoming/outgoing replication tracking, plus `SourceClusterNodes` correctness -- non-KV source nodes never advertised (including when the non-KV node is the source orchestrator, i.e. the heartbeat sender: MB-71771), failed-over and rebalanced nodes reflected, every target node agreeing (P2P heartbeat proxying), source cluster name propagation, heartbeats surviving an orchestrator crash, and the target-side `xdcr_number_of_source_nodes_total` gauge. Tests shorten the heartbeat cadence via `SrcHeartbeatMinInterval`/`SrcHeartbeatMaxIntervalFactor` (shipped defaults put the next heartbeat up to 300s away; these are metakv-backed, so one POST per cluster covers every node and restarts goxdcr cluster-wide), assert the values read back before deriving any wait from them, and restore the shipped values in `tearDown`. Needs an ini with spare nodes -- `b/resources/6-nodes-template-xdcr.ini` |
 | **Variable vBuckets** | `variableVbucketXDCR.py` | Dynamic vBucket configuration |
 | **XATTR** | `xdcr_xattr_sdk.py` | Extended attributes replication |
 | **forwardLocalOnly** | `forwardLocalOnlyXDCR.py` | AA bidirectional ECCV replication of local-only mutations; covers Type-1/2/3 mutation classification, foreign-HLV skip, `disableHlvBasedShortCircuit`, deletes/tombstones/expiry, advanced filtering, creation-time validation (source/target ECCV checks, FLO+mobile mutual exclusion), 3-cluster mixed-ECCV, full-mesh exactly-once delivery, ring-topology data-loss callout (with leg-liveness control), mixed-mode setting persistence; verifies `xdcr_non_local_mutations_skipped_total` and appends a post-scenario FLO-enforcement probe to lifecycle/topology tests |
@@ -98,6 +98,15 @@ INI files in `b/resources/` define cluster topology with dynamic IP placeholders
 ### Base Class
 - `XDCRNewBaseTest` in `xdcrnewbasetests.py` - The only active base class for XDCR tests
 - Note: `xdcrbasetests.py` is deprecated and should not be used for new tests
+- Topology helpers worth reusing instead of re-deriving:
+  - `get_orchestrator_node(cluster)` - the ns_server orchestrator as a server object, **not** the same thing as `cluster.get_master_node()`; it is the only node that sends topology heartbeats, and leadership moves on its own after restarts/rebalances/failovers
+  - `get_active_kv_nodes(cluster)` - `"<host>:<port>"` of active data nodes, matching how XDCR advertises source nodes
+  - `get_live_rest(cluster)` - `RestConnection` to the first responsive node, for tests that take nodes down
+  - `query_prometheus_metric_series(cluster, metric)` - per-series metric read with labels; cluster-level goxdcr gauges are exported by every node, so `query_prometheus_metric()`'s sum multiplies them by the node count
+  - `CouchbaseCluster.rebalance_in_with_services(["index,n1ql"])` - rebalance in service-only (non-KV) nodes; `rebalance_in()` always adds data nodes
+- goxdcr's admin surface is proxied by ns_server on 8091: `GET`/`POST /xdcr/internalSettings` and `GET /xdcr/sourceClusters` all work through `RestConnection`, so tests do not need SSH + `curl localhost:9998` (which also puts the admin password into the logs and returns no usable status)
+- Remote commands: `execute_command(..., use_channel=True)` does **not** surface stderr or a failure - it logged "command executed successfully" for a command that died with `nft: command not found`, which is how a firewall test blocked nothing and then blamed the product. Use `get_exit_code=True` and assert on the exit code, and where the command is supposed to change behaviour, verify the effect too
+- Orchestrator placement: there is no supported way to hand orchestration to a chosen node. Stopping the current orchestrator moves leadership within seconds, but the node **reclaims it as soon as it is started again** (4/4 on 8.1.0-2570); rebalancing a node *in* does land leadership on the new node. A test that needs a node which is not the orchestrator should read the orchestrator and choose relative to it (`kv_node_other_than_orchestrator()` in `targetAwarenessXDCR.py`) rather than trying to move leadership
 
 ### Adding New Test Files
 - When creating a new test file, ensure it is tracked in git (`git add <filename>`)
