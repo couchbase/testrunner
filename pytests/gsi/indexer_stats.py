@@ -9,6 +9,7 @@ __created_on__ = "29/10/20 3:19 pm"
 
 """
 import json
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 from .base_gsi import BaseSecondaryIndexingTests
@@ -178,6 +179,24 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
             except (ValueError, IndexError):
                 return 0
         return 0
+
+    def _wait_for_stats_log_rotation(self, node, log_path, timeout=300):
+        """Poll until indexer_stats.log has rotated at least once, so the
+        compression check has something to look at."""
+        end_time = time.time() + timeout
+        while time.time() < end_time:
+            shell = RemoteMachineShellConnection(node)
+            output, _ = shell.execute_command(
+                f"ls -1 {log_path}/indexer_stats.log.[0-9]* 2>/dev/null | wc -l")
+            shell.disconnect()
+            count = int(output[0].strip()) if output and output[0].strip().isdigit() else 0
+            if count:
+                self.log.info(f"{count} stats log rotation(s) present on {node.ip}")
+                return True
+            self.sleep(30, "Waiting for indexer_stats.log to rotate")
+        self.log.warning(
+            f"indexer_stats.log did not rotate on {node.ip} within {timeout}s")
+        return False
 
     def _get_stats_log_tail(self, node, lines=30):
         stats_log = f"{LINUX_COUCHBASE_LOGS_PATH}/indexer_stats.log"
@@ -1182,3 +1201,80 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
 
         self.log.info("PASS: indexer_stats.log kept receiving new entries while "
                       "indexer main loop was under heavy DGM load (MB-70307 verified)")
+
+    def test_indexer_stats_log_compression(self):
+        """
+        MB-72106: Verify rotated indexer stats log files are gzip compressed.
+
+        The stats log grows by only ~600 bytes per dump at the default 60s
+        dump interval, so the stock 32MB rotation threshold is weeks away and
+        never fires during a test run. Rotation has to be forced.
+
+        Steps:
+          1. Shrink indexer.statsLogFsize so a single dump exceeds it
+          2. Restart the indexer - the stats logger reads the file size at
+             init, so a running indexer ignores the new value
+          3. Wait for rotations to appear on disk
+          4. Assert at least one indexer_stats.log.N.gz exists
+          5. Assert no uncompressed indexer_stats.log.N exists
+          6. Assert the compressed files open with gzip
+        """
+        index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
+        log_path = LINUX_COUCHBASE_LOGS_PATH
+        rest = RestConnection(index_node)
+        default_fsize = rest.get_indexer_internal_stats().get(
+            'indexer.statsLogFsize', 33554432)
+        # Steps 1-2: shrink the threshold, then bounce the indexer so the
+        # stats logger picks it up
+        rest.set_index_settings_internal({"indexer.statsLogFsize": 8192})
+        try:
+            self._kill_all_processes_index(index_node)
+            self.sleep(30, "Waiting for indexer to come back up after restart")
+            self._wait_for_stats_log_rotation(index_node, log_path)
+        finally:
+            rest.set_index_settings_internal({"indexer.statsLogFsize": default_fsize})
+
+        shell = RemoteMachineShellConnection(index_node)
+        try:
+            # Step 3: list the rotations that exist on disk
+            gz_out, _ = shell.execute_command(
+                f"ls -1 {log_path}/indexer_stats.log.*.gz 2>/dev/null")
+            plain_out, _ = shell.execute_command(
+                f"ls -1 {log_path}/indexer_stats.log.[0-9]* 2>/dev/null | grep -v '\\.gz$'")
+            gz_files = [f.strip() for f in (gz_out or []) if f.strip()]
+            plain_files = [f.strip() for f in (plain_out or []) if f.strip()]
+            self.log.info(f"Compressed rotations on {index_node.ip}: {gz_files}")
+            self.log.info(f"Uncompressed rotations on {index_node.ip}: {plain_files}")
+
+            # Step 6 data gathered up front so the shell can be closed before
+            # any assertion short-circuits the rest of the test
+            gzip_results = []
+            for gz_file in gz_files:
+                rc_out, err = shell.execute_command(f"gzip -t {gz_file}; echo rc=$?")
+                gzip_results.append((gz_file, "".join(rc_out or []), err))
+        finally:
+            shell.disconnect()
+
+        # Step 4: compressed rotations must exist
+        self.assertTrue(
+            gz_files,
+            f"No indexer_stats.log.N.gz found on {index_node.ip} after forcing "
+            f"rotation. Stats log compression appears disabled - verify the "
+            f"MB-72106 fix is in this build.")
+
+        # Step 5: no uncompressed rotations may be left behind
+        self.assertFalse(
+            plain_files,
+            f"Uncompressed indexer_stats.log.N files still present on "
+            f"{index_node.ip}: {plain_files}. Rotated stats logs are expected to "
+            f"be gzip compressed.")
+
+        # Step 6: the compressed files must actually open with gzip
+        for gz_file, rc_text, err in gzip_results:
+            self.assertIn("rc=0", rc_text,
+                          f"gzip -t failed on {gz_file}: {err}")
+            self.log.info(f"{gz_file} opens cleanly with gzip")
+
+        self.log.info(f"PASS: {len(gz_files)} rotated stats log file(s) are gzip "
+                      f"compressed with no uncompressed rotations left on disk "
+                      f"(MB-72106 verified)")
