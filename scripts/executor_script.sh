@@ -260,8 +260,11 @@ fi
 # Clean this build's own old per-run log dirs - each run gets a freshly
 # timestamped logs/testrunner-<ts>/ (testrunner.py os.makedirs), so only
 # genuinely completed runs of THIS job ever match; the live run's own dir
-# always has a fresh ctime.
-find "$WORKSPACE/logs" -mindepth 1 -maxdepth 1 -type d -ctime +10 -exec rm -rf {} \;
+# always has a fresh ctime. logs/ doesn't exist yet on a wiped workspace,
+# hence 2>/dev/null - the bare error used to look like the point where a
+# stalled build died.
+find "$WORKSPACE/logs" -mindepth 1 -maxdepth 1 -type d -ctime +10 \
+  -exec rm -rf {} \; 2>/dev/null
 
 # Reclaim whole workspaces of jobs that haven't run in 10+ days, node-wide.
 # logs/ itself only gets a new entry when testrunner.py actually starts a
@@ -274,21 +277,81 @@ find "$WORKSPACE/logs" -mindepth 1 -maxdepth 1 -type d -ctime +10 -exec rm -rf {
 # $WORKSPACE, skip anything with a recent .executor_lock heartbeat
 # (touched at the top of every run), and skip anything with an open file
 # handle.
-for base in /data/workspace /root/workspace; do
-  [ -d "$base" ] || continue
-  find "$base" -mindepth 2 -maxdepth 2 -type d -name logs -ctime +10 2>/dev/null | while IFS= read -r logdir; do
-    parent="$(dirname "$logdir")"
-    [ "$parent" = "$WORKSPACE" ] && continue
-    [ -n "$(find "$parent/.executor_lock" -mtime -1 2>/dev/null)" ] && continue
-    lsof +D "$parent" >/dev/null 2>&1 && continue
-    rm -rf "$parent"
+#
+# Everything here is hard-bounded in time. `lsof +D` walks every file under
+# a whole workspace and blocks indefinitely on a stale NFS mount (these
+# nodes force-unmount NFS during install), so it gets a per-workspace
+# timeout, and the sweep as a whole gets a budget. A build must never spend
+# its wall-clock on housekeeping: one sweep stuck in `lsof +D` consumed a
+# full 780-minute job timeout before a single test ran, and the build was
+# aborted with zero results (test_suite_executor/85412).
+#
+# Note the exit-code handling: lsof exits 0 when it finds open handles and
+# 1 when it finds none. ONLY a clean 1 permits deletion. A timed-out lsof
+# exits 124 and a missing lsof exits 127, and neither means "idle" - any
+# outcome we can't read as "proven idle" skips the workspace, because the
+# cost of being wrong is deleting a live build's cwd.
+RECLAIM_BUDGET_SECS=300      # whole node-wide sweep
+RECLAIM_LSOF_TIMEOUT=30      # single `lsof +D <workspace>`
+RECLAIM_FIND_TIMEOUT=60      # single top-level `find <base>`
+
+reclaim_stale_workspaces() {
+  local deadline=$((SECONDS + RECLAIM_BUDGET_SECS))
+  local base logdir parent rc
+
+  # Both tools are mandatory, not optional: without lsof we cannot prove a
+  # workspace is idle before deleting it, and without timeout we cannot bound
+  # lsof. Skipping loudly beats either deleting blind or hanging - and don't
+  # assume a tool is present just because it usually is (see killall below).
+  if ! command -v lsof >/dev/null 2>&1 || ! command -v timeout >/dev/null 2>&1; then
+    echo "Skipping node-wide workspace reclaim: lsof and timeout are both" \
+         "required to reclaim a workspace safely"
+    return 0
+  fi
+
+  for base in /data/workspace /root/workspace; do
+    [ -d "$base" ] || continue
+    while IFS= read -r logdir; do
+      if [ "$SECONDS" -ge "$deadline" ]; then
+        echo "Node-wide workspace reclaim hit its ${RECLAIM_BUDGET_SECS}s" \
+             "budget; remaining stale workspaces left for the next run"
+        return 0
+      fi
+      parent="$(dirname "$logdir")"
+      [ "$parent" = "$WORKSPACE" ] && continue
+      [ -n "$(find "$parent/.executor_lock" -mtime -1 2>/dev/null)" ] && continue
+      timeout "$RECLAIM_LSOF_TIMEOUT" lsof +D "$parent" >/dev/null 2>&1
+      rc=$?
+      if [ "$rc" -ne 1 ]; then
+        echo "Keeping $parent: lsof exited $rc (open handles, timeout or" \
+             "error) - not proven idle"
+        continue
+      fi
+      rm -rf "$parent"
+    done < <(timeout "$RECLAIM_FIND_TIMEOUT" find "$base" -mindepth 2 -maxdepth 2 \
+               -type d -name logs -ctime +10 2>/dev/null)
   done
-done
+}
+
+reclaim_stale_workspaces
 ######
 
 ##Added on August 2nd 2017 to kill all python processes older than 10days, comment if it causes any failures
 ## Updated on 11/21/19 by Mihir to kill all python processes older than 3 days instead of 10 days.
-killall --older-than 72h ${py_executable}
+## killall comes from psmisc, which isn't installed on every slave - on the
+## debian 12 nodes this was a silent no-op ("killall: command not found"), so
+## fall back to an equivalent age filter over ps. 72h is far beyond the 780
+## minute job timeout, so nothing still doing useful work can match.
+if command -v killall >/dev/null 2>&1; then
+  killall --older-than 72h ${py_executable}
+else
+  ps -eo pid=,etimes=,comm= | while read -r stale_pid stale_age stale_comm; do
+    [ "$stale_comm" = "${py_executable}" ] || continue
+    [ "$stale_age" -gt 259200 ] 2>/dev/null || continue
+    echo "Killing stale ${py_executable} pid $stale_pid (${stale_age}s old)"
+    kill -9 "$stale_pid" 2>/dev/null
+  done
+fi
 
 # Trim whitespaces to detect empty input
 rerun_params=$(echo "$rerun_params" | xargs)
