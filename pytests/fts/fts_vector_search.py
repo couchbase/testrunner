@@ -378,6 +378,10 @@ HIERARCHICAL_INDEX_DEF_JSON = r"""
 
 class VectorSearch(FTSBaseTest):
 
+    # Similarity metrics whose ranking the euclidean groundtruth files do not
+    # describe - see index_needs_faiss_answer_key().
+    NON_EUCLIDEAN_SIMILARITIES = ("dot_product",)
+
     def setUp(self):
         os.environ['OPENBLAS_NUM_THREADS'] = '1'
         super(VectorSearch, self).setUp()
@@ -440,23 +444,20 @@ class VectorSearch(FTSBaseTest):
 
         if self.prefilter_docs:
             if self.conjuction_query_with_prefilter:
-                # Build two overlapping ranges from [min, max). The earlier
-                # version used max/2 as the midpoint, which inverted the first
-                # range whenever start_key was big enough to push min past
-                # max/2, and split [min, max) into two disjoint halves whose
-                # AND was always empty. Use a proper midpoint and overlap the
-                # halves by a quarter of the span so the conjunction is a
-                # real, non-empty band that exercises the prefilter.
+                # Widen each conjunct outwards so the AND is exactly the
+                # [min, max) band the groundtruth covers. ANDing two halves of
+                # the band instead caps recall near 50% whatever the index does.
+                # Each conjunct alone still reaches outside the band, so an AND
+                # that is not applied trips the prefilter check in the test body.
                 lo = int(self.prefilter_query["min"])
                 hi = int(self.prefilter_query["max"])
-                midpoint = (lo + hi) // 2
-                overlap = max(1, (hi - lo) // 4)
-                fts_vector_query["knn"][0]["filter"] = {"conjuncts": []}
-                first_query = self.prefilter_query.copy()
-                first_query["max"] = midpoint + overlap
-                self.prefilter_query["min"] = max(lo, midpoint - overlap)
-                fts_vector_query["knn"][0]["filter"]["conjuncts"].append(first_query)
-                fts_vector_query["knn"][0]["filter"]["conjuncts"].append(self.prefilter_query)
+                span = max(1, (hi - lo) // 4)
+                lower_conjunct = dict(self.prefilter_query)
+                lower_conjunct["min"] = lo - span
+                upper_conjunct = dict(self.prefilter_query)
+                upper_conjunct["max"] = hi + span
+                fts_vector_query["knn"][0]["filter"] = {
+                    "conjuncts": [lower_conjunct, upper_conjunct]}
                 self.log.info(f"conjunction query with prefilter is : {fts_vector_query}")
             else:
                 fts_vector_query["knn"][0]["filter"] = self.prefilter_query
@@ -894,6 +895,23 @@ class VectorSearch(FTSBaseTest):
 
         return accuracy, percentage_exist
 
+    def index_needs_faiss_answer_key(self, index):
+        """Whether this index must be graded against FAISS instead of groundtruth.
+
+        The groundtruth files are euclidean neighbour lists, so they are a valid
+        answer key only for an index that ranks by distance. A dot_product index
+        ranks by raw inner product and legitimately disagrees with them on the
+        top hit, so it is graded against its FAISS IndexFlatIP reference instead.
+        """
+        return index.get('similarity') in self.NON_EUCLIDEAN_SIMILARITIES
+
+    def grade_metrics_for_index(self, index, recall_and_accuracy):
+        """Pick the (accuracy, recall) pair this index should be graded on."""
+        if self.index_needs_faiss_answer_key(index):
+            return (recall_and_accuracy['fts_faiss_accuracy'],
+                    recall_and_accuracy['fts_faiss_recall'])
+        return recall_and_accuracy['fts_accuracy'], recall_and_accuracy['fts_recall']
+
     def perform_validations_from_faiss(self, matches, index, query_vector):
         import faiss
         import numpy as np
@@ -1097,13 +1115,16 @@ class VectorSearch(FTSBaseTest):
 
         recall_and_accuracy = {}
 
+        # One exact-search pass shared by both comparisons below
+        faiss_results = None
+        want_faiss = validate_fts_with_faiss or (neighbours is not None and perform_faiss_validation)
+        if want_faiss and not continue_on_failure:
+            faiss_results = self.perform_validations_from_faiss(matches, index, vector)
+
         if validate_fts_with_faiss and not continue_on_failure:
-            query_vector = vector
             fts_matches = []
             for i in range(self.k):
                 fts_matches.append(matches[i]['fields']['sno'] - 1)
-
-            faiss_results = self.perform_validations_from_faiss(matches, index, query_vector)
 
             self.log.info("*" * 5 + f"Query RESULT # {self.count - 1}" + "*" * 5)
             fts_faiss_accuracy, fts_faiss_recall = self.compare_results(faiss_results, fts_matches, "faiss",
@@ -1119,14 +1140,10 @@ class VectorSearch(FTSBaseTest):
             self.log.info("*" * 30)
 
         if neighbours is not None and not continue_on_failure:
-            query_vector = vector
             fts_matches = []
 
             for i in range(self.k):
                 fts_matches.append(matches[i]['fields']['sno'] - 1)
-
-            if perform_faiss_validation:
-                faiss_results = self.perform_validations_from_faiss(matches, index, query_vector)
 
             self.log.info("*" * 5 + f"Query RESULT # {self.count}" + "*" * 5)
 
@@ -1215,6 +1232,7 @@ class VectorSearch(FTSBaseTest):
                                                      )
         indexes.append(index[0])
         index[0]['dataset'] = bucketvsdataset['bucket_name']
+        index[0]['similarity'] = self.similarity
         index_obj = next((item for item in index if item['name'] == "i1"), None)['index_obj']
         index_obj.faiss_index = self.create_faiss_index_from_train_data(index[0]['dataset'])
 
@@ -1230,6 +1248,7 @@ class VectorSearch(FTSBaseTest):
                                                      )
         indexes.append(index[0])
         index[0]['dataset'] = bucketvsdataset['bucket_name']
+        index[0]['similarity'] = "dot_product"
         index_obj = next((item for item in index if item['name'] == "i2"), None)['index_obj']
         index_obj.faiss_index = self.create_faiss_index_from_train_data(index[0]['dataset'], index_type="IndexFlatIP")
 
@@ -1250,14 +1269,17 @@ class VectorSearch(FTSBaseTest):
             faiss_accuracy = []
             faiss_recall = []
             perform_faiss_validation = True
+            grade_with_faiss = self.index_needs_faiss_answer_key(index)
             for count, q in enumerate(queries[:self.num_queries]):
 
                 _, _, _, recall_and_accuracy = self.run_vector_query(vector=q.tolist(), index=index['index_obj'],
                                                                      neighbours=neighbours[count],
                                                                      perform_faiss_validation=perform_faiss_validation,
+                                                                     validate_fts_with_faiss=grade_with_faiss,
                                                                      bucket_name=self.index_src,validation_data=self.validation_data,fts_nodes=self.fts_nodes,variable_node=self.fts_target_node)
-                fts_accuracy.append(recall_and_accuracy['fts_accuracy'])
-                fts_recall.append(recall_and_accuracy['fts_recall'])
+                accuracy, recall = self.grade_metrics_for_index(index, recall_and_accuracy)
+                fts_accuracy.append(accuracy)
+                fts_recall.append(recall)
                 if perform_faiss_validation:
                     faiss_accuracy.append(recall_and_accuracy['faiss_accuracy'])
                     faiss_recall.append(recall_and_accuracy['faiss_recall'])
@@ -1269,6 +1291,7 @@ class VectorSearch(FTSBaseTest):
                 self.log.info(f"faiss_recall: {faiss_recall}")
 
             index_stats['index_name'] = index['index_obj'].name
+            index_stats['graded_against'] = 'faiss_ip' if grade_with_faiss else 'groundtruth'
             index_stats['fts_accuracy'] = (sum(fts_accuracy) / len(fts_accuracy)) * 100
             index_stats['fts_recall'] = (sum(fts_recall) / len(fts_recall))
 
@@ -2313,12 +2336,15 @@ class VectorSearch(FTSBaseTest):
         indexes.append(index_similarityobj[0])
 
         if create_alias:
-            index_obj_alias = self.create_alias(target_indexes=[index_obj_similarityobj])
             decoded_index = self._decode_index(idx[0])
             collection_index, _type, index_scope, index_collections = self.define_index_params(decoded_index)
-            index_obj_alias.scope = index_scope
+            # alias must be created in the target's bucket and scope - a scoped
+            # target is not resolvable from the default scope
+            index_obj_alias = self.create_alias(
+                target_indexes=[index_obj_similarityobj],
+                bucket=self._cb_cluster.get_bucket_by_name(decoded_index['bucket']),
+                scope=index_scope)
             index_obj_alias.collections = index_collections
-            index_obj_alias._source_name = decoded_index['bucket']
             self.log.info("\n\nIndex Alias object: {}\n\n".format(index_obj_alias.__dict__))
 
         buckets = eval(TestInputSingleton.input.param("kv", "{}"))
@@ -2656,6 +2682,20 @@ class VectorSearch(FTSBaseTest):
             if hits == -1:
                 self.fail("Query returned 0 hits")
 
+    def _resolve_backup_index_key(self, index_name, backup):
+        """Find the key an index is stored under in the backup's indexDefs.
+
+        A scoped index is keyed there by its qualified bucket.scope.name while
+        use_scoped_fts keeps the local FTSIndex on the short name. Returns None
+        if the index is absent from the backup.
+        """
+        if index_name in backup:
+            return index_name
+        for key in backup:
+            if key.endswith('.' + index_name):
+                return key
+        return None
+
     def _check_indexes_definitions(self, index_definitions={}, indexes_for_backup=[]):
         errors = {}
 
@@ -2781,8 +2821,11 @@ class VectorSearch(FTSBaseTest):
         # indexes_for_backup = eval(TestInputSingleton.input.param("expected_indexes", "[]"))
         indexes_for_backup = ["i1"]
         for idx in indexes_for_backup:
-            backup_index_def = backup[idx]
-            index_definitions[idx]['backup_def'] = backup_index_def
+            backup_key = self._resolve_backup_index_key(idx, backup)
+            if backup_key is None:
+                self.fail(f"Index {idx} is expected to be in backup, but it is not found there! "
+                          f"Backed up indexes: {list(backup.keys())}")
+            index_definitions[idx]['backup_def'] = backup[backup_key]
 
         # delete all indexes before restoring from backup
         self._cb_cluster.delete_all_fts_indexes()
@@ -2791,9 +2834,7 @@ class VectorSearch(FTSBaseTest):
         backup_client.restore()
 
         # getting restored indexes definitions and storing them in indexes definitions dict
-        # Map each index name to its (bucket, scope) so the scoped-FTS REST endpoint
-        # targets the right path. Without this, get_fts_index_definition defaults to
-        # _default/_default and 404s for indexes in non-default scopes.
+        # (bucket, scope) per index so the scoped-FTS endpoint targets the right path
         ix_bucket_scope = {}
         for index in indexes:
             ix = index['index_obj']
@@ -2857,6 +2898,7 @@ class VectorSearch(FTSBaseTest):
                                                      extra_fields=[{"sno": "number"}])
         indexes.append(index[0])
         index[0]['dataset'] = bucketvsdataset['bucket_name']
+        index[0]['similarity'] = self.similarity
         index_obj = next((item for item in index if item['name'] == "i1"), None)['index_obj']
         index_obj.faiss_index = self.create_faiss_index_from_train_data(index[0]['dataset'])
 
@@ -2871,6 +2913,7 @@ class VectorSearch(FTSBaseTest):
                                                      extra_fields=[{"sno": "number"}])
         indexes.append(index[0])
         index[0]['dataset'] = bucketvsdataset['bucket_name']
+        index[0]['similarity'] = "dot_product"
         index_obj = next((item for item in index if item['name'] == "i2"), None)['index_obj']
         index_obj.faiss_index = self.create_faiss_index_from_train_data(index[0]['dataset'], index_type="IndexFlatIP")
 
@@ -2887,13 +2930,16 @@ class VectorSearch(FTSBaseTest):
             faiss_accuracy = []
             faiss_recall = []
             perform_faiss_validation = True
+            grade_with_faiss = self.index_needs_faiss_answer_key(index)
             for count, q in enumerate(queries[:self.num_queries]):
 
                 _, _, _, recall_and_accuracy = self.run_vector_query(vector=q.tolist(), index=index['index_obj'],
                                                                      neighbours=neighbours[count],
-                                                                     perform_faiss_validation=perform_faiss_validation)
-                fts_accuracy.append(recall_and_accuracy['fts_accuracy'])
-                fts_recall.append(recall_and_accuracy['fts_recall'])
+                                                                     perform_faiss_validation=perform_faiss_validation,
+                                                                     validate_fts_with_faiss=grade_with_faiss)
+                accuracy, recall = self.grade_metrics_for_index(index, recall_and_accuracy)
+                fts_accuracy.append(accuracy)
+                fts_recall.append(recall)
                 if perform_faiss_validation:
                     faiss_accuracy.append(recall_and_accuracy['faiss_accuracy'])
                     faiss_recall.append(recall_and_accuracy['faiss_recall'])
@@ -2905,6 +2951,7 @@ class VectorSearch(FTSBaseTest):
                 self.log.info(f"faiss_recall: {faiss_recall}")
 
             index_stats['index_name'] = index['index_obj'].name
+            index_stats['graded_against'] = 'faiss_ip' if grade_with_faiss else 'groundtruth'
             index_stats['fts_accuracy'] = (sum(fts_accuracy) / len(fts_accuracy)) * 100
             index_stats['fts_recall'] = (sum(fts_recall) / len(fts_recall))
 
@@ -2930,13 +2977,16 @@ class VectorSearch(FTSBaseTest):
             faiss_accuracy = []
             faiss_recall = []
             perform_faiss_validation = True
+            grade_with_faiss = self.index_needs_faiss_answer_key(index)
             for count, q in enumerate(queries[:self.num_queries]):
 
                 _, _, _, recall_and_accuracy = self.run_vector_query(vector=q.tolist(), index=index['index_obj'],
                                                                      neighbours=neighbours[count],
-                                                                     perform_faiss_validation=perform_faiss_validation)
-                fts_accuracy.append(recall_and_accuracy['fts_accuracy'])
-                fts_recall.append(recall_and_accuracy['fts_recall'])
+                                                                     perform_faiss_validation=perform_faiss_validation,
+                                                                     validate_fts_with_faiss=grade_with_faiss)
+                accuracy, recall = self.grade_metrics_for_index(index, recall_and_accuracy)
+                fts_accuracy.append(accuracy)
+                fts_recall.append(recall)
                 if perform_faiss_validation:
                     faiss_accuracy.append(recall_and_accuracy['faiss_accuracy'])
                     faiss_recall.append(recall_and_accuracy['faiss_recall'])
@@ -2948,6 +2998,7 @@ class VectorSearch(FTSBaseTest):
                 self.log.info(f"faiss_recall: {faiss_recall}")
 
             index_stats['index_name'] = index['index_obj'].name
+            index_stats['graded_against'] = 'faiss_ip' if grade_with_faiss else 'groundtruth'
             index_stats['fts_accuracy'] = (sum(fts_accuracy) / len(fts_accuracy)) * 100
             index_stats['fts_recall'] = (sum(fts_recall) / len(fts_recall))
 
@@ -3273,6 +3324,7 @@ class VectorSearch(FTSBaseTest):
                                                      )
         indexes.append(index[0])
         index[0]['dataset'] = bucketvsdataset['bucket_name']
+        index[0]['similarity'] = self.similarity
         index_obj = next((item for item in index if item['name'] == "i1"), None)['index_obj']
         index_obj.faiss_index = self.create_faiss_index_from_train_data("siftsmall")
 
@@ -3288,6 +3340,7 @@ class VectorSearch(FTSBaseTest):
                                                      )
         indexes.append(index[0])
         index[0]['dataset'] = bucketvsdataset['bucket_name']
+        index[0]['similarity'] = "dot_product"
         index_obj = next((item for item in index if item['name'] == "i2"), None)['index_obj']
         index_obj.faiss_index = self.create_faiss_index_from_train_data("siftsmall", index_type="IndexFlatIP")
         all_stats = []
@@ -3306,11 +3359,12 @@ class VectorSearch(FTSBaseTest):
             faiss_accuracy = []
             faiss_recall = []
             perform_faiss_validation = True
+            grade_with_faiss = self.index_needs_faiss_answer_key(index)
             queries_with_failed_prefilter_condition  = []
             for count, q in enumerate(queries[:self.num_queries]):
-                groundTruth_at_start_key = neighbours[count]
-                for i in range(len(groundTruth_at_start_key)):
-                    groundTruth_at_start_key[i] += self.start_key
+                # shifted copy - neighbours[count] is a view, += mutates the
+                # shared groundtruth array
+                groundTruth_at_start_key = [int(n) + self.start_key for n in neighbours[count]]
                 _, _, matches, recall_and_accuracy = self.run_vector_query(vector=q.tolist(), index=index['index_obj'],
                                                                      neighbours=groundTruth_at_start_key,
                                                                      perform_faiss_validation=perform_faiss_validation,
@@ -3325,9 +3379,10 @@ class VectorSearch(FTSBaseTest):
                 out_of_range = [num for num in fts_matches if num < self.start_key or num > self.start_key+10000]
                 if len(out_of_range) > 0:
                     self.log.error(f"Getting results out of specified range = {out_of_range}")
-                    queries_with_failed_prefilter_condition.append(i)
-                fts_accuracy.append(recall_and_accuracy['fts_accuracy'])
-                fts_recall.append(recall_and_accuracy['fts_recall'])
+                    queries_with_failed_prefilter_condition.append(count)
+                accuracy, recall = self.grade_metrics_for_index(index, recall_and_accuracy)
+                fts_accuracy.append(accuracy)
+                fts_recall.append(recall)
                 if perform_faiss_validation:
                     faiss_accuracy.append(recall_and_accuracy['faiss_accuracy'])
                     faiss_recall.append(recall_and_accuracy['faiss_recall'])
@@ -3339,6 +3394,7 @@ class VectorSearch(FTSBaseTest):
                 self.log.info(f"faiss_recall: {faiss_recall}")
 
             index_stats['index_name'] = index['index_obj'].name
+            index_stats['graded_against'] = 'faiss_ip' if grade_with_faiss else 'groundtruth'
             index_stats['fts_accuracy'] = (sum(fts_accuracy) / len(fts_accuracy)) * 100
             index_stats['fts_recall'] = (sum(fts_recall) / len(fts_recall))
             index_stats['failed_prefilter_conditions'] = queries_with_failed_prefilter_condition

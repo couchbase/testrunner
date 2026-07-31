@@ -7183,9 +7183,11 @@ class FTSBaseTest(unittest.TestCase):
                 index_collections.append(self.collection)
         return collection_index, _type, index_scope, index_collections
 
-    def create_alias(self, target_indexes, bucket=None, name=None, alias_def=None):
+    def create_alias(self, target_indexes, bucket=None, name=None, alias_def=None, scope=None):
         """
         Creates an alias spanning one or many target indexes
+        @param scope: scope to create the alias in, required when the targets are
+                      scoped indexes - an alias resolves targets within its own scope
         """
         if not name:
             name = 'alias_%s' % int(time.time())
@@ -7198,10 +7200,12 @@ class FTSBaseTest(unittest.TestCase):
             return self._cb_cluster.create_fts_index(name=name,
                                                      source_name=bucket.name,
                                                      index_type='fulltext-alias',
-                                                     index_params=alias_def)
+                                                     index_params=alias_def,
+                                                     scope=scope)
         return self._cb_cluster.create_fts_index(name=name,
                                                  index_type='fulltext-alias',
-                                                 index_params=alias_def)
+                                                 index_params=alias_def,
+                                                 scope=scope)
 
     def validate_index_count(self, equal_bucket_doc_count=False,
                              zero_rows_ok=True, must_equal=None):
@@ -9063,7 +9067,8 @@ class FTSBaseTest(unittest.TestCase):
         import numpy as np
 
         INDEX_FILE_DIR = "b/resources/fts/vector_search/"
-        file_name = f"{dataset_name}_index.index"
+        # index_type in the name so an L2 reference is never served for an IP request
+        file_name = f"{dataset_name}_{index_type}_index.index"
         file_path = INDEX_FILE_DIR + file_name
 
         if os.path.exists(file_path):
@@ -9097,9 +9102,11 @@ class FTSBaseTest(unittest.TestCase):
                 faiss_index = faiss.IndexFlatL2(len(ds.train_vecs[0]))
             else:
                 faiss_index = faiss.IndexFlatIP(len(ds.train_vecs[0]))
-            faiss_index = faiss.IndexFlatL2(len(ds.train_vecs[0]))
             index_vectors = np.array(ds.train_vecs).astype('float32')
-            faiss.normalize_L2(index_vectors)
+            # only the L2 reference normalises - FTS scores dot_product on the
+            # raw inner product, normalising here would rank by cosine instead
+            if index_type == "IndexFlatL2":
+                faiss.normalize_L2(index_vectors)
             faiss_index.add(index_vectors)
             # faiss.write_index(faiss_index, file_path)
 
