@@ -1,7 +1,7 @@
 import zlib
 import json
 
-from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator, SDKDataLoader
+from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator
 from .xdcrnewbasetests import XDCRNewBaseTest, FloatingServers
 from .xdcrnewbasetests import NodeHelper
 from membase.api.rest_client import RestConnection
@@ -161,10 +161,10 @@ class Lww(XDCRNewBaseTest):
                 self._scope_num, self._collection_num, bucket)
 
     def load_cluster_buckets(self, cluster=None):
-        if self._use_java_sdk:
-            gen = SDKDataLoader(self._num_items, percent_create=100, key_prefix="lww-")
-        else:
-            gen = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
+        # load_all_buckets_from_generator() converts to SDKDataLoader itself when
+        # java_sdk_client is set, reading BlobGenerator attributes (.name, .end) to
+        # do it. Converting here as well hands it a generator it cannot read.
+        gen = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         if cluster:
             cluster.load_all_buckets_from_generator(gen)
         else:

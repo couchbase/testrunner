@@ -3,7 +3,7 @@ import random
 import re
 
 from couchbase_helper.cluster import Cluster
-from couchbase_helper.documentgenerator import BlobGenerator, SDKDataLoader
+from couchbase_helper.documentgenerator import BlobGenerator
 from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection
 
@@ -147,12 +147,11 @@ class nwusage(XDCRNewBaseTest):
         return curr_time
 
     def _get_generator(self, prefix, docsize, numitems):
-        if self._use_java_sdk:
-            gen_create = SDKDataLoader(num_ops=numitems, percent_create=100, key_prefix=prefix, doc_size=docsize,
-                                       timeout=1000)
-        else:
-            gen_create = BlobGenerator(prefix, prefix, docsize, end=numitems)
-        return gen_create
+        # Both load paths go through load_all_buckets_from_generator(), which converts
+        # to SDKDataLoader itself when java_sdk_client is set, reading BlobGenerator
+        # attributes (.name, .end) to do it. Converting here as well hands it a
+        # generator it cannot read.
+        return BlobGenerator(prefix, prefix, docsize, end=numitems)
 
     def test_nwusage_with_unidirection(self):
         self.setup_xdcr()
