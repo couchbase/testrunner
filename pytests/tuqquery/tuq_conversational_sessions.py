@@ -1,6 +1,7 @@
 import json
 import time
 from .tuq import QueryTests
+from membase.api.exception import CBQError
 import os
 
 
@@ -16,8 +17,17 @@ class ConversationalSessionTests(QueryTests):
         self.log.info("==============  ConversationalSessionTests setup has started ==============")
         self.natural_capella_user = os.environ.get("NATURAL_CAPELLA_USER", None)
         self.natural_capella_password = os.environ.get("NATURAL_CAPELLA_PASSWORD", None)
-        self.natural_cred = self.natural_capella_user + ":" + self.natural_capella_password
+        # Keep this None-safe: the REST-based chat lifecycle tests below need no AI
+        # credentials, so setUp must not blow up when the env vars are absent.
+        # Tests that do need Capella call _require_ai_creds() and skip instead.
+        if self.natural_capella_user and self.natural_capella_password:
+            self.natural_cred = self.natural_capella_user + ":" + self.natural_capella_password
+        else:
+            self.natural_cred = None
         self.natural_orgid = os.environ.get("NATURAL_ORGID", None)
+        # Resources created by the REST-based tests, cleaned up in tearDown.
+        self._chats = []
+        self._users_created = []
         self.natural_context = self.input.param(
             "natural_context",
             "travel-sample.inventory.airport,travel-sample.inventory.airline,"
@@ -53,6 +63,18 @@ class ConversationalSessionTests(QueryTests):
 
     def tearDown(self):
         self.log.info("==============  ConversationalSessionTests tearDown has started ==============")
+        # The chat cache is capped at NumCPU*2, so leaked chats make later tests fail
+        # with E_NL_CHAT_CACHE_FULL. End every chat this test created.
+        for chat_id in getattr(self, '_chats', []):
+            try:
+                self._rest_chat('END CHAT WITH {"chatId": "%s"}' % chat_id)
+            except Exception as exc:
+                self.log.warning("cleanup: END CHAT %s failed: %s" % (chat_id, exc))
+        for user_id in getattr(self, '_users_created', []):
+            try:
+                self.rest.delete_builtin_user(user_id)
+            except Exception as exc:
+                self.log.warning("cleanup: delete user %s failed: %s" % (user_id, exc))
         super(ConversationalSessionTests, self).tearDown()
         self.log.info("==============  ConversationalSessionTests tearDown has completed ==============")
 
@@ -82,8 +104,15 @@ class ConversationalSessionTests(QueryTests):
                     pass
         return {}
 
+    def _require_ai_creds(self):
+        """Skip a test that needs live Capella conversational AI when creds are absent."""
+        if not self.natural_cred or not self.natural_orgid:
+            self.skipTest("Capella AI credentials not set; export NATURAL_CAPELLA_USER, "
+                          "NATURAL_CAPELLA_PASSWORD and NATURAL_ORGID to run this test")
+
     def _begin_chat(self):
         """Start a conversational session via BEGIN CHAT; returns the chatId."""
+        self._require_ai_creds()
         cmds = []
         if self.natural_cred:
             cmds.append('\\set -natural_cred %s;' % self.natural_cred)
@@ -160,6 +189,126 @@ class ConversationalSessionTests(QueryTests):
             if key in row:
                 return row[key]
         return next(iter(row.values()), None)
+
+    # ---------------------------------------------- REST chat-lifecycle helpers
+    # BEGIN/END/PAUSE/ALTER CHAT and system:natural_chats are plain REST statements:
+    # they only need a natural_context request parameter, not the cbq shell and not
+    # Capella credentials (only USING AI actually calls the LLM). The helpers below
+    # drive that path so the regression tests are hermetic and always runnable.
+
+    # The plain 'default' bucket, deliberately not self.natural_context (travel-sample).
+    # Without a natural_context, BEGIN CHAT fails with 19215 / cause "empty path".
+    _REST_CTX = "default"
+
+    def _rest_chat(self, statement, username=None, password=None, natural_context=None):
+        """Run a chat statement over REST, returning the raw response dict."""
+        params = {"natural_context": natural_context or self._REST_CTX}
+        return self.run_cbq_query(statement, query_params=params,
+                                  username=username, password=password)
+
+    def _rest_begin_chat(self, timeout=None, username=None, password=None,
+                         natural_context=None):
+        """BEGIN CHAT over REST; records the chatId for tearDown and returns it."""
+        if timeout is None:
+            stmt = 'BEGIN CHAT'
+        elif isinstance(timeout, str):
+            stmt = 'BEGIN CHAT WITH {"timeout": "%s"}' % timeout
+        else:
+            stmt = 'BEGIN CHAT WITH {"timeout": %s}' % json.dumps(timeout)
+        result = self._rest_chat(stmt, username=username, password=password,
+                                 natural_context=natural_context)
+        chat_id = result.get('chatId')
+        self.assertIsNotNone(chat_id, "BEGIN CHAT did not return a chatId: %s" % result)
+        self._chats.append(chat_id)
+        return chat_id
+
+    def _end_rest_chat(self, chat_id, username=None, password=None):
+        """END CHAT and stop tracking the chat, so tearDown does not re-end it."""
+        try:
+            self._rest_chat('END CHAT WITH {"chatId": "%s"}' % chat_id,
+                            username=username, password=password)
+        finally:
+            if chat_id in self._chats:
+                self._chats.remove(chat_id)
+
+    def _chat_ids(self, username=None, password=None):
+        """chatIds visible in system:natural_chats for the given user (admin by default)."""
+        result = self.run_cbq_query("SELECT RAW chatId FROM system:natural_chats",
+                                    username=username, password=password)
+        return result['results']
+
+    def _chat_field(self, chat_id, field):
+        """Read one field of a chat row from system:natural_chats, or None if absent."""
+        result = self.run_cbq_query(
+            "SELECT RAW `%s` FROM system:natural_chats WHERE chatId = '%s'" % (field, chat_id))
+        rows = result['results']
+        return rows[0] if rows else None
+
+    def _expect_error(self, statement, code, msg_substring=None, username=None,
+                      password=None, natural_context=None):
+        """Assert a chat statement fails with the given error code (and message text).
+
+        run_cbq_query raises CBQError on a N1QL error, so a missing exception means
+        the statement unexpectedly succeeded - that must fail the test explicitly.
+        """
+        try:
+            result = self._rest_chat(statement, username=username, password=password,
+                                     natural_context=natural_context)
+        except CBQError as ex:
+            error = self.process_CBQE(ex)
+            self.assertEqual(error['code'], code,
+                             "Expected error %s for [%s], got %s" % (code, statement, error))
+            if msg_substring:
+                self.assertIn(msg_substring, str(error),
+                              "Expected %r in error for [%s], got %s"
+                              % (msg_substring, statement, error))
+            return error
+        self.fail("Expected error %s for [%s] but it succeeded: %s"
+                  % (code, statement, result))
+
+    def _prom_metric(self, metric_name):
+        """Value of an n1ql metric from :8093/_prometheusMetrics, or None if absent.
+
+        Matches the metric name exactly - a substring match would let n1ql_chats
+        collide with any n1ql_chats_* metric - so None means genuinely absent,
+        which is different from a present-but-zero counter.
+        """
+        status, content = self.rest.get_rest_endpoint_data(
+            '_prometheusMetrics', ip=self.master.ip, port=self.n1ql_port)
+        self.assertTrue(status, "Failed to scrape _prometheusMetrics on %s" % self.master.ip)
+        if isinstance(content, bytes):
+            content = content.decode('utf8', 'replace')
+        for line in content.splitlines():
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            name = line.split('{')[0].split(' ')[0]
+            if name == metric_name:
+                try:
+                    return int(float(line.split()[-1]))
+                except (ValueError, IndexError):
+                    continue
+        return None
+
+    def _create_chat_user(self, user_id, roles='query_system_catalog,query_manage_system_catalog',
+                          password='password1'):
+        """Create a local user with the given roles, tracked for deletion in tearDown.
+
+        Roles are comma separated: this goes straight to
+        PUT /settings/rbac/users/local/<id>, which rejects the colon separated form
+        that RbacBase only rewrites for roles carrying [bucket] parameters.
+        Returns (user_id, password).
+        """
+        # Drop a leftover from an earlier run so the test is rerun-safe.
+        try:
+            self.rest.delete_builtin_user(user_id)
+        except Exception:
+            pass
+        payload = "name=%s&roles=%s&password=%s" % (user_id, roles, password)
+        self.rest.add_set_builtin_user(user_id, payload)
+        self._users_created.append(user_id)
+        self.sleep(3, "Waiting for user %s to be usable" % user_id)
+        return user_id, password
 
     # ------------------------------------------------------------------ S-01
 
@@ -642,3 +791,186 @@ class ConversationalSessionTests(QueryTests):
                             result.get('generated_statement'))
         finally:
             self._end_chat(chat_id)
+
+    # ============================================================================
+    # REST-based chat lifecycle regressions (no AI credentials required).
+    # BEGIN/END/PAUSE/ALTER CHAT and system:natural_chats are plain REST statements,
+    # so these run anywhere - no cbq shell, no Capella, no travel-sample.
+    # ============================================================================
+
+    def test_n1ql_chats_metric_increments(self):
+        """
+        MB-71826: a n1ql_chats counter is exposed on the query service's
+        /_prometheusMetrics endpoint and increments once per successful BEGIN CHAT.
+        Note the metric lives on the query port (8093), not 9499 as the MB states -
+        9499 is a cluster_run-only port and is refused on an installed build.
+        """
+        before = self._prom_metric('n1ql_chats')
+        self.assertIsNotNone(
+            before, "MB-71826: n1ql_chats is absent from :%s/_prometheusMetrics "
+                    "(pre-fix builds do not expose it)" % self.n1ql_port)
+
+        chat_id = self._rest_begin_chat()
+        after = self._prom_metric('n1ql_chats')
+        self.assertEqual(after - before, 1,
+                         "MB-71826: expected n1ql_chats +1 after BEGIN CHAT, got %s -> %s"
+                         % (before, after))
+
+        # Only BEGIN CHAT increments; END CHAT must leave the counter alone.
+        self._end_rest_chat(chat_id)
+        after_end = self._prom_metric('n1ql_chats')
+        self.assertEqual(after_end, after,
+                         "MB-71826: END CHAT must not increment n1ql_chats, got %s -> %s"
+                         % (after, after_end))
+
+    def test_chat_timeout_accepted_values(self):
+        """
+        MB-71372: chats carry a configurable inactivity timeout, surfaced as a Go
+        duration string in system:natural_chats. The default is 60 minutes.
+        """
+        chat_id = self._rest_begin_chat()
+        self.assertEqual(self._chat_field(chat_id, 'inactivityTimeout'), '1h0m0s',
+                         "MB-71372: default inactivityTimeout should be 1h0m0s")
+
+        # A JSON number is interpreted as seconds, a string as a Go duration.
+        chat_secs = self._rest_begin_chat(timeout=3600)
+        self.assertEqual(self._chat_field(chat_secs, 'inactivityTimeout'), '1h0m0s',
+                         "MB-71372: timeout=3600 (seconds) should be 1h0m0s")
+
+        chat_dur = self._rest_begin_chat(timeout="90m")
+        self.assertEqual(self._chat_field(chat_dur, 'inactivityTimeout'), '1h30m0s',
+                         "MB-71372: timeout='90m' should be 1h30m0s")
+
+    def test_chat_timeout_below_minimum_rejected(self):
+        """
+        MB-71372: the inactivity timeout can only be raised - the minimum equals the
+        60 minute default - and non-numeric/non-duration values are rejected outright.
+        """
+        for timeout in ('300', '60'):
+            self._expect_error('BEGIN CHAT WITH {"timeout": %s}' % timeout, 19246,
+                               'inactivity timeout must be at least 1h0m0s')
+        self._expect_error('BEGIN CHAT WITH {"timeout": "5m"}', 19246,
+                           'inactivity timeout must be at least 1h0m0s')
+        self._expect_error('BEGIN CHAT WITH {"timeout": true}', 19246,
+                           'invalid timeout type: bool')
+
+    def test_alter_and_update_chat_timeout(self):
+        """
+        MB-71372: an existing chat's timeout can be changed with ALTER CHAT or by
+        UPDATEing system:natural_chats. inactivityTimeout is the only updatable field.
+        """
+        chat_id = self._rest_begin_chat()
+
+        self._rest_chat('ALTER CHAT WITH {"chatId": "%s", "timeout": "2h"}' % chat_id)
+        self.assertEqual(self._chat_field(chat_id, 'inactivityTimeout'), '2h0m0s',
+                         "MB-71372: ALTER CHAT should set inactivityTimeout to 2h0m0s")
+
+        # The WITH clause and its timeout key are both mandatory for ALTER CHAT.
+        self._expect_error('ALTER CHAT WITH {"chatId": "%s"}' % chat_id, 19213)
+
+        self.run_cbq_query("UPDATE system:natural_chats SET inactivityTimeout = '1h40m' "
+                           "WHERE chatId = '%s'" % chat_id)
+        self.assertEqual(self._chat_field(chat_id, 'inactivityTimeout'), '1h40m0s',
+                         "MB-71372: UPDATE should set inactivityTimeout to 1h40m0s")
+
+        # Any other field is not updatable.
+        try:
+            self.run_cbq_query("UPDATE system:natural_chats SET summary = 'nope' "
+                               "WHERE chatId = '%s'" % chat_id)
+            self.fail("MB-71372: updating a field other than inactivityTimeout should fail")
+        except CBQError as ex:
+            error = self.process_CBQE(ex)
+            self.assertEqual(error['code'], 5130,
+                             "MB-71372: expected 5130 invalid field update, got %s" % error)
+
+    def test_chat_not_visible_to_other_user(self):
+        """
+        MB-71373: system:natural_chats is filtered by chat ownership - another
+        non-admin user simply does not see the rows (no error) - while an
+        administrator can see every user's chat.
+        """
+        user_a, pwd_a = self._create_chat_user('chat_user_a')
+        user_b, pwd_b = self._create_chat_user('chat_user_b')
+
+        chat_id = self._rest_begin_chat(username=user_a, password=pwd_a)
+
+        self.assertIn(chat_id, self._chat_ids(username=user_a, password=pwd_a),
+                      "MB-71373: the owner must see their own chat")
+        self.assertNotIn(chat_id, self._chat_ids(username=user_b, password=pwd_b),
+                         "MB-71373: another user must not see someone else's chat")
+        # The admin bypass is the actual fix: pre-fix an admin saw no chats at all.
+        self.assertIn(chat_id, self._chat_ids(),
+                      "MB-71373: an administrator must see every user's chat")
+
+    def test_chat_statements_denied_for_non_owner(self):
+        """
+        MB-71373: chat statements issued by a non-owner are rejected with 19241,
+        and mutations through system:natural_chats affect no rows.
+        """
+        user_a, pwd_a = self._create_chat_user('chat_user_a')
+        user_b, pwd_b = self._create_chat_user('chat_user_b')
+
+        chat_id = self._rest_begin_chat(username=user_a, password=pwd_a)
+        denied = 'The non-admin user(s) provided in the request are not part of the chat session'
+
+        for statement in ('PAUSE CHAT WITH {"chatId": "%s"}' % chat_id,
+                          'ALTER CHAT WITH {"chatId": "%s", "timeout": "2h"}' % chat_id,
+                          'END CHAT WITH {"chatId": "%s"}' % chat_id):
+            self._expect_error(statement, 19241, denied,
+                               username=user_b, password=pwd_b)
+
+        # UPDATE/DELETE are filtered rather than denied: no rows, no error.
+        result = self.run_cbq_query(
+            "UPDATE system:natural_chats SET inactivityTimeout = '2h' WHERE chatId = '%s'"
+            % chat_id, username=user_b, password=pwd_b)
+        self.assertEqual(result['metrics'].get('mutationCount', 0), 0,
+                         "MB-71373: a non-owner UPDATE must not mutate the chat")
+
+        result = self.run_cbq_query(
+            "DELETE FROM system:natural_chats WHERE chatId = '%s'" % chat_id,
+            username=user_b, password=pwd_b)
+        self.assertEqual(result['metrics'].get('mutationCount', 0), 0,
+                         "MB-71373: a non-owner DELETE must not remove the chat")
+        self.assertIn(chat_id, self._chat_ids(),
+                      "MB-71373: the chat must still exist after a non-owner DELETE")
+
+    def test_admin_can_manage_any_chat(self):
+        """
+        MB-71373: an administrator may manage any user's chat. This is the behaviour
+        the fix introduced - before it, an admin was denied with 19241 like any
+        other non-owner.
+        """
+        user_a, pwd_a = self._create_chat_user('chat_user_a')
+        chat_id = self._rest_begin_chat(username=user_a, password=pwd_a)
+
+        self._end_rest_chat(chat_id)
+        self.assertNotIn(chat_id, self._chat_ids(),
+                         "MB-71373: an admin END CHAT should remove another user's chat")
+
+    def test_natural_context_more_than_four_keyspaces(self):
+        """
+        MB-70908: the four-keyspace cap on natural_context was removed. Before the
+        fix a fifth keyspace failed with 19215 wrapping 19223 'Too many keyspaces
+        specified.'; the list length is now unbounded.
+        """
+        scope = 'mb70908'
+        collections = ['c1', 'c2', 'c3', 'c4', 'c5']
+        self.run_cbq_query('CREATE SCOPE default.%s IF NOT EXISTS' % scope)
+        self.sleep(5, "Waiting for scope to be created")
+        try:
+            for name in collections:
+                self.run_cbq_query('CREATE COLLECTION default.%s.%s IF NOT EXISTS'
+                                   % (scope, name))
+            self.sleep(5, "Waiting for collections to be created")
+
+            paths = ['default.%s.%s' % (scope, name) for name in collections]
+            # 3 keyspaces was always allowed; 5 and 8 were rejected before the fix.
+            for count, context in ((3, ','.join(paths[:3])),
+                                   (5, ','.join(paths)),
+                                   (8, ','.join(paths + paths[:3]))):
+                chat_id = self._rest_begin_chat(natural_context=context)
+                self.assertIsNotNone(
+                    chat_id, "MB-70908: BEGIN CHAT with %d keyspaces should succeed" % count)
+                self._end_rest_chat(chat_id)
+        finally:
+            self.run_cbq_query('DROP SCOPE default.%s IF EXISTS' % scope)

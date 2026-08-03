@@ -183,3 +183,46 @@ class QueryInferTests(QueryTests):
             error_msg = str(ex)
             self.assertTrue("No value for named parameter" in error_msg or
                             f"Expected error about missing parameter, got: {error_msg}")
+    def test_infer_no_random_scan_no_random_entry(self):
+        """
+        MB-72891: INFER on a collection that has an index, with both random
+        retrievers disabled, forces the index-scan path. That path used to pass the
+        (nil) sequential-scan index to BackfillEncryptionKey and panic, surfacing as
+        7009 "Keyspace error." with cause "panic: runtime error: invalid memory
+        address or nil pointer dereference".
+
+        The panic only reproduces on a named collection - INFER against the
+        bucket-level keyspace silently returns an empty result instead.
+        """
+        # The other tests in this module INFER object literals, so the suite runs with
+        # no bucket params and the cluster may have none at all. Make sure the bucket
+        # this test needs exists before creating the collection.
+        if 'default' not in [b.name for b in self.rest.get_buckets()]:
+            self.rest.create_bucket(bucket='default', ramQuotaMB=256, replicaNumber=0)
+            self.sleep(15, "Waiting for the default bucket to be ready")
+
+        keyspace = "default._default.mb72891"
+        self.run_cbq_query('CREATE COLLECTION %s IF NOT EXISTS' % keyspace)
+        self.sleep(5, "Waiting for collection to be created")
+        try:
+            for i in range(20):
+                self.run_cbq_query(
+                    'UPSERT INTO %s (KEY, VALUE) VALUES ("k%d", '
+                    '{"id": %d, "name": "n%d", "tags": ["a", "b"]})' % (keyspace, i, i, i))
+            self.run_cbq_query('CREATE INDEX ix_mb72891 IF NOT EXISTS ON %s(id)' % keyspace)
+            self._wait_for_index_online('mb72891', 'ix_mb72891')
+
+            result = self.run_cbq_query(
+                'INFER %s WITH {"flags": ["no_random_scan", "no_random_entry"]}' % keyspace)
+
+            self.assertEqual(result['status'], 'success',
+                             "MB-72891: INFER should succeed, got: %s" % result)
+            flavors = result['results'][0]
+            self.assertTrue(len(flavors) > 0,
+                            "MB-72891: INFER returned no schema flavors: %s" % result)
+            properties = flavors[0]['properties']
+            for field in ('id', 'name', 'tags'):
+                self.assertIn(field, properties,
+                              "MB-72891: inferred schema is missing %r: %s" % (field, properties))
+        finally:
+            self.run_cbq_query('DROP COLLECTION %s IF EXISTS' % keyspace)

@@ -4909,6 +4909,48 @@ class QuerySanityTests(QueryTests):
             self.log.info(f"Memory used: {result['metrics']['usedMemory']}")
             self.assertEqual(result['status'], 'success')
 
+    # MB-70721 / CVE-2026-56134: CONCAT/CONCAT2/UNCOMPRESS results must honor the result-size
+    # limit + memory_quota instead of allocating unbounded and crashing cbq-engine.
+    # Assumes 8.0.x/8.1.x (UNCOMPRESS exists). The error surfaces as top-level 5010 with the
+    # specific "Size of <fn>() result exceeds limit" (5037) nested in reason -> match substring.
+    # memory_quota 0 => rely on the 20 MiB default cap; nonzero => the request memory_quota (MiB).
+    def test_concat_result_exceeds_limit(self):
+        query = 'SELECT CONCAT(REPEAT("a",6291456),REPEAT("b",6291456),REPEAT("c",6291456),REPEAT("d",6291456))'
+        for memory_quota in [0, 4]:
+            query_params = {'memory_quota': memory_quota} if memory_quota else {}
+            try:
+                self.run_cbq_query(query, query_params=query_params)
+                self.fail("MB-70721: expected concat() rejected with a size-limit error (memory_quota=%s)" % memory_quota)
+            except CBQError as ex:
+                self.assertTrue("exceeds limit" in str(ex), "MB-70721: expected 'exceeds limit' error, got: %s" % ex)
+
+    def test_concat2_result_exceeds_limit(self):
+        query = 'SELECT CONCAT2(REPEAT("a",6291456),REPEAT("b",6291456),REPEAT("c",6291456),REPEAT("d",6291456))'
+        for memory_quota in [0, 4]:
+            query_params = {'memory_quota': memory_quota} if memory_quota else {}
+            try:
+                self.run_cbq_query(query, query_params=query_params)
+                self.fail("MB-70721: expected concat2() rejected with a size-limit error (memory_quota=%s)" % memory_quota)
+            except CBQError as ex:
+                self.assertTrue("exceeds limit" in str(ex), "MB-70721: expected 'exceeds limit' error, got: %s" % ex)
+
+    def test_concat_within_limit_succeeds(self):
+        # 4 x 1 MiB = 4 MiB < 20 MiB cap -> must still succeed (fix must not break normal use)
+        result = self.run_cbq_query(
+            'SELECT LENGTH(CONCAT(REPEAT("a",1048576),REPEAT("b",1048576),REPEAT("c",1048576),REPEAT("d",1048576))) AS len')
+        self.assertEqual(result['results'], [{'len': 4194304}])
+
+    def test_uncompress_bomb_exceeds_limit(self):
+        # Exact 850-char "decompression bomb" payload from the MB-70721 description (expands to ~100GB).
+        query = "SELECT EVALUATE('SELECT UNCOMPRESS('||UNCOMPRESS(UNCOMPRESS('eNrsyDmCqjAAANADpQgxsqSYAkEHUJHRyNaBEFZRIWye/p/id2lf7vaDhA500xb6LjfYjNOB2sZxHc+tcX1lbvB3eAUkOip1Fv/pnOcXDyu/e/TsTE2VtZzKX3lMckDuIFzX4LPOrrLRbgsC1XcLQw2pnKS+rX2vD+jfT5zlHPqpinPen+4DoF3fdVcYX+wmIcwaaGgAs1TvSLP82CPUMlOGB3QdIGtpoM4fVY9cj9Fzx8DelPwFQ8nNEjmmBTRiF33KSwUy+TChKXNBz8IuPU7TLI1lR2A4MafOU0tWrZia4/WB23mzs7bYV5pmUZ5kciYiZdbynRJzVeFJl6O/2onILY9TiFOmNqTfUv/N2XdyXsH5O33gEDyok8WBzxQw4RruGaNkHOtRO0ZaODcjQFJtIZpvjQ9fG0rjAMw45z6SlBN4yEbNCPck1ftsCYZ5TUvX7n5PCyPK4FxVdJFvu7VSueWmhyW7OE0Gu3lpUXZ9fI986smzrZISG+4HL6qXLcv89Dd56jEbbpvRakBPgOSlb4BPa+q8BhfcQwQreSetNVLAwwpL6dAteHp37cJ3Upur797lh97eMA8PZ4nIIzqgqtycXCduI96smTVv4EUaKwJy9wVaYh5f2Hr0yTati+L5/DUM45ZEkW07zrssiqIRJkyYMGHChAkTJkyYMGHChAkTJkyYMGHChAkT9t8t3bLlrB2LwFMLZVo0twK3KEpGDaLLyDOo7XTdhHDe67oHId4PXlv8/PwDAAD//wEAAP//Y2+3mg=='))||')')"
+        for memory_quota in [0, 500]:
+            query_params = {'memory_quota': memory_quota, 'timeout': '120s'} if memory_quota else {'timeout': '120s'}
+            try:
+                self.run_cbq_query(query, query_params=query_params)
+                self.fail("MB-70721: expected UNCOMPRESS bomb rejected with a size-limit error (memory_quota=%s)" % memory_quota)
+            except CBQError as ex:
+                self.assertTrue("exceeds limit" in str(ex), "MB-70721: expected 'exceeds limit' error, got: %s" % ex)
+
     def test_prepared_nested_subquery(self):
         self.fail_if_no_buckets()
 
