@@ -66,7 +66,8 @@ class IcebergQueryTests(QueryTests):
                 gcs_bucket_location=self.gcs_bucket_location,
                 nessie_server=self.nessie_server,
                 nessie_uri=self.nessie_uri,
-                aws_role_arn=self.aws_role_arn
+                aws_role_arn=self.aws_role_arn,
+                sigv4_signing_name=self.sigv4_signing_name
             )
             
             _shared_iceberg_util = IcebergUtil(_shared_iceberg_base)

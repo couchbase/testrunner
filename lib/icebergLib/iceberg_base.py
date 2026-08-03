@@ -15,12 +15,13 @@ class IcebergBase:
     def __init__(self, aws_access_key=None, aws_secret_key=None, aws_session_token=None,
                  gcs_credentials=None, catalog_type=None, aws_region=None, database_name=None,
                  table_name=None, iceberg_bucket=None, gcs_project_id=None, gcs_bucket_location=None,
-                 nessie_server=None, nessie_uri=None, aws_role_arn=None):
+                 nessie_server=None, nessie_uri=None, aws_role_arn=None, sigv4_signing_name=None):
         # Common
         self.database_name = database_name or "icebergdb"
         self.table_name = table_name or "hotel"
         self.iceberg_bucket = iceberg_bucket or f"tuqquery-iceberg-{str(int(time.time()))}-{uuid.uuid4().hex[:8]}"
         self.catalog_type = catalog_type
+        self.sigv4_signing_name = sigv4_signing_name
         self.aws_account_id = os.environ.get("AWS_ACCOUNT_ID") or self._get_aws_account_id()
 
         # AWS Glue / S3 Tables

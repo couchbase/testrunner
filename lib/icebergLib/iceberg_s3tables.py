@@ -97,6 +97,14 @@ class S3TablesCatalog:
             print("Lake Formation client or principal ARN unavailable, skipping permission grant.")
             return
 
+        # S3 Tables REST (sigv4_signing_name=s3tables) does not use the Glue Data Catalog,
+        # so LF grants with account ID as CatalogId will fail. Skip LF grants entirely for
+        # REST — the IAM role's direct S3 Tables permissions are sufficient for queries.
+        if getattr(self.state, 'sigv4_signing_name', None) == 's3tables':
+            print("S3 Tables REST catalog detected — skipping Lake Formation grants "
+                  "(IAM role has direct S3 Tables access).")
+            return
+
         database_resource = {
             'Database': {
                 'CatalogId': self.state.aws_account_id,
@@ -118,19 +126,31 @@ class S3TablesCatalog:
             }
         }
 
-        try:
-            self.state.lakeformation_boto3_client.grant_permissions(
-                Principal={'DataLakePrincipalIdentifier': principal_arn},
-                Resource=database_resource,
-                Permissions=['DESCRIBE'],
-                PermissionsWithGrantOption=[]
-            )
-            print(f"Granted Lake Formation permissions ['DESCRIBE'] on {database_resource} to {principal_arn}.")
-        except ClientError as e:
-            if e.response['Error']['Code'] == 'AlreadyExistsException':
-                print(f"Lake Formation permissions ['DESCRIBE'] on {database_resource} already exist for {principal_arn}.")
-            else:
-                raise e
+        # Retry database grant — S3 Tables LF metadata can take time to propagate
+        max_db_attempts = 8
+        for db_attempt in range(1, max_db_attempts + 1):
+            try:
+                self.state.lakeformation_boto3_client.grant_permissions(
+                    Principal={'DataLakePrincipalIdentifier': principal_arn},
+                    Resource=database_resource,
+                    Permissions=['DESCRIBE'],
+                    PermissionsWithGrantOption=[]
+                )
+                print(f"Granted Lake Formation permissions ['DESCRIBE'] on {database_resource} to {principal_arn}.")
+                break
+            except ClientError as e:
+                if e.response['Error']['Code'] == 'AlreadyExistsException':
+                    print(f"Lake Formation permissions ['DESCRIBE'] on {database_resource} already exist for {principal_arn}.")
+                    break
+                elif e.response['Error']['Code'] == 'InvalidInputException' and 'Database not found' in str(e):
+                    if db_attempt < max_db_attempts:
+                        print(f"LF database not yet visible (attempt {db_attempt}/{max_db_attempts}), retrying in 5s...")
+                        import time
+                        time.sleep(5)
+                    else:
+                        raise e
+                else:
+                    raise e
 
         # LF metadata for newly created S3 Tables can take a few seconds to become visible.
         # Retry table-level grant to avoid failing suite_setUp on propagation races.
