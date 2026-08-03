@@ -498,29 +498,55 @@ class ElasticSearchBase(object):
         self.task_manager.schedule(_task)
         return _task
 
-    def load_bulk_data(self, filename, index_name):
+    def load_bulk_data(self, bulk_data, index_name):
         """
-        Bulk load to ES from a file
-        curl -s -XPOST 172.23.105.25:9200/_bulk --data-binary @req
-        cat req:
+        Bulk load to ES. 'bulk_data' is the NDJSON request body as bytes:
         { "index" : { "_index" : "your_es_index", "_type" : "aruna", "_id" : "1" } }
         { "field1" : "value1" , "field2" : "value2"}
         { "index" : { "_index" : "your_es_index", "_type" : "aruna", "_id" : "2" } }
         { "field1" : "value1" , "field2" : "value2"}
 
+        Returns False if the request failed OR if any individual item was
+        rejected - ES answers 200 with "errors": true in that case, so the
+        status alone would hide the dropped docs.
+
         Note: Use unique index names (e.g., with test ID suffix) to avoid conflicts
         when multiple tests run concurrently on the same ES cluster.
         """
         try:
-            import os
-            url = self.__connection_url + index_name + "/_bulk" 
-            data = open(filename, "rb").read()
+            url = self.__connection_url + index_name + "/_bulk"
             status, content, _ = self._http_request(url,
                                                     'POST',
-                                                    data)
-            return status
+                                                    bulk_data)
+            if not status:
+                return False
+            return self.__check_bulk_response(content, index_name)
         except Exception as e:
             raise e
+
+    def __check_bulk_response(self, content, index_name):
+        """
+        Logs the per-item failures of a _bulk response and returns False if
+        there were any.
+        """
+        try:
+            response = json.loads(content)
+        except ValueError:
+            self.__log.error("Could not parse ES bulk response on index '%s': %s"
+                             % (index_name, content))
+            return False
+
+        if not response.get("errors"):
+            return True
+
+        failed = [item for op in response.get("items", [])
+                  for item in op.values() if "error" in item]
+        self.__log.error("ES bulk load on index '%s': %s of %s items rejected"
+                         % (index_name, len(failed), len(response.get("items", []))))
+        for item in failed[:5]:
+            self.__log.error("ES bulk item '%s' rejected: %s"
+                             % (item.get("_id"), item.get("error")))
+        return False
 
     def load_data(self, index_name, document_json, doc_type, doc_id, scope=None, collection=None):
         """

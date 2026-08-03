@@ -1072,6 +1072,12 @@ class UpgradeTests(NewUpgradeBaseTest):
         servers = self._convert_server_map(self.servers[:self.nodes_init])
         out_servers = self._convert_server_map(self.servers[self.nodes_init:])
         self.swap_num_servers = min(self.swap_num_servers, len(out_servers))
+        if not self.swap_num_servers:
+            raise Exception(
+                "online swap upgrade needs at least one spare node beyond the "
+                "cluster: nodes_init=%s but the ini only provides %s servers. "
+                "Use an ini with more nodes than nodes_init."
+                % (self.nodes_init, len(self.servers)))
         start_services_num = 0
         for i in range(self.nodes_init // self.swap_num_servers):
             servers_in = {}

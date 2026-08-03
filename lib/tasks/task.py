@@ -191,6 +191,13 @@ class NodeInitializeTask(Task):
             if cluster_setting["ftsMemoryQuota"] and \
                     int(cluster_setting["ftsMemoryQuota"]) >= 256:
                 fts_quota = int(cluster_setting["ftsMemoryQuota"])
+        # Explicit per-service quotas from the test params win over both the
+        # defaults above and whatever the cluster happens to be set to already.
+        if TestInputSingleton.input is not None:
+            index_quota = int(TestInputSingleton.input.param("index_quota",
+                                                             index_quota))
+            fts_quota = int(TestInputSingleton.input.param("fts_quota",
+                                                           fts_quota))
         kv_quota = int(info.mcdMemoryReserved * CLUSTER_QUOTA_RATIO)
         if self.index_quota_percent:
             index_quota = self.index_quota
@@ -198,6 +205,12 @@ class NodeInitializeTask(Task):
             set_services = copy.deepcopy(self.services)
             if set_services is None:
                 set_services = ["kv"]
+            # services may arrive as a single comma separated entry per node,
+            # e.g. ['fts,index,n1ql'] - flatten so the checks below can see
+            # each service instead of missing them all.
+            set_services = [service
+                            for entry in set_services
+                            for service in str(entry).split(",")]
             if "index" in set_services:
                 self.log.info("quota for index service will be %s MB" % (index_quota))
                 kv_quota -= index_quota
@@ -212,11 +225,15 @@ class NodeInitializeTask(Task):
                 self.log.info("quota for cbas service will be %s MB" % (CBAS_QUOTA))
                 kv_quota -= CBAS_QUOTA
                 rest.set_service_memoryQuota(service="cbasMemoryQuota", memoryQuota=CBAS_QUOTA)
-            if kv_quota < MIN_KV_QUOTA:
-                raise Exception("KV RAM needs to be more than %s MB"
-                                " at node  %s" % (MIN_KV_QUOTA, self.server.ip))
-            if kv_quota < int(self.quota):
-                self.quota = kv_quota
+            # A node without kv needs no kv budget - only the services it
+            # actually runs count against its quota, so don't let the leftover
+            # drag the cluster kv quota down or fail the node outright.
+            if "kv" in set_services:
+                if kv_quota < MIN_KV_QUOTA:
+                    raise Exception("KV RAM needs to be more than %s MB"
+                                    " at node  %s" % (MIN_KV_QUOTA, self.server.ip))
+                if kv_quota < int(self.quota):
+                    self.quota = kv_quota
 
         rest.init_cluster_memoryQuota(username, password, self.quota)
 

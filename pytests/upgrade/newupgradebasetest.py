@@ -399,6 +399,10 @@ class NewUpgradeBaseTest(BaseTestCase):
                     set_services = services.split()
                 else:
                     set_services = services.split(",")
+            else:
+                # a single service with no separator at all, e.g. "kv" - still
+                # one node's worth of services
+                set_services = [services]
         else:
             set_services = services
         return set_services
@@ -1349,9 +1353,23 @@ class NewUpgradeBaseTest(BaseTestCase):
                 return True
         return False
 
+    def get_fts_query_node(self):
+        """
+        Node to send FTS queries to. servers[0] only works when node 1 happens
+        to run fts - on a dedicated kv master, port 8094 is closed and every
+        query fails with connection refused.
+        """
+        fts_nodes = self.get_nodes_from_services_map(service_type="fts",
+                                                     get_all_nodes=True)
+        if not fts_nodes:
+            self.log.warning("no node in the cluster runs fts, falling back "
+                             "to %s for queries" % self.servers[0].ip)
+            return self.servers[0]
+        return fts_nodes[0]
+
     def run_inbetween_tests(self):
         if self.inbetween_tests == 0:
-            self.fts_obj = FTSCallable(nodes=self.servers, es_validate=False,variable_node=self.servers[0],servers=self.servers)
+            self.fts_obj = FTSCallable(nodes=self.servers, es_validate=False,variable_node=self.get_fts_query_node(),servers=self.servers)
             self.inbetween_tests = 1
             self.fts_obj.inbetween_tests = 1
             self.fts_obj.inbetween_active = True
@@ -1508,7 +1526,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         
         self.sleep(100)
 
-        self.fts_obj = FTSCallable(nodes=self.servers, es_validate=False, variable_node=self.servers[0], servers=self.servers)
+        self.fts_obj = FTSCallable(nodes=self.servers, es_validate=False, variable_node=self.get_fts_query_node(), servers=self.servers)
 
         """delete 20% of docs"""
         status = self.fts_obj.delete_doc_by_key(self.servers[0],10000001,10005001,0.2)
