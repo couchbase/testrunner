@@ -59,35 +59,44 @@ class XDCRCollectionsTests(XDCRNewBaseTest):
             rest.create_collection(bucket_name, scope_name, excluded_col)
 
             def xdcr_service_validator(u, p):
-                # Call XDCR-specific REST endpoint with user creds
+                # Call XDCR-specific REST endpoint with user creds. This
+                # endpoint requires the cluster-level permission
+                # cluster.xdcr.remote_clusters!read, which a collection-scoped
+                # custom role can never grant, so the user is additionally
+                # given ro_admin via extra_roles below. ro_admin is used rather
+                # than replication_admin because replication_admin also grants
+                # bucket-wide data.docs!read, and grants from a second role are
+                # not subtracted by this role's collection-level deny - that
+                # would mask the exclusion assertions below.
                 api = rest.baseUrl + "pools/default/remoteClusters"
                 status, content, _ = rest._http_request(
                     api, 'GET', headers=rest._create_headers_with_auth(u, p))
                 self.assertTrue(status,
                     "XDCR: GET remoteClusters should succeed with user creds, got: %s"
                     % content)
-                perm_allowed = (
-                    "cluster.collection[{b}:{s}:{c}].xdcr.execute!write".format(
-                        b=bucket_name, s=scope_name, c=allowed_col))
-                perm_excluded = (
-                    "cluster.collection[{b}:{s}:{c}].xdcr.execute!write".format(
-                        b=bucket_name, s=scope_name, c=excluded_col))
+                # The XDCR source data path reads docs out of the collection, so
+                # collection-level exclusion is verified against data.docs!read
+                perm_allowed = "cluster.collection[{b}:{s}:{c}].data.docs!read".format(
+                    b=bucket_name, s=scope_name, c=allowed_col)
+                perm_excluded = "cluster.collection[{b}:{s}:{c}].data.docs!read".format(
+                    b=bucket_name, s=scope_name, c=excluded_col)
                 result = rest.check_user_permission(
                     u, "password", ",".join([perm_allowed, perm_excluded]))
                 self.assertTrue(result.get(perm_allowed, False),
-                    "XDCR: allowed collection '%s' should have xdcr.execute!write, "
+                    "XDCR: allowed collection '%s' should have data.docs!read, "
                     "got: %s" % (allowed_col, result))
                 self.assertFalse(result.get(perm_excluded, True),
                     "XDCR: excluded collection '%s' should be denied "
-                    "xdcr.execute!write, got: %s" % (excluded_col, result))
+                    "data.docs!read, got: %s" % (excluded_col, result))
                 self.log.info(
                     "XDCR service validation passed: remoteClusters accessible "
-                    "and xdcr.execute!write exclusion verified")
+                    "and collection-level data.docs!read exclusion verified")
 
             verify_rbac_exclusion_syntax(
                 self, rest, bucket_name, scope_name, allowed_col, excluded_col,
                 "xdcr", runtype=self._input.param("runtype", "default"),
-                service_validator=xdcr_service_validator)
+                service_validator=xdcr_service_validator,
+                extra_roles="ro_admin")
         finally:
             if scope_created:
                 try:
