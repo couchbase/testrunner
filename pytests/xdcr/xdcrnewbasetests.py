@@ -1267,6 +1267,20 @@ class XDCRRemoteClusterRef:
                 encryptionType="half"
             )
 
+        # A created reference always carries its target's uuid. Payloads that
+        # do not (e.g. the "Duplicate cluster names are not allowed" body that
+        # add_remote_cluster() deliberately tolerates) mean no reference was
+        # created - report that instead of a bare KeyError from the event
+        # validation below.
+        raise_if(
+            'uuid' not in self.__rest_info,
+            XDCRException(
+                "Remote cluster reference '{0}' was not created on {1}; "
+                "server returned: {2}".format(
+                    self.__name,
+                    self.__src_cluster.get_master_node().ip,
+                    self.__rest_info)))
+
         self.__validate_create_event()
 
     def __validate_modify_event(self):
@@ -3461,6 +3475,20 @@ class Utility:
 
 class XDCRNewBaseTest(unittest.TestCase):
 
+    # testrunner dispatches suite_tearDown as a pseudo-test on the class of the
+    # last test in the suite (testrunner.py AFTER_SUITE), and its
+    # `except AttributeError` guard no longer catches a missing hook: since
+    # python 3.5 unittest's loader returns a _FailedTest instead of raising, so
+    # every xdcr suite ended in "AttributeError: type object 'XDCRTopologyTest'
+    # has no attribute 'suite_tearDown'" reported as a suite error. Define the
+    # hook so the loader finds it, and skip it: @unittest.skip is honoured
+    # before setUp runs, which is what keeps the pseudo-test from re-entering a
+    # subclass setUp and rebuilding the clusters - or reinstalling the servers,
+    # as ccvTestXDCR.setUp does - after the suite has already finished.
+    @unittest.skip("XDCR suites have no suite-level teardown")
+    def suite_tearDown(self):
+        pass
+
     def setUp(self):
         unittest.TestCase.setUp(self)
         self._input = TestInputSingleton.input
@@ -4848,7 +4876,9 @@ class XDCRNewBaseTest(unittest.TestCase):
 
         Modes:
           all_collections=True  -> ONE Java invocation with -ac True (the jar
-                                   iterates all non-system collections internally).
+                                   iterates EVERY collection in the bucket,
+                                   `_system._query` / `_system._mobile`
+                                   included — it applies no scope filter).
                                    `pairs` is ignored; LoadResult.success_pairs is
                                    populated by enumerating the bucket manifest.
           all_collections=False -> One Java subprocess per (scope, collection)

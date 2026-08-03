@@ -15,7 +15,7 @@ XDCR (Cross Data Center Replication) test suite validates Couchbase replication 
 | **LWW (Last Writer Wins)** | `lww.py`, `lwwXDCR.py` | Conflict resolution with timestamp-based LWW |
 | **CCV (Custom Conflict Resolution)** | `ccvTestXDCR.py` | Custom conflict resolution with mobile import simulation |
 | **Conflict Logging** | `conflictLoggingTests.py` | Logging conflicts to specified collections |
-| **Compression** | `compressionXDCR.py` | XDCR data compression (Auto, Snappy, None) |
+| **Compression** | `compressionXDCR.py` | XDCR data compression. `compressionType` only accepts `Auto` or `None` over REST -- goxdcr keeps `Snappy` as an internal-only value and rejects it as user input, so conf rows must never set it |
 | **Priority** | `prioritizationXDCR.py` | DCP stream prioritization (High, Medium, Low) |
 | **Network Bandwidth** | `nwusageXDCR.py` | Network usage throttling and bandwidth limits |
 | **Security/TLS** | `secureXDCR.py` | TLS encryption, n2n encryption, multiple CA support |

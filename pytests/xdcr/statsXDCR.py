@@ -219,10 +219,12 @@ class StatsXDCR(XDCRNewBaseTest):
         self.load_binary_docs_using_cbc_pillowfight(self.dest_master, 1000, "default", 100, 300, scope=new_scope, collection=new_collection)
         self.load_binary_docs_using_cbc_pillowfight(self.src_master, 1000, "default", 100, 300, scope=new_scope, collection=new_collection)
 
-        # xdcr_data_replicated_uncompress_bytes is a rate-like metric: it
-        # reads > 0 only while bytes are actively flowing, then drops back to
-        # 0 once the pipeline drains. Poll for the peak rather than a single
-        # snapshot — the Backfill window can close in seconds.
+        # xdcr_data_replicated_uncompress_bytes is a cumulative counter, but it
+        # is owned by the *pipeline instance*, not by the replication: it holds
+        # its value while the pipeline is idle and drops straight back to 0 when
+        # the pipeline goes away. A Backfill pipeline is torn down as soon as it
+        # finishes catching the new collection up, so poll for the peak rather
+        # than a single snapshot — that window can close in seconds.
         stat_name = "xdcr_data_replicated_uncompress_bytes"
         peaks = self._poll_until_peak_above(
             self.src_master, stat_name, pipeline_type="Backfill",

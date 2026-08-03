@@ -219,8 +219,12 @@ class XDCRPrioritization(XDCRNewBaseTest):
             self.dest_master, bucket_name, **{k: p[k] for k in
             ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
 
-        self.setup_xdcr()
-        self.sleep(30)
+        # setUp() has already created the remote cluster references and
+        # replications. Calling setup_xdcr() again re-adds a reference under
+        # the same name, which ns_server rejects with "Duplicate cluster names
+        # are not allowed". The collections created above are picked up by the
+        # running replication through its backfill pipeline.
+        self.sleep(30, "Letting the new collections reach the target")
 
         src_conn = RestConnection(self.src_master)
         src_conn.set_xdcr_param(bucket_name, bucket_name, 'priority', initial_priority)

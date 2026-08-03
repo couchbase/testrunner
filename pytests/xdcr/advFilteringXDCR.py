@@ -14,7 +14,7 @@ from couchbase.cluster import Cluster
 
 import couchbase.subdocument as SD
 
-from .xdcrnewbasetests import XDCRNewBaseTest
+from .xdcrnewbasetests import XDCRNewBaseTest, REPL_PARAM, TEST_XDCR_PARAM
 
 
 class XDCRAdvFilterTests(XDCRNewBaseTest):
@@ -328,37 +328,206 @@ class XDCRAdvFilterTests(XDCRNewBaseTest):
         if not self.skip_validation:
             self.verify_results()
 
-    def test_xdcr_with_filter_for_binary(self):
-        rdirection = self._input.param("rdirection", "unidirection")
-        items = self._input.param("items", 100)
-        exclude_binary = self._input.param("filter_binary", False)
-        should_be_filtered = False   # should binary docs be filtered
-        self.wait_interval(10, "Wait for initial replication setup")
-        replications = self.src_rest.get_replications()
-        for repl in replications:
+    def _replication_filter_expressions(self, bucket_name):
+        """Filter expressions in effect for bucket_name, recorded in
+        self.filter_exp the way the base class does it."""
+        for repl in self.src_rest.get_replications():
             # Assuming src and dest bucket of the replication have the same name
             bucket = repl['source']
             if repl['filterExpression']:
                 exp_in_brackets = '( ' + str(repl['filterExpression']) + ' )'
-                if bucket in self.filter_exp.keys():
-                    self.filter_exp[bucket].add(exp_in_brackets)
-                else:
-                    self.filter_exp[bucket] = {exp_in_brackets}
-        filter_exp = self.filter_exp['default']
-        if "META()" in filter_exp:
-            should_be_filtered = True
-        if exclude_binary:
-            self.src_rest.set_xdcr_param("default", "default", "filterBinary", "true")
+                self.filter_exp.setdefault(bucket, set()).add(exp_in_brackets)
+        return self.filter_exp.get(bucket_name, set())
+
+    def _is_filter_binary_enabled(self, bucket_name):
+        """Effective filterBinary for a bucket's replication. get_xdcr_param
+        falls back to the global xdcrFilterBinary setting when the replication
+        does not override it, and returns a bool or its string form."""
+        value = self.src_rest.get_xdcr_param(bucket_name, bucket_name,
+                                             REPL_PARAM.FILTER_BINARY)
+        if isinstance(value, str):
+            return value.strip().lower() == "true"
+        return bool(value)
+
+    def _wait_for_item_count_delta(self, cluster, bucket, baseline,
+                                   expected_delta, timeout=300, poll_interval=10):
+        """Poll a bucket's item count until it has grown by expected_delta.
+
+        Returns the delta observed, which may fall short on timeout - the
+        caller decides what a short count means.
+        """
+        end_time = time.time() + timeout
+        delta = self.bucket_item_count(cluster, bucket) - baseline
+        while delta < expected_delta and time.time() < end_time:
+            self.sleep(poll_interval, "{0}: {1}/{2} new items visible".format(
+                cluster.get_name(), delta, expected_delta))
+            delta = self.bucket_item_count(cluster, bucket) - baseline
+        return delta
+
+    def _wait_for_item_count_to_settle(self, cluster, bucket, timeout=600,
+                                       poll_interval=15, stable_polls=3):
+        """Poll a bucket's item count until it stops changing, and return it.
+
+        Neither of the ready-made waits fits a filtered replication:
+        _wait_for_replication_to_catchup waits for src==dest, which never holds
+        while a filter drops docs, and replication_changes_left is treated as
+        unreliable in this framework already (see MB-9707 in xdcrnewbasetests).
+        """
+        end_time = time.time() + timeout
+        count = self.bucket_item_count(cluster, bucket)
+        stable = 1
+        while stable < stable_polls and time.time() < end_time:
+            self.sleep(poll_interval, "{0}/{1}: item count {2}, unchanged for "
+                       "{3} poll(s)".format(cluster.get_name(), bucket, count,
+                                            stable))
+            new_count = self.bucket_item_count(cluster, bucket)
+            stable = stable + 1 if new_count == count else 1
+            count = new_count
+        if stable < stable_polls:
+            self.log.warning("{0}/{1} item count was still moving after {2}s "
+                             "(last={3})".format(cluster.get_name(), bucket,
+                                                 timeout, count))
+        return count
+
+    def _wait_for_pipeline_to_go_idle(self, bucket, timeout=600,
+                                      poll_interval=15, stable_polls=3):
+        """Wait until docs_processed on the C1->C2 pipeline stops advancing,
+        and return the stats read last.
+
+        Both hazards this test has to avoid are the same "is the pipeline
+        busy?" question: a baseline taken before replication has started would
+        absorb the setUp load into the binary-load window, and a verdict taken
+        while mutations are still in flight would read a leak as a clean
+        filter. Stat read failures only warn - the counters are diagnostics
+        here, the item counts are the verdict.
+        """
+        end_time = time.time() + timeout
+        stats = self.get_docs_processed_to_peer(
+            self.src_cluster, self.dest_cluster, src_bucket_filter=bucket)
+        processed = stats.get("docs_processed", 0)
+        stable = 1
+        while stable < stable_polls and time.time() < end_time:
+            self.sleep(poll_interval, "docs_processed {0}, unchanged for {1} "
+                       "poll(s)".format(processed, stable))
+            stats = self.get_docs_processed_to_peer(
+                self.src_cluster, self.dest_cluster, src_bucket_filter=bucket)
+            new_processed = stats.get("docs_processed", 0)
+            stable = stable + 1 if new_processed == processed else 1
+            processed = new_processed
+        if stable < stable_polls:
+            self.log.warning("docs_processed was still advancing after {0}s "
+                             "(last={1})".format(timeout, processed))
+        if stats.get("_failed_reads"):
+            self.log.warning("pipeline stats unreadable, fell back to a fixed "
+                             "wait: {0}".format(stats.get("_failed_reads")))
+        return stats
+
+    def test_xdcr_with_filter_for_binary(self):
+        """Advanced filtering versus binary (non-JSON) documents.
+
+        Item counts come from KV (curr_items), not N1QL: the query service
+        cannot see binary docs, so a COUNT(*) carrying the filter expression
+        returns 0 on both clusters no matter what XDCR did with them. That is
+        what used to make this test report "binary docs were replicated" off
+        SRC:0, TARGET:0 while 10000 binary docs sat unreplicated on the source.
+        """
+        items = self._input.param("items", 100)
+        bucket = self._input.param("bucket_name", "default")
+        wait_timeout = self._input.param("wait_timeout", 600)
+
+        # filterBinary reaches the replication either as a test param
+        # (filter_binary=True, applied here) or as a creation-time setting
+        # inside default@C1=... (filter_binary:True, e.g.
+        # py-xdcr-memory-throttler.conf), so read the effective value back off
+        # the replication rather than trusting one of the two conf styles.
+        if self._input.param(TEST_XDCR_PARAM.FILTER_BINARY, False):
+            self.src_rest.set_xdcr_param(bucket, bucket,
+                                         REPL_PARAM.FILTER_BINARY, "true")
             self.log.info("Set filterBinary to be True")
+        filter_binary = self._is_filter_binary_enabled(bucket)
+        filter_exps = self._replication_filter_expressions(bucket)
 
-        self.load_docs_with_pillowfight(self.src_master, items=items, bucket="default", batch=1000, docsize=300)
-        self.sleep(10, "sleeping after inserting binary docs")
-
-        if should_be_filtered:
-            if self._if_docs_count_match_on_servers():
-                self.log.info("Binary docs filtered and count matches")
-            else:
-                self.fail("Binary docs were not replicated")
+        # What the target is allowed to gain from a binary load:
+        #   filterBinary=true         -> nothing, whatever the expression says
+        #   no filter expression      -> every binary doc
+        #   key/metadata-only clause  -> the docs whose key matches. How many
+        #                                that is depends on cbc-pillowfight's
+        #                                key format, which is not a contract,
+        #                                so only the src_delta bound is checked
+        #   a body clause             -> nothing: a doc with no JSON body can
+        #                                never match it (an expression mixing
+        #                                both is covered by the bound above)
+        if filter_binary or (filter_exps and not any(
+                "META()" in exp for exp in filter_exps)):
+            expected = "none"
+        elif not filter_exps:
+            expected = "all"
         else:
-            if self._if_docs_count_match_on_servers():
-                self.fail("Binary docs were replicated when they were not supposed to")
+            expected = "some"
+        self.log.info("filterBinary={0}, filter expressions={1} -> expecting "
+                      "'{2}' of the binary docs on the target".format(
+                          filter_binary, sorted(filter_exps), expected))
+
+        # A baseline only means something once the JSON load from setUp has
+        # finished reaching the target.
+        pipeline_before = self._wait_for_pipeline_to_go_idle(
+            bucket, timeout=wait_timeout)
+        src_before = self.bucket_item_count(self.src_cluster, bucket)
+        dest_before = self._wait_for_item_count_to_settle(
+            self.dest_cluster, bucket, timeout=wait_timeout)
+        self.log.info("Baseline item counts: src={0}, target={1}".format(
+            src_before, dest_before))
+
+        self.load_docs_with_pillowfight(self.src_master, items=items,
+                                        bucket=bucket, batch=1000, docsize=300)
+
+        # Ground truth for the load itself - without it the test passes
+        # vacuously whenever cbc-pillowfight writes nothing.
+        src_delta = self._wait_for_item_count_delta(
+            self.src_cluster, bucket, src_before, items)
+        self.assertGreater(src_delta, 0,
+                           "cbc-pillowfight loaded no binary docs on the "
+                           "source (item count stayed at {0}); nothing to "
+                           "validate".format(src_before))
+        self.log.info("Source gained {0} binary docs (asked for {1})".format(
+            src_delta, items))
+
+        # Let goxdcr run the binary mutations through the pipeline, then let the
+        # target count settle, before reading the verdict off the item counts.
+        pipeline_after = self._wait_for_pipeline_to_go_idle(
+            bucket, timeout=wait_timeout)
+        dest_after = self._wait_for_item_count_to_settle(
+            self.dest_cluster, bucket, timeout=wait_timeout)
+        dest_delta = dest_after - dest_before
+        pipeline_delta = {stat: pipeline_after.get(stat, 0) - pipeline_before.get(stat, 0)
+                          for stat in self.PIPELINE_STATS}
+        self.log.info("Binary load window: src +{0}, target +{1}, pipeline {2}"
+                      .format(src_delta, dest_delta, pipeline_delta))
+        if pipeline_delta["docs_processed"] < src_delta:
+            # Not fatal on its own (see MB-9707 on XDCR stat reliability), but
+            # it means the verdict below rests on a possibly early snapshot.
+            self.log.warning(
+                "Pipeline only accounted for {0} of the {1} binary docs loaded "
+                "on the source; the target count may still move".format(
+                    pipeline_delta["docs_processed"], src_delta))
+
+        if expected == "none":
+            # A leak can only push the count up; <= 0 rather than == 0 so an
+            # unrelated expiry/purge tick cannot fail the test on its own.
+            self.assertLessEqual(dest_delta, 0,
+                                 "{0} binary docs reached the target although "
+                                 "filterBinary={1} and filter expressions={2} "
+                                 "should have filtered every one of them".format(
+                                     dest_delta, filter_binary, sorted(filter_exps)))
+        elif expected == "all":
+            self.assertEqual(src_delta, dest_delta,
+                             "Unfiltered replication should have carried all "
+                             "{0} binary docs to the target, it carried {1}"
+                             .format(src_delta, dest_delta))
+        else:
+            self.assertTrue(0 <= dest_delta <= src_delta,
+                            "Target gained {0} binary docs out of {1} loaded "
+                            "on the source under filter expressions {2}"
+                            .format(dest_delta, src_delta, sorted(filter_exps)))
+        self.log.info("Binary doc filtering behaved as expected ('{0}'): "
+                      "src +{1}, target +{2}".format(expected, src_delta, dest_delta))
