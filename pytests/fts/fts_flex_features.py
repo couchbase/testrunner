@@ -248,6 +248,10 @@ class FlexFeaturesFTS(FTSBaseTest):
 
                 idx.update()
 
+            self.sleep(5)
+            self.wait_for_indexing_complete()
+            self.validate_index_count(equal_bucket_doc_count=True)
+
         tests = []
         for like_expression in like_expressions:
             flex_query = "select count(*) from `default`.scope1.collection1 USE INDEX({0}) where meta().id {1} 'emp_%' and type='emp'".\
