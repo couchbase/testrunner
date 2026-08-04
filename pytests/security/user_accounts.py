@@ -4,10 +4,12 @@ import json
 import time
 import requests
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from lib import testconstants
-from couchbase.bucket import Bucket
+from couchbase.cluster import Cluster
+from couchbase.options import ClusterOptions
+from couchbase.auth import PasswordAuthenticator
 from couchbase.exceptions import CouchbaseException as CBException
 from basetestcase import BaseTestCase
 from lib.membase.api.rest_client import RestConnection
@@ -616,11 +618,13 @@ class UserAccounts(BaseTestCase):
         password = self.test_user_password
         self.log.info("Bucket Name: {}, IP: {}, Username: {}".format(bucket_name, ip, username))
 
-        url = 'couchbase://{}/{}'.format(ip, bucket_name)
+        url = 'couchbase://{}'.format(ip)
         self.log.info("Connecting to Couchbase at: {}".format(url))
 
         try:
-            Bucket(url, username=username, password=password)
+            cluster = Cluster.connect(url, ClusterOptions(PasswordAuthenticator(username, password)))
+            cluster.wait_until_ready(timedelta(seconds=10))
+            cluster.bucket(bucket_name).default_collection()
             self.log.info("Couchbase bucket connection established.")
         except Exception as e:
             self.log.info(e)
@@ -636,13 +640,15 @@ class UserAccounts(BaseTestCase):
 
         self.log.info("Bucket Name: {}, IP: {}, Username: {}".format(bucket_name, ip, username))
 
-        url = 'couchbase://{}/{}'.format(ip, bucket_name)
+        url = 'couchbase://{}'.format(ip)
         self.log.info("Connecting to Couchbase at: {}".format(url))
 
-        bucket = Bucket(url, username=username, password=password)
+        cluster = Cluster.connect(url, ClusterOptions(PasswordAuthenticator(username, password)))
+        cluster.wait_until_ready(timedelta(seconds=10))
+        bucket = cluster.bucket(bucket_name)
         self.log.info("Couchbase bucket connection established again.")
 
-        data = bucket.get("airline_10")
+        data = bucket.default_collection().get("airline_10")
         self.log.info("Data retrieved successfully from bucket after unlocking.")
         self.log.info(json.dumps(data.value, indent=4))
 
@@ -669,10 +675,12 @@ class UserAccounts(BaseTestCase):
         ip = self.master.ip
         username = "user1"
         password = self.test_user_password
-        url = 'couchbase://{ip}/{name}'.format(ip=ip, name=bucket_name)
+        url = 'couchbase://{ip}'.format(ip=ip)
 
         try:
-            Bucket(url, username=username, password=password)
+            cluster = Cluster.connect(url, ClusterOptions(PasswordAuthenticator(username, password)))
+            cluster.wait_until_ready(timedelta(seconds=10))
+            cluster.bucket(bucket_name).default_collection()
             self.log.info("Couchbase bucket connection established.")
             self.fail("Authentication should have failed as the user has temporary password")
         except CBException as e:
@@ -687,12 +695,14 @@ class UserAccounts(BaseTestCase):
 
         self.sleep(10, "Wait for some time before connecting to the bucket again")
 
-        url = 'couchbase://{}/{}'.format(ip, bucket_name)
+        url = 'couchbase://{}'.format(ip)
         self.log.info("Connecting to Couchbase at: {}".format(url))
 
-        bucket = Bucket(url, username=username, password=self.test_user_new_password)
+        cluster = Cluster.connect(url, ClusterOptions(PasswordAuthenticator(username, self.test_user_new_password)))
+        cluster.wait_until_ready(timedelta(seconds=10))
+        bucket = cluster.bucket(bucket_name)
         self.log.info("Couchbase bucket connection established again.")
 
-        data = bucket.get("airline_10")
+        data = bucket.default_collection().get("airline_10")
         self.log.info("Data retrieved successfully from bucket after resetting the password.")
         self.log.info(json.dumps(data.value, indent=4))
