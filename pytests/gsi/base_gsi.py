@@ -4165,6 +4165,53 @@ class BaseSecondaryIndexingTests(QueryTests):
                           f"No log lines matching string {log_string} seen on any of the indexer nodes.")
         return log_validated
 
+    def count_indexer_log_occurrences(self, log_pattern, indexer_nodes=None):
+        """
+        Count occurrences of `log_pattern` across indexer.log* on every index node.
+
+        Generic counterpart to the pattern-specific check_gsi_logs_for_* helpers above: those
+        answer "did this one thing happen"; this returns the raw cluster-wide count, which lets
+        a caller diff against a baseline taken earlier in the test. indexer.log is cumulative
+        for the whole suite run, so an unscoped check also matches lines written by earlier
+        tests on the same cluster.
+
+        Args:
+            log_pattern: string passed to zgrep (may be a regex)
+            indexer_nodes: optional list of servers; defaults to all index nodes
+
+        Returns:
+            Total match count summed over all index nodes.
+        """
+        if indexer_nodes is None:
+            indexer_nodes = self.get_nodes_from_services_map(service_type="index",
+                                                             get_all_nodes=True)
+        if not indexer_nodes:
+            return 0
+
+        total = 0
+        for server in indexer_nodes:
+            shell = RemoteMachineShellConnection(server)
+            _, dir = RestConnection(server).diag_eval(
+                'filename:absname(element(2, application:get_env(ns_server,error_logger_mf_dir))).')
+            indexer_log = str(dir) + '/indexer.log*'
+
+            # `zgrep -c` over a glob prints one "path:count" line per file, which cannot be
+            # parsed as a single integer — pipe the matching lines through wc -l instead.
+            output, _ = shell.execute_command(
+                f'zgrep -h "{log_pattern}" {indexer_log} 2>/dev/null | wc -l')
+            shell.disconnect()
+
+            if isinstance(output, list):
+                output = output[0] if output else "0"
+            count = int(str(output).strip()) if str(output).strip().isdigit() else 0
+
+            if count > 0:
+                self.log.info(
+                    f"Found {count} occurrences of '{log_pattern}' in indexer logs on {server.ip}")
+            total += count
+
+        return total
+
     def verify_dcp_transfer_tokens(self):
         index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
         url = f"http://{index_node.ip}:9102/listRebalanceTokens"
