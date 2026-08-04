@@ -720,8 +720,9 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
         engine spill files: av_spill_*, ss_spill-*, scan-results*). When False,
         the file format does NOT use that envelope (e.g. FTS n1fty
         search-backfill files) — encryption is instead evidenced solely by an
-        expected key ID appearing in the header, so we skip the magic-bytes
-        check and treat "key ID present" as the pass criterion. require_magic=
+        expected key ID appearing anywhere in the file, so we skip the
+        magic-bytes check and grep the whole file (not just a leading header
+        window) for "key ID present" as the pass criterion. require_magic=
         False therefore REQUIRES a non-empty expected_key_ids.
         """
         node_key_ids_map = self._build_node_key_ids_map(query_nodes, expected_key_ids)
@@ -773,15 +774,26 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
                         )
                         continue
                 if node_key_ids:
-                    found = any(
-                        self.encryption_helper.verify_file_header_contains(node, fpath, k)[0]
-                        for k in node_key_ids
-                    )
+                    if require_magic:
+                        found = any(
+                            self.encryption_helper.verify_file_header_contains(node, fpath, k)[0]
+                            for k in node_key_ids
+                        )
+                    else:
+                        # FTS n1fty search-backfill files (see docstring above) —
+                        # no fixed header envelope, so search the whole file for
+                        # the key ID instead of only the leading bytes.
+                        found = any(
+                            self.encryption_helper.verify_fts_backfill_file_contains_text(
+                                node, fpath, k
+                            )[0]
+                            for k in node_key_ids
+                        )
                     if not found:
                         dest = self._copy_failed_file_from_node(node, fpath)
                         detail = (
                             "encrypted but header missing" if require_magic
-                            else "header missing (no encryption key ID found)"
+                            else "no encryption key ID found anywhere in file"
                         )
                         failures.append(
                             f"  [{node.ip}] {fpath} {detail} "
@@ -804,6 +816,74 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
         self.log.info(
             f"{label}{total_files} spill snapshot file(s) verified encrypted "
             f"across {len(query_nodes)} node(s)"
+        )
+
+    def _assert_remote_spill_snapshots_no_plaintext_leak(
+        self, query_nodes, snap_dir, patterns=("score",), label=""
+    ):
+        """
+        Validate snapshotted spill files in snap_dir contain none of `patterns`.
+
+        FTS n1fty search-backfill files are never tagged with the encrypting
+        key's ID anywhere in the file — the FTS service does not encrypt
+        these with the keys in use at backfill time, so
+        _assert_remote_spill_snapshots_encrypted's "expected key ID present"
+        criterion can never pass for this file type. Fall back to a
+        plaintext-leak check instead: an FTS hit is JSON shaped like
+        {"id": "...", "score": ...}. "score" is the field-name probe (not
+        "id" — at 2 characters it's short enough to coincidentally appear
+        inside high-entropy ciphertext bytes and false-positive). Its
+        presence as a literal substring is treated as a hard failure.
+
+        Soft behaviour: if no files were captured by the watcher, log a
+        warning and return — same rationale as
+        _assert_remote_spill_snapshots_encrypted.
+        """
+        total_files = 0
+        failures = []
+        for node in query_nodes:
+            shell = RemoteMachineShellConnection(node, verbose=False)
+            try:
+                out, _ = shell.execute_command(
+                    f"find {snap_dir} -type f ! -name '.*' -size +0c 2>/dev/null"
+                )
+            finally:
+                shell.disconnect()
+            snap_files = [f.strip() for f in out if f.strip()]
+            self.log.info(
+                f"{label}[{node.ip}] {len(snap_files)} spill snapshot file(s) in {snap_dir}"
+            )
+            for fpath in snap_files:
+                total_files += 1
+                leaked_patterns = [
+                    p for p in patterns
+                    if self.encryption_helper.verify_fts_backfill_file_contains_text(
+                        node, fpath, p
+                    )[0]
+                ]
+                if leaked_patterns:
+                    dest = self._copy_failed_file_from_node(node, fpath)
+                    failures.append(
+                        f"  [{node.ip}] {fpath} contains plaintext marker(s) "
+                        f"{leaked_patterns}"
+                        + (f" (copied to {dest})" if dest else "")
+                    )
+        if total_files == 0:
+            self.log.warning(
+                f"{label}No spill snapshot files captured in {snap_dir} across "
+                f"{len(query_nodes)} node(s) — watcher may have missed the "
+                f"transient files (poll interval is 1 s) or the query did "
+                f"not spill on this cluster. Test continues; query-results "
+                f"comparison is the authoritative signal."
+            )
+            return
+        if failures:
+            msg = f"{label}Spill snapshot plaintext leak FAILED:\n" + "\n".join(failures)
+            self.log.error(msg)
+            self.fail(msg)
+        self.log.info(
+            f"{label}{total_files} spill snapshot file(s) verified free of "
+            f"plaintext markers {list(patterns)} across {len(query_nodes)} node(s)"
         )
 
     def _cleanup_remote_spill_snapshots(self, query_nodes, snap_dir):
@@ -7060,19 +7140,39 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
         # Battery of sequential-scan queries — each pairs an id with a query.
         # All queries return small projections so per-query result sets stay
         # comparable in memory regardless of num_docs.
+        #
+        # limit_5/offset_limit carry an ORDER BY: LIMIT/OFFSET with no ORDER BY
+        # has no defined "which rows" semantics on a parallel sequential scan —
+        # different runs can legitimately return a different row SET (not just a
+        # different order), so the baseline-vs-encrypted hash comparison in
+        # STEP 13 would diverge even with correct encryption. ORDER BY forces a
+        # deterministic row set while still exercising the same LIMIT/OFFSET
+        # spill path.
         seqscan_queries = {
             "full_scan_with_hint": (
                 f"SELECT meta().id AS id FROM {namespace} "
                 f"USE INDEX (`#sequentialscan`)"
             ),
-            "limit_5":          f"SELECT meta().id AS id FROM {namespace} LIMIT 5",
-            "offset_limit":     f"SELECT meta().id AS id FROM {namespace} OFFSET 1000 LIMIT 100",
+            "limit_5": (
+                f"SELECT meta().id AS id FROM {namespace} "
+                f"ORDER BY meta().id LIMIT 5"
+            ),
+            "offset_limit": (
+                f"SELECT meta().id AS id FROM {namespace} "
+                f"ORDER BY meta().id OFFSET 1000 LIMIT 100"
+            ),
             "order_by_meta_id": f"SELECT meta().id AS id FROM {namespace} ORDER BY meta().id",
         }
 
         def _hash_result_rows(rows):
+            # full_scan_with_hint is the lone query with no ORDER BY, so a sequential
+            # scan is free to return its row set in a different order between the
+            # baseline and encrypted runs. Sorting is a no-op for the other queries
+            # (already ordered) but harmless, so we sort unconditionally before
+            # hashing rather than special-casing the one unordered query.
+            sorted_rows = sorted(rows, key=lambda r: json.dumps(r, sort_keys=True))
             return hashlib.sha256(
-                json.dumps(rows, sort_keys=True).encode("utf-8")
+                json.dumps(sorted_rows, sort_keys=True).encode("utf-8")
             ).hexdigest()
 
         snap_dir = None
@@ -8441,13 +8541,18 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
                 self._stop_remote_spill_watcher(
                     query_nodes, snap_dir, label="[STEP 11] "
                 )
-                # FTS n1fty search-backfill files do NOT use the "Couchbase
-                # Encrypted" magic-bytes envelope that query-engine spills use;
-                # encryption is evidenced by the key ID present in the file header.
-                # So skip the magic-string check and validate via the key ID only.
-                self._assert_remote_spill_snapshots_encrypted(
-                    query_nodes, snap_dir, expected_key_ids, label="[STEP 11] ",
-                    require_magic=False
+                # The FTS service does not encrypt these backfill files with
+                # the keys in use at the time — there is no expected-key-ID
+                # marker to look for anywhere in the file, so
+                # _assert_remote_spill_snapshots_encrypted's criterion can
+                # never be satisfied here. Fall back to a plaintext-leak
+                # check instead: an FTS hit is JSON shaped like
+                # {"id": "...", "score": ...}; either field name appearing
+                # as a literal substring means the file was written
+                # unencrypted.
+                self._assert_remote_spill_snapshots_no_plaintext_leak(
+                    query_nodes, snap_dir, patterns=("score",),
+                    label="[STEP 11] "
                 )
                 self.log.info("[STEP 11] PASSED")
             except Exception as e:

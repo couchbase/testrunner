@@ -1,6 +1,7 @@
 
 """Query-specific encryption-at-rest helpers."""
 
+import shlex
 import threading
 import time
 
@@ -26,6 +27,38 @@ class N1QLEncryptionHelpers(GSIEncryptionHelpers):
 
     def __init__(self, log):
         super().__init__(log)
+
+    def verify_fts_backfill_file_contains_text(self, node, file_path, expected_text):
+        """
+        Verify that expected_text appears anywhere in file_path via a
+        whole-file grep, not just within a leading header window.
+
+        FTS n1fty search-backfill files don't use the query engine's fixed
+        "Couchbase Encrypted" magic-bytes header envelope, so any marker
+        (an encryption key ID, or a plaintext-leak probe like a JSON field
+        name) isn't guaranteed to fall within the first N header bytes the
+        way verify_file_header_contains assumes. Use this instead for that
+        file type specifically — both to look FOR an expected key ID and to
+        look for plaintext content that should NOT be there.
+
+        Args:
+            node: Server object to check
+            file_path: Absolute path to file to inspect
+            expected_text: Text expected (or checked for) anywhere in the file
+
+        Returns:
+            tuple: (contains_text: bool, details: str)
+        """
+        shell = RemoteMachineShellConnection(node, verbose=False)
+        cmd = (
+            f"grep -a -c -F -- {shlex.quote(str(expected_text))} "
+            f"{shlex.quote(file_path)} 2>/dev/null"
+        )
+        output, _ = shell.execute_command(cmd)
+        shell.disconnect()
+        count_str = ''.join(output).strip()
+        found = count_str.isdigit() and int(count_str) > 0
+        return found, f"grep match count={count_str or '0'}"
 
     def verify_query_log_files_encrypted(self, query_nodes, expected_key_ids=None):
         """

@@ -3,6 +3,8 @@ from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection, RestHelper
 
 from pytests.query_tests_helper import QueryHelperTests
+import re
+import shlex
 import time
 
 
@@ -902,17 +904,232 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests, QueryHelperT
                 remote.disconnect()
         return errors
 
+    def _get_indexer_pid(self, shell, node_ip, label=""):
+        """Return the PID of the real indexer process on ``node_ip``.
+
+        ``pgrep -f '/indexer'`` matches against the full command line, which
+        also matches the babysitter/goport supervisor (its argv embeds the
+        indexer binary path even though it is a different process). Cross
+        check /proc/<pid>/comm so we validate the process that actually
+        holds the memory, not a parent/supervisor.
+        """
+        out, _ = shell.execute_command("pgrep -f '/indexer'")
+        candidate_pids = [l.strip() for l in out if l.strip()]
+        for pid in candidate_pids:
+            comm_out, _ = shell.execute_command(f"cat /proc/{pid}/comm 2>/dev/null")
+            comm = comm_out[0].strip() if comm_out else ""
+            if comm == "indexer":
+                return pid
+        self.log.warning(
+            f"{label}No process with comm='indexer' found on {node_ip} among "
+            f"candidate PIDs {candidate_pids} (matched via pgrep -f '/indexer')"
+        )
+        return None
+
+    @staticmethod
+    def _extract_proc_value(lines, field_name):
+        """Pull the integer value for ``field_name:`` out of /proc-style lines."""
+        for line in lines:
+            line = line.strip()
+            if line.startswith(field_name + ":"):
+                parts = line.split()
+                if len(parts) >= 2 and parts[1].isdigit():
+                    return int(parts[1])
+        return None
+
+    def _log_thp_process_tree(self, shell, node_ip, label=""):
+        """Diagnostic only: log THP_enabled across indexer/projector/babysitter.
+
+        PR_SET_THP_DISABLE is inherited across fork() but its behavior across
+        execve() is kernel-version dependent, so it's worth seeing whether the
+        flag actually landed on indexer specifically rather than assuming the
+        babysitter's prctl call carried through.
+        """
+        out, _ = shell.execute_command("pgrep -f 'indexer|babysitter|projector'")
+        for pid in [l.strip() for l in out if l.strip()]:
+            comm_out, _ = shell.execute_command(f"cat /proc/{pid}/comm 2>/dev/null")
+            status_out, _ = shell.execute_command(
+                f"grep '^THP_enabled:' /proc/{pid}/status 2>/dev/null"
+            )
+            comm = comm_out[0].strip() if comm_out else "?"
+            thp = self._extract_proc_value(status_out, "THP_enabled")
+            self.log.info(f"{label}{node_ip}: pid={pid} comm={comm} THP_enabled={thp}")
+
+    _THP_SYSFS_PATHS = {
+        "enabled": "/sys/kernel/mm/transparent_hugepage/enabled",
+        "defrag": "/sys/kernel/mm/transparent_hugepage/defrag",
+        "shmem_enabled": "/sys/kernel/mm/transparent_hugepage/shmem_enabled",
+    }
+
+    def _read_sysfs_thp_choice(self, shell, path):
+        """Return the active choice from a THP sysfs knob, e.g. 'never' from
+        the line 'always madvise [never]'. None if the file is unreadable
+        (kernel built without CONFIG_TRANSPARENT_HUGEPAGE)."""
+        out, _ = shell.execute_command(f"cat {path} 2>/dev/null")
+        line = out[0].strip() if out else ""
+        match = re.search(r"\[(\w+)\]", line)
+        return match.group(1) if match else None
+
+    def _capture_sysfs_thp_settings(self, shell, node_ip):
+        settings = {}
+        for name, path in self._THP_SYSFS_PATHS.items():
+            settings[name] = self._read_sysfs_thp_choice(shell, path)
+        self.log.info(f"[THP-SYSFS] {node_ip}: current settings = {settings}")
+        return settings
+
+    def _write_sysfs_thp_settings(self, shell, node_ip, settings, label=""):
+        """Write ``settings`` (name -> chosen value) to the THP sysfs knobs.
+
+        Skips a knob when its value is None (path was unreadable, e.g. this
+        kernel doesn't expose it, or we have nothing to restore it to).
+        """
+        # Minimal/root-only images (common for AL2023, some Debian/Ubuntu
+        # cloud images) often don't ship a 'sudo' binary at all, since the
+        # SSH user is already root -- prepending 'sudo' unconditionally
+        # would fail there with 'sudo: command not found'.
+        sudo_prefix = "" if getattr(shell, "username", None) == "root" else "sudo "
+        for name, value in settings.items():
+            if value is None:
+                continue
+            path = self._THP_SYSFS_PATHS[name]
+            shell.execute_command(
+                f'{sudo_prefix}bash -c "echo {shlex.quote(value)} > {shlex.quote(path)}" 2>/dev/null'
+            )
+            readback = self._read_sysfs_thp_choice(shell, path)
+            if readback != value:
+                self.log.warning(
+                    f"{label}{node_ip}: tried to set {name}={value} but "
+                    f"readback is {readback} (write may have failed/needs root)"
+                )
+            else:
+                self.log.info(f"{label}{node_ip}: set {name}={value}")
+
+    def _check_thp_state(self, index_nodes, expect_disabled, label=""):
+        """Validate THP state for the indexer process on every index node.
+
+        THP_enabled in /proc/<pid>/status only reflects whether the process
+        called prctl(PR_SET_THP_DISABLE): 0 means it opted out, 1 means it
+        did not. ``expect_disabled=True`` (platform.disable_thp=true) asserts
+        THP_enabled == 0 and AnonHugePages == 0 in smaps_rollup -- both must
+        hold regardless of the box's global THP config, since prctl forces
+        VM_NOHUGEPAGE for that process's future anonymous mappings.
+
+        ``expect_disabled=False`` asserts THP_enabled == 1, but only asserts
+        AnonHugePages > 0 when /proc/meminfo shows the box is actively
+        serving THP system-wide. Without that control, a 0 could just mean
+        the box's global THP is off (madvise/never) or the huge-page pool is
+        exhausted -- not that the setting failed.
+        """
+        errors = []
+        for index_node in index_nodes:
+            shell = RemoteMachineShellConnection(index_node, verbose=False)
+            try:
+                pid = self._get_indexer_pid(shell, index_node.ip, label=label)
+                if pid is None:
+                    errors.append(f"{label} {index_node.ip}: no indexer PID found")
+                    continue
+                self.log.info(f"{label} Indexer PID on {index_node.ip}: {pid}")
+                self._log_thp_process_tree(shell, index_node.ip, label=label)
+
+                status_out, _ = shell.execute_command(
+                    f"grep '^THP_enabled:' /proc/{pid}/status 2>/dev/null"
+                )
+                thp_enabled = self._extract_proc_value(status_out, "THP_enabled")
+                self.log.info(
+                    f"{label} /proc/{pid}/status THP_enabled on {index_node.ip}: "
+                    f"{thp_enabled}"
+                )
+
+                smaps_out, _ = shell.execute_command(
+                    f"grep -E '^(Anonymous|AnonHugePages):' "
+                    f"/proc/{pid}/smaps_rollup 2>/dev/null"
+                )
+                anon_kb = self._extract_proc_value(smaps_out, "Anonymous")
+                anon_huge_kb = self._extract_proc_value(smaps_out, "AnonHugePages")
+                self.log.info(
+                    f"{label} /proc/{pid}/smaps_rollup on {index_node.ip}: "
+                    f"Anonymous={anon_kb} kB, AnonHugePages={anon_huge_kb} kB"
+                )
+
+                meminfo_out, _ = shell.execute_command(
+                    "grep '^AnonHugePages:' /proc/meminfo 2>/dev/null"
+                )
+                system_anon_huge_kb = self._extract_proc_value(meminfo_out, "AnonHugePages")
+                self.log.info(
+                    f"{label} System-wide /proc/meminfo AnonHugePages on "
+                    f"{index_node.ip}: {system_anon_huge_kb} kB"
+                )
+
+                if thp_enabled is None or anon_huge_kb is None:
+                    errors.append(
+                        f"{label} {index_node.ip}: could not read THP_enabled/"
+                        f"AnonHugePages for PID {pid} (process may have exited "
+                        f"or /proc files unreadable)"
+                    )
+                    continue
+
+                if expect_disabled:
+                    if thp_enabled != 0:
+                        errors.append(
+                            f"{label} {index_node.ip}: expected THP_enabled=0 "
+                            f"(opted out) with platform.disable_thp=true, got "
+                            f"{thp_enabled}"
+                        )
+                    if anon_huge_kb != 0:
+                        errors.append(
+                            f"{label} {index_node.ip}: expected AnonHugePages=0 kB "
+                            f"with platform.disable_thp=true, got {anon_huge_kb} kB"
+                        )
+                else:
+                    if thp_enabled != 1:
+                        errors.append(
+                            f"{label} {index_node.ip}: expected THP_enabled=1 "
+                            f"(not opted out) with platform.disable_thp=false, "
+                            f"got {thp_enabled}"
+                        )
+                    if system_anon_huge_kb:
+                        if not anon_huge_kb:
+                            errors.append(
+                                f"{label} {index_node.ip}: platform.disable_thp=false "
+                                f"but indexer AnonHugePages=0 kB even though the box "
+                                f"is actively serving THP system-wide "
+                                f"({system_anon_huge_kb} kB) -- the huge-page pool "
+                                f"isn't exhausted, the indexer just isn't getting THP"
+                            )
+                    else:
+                        self.log.warning(
+                            f"{label} {index_node.ip}: system-wide AnonHugePages is "
+                            f"0 kB, so this box isn't serving THP at all right now "
+                            f"(global sysfs config or no memory pressure) -- "
+                            f"skipping the indexer AnonHugePages>0 check, only "
+                            f"THP_enabled is verified here"
+                        )
+            finally:
+                shell.disconnect()
+        return errors
+
     def test_thp_disable_enable_setting_check(self):
         """
         MB-65503: THP disable/enable setting check for the indexer process.
 
-        Validate that Transparent Huge Pages (THP) is disabled for the indexer
-        process when platform.disable_thp is true (default): cat
+        Some lab machines ship with THP auto-disabled at the OS level
+        (/sys/kernel/mm/transparent_hugepage/enabled = madvise or never), in
+        which case the indexer would never get huge pages regardless of the
+        platform.disable_thp setting -- so this first forces enabled, defrag,
+        and shmem_enabled to 'always' on every index node (restored to their
+        original values at the end, however the test exits).
+
+        With THP actually available, validate that it is disabled for the
+        indexer process when platform.disable_thp is true (default): cat
         /proc/<indexer PID>/status and verify THP_enabled is 0, and cat
         /proc/<PID>/smaps_rollup and verify AnonHugePages is 0 kB. Then disable
         the indexer setting (platform.disable_thp to false), restart the
-        indexer on all index nodes, and log the previous two settings to
-        console.
+        indexer on all index nodes, and verify THP_enabled flips to 1 and
+        AnonHugePages becomes non-zero. Restores platform.disable_thp=true
+        afterwards regardless of outcome.
+
+        The indexer PID is cross-checked via /proc/<pid>/comm because
+        babysitter/goport's cmdline also matches a plain ``pgrep -f indexer``.
 
         Works across RHEL 9, Ubuntu 24, Debian 13, Alma 9, SUSE 15, Rocky 9, AL2023.
 
@@ -957,98 +1174,123 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests, QueryHelperT
         )
         # self.assertGreaterEqual(len(index_nodes), 1, "Need at least one index node")
 
-        # ---- Phase 1: THP should be disabled (platform.disable_thp=true by default) ----
+        # ---- Phase 0b: Capture each node's current OS-level THP posture ----
+        # Some distros/lab images ship with THP auto-disabled (madvise/never).
+        # If we don't force it on, the "AFTER" check below would see
+        # AnonHugePages=0 even when platform.disable_thp correctly re-enables
+        # THP for the indexer -- there'd simply be no huge pages to take, and
+        # the test would wrongly look like the flag doesn't work.
+        original_sysfs_settings = {}
         for index_node in index_nodes:
             shell = RemoteMachineShellConnection(index_node, verbose=False)
             try:
-                out, _ = shell.execute_command("pgrep -f indexer")
-                pids = [l.strip() for l in out if l.strip()]
-                if not pids:
-                    self.log.warning(f"No indexer PID found on {index_node.ip}")
-                    continue
-                pid = pids[0]
-                self.log.info(f"Indexer PID on {index_node.ip}: {pid}")
-
-                self.log.info(f"[BEFORE] Checking THP state on {index_node.ip} (PID={pid})")
-
-                status_out, _ = shell.execute_command(
-                    f"grep -i 'thp' /proc/{pid}/status 2>/dev/null || echo 'NO_THP_LINES'"
-                )
-                status_lines = [l.strip() for l in status_out]
-                self.log.info(
-                    f"[BEFORE] /proc/{pid}/status THP lines on {index_node.ip}: "
-                    f"{status_lines}"
-                )
-
-                smaps_out, _ = shell.execute_command(
-                    f"grep -E '^(AnonHugePages|ShmemHugePages|FileHugePages):' "
-                    f"/proc/{pid}/smaps_rollup 2>/dev/null || echo 'NO_SMAPS'"
-                )
-                smaps_lines = [l.strip() for l in smaps_out]
-                self.log.info(
-                    f"[BEFORE] /proc/{pid}/smaps_rollup on {index_node.ip}: "
-                    f"{smaps_lines}"
+                original_sysfs_settings[index_node.ip] = (
+                    self._capture_sysfs_thp_settings(shell, index_node.ip)
                 )
             finally:
                 shell.disconnect()
 
-        # ---- Phase 2: Disable platform.disable_thp (set to false) ----
-        self.log.info(f"[DISABLE] Setting platform.disable_thp=false on {index_nodes[0].ip}")
-        rest = RestConnection(index_nodes[0])
-        rest.set_index_settings({"platform.disable_thp": False})
-        self.sleep(15, "Wait for THP setting to take effect")
+        try:
+            # ---- Phase 0c: Force THP on at the OS level on every index node ----
+            for index_node in index_nodes:
+                shell = RemoteMachineShellConnection(index_node, verbose=False)
+                try:
+                    self._write_sysfs_thp_settings(
+                        shell, index_node.ip,
+                        {"enabled": "always", "defrag": "always",
+                         "shmem_enabled": "always"},
+                        label="[ENABLE-THP] ",
+                    )
+                finally:
+                    shell.disconnect()
 
-        # ---- Phase 3: Restart indexer on all index nodes so the new setting takes effect ----
-        restart_errors = self._restart_indexer_on_all_nodes(label="[DISABLE-RESTART] ")
-        if restart_errors:
-            self.fail(
-                "Indexer restart failed on some nodes:\n" + "\n".join(restart_errors)
+            # ---- Phase 1: THP should be disabled (platform.disable_thp=true by default) ----
+            before_errors = self._check_thp_state(
+                index_nodes, expect_disabled=True, label="[BEFORE]",
             )
+            if before_errors:
+                self.fail(
+                    "THP state incorrect before disabling platform.disable_thp:\n"
+                    + "\n".join(before_errors)
+                )
 
-        # ---- Phase 3b: Run scans against all indexes so the indexer touches its data pages ----
-        self.log.info(
-            f"[SCAN] Running {len(select_queries)} select queries against created indexes"
-        )
-        scan_consistency = getattr(self, 'scan_consistency', None) or 'not_bounded'
-        scan_tasks = self.gsi_util_obj.aysnc_run_select_queries(
-            select_queries=select_queries, query_node=query_node,
-            scan_consistency=scan_consistency,
-        )
-        for task in scan_tasks:
+            # ---- Phase 2: Disable platform.disable_thp (set to false) ----
+            self.log.info(
+                f"[DISABLE] Setting platform.disable_thp=false on {index_nodes[0].ip}"
+            )
+            rest = RestConnection(index_nodes[0])
+            rest.set_index_settings({"platform.disable_thp": False})
+            self.sleep(15, "Wait for THP setting to take effect")
+
             try:
-                task.result()
-            except Exception as err:
-                self.log.error(f"[SCAN] Select query failed: {err}")
-        self.sleep(10, "Wait for indexer to settle after scans")
-
-        # ---- Phase 4: Log THP state after disabling the setting and restarting ----
-        for index_node in index_nodes:
-            shell = RemoteMachineShellConnection(index_node, verbose=False)
-            try:
-                out, _ = shell.execute_command("pgrep -f indexer")
-                pids = [l.strip() for l in out if l.strip()]
-                if not pids:
-                    self.log.warning(f"No indexer PID found on {index_node.ip}")
-                    continue
-                pid = pids[0]
-                self.log.info(f"[AFTER] Checking THP state on {index_node.ip} (PID={pid})")
-
-                status_out2, _ = shell.execute_command(
-                    f"grep -i 'thp' /proc/{pid}/status 2>/dev/null || echo 'NO_THP_LINES'"
+                # ---- Phase 3: Restart indexer on all nodes so the new setting takes effect ----
+                restart_errors = self._restart_indexer_on_all_nodes(
+                    label="[DISABLE-RESTART] ",
                 )
+                if restart_errors:
+                    self.fail(
+                        "Indexer restart failed on some nodes:\n"
+                        + "\n".join(restart_errors)
+                    )
+
+                # ---- Phase 3b: Run scans so the indexer actually touches/faults in data pages ----
+                # prctl (and its absence) only affects *future* page faults, so THP
+                # coverage has to be judged after fresh faults, not a config reload.
                 self.log.info(
-                    f"[AFTER] /proc/{pid}/status THP lines on {index_node.ip}: "
-                    f"{[l.strip() for l in status_out2]}"
+                    f"[SCAN] Running {len(select_queries)} select queries "
+                    f"against created indexes"
                 )
+                scan_consistency = getattr(self, 'scan_consistency', None) or 'not_bounded'
+                scan_tasks = self.gsi_util_obj.aysnc_run_select_queries(
+                    select_queries=select_queries, query_node=query_node,
+                    scan_consistency=scan_consistency,
+                )
+                for task in scan_tasks:
+                    try:
+                        task.result()
+                    except Exception as err:
+                        self.log.error(f"[SCAN] Select query failed: {err}")
+                self.sleep(10, "Wait for indexer to settle after scans")
 
-                smaps_out2, _ = shell.execute_command(
-                    f"grep -E '^(AnonHugePages|ShmemHugePages|FileHugePages):' "
-                    f"/proc/{pid}/smaps_rollup 2>/dev/null || echo 'NO_SMAPS'"
+                # ---- Phase 4: THP should be enabled now that platform.disable_thp=false ----
+                after_errors = self._check_thp_state(
+                    index_nodes, expect_disabled=False, label="[AFTER]",
                 )
-                self.log.info(
-                    f"[AFTER] /proc/{pid}/smaps_rollup on {index_node.ip}: "
-                    f"{[l.strip() for l in smaps_out2]}"
-                )
+                if after_errors:
+                    self.fail(
+                        "THP state incorrect after disabling platform.disable_thp:\n"
+                        + "\n".join(after_errors)
+                    )
             finally:
-                shell.disconnect()
+                # ---- Cleanup: restore platform.disable_thp=true so later tests aren't affected ----
+                self.log.info(
+                    f"[CLEANUP] Restoring platform.disable_thp=true on {index_nodes[0].ip}"
+                )
+                try:
+                    rest.set_index_settings({"platform.disable_thp": True})
+                    self.sleep(15, "Wait for THP setting to take effect")
+                    cleanup_restart_errors = self._restart_indexer_on_all_nodes(
+                        label="[CLEANUP-RESTART] ",
+                    )
+                    if cleanup_restart_errors:
+                        self.log.error(
+                            "[CLEANUP] Indexer restart failed on some nodes:\n"
+                            + "\n".join(cleanup_restart_errors)
+                        )
+                except Exception as e:
+                    self.log.error(
+                        f"[CLEANUP] Failed to restore platform.disable_thp: {e}"
+                    )
+        finally:
+            # ---- Cleanup: put each node's OS-level THP posture back the way it was ----
+            for index_node in index_nodes:
+                shell = RemoteMachineShellConnection(index_node, verbose=False)
+                try:
+                    self._write_sysfs_thp_settings(
+                        shell, index_node.ip,
+                        original_sysfs_settings.get(index_node.ip, {}),
+                        label="[RESTORE-THP] ",
+                    )
+                finally:
+                    shell.disconnect()
 

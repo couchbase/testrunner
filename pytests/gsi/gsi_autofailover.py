@@ -265,6 +265,7 @@ class GSIAutofailover(AutoFailoverBaseTest, BaseSecondaryIndexingTests):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename)
         select_queries = set()
         namespace_index_map = {}
+        all_definitions = []
         for namespace in self.namespaces:
             definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
                                                                       prefix='test', bhive_index=self.bhive_index,
@@ -280,6 +281,7 @@ class GSIAutofailover(AutoFailoverBaseTest, BaseSecondaryIndexingTests):
             select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=definitions,
                                                                        namespace=namespace, limit=self.scan_limit))
             namespace_index_map[namespace] = definitions
+            all_definitions.extend(definitions)
 
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
         self.wait_until_indexes_online()
@@ -308,8 +310,10 @@ class GSIAutofailover(AutoFailoverBaseTest, BaseSecondaryIndexingTests):
 
         self.assertEqual(len(index_meta_data_before_autofailover), len(index_meta_data_after_autofailover), f"indexes dropped post recovery after autofailover meta data before {index_meta_data_before_autofailover}"
                                                                                                             f"meta data after {index_meta_data_after_autofailover}")
+        expected_title, use_brute_force = self.get_sparse_recall_params(all_definitions, select_queries)
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
-                                               message="results after recovering the node post autofailover of a node", similarity=self.similarity)
+                                               message="results after recovering the node post autofailover of a node", similarity=self.similarity,
+                                               expected_title=expected_title, use_brute_force=use_brute_force)
 
 
     def test_autofailover_and_addback_of_node(self):
@@ -349,4 +353,4 @@ class GSIAutofailover(AutoFailoverBaseTest, BaseSecondaryIndexingTests):
         try:
             self.disable_autofailover_and_validate()
         except Exception as err:
-            pass
+            self.log.warning(f"disable_autofailover_and_validate failed: {err}")

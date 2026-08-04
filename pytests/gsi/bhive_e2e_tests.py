@@ -668,7 +668,7 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
             backup_url = f"http://{index_node.ip}:9102/api/v1/bucket/{bucket}/backup"
 
             self.log.info(f"Making GET request to backup URL: {backup_url}")
-            response = requests.get(backup_url, timeout=120)
+            response = requests.get(backup_url, auth=(self.username, self.password), timeout=120)
             status_code = response.status_code
             self.log.info(f"Received status code: {status_code} from node {index_node.ip}")
 
@@ -1950,7 +1950,6 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
 
         self.log.info("Step 3: Creating indexes on all collections")
         similarity_list = ["COSINE", "L2_SQUARED", "L2", "DOT", "EUCLIDEAN_SQUARED", "EUCLIDEAN"]
-        prefixes = ["test_scalar", "test_bhive", "test_composite"]
         create_queries = list()
         build_queries = list()
         drop_queries = list()
