@@ -4109,7 +4109,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
         url = f"http://{index_node.ip}:9102/listRebalanceTokens"
         try:
-            response = requests.get(url, auth=('Administrator', 'password'))
+            response = requests.get(url, auth=(self.rest.username, self.rest.password))
             tokens_data = response.json()
             self.log.info(f"tokens_data: {tokens_data}")
         except Exception as e:

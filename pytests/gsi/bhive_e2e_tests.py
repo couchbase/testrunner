@@ -6,17 +6,18 @@ __git_user__ = "dananjay-s"
 """
 from copy import deepcopy
 import logging
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import json
 import huggingface_hub
 if not hasattr(huggingface_hub, "cached_download"):
     huggingface_hub.cached_download = huggingface_hub.hf_hub_download
 from sentence_transformers import SentenceTransformer
 from couchbase_helper.documentgenerator import SDKDataLoader
-from remote.remote_util import RemoteMachineShellConnection
+from remote.remote_util import RemoteMachineShellConnection, RemoteMachineHelper
 from membase.api.rest_client import RestHelper
 from .base_gsi import BaseSecondaryIndexingTests
 from membase.api.rest_client import RestConnection
-from threading import Event
+from threading import Event, Barrier
 import random
 import time
 from couchbase_helper.query_definitions import QueryDefinition, RANGE_SCAN_TEMPLATE
@@ -609,33 +610,73 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
         Steps:
         1. Create test bucket and collections
         2. Load 10k documents into collections
-        3. Create BHIVE vector indexes on all collections
+        3. Create BHIVE vector indexes on all collections with deferred build
         4. Wait for indexes to come online
-        5. Terminate indexer process on all index nodes
-        6. Poll backup API endpoint (/api/v1/bucket/{bucket}/backup)
-        7. Validate HTTP status codes returned by backup API
+        5. Verify backup API returns 200 (OK) on all index nodes before failure
+        6. Simultaneously terminate indexer process on all index nodes using a threading barrier
+        7. Confirm indexer process is down on each node
+        8. Start background flapper threads to keep the indexer process down
+        9. Poll backup API endpoint (/api/v1/bucket/{bucket}/backup) on each index node
+           with up to 12 retries at 10-second intervals
+        10. Validate HTTP status codes returned by backup API
+        11. Stop flapper threads and clean up
 
         Expected Results:
-        - Backup API should return 503 (Service Unavailable) status code
+        - Backup API should return 200 (OK) when indexer service is available
+        - Backup API should return 503 (Service Unavailable) when indexer is down
         - Should NOT return 404 (Not Found) status code
-        - All index nodes should consistently return 503 status
-        - Proper error handling when indexer service is down
+        - All index nodes should consistently return 503 status during indexer unavailability
 
         Validation:
-        - Confirms backup API correctly identifies service unavailability
+        - Confirms backup API returns 200 when indexer is healthy
+        - Confirms backup API correctly identifies service unavailability with 503
         - Ensures clients receive appropriate error codes for retry logic
         - Validates consistent error response across all index nodes
+        - Verifies indexer process is confirmed down before polling backup API
         """
+
+        def log_backup_response(index_node, response):
+            self.log.info(f"Backup API response from {index_node.ip}")
+            self.log.info(f"Status Code: {response.status_code}")
+            self.log.info(f"Headers: {response.headers}")
+
+            try:
+                body = response.json()
+                self.log.info(f"Response JSON: {json.dumps(body, indent=2)}")
+            except ValueError:
+                self.log.info(f"Response Text: {response.text}")
+
+        def keep_indexer_down(index_node, stop_event, interval=5):
+            remote = RemoteMachineShellConnection(index_node)
+            remote_helper = RemoteMachineHelper(remote)
+            try:
+                while not stop_event.is_set():
+                    if remote_helper.is_process_running("indexer"):
+                        self.log.info(f"[FLAPPER] Indexer UP on {index_node.ip}, killing it")
+                        remote.terminate_process(process_name="indexer")
+                    else:
+                        self.log.info(f"[FLAPPER] Indexer already DOWN on {index_node.ip}")
+                    time.sleep(interval)
+            finally:
+                remote.disconnect()
+
+        username = self.input.membase_settings.rest_username
+        password = self.input.membase_settings.rest_password
+
         self.log.info("Setting up buckets and loading docs")
         buckets = self._create_test_buckets(num_buckets=1)
+        bucket = buckets[0]
+        self.sleep(120, "Waiting for buckets to be created")
         query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
-        for bucket in buckets:
-            self.prepare_collection_for_indexing(bucket_name=bucket, num_scopes=self.num_scopes, num_collections=self.num_collections,
+        self.sleep(120, "Waiting for query node to be created")
+        for bckt in buckets:
+            self.prepare_collection_for_indexing(bucket_name=bckt, num_scopes=self.num_scopes, num_collections=self.num_collections,
                                                  num_of_docs_per_collection=10000,
                                                  json_template=self.json_template, load_default_coll=False)
+        self.sleep(120, "Waiting for collections/docs to stabilize in KV")
         for namespace in self.namespaces:
             self._load_docs_in_collection(namespace=namespace, json_template=self.json_template)
-        self.sleep(60, "Waiting for docs to be loaded")
+        self.sleep(120, "Waiting for docs to be loaded")
 
         # Creating BHIVE indexes
         create_queries = []
@@ -643,42 +684,136 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
             self.log.info(f"Creating index on {namespace}")
             self.log.info("Getting query definitions...")
             bhive_def, _, _ = self._get_query_definitions()
-            current_create_queries = self._get_create_queries(bhive_def, None, None, namespace=namespace, defer_build_mix=False)
+            current_create_queries = self._get_create_queries(bhive_def, None, None, namespace=namespace, defer_build_mix=True)
             create_queries.extend(current_create_queries)
+        self.sleep(90, "Waiting for docs to be fully indexed in KV")
 
         self.log.info(f"Running create_queries")
         for query in create_queries:
             self.log.info(f"Running create query: {query}")
             self.run_cbq_query(query=query, server=query_node)
-
+        self.sleep(10, "Short wait before checking index status")
         self.wait_until_indexes_online()
-        self.sleep(10, "Indexes online")
+        self.sleep(60, "Indexes online")
 
         # Killing indexer process on all nodes.
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-        for index_node in index_nodes:
-            remote_client = RemoteMachineShellConnection(index_node)
-            remote_client.terminate_process(process_name='indexer')
-        
-        self.log.info("Sleeping for 60seconds after indexer process has been killed in all the index nodes.")
-        self.sleep(60)
-        # Polling for api/v1/bucket/test_bucket/backup
-        bucket = "test_bucket_0"
+
+        # checking for API Response before killing the indexer nodes
         for index_node in index_nodes:
             backup_url = f"http://{index_node.ip}:9102/api/v1/bucket/{bucket}/backup"
-
-            self.log.info(f"Making GET request to backup URL: {backup_url}")
-            response = requests.get(backup_url, auth=(self.username, self.password), timeout=120)
+            self.log.info(f"Making GET request(while indexer service is available) to backup URL: {backup_url}")
+            response = requests.get(backup_url, auth=(username, password), timeout=120)
             status_code = response.status_code
             self.log.info(f"Received status code: {status_code} from node {index_node.ip}")
+            if status_code != 200:
+                self.fail(
+                    f"Backup API returned {status_code} on {index_node.ip} "
+                    f"before indexer failure"
+                )
 
-            # Validate that status is 503 (Service Unavailable) and not 404 (Not Found)
-            if status_code == 404:
-                self.fail(f"Received 404 status code from backup URL {backup_url}. Expected 503 (Service Unavailable)")
-            elif status_code == 503:
-                self.log.info(f"Successfully received 503 (Service Unavailable) status from node {index_node.ip}")
-            else:
-                self.fail(f"Received unexpected status code {status_code} from node {index_node.ip}")
+        # threading barrier for index nodes
+        start_barrier = Barrier(len(index_nodes), timeout=120)
+
+        # function to kill indexer process on a node using framework methods
+        def kill_indexer(index_node):
+            shell = RemoteMachineShellConnection(index_node)
+            try:
+                start_barrier.wait()
+                shell.terminate_process(info=shell.extract_remote_info(), process_name='indexer', force=True)
+                self.log.info(f"[OK] Killed indexer on {index_node.ip}")
+                time.sleep(5)
+                if not RemoteMachineHelper(shell).is_process_running("indexer"):
+                    self.log.info(f"[CONFIRMED] Indexer is DOWN on {index_node.ip}")
+                else:
+                    self.log.warning(f"[WARNING] Indexer process is still running on {index_node.ip}")
+            except Exception as e:
+                self.log.error(f"[ERROR] {index_node.ip}: {e}")
+            finally:
+                shell.disconnect()
+
+        # use multithreading to kill indexer nodes simultaneously
+        with ThreadPoolExecutor(max_workers=len(index_nodes)) as executor:
+            futures = [executor.submit(kill_indexer, node) for node in index_nodes]
+            for future in as_completed(futures):
+                future.result()
+
+        self.sleep(10, "Allowing indexer to transition to unavailable state")
+
+        stop_event = Event()
+
+        with ThreadPoolExecutor(max_workers=len(index_nodes)) as executor:
+            try:
+                # Start flappers
+                for node in index_nodes:
+                    executor.submit(
+                        keep_indexer_down,
+                        node,
+                        stop_event,
+                        5
+                    )
+
+                # Poll backup API while indexer is unstable
+                for index_node in index_nodes:
+                    backup_url = (
+                        f"http://{index_node.ip}:9102"
+                        f"/api/v1/bucket/{bucket}/backup"
+                    )
+
+                    max_retries = 12
+                    sleep_interval = 10
+                    seen_503 = False
+
+                    self.log.info(
+                        f"Polling backup API on {index_node.ip} "
+                        f"while indexer is unavailable"
+                    )
+
+                    for attempt in range(1, max_retries + 1):
+                        response = requests.get(
+                            backup_url,
+                            auth=(username, password),
+                            timeout=120
+                        )
+
+                        self.log.info(
+                            f"[Attempt {attempt}/{max_retries}] "
+                            f"{index_node.ip} -> {response.status_code}"
+                        )
+
+                        log_backup_response(index_node, response)
+
+                        if response.status_code == 503:
+                            self.log.info(
+                                f"[PASS] Expected 503 received from {index_node.ip}"
+                            )
+                            seen_503 = True
+                            break
+
+                        if response.status_code == 404:
+                            stop_event.set()
+                            self.fail(
+                                f"[FAIL] Received 404 from {backup_url}. "
+                                f"Expected 503 when indexer is unavailable."
+                            )
+
+                        time.sleep(sleep_interval)
+
+                    if not seen_503:
+                        stop_event.set()
+                        self.fail(
+                            f"[FAIL] Backup API never returned 503 on "
+                            f"{index_node.ip} while indexer was down"
+                        )
+
+                # Stop indexer flappers
+                stop_event.set()
+            finally:
+                stop_event.set()
+
+        self.log.info(
+            "Backup API correctly returned 503 during indexer unavailability"
+        )
 
 
     def test_logs_on_moi_disk(self):
