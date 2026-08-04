@@ -135,7 +135,13 @@ class auditcheckconfig(BaseTestCase):
         if ops == 'disable':
             shell = RemoteMachineShellConnection(self.master)
             try:
-                result = shell.file_exists(auditIns.getAuditLogPath(), auditIns.AUDITLOGFILENAME)
+                # current-audit.log is a symlink to the active log file, and
+                # the server removes that symlink once audit is disabled
+                # (there is no "current" log once nothing is being written).
+                # The underlying dated/rotated log file it pointed to is what
+                # actually persists, so check for that instead of the
+                # now-removed "current" name.
+                result = shell.file_exists(auditIns.getAuditLogPath(), '-audit.log')
             finally:
                 shell.disconnect()
             self.assertTrue(result, 'Issue with file getting create in new directory')

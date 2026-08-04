@@ -1,6 +1,7 @@
 import json
 from threading import Thread
-from membase.api.rest_client import RestConnection
+from membase.api.rest_client import RestConnection, RestHelper
+from membase.helper.bucket_helper import BucketOperationHelper
 from TestInput import TestInputSingleton
 from clitest.cli_base import CliBaseTest
 from remote.remote_util import RemoteMachineShellConnection
@@ -87,6 +88,12 @@ class auditcli(ldaptest):
                 RbacBase().enable_ldap(rest)
                 self._removeLdapUserRemote(self.ldap_users)
                 self._createLDAPUser(self.ldap_users)
+                # enable_ldap() only turns on saslauthd auth with empty
+                # admins/roAdmins lists - it grants the LDAP user no RBAC
+                # role. Without this, self.ldapUser can authenticate but
+                # every REST/CLI call fails with "unable to access the REST
+                # API - please check your username (-u) and password (-p)".
+                self.set_user_role(rest, self.ldapUser)
 
     def tearDown(self):
         super(auditcli, self).tearDown()
@@ -125,6 +132,14 @@ class auditcli(ldaptest):
 
     def _create_bucket(self, remote_client, bucket="default", bucket_type="couchbase",
                        bucket_ramsize=200, bucket_replica=1, wait=False, enable_flush=None, enable_index_replica=None):
+        rest = RestConnection(self.master)
+        if RestHelper(rest).bucket_exists(bucket):
+            self.log.warning("Bucket '{0}' already exists, deleting it before "
+                             "re-creating via CLI".format(bucket))
+            rest.delete_bucket(bucket)
+            self.assertTrue(BucketOperationHelper.wait_for_bucket_deletion(bucket, rest, 60),
+                            "Bucket '{0}' was not deleted in time".format(bucket))
+
         options = "--bucket={0} --bucket-type={1} --bucket-ramsize={2} --bucket-replica={3}".\
             format(bucket, bucket_type, bucket_ramsize, bucket_replica)
         options += (" --enable-flush={0}".format(enable_flush), "")[enable_flush is None]
@@ -134,6 +149,8 @@ class auditcli(ldaptest):
         cli_command = "bucket-create"
 
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
+        self.assertFalse(output and "ERROR" in output[0],
+                         "bucket-create for bucket '{0}' failed: {1}".format(bucket, output))
 
     def testClusterEdit(self):
         options = "--server-add={0}:8091 --server-add-username=Administrator --server-add-password=password".format(self.servers[num + 1].ip)
@@ -218,11 +235,11 @@ class auditcli(ldaptest):
         self._create_bucket(remote_client, bucket=bucket_name, bucket_type=bucket_type, \
                         bucket_ramsize=bucket_ramsize, bucket_replica=bucket_replica, wait=wait, enable_flush=enable_flush, enable_index_replica=enable_index_replica)
         expectedResults = {'bucket_name':'default', 'ram_quota':209715200, 'num_replicas':1,
-                               'replica_index':True, 'eviction_policy':'value_only', 'type':'membase', \
+                               'replica_index':True, 'eviction_policy':'full_eviction', 'type':'membase', \
                                'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", \
                                 "flush_enabled":False, "num_threads":3, "source":self.source, \
                                "user":self.ldapUser, "ip":'::1', "port":57457, 'sessionid':'', \
-                               'conflict_resolution_type':'seqno','storage_mode':'couchstore'}
+                               'conflict_resolution_type':'seqno','storage_mode':'magma'}
         self.checkConfig(8201, self.master, expectedResults)
         remote_client.disconnect()
 
@@ -258,12 +275,14 @@ class auditcli(ldaptest):
         options += (" --bucket-ramsize={0}".format(bucket_ramsize_new), "")[bucket_ramsize_new is None]
 
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
+        self.assertFalse(output and "ERROR" in output[0],
+                         "bucket-edit for bucket '{0}' failed: {1}".format(bucket, output))
         expectedResults = {'bucket_name':'BBB', 'ram_quota':465567744, 'num_replicas':1,
-                            'replica_index':True, 'eviction_policy':'value_only', 'type':'membase', \
+                            'replica_index':True, 'eviction_policy':'full_eviction', 'type':'membase', \
                             'auth_type':'none', "autocompaction":'false', "purge_interval":"undefined", \
                             "flush_enabled":True, "num_threads":3, "source":self.source, \
                             "user":self.ldapUser, "ip":'::1', "port":57457, 'sessionid':'',
-                            'auth_type':self.source, 'storage_mode': 'couchstore'}
+                            'auth_type':self.source, 'storage_mode': 'magma'}
         self.checkConfig(8202, self.master, expectedResults)
 
         cli_command = "bucket-flush --force"

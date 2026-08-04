@@ -582,6 +582,10 @@ class audit:
     def validateEvents(self, expectedResults, disable_hostname_verification=True, n1ql_audit=False):
         defaultField, mandatoryFields, mandatorySecLevel, optionalFields, optionalSecLevel = self.returnFieldsDef(self.eventDef, self.eventID)
         actualEvent = self.returnEvent(self.eventID)
+        if actualEvent is None:
+            raise Exception("Event id {0} was not found in audit.log on host {1} - the event may not have "
+                             "been written yet or the operation that should trigger it did not succeed"
+                             .format(self.eventID, self.host.ip))
         fieldVerification = self.validateFieldActualLog(actualEvent, self.eventID, 'ns_server', self.defaultFields, mandatoryFields, \
                                                     mandatorySecLevel, optionalFields, optionalSecLevel, self.method, n1ql_audit)
         expectedResults = dict(list(defaultField.items()) + list(expectedResults.items()))

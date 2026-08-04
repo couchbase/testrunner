@@ -3899,8 +3899,14 @@ class RestConnection(object):
         return json_parsed
 
     def disable_alerts(self):
+        """ns_server commit 5ac7a07f9 ("MB-72809: Harden 'recipients' in email alerts", 2026-07-20) 
+        intentionally made recipients required and non-empty on every POST to /settings/alerts, 
+        including disable — previously it defaulted to []. """
         api = self.baseUrl + 'settings/alerts'
-        params = urllib.parse.urlencode({'enabled': 'false'})
+        current_settings = self.get_alerts_settings()
+        recipients = current_settings.get('recipients') or ['couchbase@localhost']
+        params = urllib.parse.urlencode({'enabled': 'false',
+                                          'recipients': ','.join(recipients)})
         log.info('settings/alerts params : {0}'.format(params))
         status, content, header = self._http_request(api, 'POST', params)
         return status
