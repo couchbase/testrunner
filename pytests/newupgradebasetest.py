@@ -1,5 +1,6 @@
 import copy, json
 import re
+import time
 import testconstants
 import gc
 import traceback
@@ -291,6 +292,35 @@ class NewUpgradeBaseTest(QueryHelperTests, FTSBaseTest):
             raise Exception("Build %s for machine %s is not found" % (version, server))
         return appropriate_build
 
+    def _wait_for_node_warmup_after_upgrade(self, server, wait_time):
+        """
+        Local, upgrade-test-only replacement for
+        ClusterOperationHelper.wait_for_ns_servers_or_assert()/_wait_warmup_completed().
+        That shared helper's warmup-stats poll loop has no sleep on its exception
+        path, so it busy-loops (tens of thousands of times over the timeout window)
+        against a node that's still coming up right after an offline upgrade
+        restart -- scoped here instead of fixing the shared helper directly, since
+        that helper is used across the whole framework.
+        """
+        rest = RestConnection(server)
+        if RestHelper(rest).is_ns_server_running(wait_time):
+            return
+        for bucket in rest.get_buckets():
+            start = time.time()
+            while time.time() - start < wait_time:
+                try:
+                    mc = MemcachedClientHelper.direct_client(server, bucket.name)
+                    stats = mc.stats()
+                    if stats is not None and stats.get('ep_warmup_thread') == 'complete':
+                        break
+                except Exception as e:
+                    self.log.error("Could not get ep_warmup_time stats from server %s:%s, exception %s" %
+                                    (server.ip, server.port, e))
+                self.sleep(2, "waiting for warmup stats from %s:%s" % (server.ip, server.port))
+            else:
+                self.fail("Fail! Unable to get the warmup-stats from server %s:%s after trying for %s seconds." %
+                           (server.ip, server.port, wait_time))
+
     def _upgrade(self, upgrade_version, server, queue=None, skip_init=False, info=None,
                  save_upgrade_config=False, fts_query_limit=None, debug_logs=False, cluster_profile=None):
         try:
@@ -319,7 +349,7 @@ class NewUpgradeBaseTest(QueryHelperTests, FTSBaseTest):
                 remote.start_server()
             self.rest = RestConnection(server)
             if self.is_linux:
-                self.wait_node_restarted(server, wait_time=testconstants.NS_SERVER_TIMEOUT * 4, wait_if_warmup=True)
+                self._wait_for_node_warmup_after_upgrade(server, wait_time=testconstants.NS_SERVER_TIMEOUT * 4)
             else:
                 self.wait_node_restarted(server, wait_time=testconstants.NS_SERVER_TIMEOUT * 10, wait_if_warmup=True, check_service=True)
             if not skip_init:
@@ -329,7 +359,7 @@ class NewUpgradeBaseTest(QueryHelperTests, FTSBaseTest):
             self.sleep(10)
             return o, e
         except Exception as e:
-            print((traceback.extract_stack()))
+            print(traceback.format_exc())
             if queue is not None:
                 queue.put(False)
                 raise e
@@ -536,11 +566,11 @@ class NewUpgradeBaseTest(QueryHelperTests, FTSBaseTest):
                 remote.disconnect()
                 self.sleep(10)
                 if self.is_linux:
-                    self.wait_node_restarted(server, wait_time=testconstants.NS_SERVER_TIMEOUT * 4, wait_if_warmup=True)
+                    self._wait_for_node_warmup_after_upgrade(server, wait_time=testconstants.NS_SERVER_TIMEOUT * 4)
                 else:
                     self.wait_node_restarted(server, wait_time=testconstants.NS_SERVER_TIMEOUT * 10, wait_if_warmup=True, check_service=True)
             except Exception as e:
-                print((traceback.extract_stack()))
+                print(traceback.format_exc())
                 if queue is not None:
                     queue.put(False)
                     if not self.is_linux:
@@ -878,7 +908,7 @@ class NewUpgradeBaseTest(QueryHelperTests, FTSBaseTest):
         2. Loads fts json data
         3. Runs queries and compares the results against ElasticSearch
         """
-        self.fts_obj = FTSCallable(nodes=self.servers, es_validate=True)
+        self.fts_obj = FTSCallable(nodes=self.servers, es_validate=True, for_upgrade=True)
         for bucket in self.buckets:
             self.fts_obj.create_default_index(
                 index_name="index_{0}".format(bucket.name),
@@ -896,7 +926,7 @@ class NewUpgradeBaseTest(QueryHelperTests, FTSBaseTest):
         """
         try:
             if not fts_obj:
-                fts_obj = FTSCallable(nodes=self.servers, es_validate=True)
+                fts_obj = FTSCallable(nodes=self.servers, es_validate=True, for_upgrade=True)
             fts_obj.async_perform_update_delete()
             fts_obj.wait_for_indexing_complete()
             for index in fts_obj.fts_indexes:

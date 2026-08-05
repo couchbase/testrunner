@@ -42,9 +42,9 @@ class FTSCallable:
     """
 
     def __init__(self, nodes, es_validate=False, es_reset=True, scope=None, collections=None, collection_index=False, is_elixir=False, reduce_query_logging=False,
-                 variable_node=None, xattr_flag=False, base64_flag=False,servers = None):
+                 variable_node=None, xattr_flag=False, base64_flag=False,servers = None, for_upgrade=False):
         self.log = logger.Logger.get_logger()
-        self.cb_cluster = CouchbaseCluster(name="C1", nodes= nodes, log=self.log, reduce_query_logging=reduce_query_logging)
+        self.cb_cluster = CouchbaseCluster(name="C1", nodes= nodes, log=self.log, reduce_query_logging=reduce_query_logging, for_upgrade=for_upgrade)
         self.cb_cluster.get_buckets()
         self.fts_indexes = self.cb_cluster.get_indexes()
         """ have to have a elastic search node to run these tests """
@@ -286,6 +286,8 @@ class FTSCallable:
             retry_count = retry
             prev_count = 0
             es_index_count = 0
+            index_doc_count = 0
+            bucket_doc_count = 0
             while retry_count > 0:
                 try:
                     index_doc_count = index.get_indexed_doc_count()
@@ -335,6 +337,16 @@ class FTSCallable:
                     self.log.info(e)
                     retry_count -= 1
                 time.sleep(6)
+            else:
+                # Loop exhausted its retry budget without ever hitting a break
+                # above (i.e. indexing never converged) -- fail loudly instead
+                # of silently letting queries run against a stale/empty index.
+                raise Exception(
+                    "FTS indexing did not complete for index '%s': bucket has "
+                    "%s docs but FTS index only reports %s docs after %s "
+                    "retries (~%s seconds)" %
+                    (index.name, bucket_doc_count, index_doc_count, retry,
+                     retry * 6))
             # now wait for num_mutations_to_index to become zero to handle the pure
             # updates scenario - where doc count remains unchanged
             retry_mut_count = 200

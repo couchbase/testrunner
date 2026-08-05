@@ -2355,8 +2355,14 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         # running n1ql commands
         self.n1ql_server = self.get_nodes_from_services_map(
             service_type="n1ql")
-        # Run the pre upgrade operations, typically creating index
-        fts_obj = self.create_fts_index_query_compare()
+        # Run the pre upgrade operations, typically creating index.
+        # operations() already created/loaded/queried the FTS index above when
+        # is_fts_in_pre_upgrade is set -- calling this again here would delete
+        # that just-built index and rebuild it from scratch for no reason.
+        if self.is_fts_in_pre_upgrade:
+            fts_obj = self.fts_obj
+        else:
+            fts_obj = self.create_fts_index_query_compare()
 
         self.buckets = RestConnection(self.master).get_buckets()
         if 5 <= int(self.initial_version[:1]) and 5.5 > float(self.initial_version[:3]):

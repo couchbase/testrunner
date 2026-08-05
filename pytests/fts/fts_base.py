@@ -2309,13 +2309,18 @@ class FTSIndex:
 
 
 class CouchbaseCluster:
-    def __init__(self, name, nodes, log, use_hostname=False, sdk_compression=True, reduce_query_logging=False):
+    def __init__(self, name, nodes, log, use_hostname=False, sdk_compression=True, reduce_query_logging=False, for_upgrade=False):
         """
         @param name: Couchbase cluster name. e.g C1, C2 to distinguish in logs.
         @param nodes: list of server objects (read from ini file).
         @param log: logger object to print logs.
         @param use_hostname: True if use node's hostname rather ip to access
                         node else False.
+        @param for_upgrade: True if this cluster is used from an upgrade test
+                        (nodes there tend to be memory-constrained and get
+                        other services added mid-test) -- uses much lower
+                        KV/FTS/Index RAM quotas than the stable-topology FTS
+                        suites need.
         """
         self.__name = name
         self.__nodes = nodes
@@ -2342,7 +2347,10 @@ class CouchbaseCluster:
         self.modify_memory_quotas = TestInputSingleton.input.param("modify_memory_quotas", False)
         self.hierarchical = TestInputSingleton.input.param("hierarchical", False)
         self.__separate_nodes_on_services()
-        self.__set_fts_ram_quota()
+        if for_upgrade:
+            self.__set_fts_ram_quota_for_upgrade()
+        else:
+            self.__set_fts_ram_quota()
         self.sdk_compression = sdk_compression
         self.reduce_query_logging = reduce_query_logging
 
@@ -2452,6 +2460,26 @@ class CouchbaseCluster:
                                      index_quota=index_quota)
         except Exception as ex:
             print(f"Error setting memory quota for the cluster.\nSource : fts_base.py.\nError : {ex}\n")
+
+    def __set_fts_ram_quota_for_upgrade(self):
+        # Upgrade-test lab nodes join the cluster one at a time and can be
+        # memory-constrained (seen failing with "maximum allowed quota" well
+        # under 3103MB for kv+fts+index alone at the stable-topology defaults
+        # of 3000+3000+600=6600MB). Upgrade tests only ever index a small,
+        # fixed dataset, so these lower quotas are still comfortably enough.
+        is_n1ql = TestInputSingleton.input.param("is_n1ql", False)
+        fts_quota = TestInputSingleton.input.param("fts_quota", 512)
+        index_quota = TestInputSingleton.input.param("index_quota", 256)
+        kv_quota = TestInputSingleton.input.param("kv_quota", 512)
+        if(is_n1ql):
+            fts_quota = 400
+        try:
+            RestConnection(self.__master_node).modify_memory_quota(kv_quota = kv_quota, fts_quota = fts_quota, index_quota = index_quota)
+        except Exception as ex:
+            raise Exception(
+                "Could not set FTS/KV/Index memory quotas on %s -- FTS "
+                "indexing will not work without this. Underlying error: %s"
+                % (self.__master_node.ip, ex))
 
     def get_node(self, ip, port):
         for node in self.__nodes:

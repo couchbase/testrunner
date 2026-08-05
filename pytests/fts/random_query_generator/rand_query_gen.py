@@ -321,7 +321,14 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         if bool(random.getrandbits(1)):
             filter_fts_query, filter_es_query = self.construct_match_query(
                 ret_list=False)
-            fts_bool_query['filter'] = filter_fts_query
+            # FTS bool queries have no top-level "filter" clause like ES does --
+            # older FTS/bleve versions silently drop an unrecognized "filter" key
+            # instead of erroring, so express the AND semantics via a "must"
+            # conjunct instead, which every FTS version understands.
+            if 'must' in fts_bool_query:
+                fts_bool_query['must']['conjuncts'].append(filter_fts_query)
+            else:
+                fts_bool_query['must'] = {"conjuncts": [filter_fts_query]}
             if isinstance(filter_es_query, list):
                 es_bool_query['bool']['filter'] = filter_es_query
             else:
@@ -346,7 +353,9 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
 
         filter_fts_query, filter_es_query = self.construct_match_query(
             ret_list=False)
-        fts_bool_query['filter'] = filter_fts_query
+        # Fold into the existing "must" conjuncts -- see comment in
+        # construct_bool_query() for why FTS can't use a top-level "filter" key.
+        fts_bool_query['must']['conjuncts'].append(filter_fts_query)
         if isinstance(filter_es_query, list):
             es_bool_query['bool']['filter'] = filter_es_query
         else:

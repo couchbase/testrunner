@@ -426,6 +426,16 @@ class BucketDeleteTask(Task):
         self.server = server
         self.bucket = bucket
 
+    def _log_bucket_timings(self):
+        # Best-effort diagnostic logging only -- the bucket (and its internal
+        # admin credentials) may already be gone by the time this runs, since
+        # it's called from delete-failure paths, so a failure here must never
+        # mask the real exception being handled by the caller.
+        try:
+            self.log.info(StatsCommon.get_stats([self.server], self.bucket, "timings"))
+        except Exception as e:
+            self.log.info("Could not fetch bucket timings for %s: %s" % (self.bucket, e))
+
     def execute(self, task_manager):
         try:
             rest = RestConnection(self.server)
@@ -433,14 +443,14 @@ class BucketDeleteTask(Task):
                 self.state = CHECKING
                 task_manager.schedule(self)
             else:
-                self.log.info(StatsCommon.get_stats([self.server], self.bucket, "timings"))
+                self._log_bucket_timings()
                 self.state = FINISHED
                 self.set_result(False)
         # catch and set all unexpected exceptions
 
         except Exception as e:
             self.state = FINISHED
-            self.log.info(StatsCommon.get_stats([self.server], self.bucket, "timings"))
+            self._log_bucket_timings()
             self.set_unexpected_exception(e)
 
     def check(self, task_manager):
@@ -454,7 +464,7 @@ class BucketDeleteTask(Task):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.info(StatsCommon.get_stats([self.server], self.bucket, "timings"))
+            self._log_bucket_timings()
             self.set_unexpected_exception(e)
 
 
