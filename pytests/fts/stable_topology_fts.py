@@ -12,7 +12,8 @@ from remote.remote_util import RemoteMachineShellConnection
 
 from TestInput import TestInputSingleton
 from tasks.task import ESRunQueryCompare
-from lib.testconstants import FUZZY_FTS_SMALL_DATASET, FUZZY_FTS_LARGE_DATASET
+from lib.testconstants import (FUZZY_FTS_SMALL_DATASET, FUZZY_FTS_LARGE_DATASET,
+                               MIN_KV_QUOTA, FTS_SERVICE_QUOTA)
 from .fts_base import FTSBaseTest, INDEX_DEFAULTS, QUERY, download_from_s3
 from lib.membase.api.exception import FTSException, ServerUnavailableException
 from lib.membase.api.rest_client import RestConnection
@@ -26,10 +27,46 @@ class StableTopFTS(FTSBaseTest):
         super(StableTopFTS, self).setUp()
         self.ignore_wiki = False
         self.log.info("Modifying quotas for each services in the cluster")
+        kv_quota = self._input.param("kv_quota", 3000)
+        index_quota = self._input.param("index_quota", 400)
+        cbas_quota = self._input.param("cbas_quota", 1024)
+        eventing_quota = self._input.param("eventing_quota", 256)
+        # FTS needs the full 3000MB here - starving it stalls indexing outright.
+        # A smaller fts_quota is only ever passed to squeeze onto a node that also
+        # runs kv, and the fix for that is separating the services, not shrinking
+        # the quota, so treat 3000 as a floor.
+        fts_quota = max(FTS_SERVICE_QUOTA, self._input.param("fts_quota", FTS_SERVICE_QUOTA))
         try:
-            RestConnection(self._cb_cluster.get_master_node()).modify_memory_quota(3000, 400, 3000, 1024, 256)
+            master = self._cb_cluster.get_master_node()
+            rest = RestConnection(master)
+            master_services = (getattr(master, "services", "") or "kv").split(",")
+            if "kv" in master_services and "fts" in master_services:
+                # ns_server charges kv + fts against this one node, so the quotas
+                # below cannot all fit and the request is rejected as a whole -
+                # leaving fts on its 512MB default. Use an ini that puts fts on
+                # its own node (e.g. b/resources/fts/ini/3-node.ini).
+                self.log.warning(
+                    "%s runs both kv and fts; their quotas compete on one node "
+                    "and the quota request is likely to be rejected. Separate "
+                    "the services across nodes." % master.ip)
+            # ns_server rejects the request as a whole when the total exceeds what
+            # the node can back, so a node that is a little too small loses every
+            # quota in it - including fts. Trim kv to fit, never fts.
+            reserved = int(rest.get_nodes_self().mcdMemoryReserved)
+            charged = kv_quota + index_quota
+            if "fts" in master_services:
+                charged += fts_quota
+            if charged > reserved:
+                trimmed = max(MIN_KV_QUOTA, kv_quota - (charged - reserved))
+                self.log.warning(
+                    "quotas charged to %s total %sMB but the node can only back "
+                    "%sMB; using kv quota %s instead of %s"
+                    % (master.ip, charged, reserved, trimmed, kv_quota))
+                kv_quota = trimmed
+            rest.modify_memory_quota(kv_quota, index_quota, fts_quota,
+                                     cbas_quota, eventing_quota)
         except Exception as e:
-            print(e)
+            self.log.warning("Could not modify service memory quotas: %s" % e)
         self.doc_filter_query = {"match": "search", "field": "search_string"}
         self.index_wait_time = 20
 
@@ -63,6 +100,22 @@ class StableTopFTS(FTSBaseTest):
         #selecting the fts target node (random)
         self.fts_target_node = random.choice(self._cb_cluster.get_fts_nodes())
         self.fts_nodes = self._cb_cluster.get_fts_nodes()
+
+        # A local_only read is served purely from the partitions sitting on the
+        # target node, and the replica copies there can still be catching up:
+        # wait_for_indexing_complete only checks the index-wide count from
+        # whichever node answers, so it returns while this node lags. Drain the
+        # target node first, otherwise an exact-hit assertion sees a subset.
+        target_rest = RestConnection(self.fts_target_node)
+        for index in self._cb_cluster.get_indexes():
+            if index.index_type == "fulltext-alias":
+                continue
+            for _ in range(self._input.param("index_retry", 200)):
+                pending = index.get_num_mutations_to_index(rest=target_rest)
+                if not pending:
+                    break
+                self.sleep(5, "{0} still has {1} mutations to index for '{2}'"
+                              .format(self.fts_target_node.ip, pending, index.name))
 
         #store the active and replica stat for all indices present in the cluster. This should be executed post index creation
         self.rfr_stats = {}
@@ -1202,12 +1255,24 @@ class StableTopFTS(FTSBaseTest):
                                   scope=index_scope, collections=index_collections)
         num_collections = TestInputSingleton.input.param("num_collections", 1)
 
+        # These counts used to be hardcoded as 1000/700/400 per collection, which
+        # only held while the conf loaded 1000 items - it now loads 100000, so
+        # every assertion was out by 100x. Derive them from the item count and the
+        # update/delete percentages instead: 1000/30/30 reproduces the old
+        # numbers exactly.
+        per_collection = self._num_items
+        after_insert = per_collection * num_collections
+        after_update = per_collection * (100 - self._perc_upd) // 100 * num_collections
+        after_delete = per_collection * (100 - self._perc_del) // 100 * num_collections
+        after_expiry = per_collection * (100 - self._perc_del - self._perc_upd) // 100 \
+            * num_collections
+
         self.load_data()
         time.sleep(240)
         self.wait_for_indexing_complete()
         query = {"query": "mutated:0"}
         hits,_,_,_ = index.execute_query(query)
-        self.assertEquals(hits, 1000 * num_collections, f"Expected hits does not match after insert. Expected - {1000 * num_collections}, found {hits}")
+        self.assertEquals(hits, after_insert, f"Expected hits does not match after insert. Expected - {after_insert}, found {hits}")
 
         self._update = True
         self.async_perform_update_delete(self.upd_del_fields)
@@ -1215,7 +1280,7 @@ class StableTopFTS(FTSBaseTest):
         self.sleep(30, "sleep additional time.")
         query = {"query": "mutated:0"}
         hits,_,_,_ = index.execute_query(query)
-        self.assertEquals(hits, 700*num_collections, f"Expected hits does not match after update. Expected - {700*num_collections}, found {hits}")
+        self.assertEquals(hits, after_update, f"Expected hits does not match after update. Expected - {after_update}, found {hits}")
 
         self._update = False
         self._delete = True
@@ -1225,7 +1290,7 @@ class StableTopFTS(FTSBaseTest):
         query = {"query": "type:emp"}
         time.sleep(120)
         hits,_,_,_ = index.execute_query(query)
-        self.assertEquals(hits, 700*num_collections, f"Expected hits does not match after delete. Expected - {700*num_collections}, found {hits}")
+        self.assertEquals(hits, after_delete, f"Expected hits does not match after delete. Expected - {after_delete}, found {hits}")
 
         self._expires = 10
         self._update = True
@@ -1235,7 +1300,7 @@ class StableTopFTS(FTSBaseTest):
         self.sleep(30, "Wait for docs expiration")
         query = {"query": "type:emp"}
         hits,_,_,_ = index.execute_query(query)
-        self.assertEquals(hits, 400*num_collections, f"Expected hits does not match after expiration. Expected - {400*num_collections}, found {hits}")
+        self.assertEquals(hits, after_expiry, f"Expected hits does not match after expiration. Expected - {after_expiry}, found {hits}")
 
     def test_collection_mutations_isolation(self):
         #delete unnecessary bucket
@@ -1415,7 +1480,10 @@ class StableTopFTS(FTSBaseTest):
             bucket=self._cb_cluster.get_bucket_by_name('default'),
             index_name="custom_index", collection_index=collection_index, _type=type,
             scope=index_scope, collections=index_collections)
-        self.create_es_index_mapping(index.es_custom_map, index.index_definition)
+        # self.es is None when the suite runs with compare_es=False, so guard the
+        # mapping call the same way index_query_custom_mapping does.
+        if self.es:
+            self.create_es_index_mapping(index.es_custom_map, index.index_definition)
         self.load_data()
         self.wait_for_indexing_complete()
         self.generate_random_queries(index, self.num_queries, self.query_types)
@@ -1431,7 +1499,8 @@ class StableTopFTS(FTSBaseTest):
         index.update()
         # updating mapping on ES is not easy, often leading to merge issues
         # drop and recreate the index, load again
-        self.create_es_index_mapping(index.es_custom_map)
+        if self.es:
+            self.create_es_index_mapping(index.es_custom_map)
         self.load_data()
         self.wait_for_indexing_complete()
         if self.run_via_n1ql:

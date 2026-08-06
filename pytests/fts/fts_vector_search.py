@@ -807,13 +807,28 @@ class VectorSearch(FTSBaseTest):
 
         # could be "linux", "linux2", "linux3", ...
         if sys.platform.startswith("linux"):
-            ip = os.popen(
-                'ifconfig eth0 | grep "inet " | xargs | cut -d" " -f 2') \
-                .read().strip()
+            # 'ifconfig eth0' returns nothing on the current slaves: Debian 12
+            # ships without net-tools and names interfaces predictably (ens192,
+            # enp0s3...), so there is no eth0. That left the ip empty, the vector
+            # loader was handed '-fn' with no value, exited 2 on a usage error and
+            # never wrote the faiss index file - which only surfaced much later as
+            # "could not open /tmp/<name>.index". Ask the routing table instead,
+            # and fall back to the old command for older images.
+            for command in ('ip -4 route get 1 | head -1 | grep -oP "src \\K\\S+"',
+                            'hostname -I | xargs | cut -d" " -f 1',
+                            'ifconfig eth0 | grep "inet " | xargs | cut -d" " -f 2'):
+                ip = os.popen(command).read().strip()
+                if ip:
+                    break
         else:
             ip = '127.0.0.1'
 
         self.log.info("Host_ip = %s" % ip)
+        if not ip:
+            # Callers pass this straight to the loader as -fn; an empty value
+            # makes it fail its argument parsing rather than saying what is wrong.
+            self.fail("Could not determine this host's IP address; the vector "
+                      "loader needs it to write the faiss index file")
         return ip
 
     def floats_to_little_endian_bytes(self, floats):
@@ -829,7 +844,27 @@ class VectorSearch(FTSBaseTest):
         base64_string = base64.b64encode(byte_array).decode('ascii')
         return base64_string
 
+    def expected_hit_count(self):
+        """How many hits a knn query can return.
+
+        Normally k, but a query that asks for a score window can never return
+        more than the window's worth of hits, so cap it there.
+        """
+        size = int(self.k)
+        score_window_size = (self.query.get('params') or {}).get('score_window_size')
+        if score_window_size is not None:
+            size = min(size, int(score_window_size))
+        return size
+
     def compare_results(self, listA, listB, nameA="listA", nameB="listB"):
+        # Test against length, not truthiness: the groundtruth side is a numpy
+        # array and `not <array>` raises "truth value of an array ... is
+        # ambiguous" rather than telling us whether it is empty.
+        if len(listA) == 0 or len(listB) == 0:
+            self.log.error(f"Cannot compare results, {nameA} has {len(listA)} "
+                           f"and {nameB} has {len(listB)} elements")
+            return 0, 0
+
         common_elements = set(listA) & set(listB)
 
         not_common_elements = set(listA) ^ set(listB)
@@ -854,7 +889,7 @@ class VectorSearch(FTSBaseTest):
             distances, ann = faiss_index.search(faiss_query_vector, k=self.k)
             faiss_doc_ids = [i + int(self.start_key) for i in ann[0]]
 
-            fts_doc_ids = [matches[i]['fields']['sno'] - 1 for i in range(self.k)]
+            fts_doc_ids = [matches[i]['fields']['sno'] - 1 for i in range(min(self.k, len(matches)))]
 
             fts_hits = len(matches)
             if len(faiss_doc_ids) != int(fts_hits):
@@ -975,7 +1010,13 @@ class VectorSearch(FTSBaseTest):
         # Run fts query via n1ql
         n1ql_hits = -1
         if self.run_n1ql_search_function:
-            n1ql_query = f"SELECT COUNT(*) FROM `{index._source_name}`.{index.scope}.{index.collections[0]} AS t1 WHERE SEARCH(t1, {self.query});"
+            # SEARCH() passes the request straight through to FTS, which pages at
+            # its default size of 10 unless the request asks for more. Without an
+            # explicit size the count comes back as 10 for every k, so callers
+            # comparing n1ql_hits against k only ever pass when k happens to be 10.
+            n1ql_search_request = dict(self.query)
+            n1ql_search_request['size'] = self.expected_hit_count()
+            n1ql_query = f"SELECT COUNT(*) FROM `{index._source_name}`.{index.scope}.{index.collections[0]} AS t1 WHERE SEARCH(t1, {n1ql_search_request});"
             self.log.info(f" Running n1ql Query - {n1ql_query}")
             if continue_on_failure:
                 try:
@@ -1014,6 +1055,13 @@ class VectorSearch(FTSBaseTest):
                 continue
             else:
                 break
+        else:
+            # Retries exhausted. Negative tests expect this and check hits below,
+            # but otherwise the failed response is carried into the validations and
+            # surfaces as an opaque TypeError instead of the actual query error.
+            if not continue_on_failure:
+                self.fail(f"FTS query failed after {self.query_retries} attempts. "
+                          f"status: {status}, response: {matches}, query: {self.query}")
 
         if hits == 0:
             hits = -1
@@ -1041,7 +1089,7 @@ class VectorSearch(FTSBaseTest):
         if validate_fts_with_faiss and not continue_on_failure:
             query_vector = vector
             fts_matches = []
-            for i in range(self.k):
+            for i in range(min(self.k, len(matches))):
                 fts_matches.append(matches[i]['fields']['sno'] - 1)
 
             faiss_results = self.perform_validations_from_faiss(matches, index, query_vector)
@@ -1063,7 +1111,9 @@ class VectorSearch(FTSBaseTest):
             query_vector = vector
             fts_matches = []
 
-            for i in range(self.k):
+            # FTS can return fewer than k hits, so validate against whatever
+            # actually came back rather than indexing past the end of matches.
+            for i in range(min(self.k, len(matches))):
                 fts_matches.append(matches[i]['fields']['sno'] - 1)
 
             if perform_faiss_validation:
@@ -1092,9 +1142,11 @@ class VectorSearch(FTSBaseTest):
         # validate no of results are k only
         if (self.run_n1ql_search_function and not continue_on_failure):
             if validate_result_count:
-                if len(matches) != self.k and n1ql_hits != self.k:
+                expected_hits = self.expected_hit_count()
+                if len(matches) != expected_hits and n1ql_hits != expected_hits:
                     self.fail(
-                        f"No of results are not same as k=({self.k} \n k = {self.k} || N1QL hits = {n1ql_hits}  || "
+                        f"No of results are not same as k=({self.k} \n k = {self.k} || "
+                        f"expected hits = {expected_hits} || N1QL hits = {n1ql_hits}  || "
                         f"FTS hits = {hits}")
 
         return n1ql_hits, hits, matches, recall_and_accuracy
@@ -1630,8 +1682,13 @@ class VectorSearch(FTSBaseTest):
                 if isinstance(iv, set):
                     iv = list(iv)
                 self.run_n1ql_search_function = False
+                # These vectors are deliberately malformed, so FTS rejecting the
+                # query is the expected outcome. Mark it as such - otherwise the
+                # retry loop in run_vector_query burns all its attempts on a query
+                # that can never succeed and then reports the failed response as
+                # a test failure.
                 n1ql_hits, hits, matches, _ = self.run_vector_query(vector=iv, index=index['index_obj'],
-
+                                                                    continue_on_failure=True,
                                                                     validate_result_count=False,
                                                                     load_invalid_base64_string=True)
                 if n1ql_hits != -1 and hits != -1:
@@ -3227,7 +3284,7 @@ class VectorSearch(FTSBaseTest):
                                                                      fts_nodes=self.fts_nodes,
                                                                      variable_node=self.fts_target_node)
                 fts_matches = []
-                for i in range(self.k):
+                for i in range(min(self.k, len(matches))):
                     fts_matches.append(matches[i]['fields']['sno'] - 1)
                 out_of_range = [num for num in fts_matches if num < self.start_key or num > self.start_key+10000]
                 if len(out_of_range) > 0:

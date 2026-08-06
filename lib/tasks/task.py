@@ -1715,9 +1715,15 @@ class ESBulkLoadGeneratorTask(Task):
         self.set_result(True)
 
     def execute(self, task_manager):
-        es_filename = "/tmp/es_bulk.txt"
+        # A fixed path here is shared by every loader task in this process and by
+        # any other testrunner job on the same slave. A concurrent writer
+        # truncates and rewrites the file between our write and our read, so the
+        # POST body starts mid-line and Elasticsearch rejects the whole batch
+        # with x_content_parse_exception. Keep the scratch file per task.
+        es_filename = "/tmp/es_bulk_{0}_{1}.txt".format(os.getpid(), id(self))
         es_bulk_docs = []
         loaded = 0
+        failed = 0
         batched = 0
         for key, doc in self.generator:
             doc = json.loads(doc)
@@ -1736,19 +1742,49 @@ class ESBulkLoadGeneratorTask(Task):
                 es_bulk_docs.append(json.dumps({"doc": doc}))
             batched += 1
             if batched == self.batch_size or not self.generator.has_next():
-                es_file = open(es_filename, "wb")
-                for line in es_bulk_docs:
-                    es_file.write("{}\n".format(line).encode())
-                es_file.close()
-                self.es_instance.load_bulk_data(es_filename,self.index_name)
-                loaded += batched
-                self.log.info("{0} documents bulk loaded into ES".format(loaded))
+                # Retry the batch rather than dropping it. A batch that is only
+                # logged and skipped leaves ES permanently short of the bucket,
+                # which then surfaces much later as an unexplained FTS/ES count
+                # mismatch in whichever test happens to run next.
+                status = False
+                for attempt in range(1, 4):
+                    es_file = open(es_filename, "wb")
+                    for line in es_bulk_docs:
+                        es_file.write("{}\n".format(line).encode())
+                    es_file.close()
+                    status = self.es_instance.load_bulk_data(es_filename, self.index_name)
+                    if status:
+                        break
+                    self.log.error("ES bulk load failed for batch of {0} docs "
+                                   "(attempt {1}/3); loaded so far: {2}"
+                                   .format(batched, attempt, loaded))
+                    time.sleep(2 * attempt)
+                if status:
+                    loaded += batched
+                    self.log.info("{0} documents bulk loaded into ES".format(loaded))
+                else:
+                    failed += batched
+                    self.log.error("ES bulk load gave up on a batch of {0} docs "
+                                   "after 3 attempts; loaded so far: {1}"
+                                   .format(batched, loaded))
                 self.es_instance.update_index(self.index_name)
                 batched = 0
+        try:
+            os.remove(es_filename)
+        except OSError:
+            pass
         indexed = self.es_instance.get_index_count(self.index_name)
         self.log.info("ES index count for '{0}': {1}".
                       format(self.index_name, indexed))
         self.state = FINISHED
+        if failed:
+            # Fail here instead of leaving a short ES index behind - every
+            # downstream ES comparison in this test would fail with a confusing
+            # doc-count mismatch that points nowhere near the load.
+            self.set_exception(Exception(
+                "ES bulk load lost {0} docs; ES index '{1}' has {2} docs"
+                .format(failed, self.index_name, indexed)))
+            return
         self.set_result(True)
 
 
@@ -1949,6 +1985,15 @@ class ESRunQueryCompare(Task):
                 return False
 
         except Exception as e:
+            if "service_not_available" in str(e):
+                # The validator reads every document back over N1QL, so the
+                # cluster spec for a hierarchical suite must include a query
+                # node (e.g. cluster=D,D+Q,F,F). Without one every query in the
+                # run fails here with the same opaque SDK error.
+                self.log.error(
+                    "Hierarchical validation needs the query service, but no "
+                    "query node is reachable. Add a query node to the cluster "
+                    "spec for this test.")
             self.log.error(f"Exception during hierarchical validation: {e}")
             import traceback
             self.log.error(traceback.format_exc())
