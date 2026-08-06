@@ -236,12 +236,14 @@ class CollectionsAlterIndex(BaseSecondaryIndexingTests):
             self.assertEqual(index['numReplica'], initial_replica, "No. of replicas are not matching")
 
         self.alter_index_replicas(namespace=collection_namespace, index_name=idx1, action='drop_replica', replica_id=2)
-        self.sleep(10)
         self.alter_index_replicas(namespace=collection_namespace, index_name=idx2, action='drop_replica', replica_id=1)
-        self.sleep(10)
         self.wait_until_indexes_online()
 
-        index_metadata = self.rest.get_indexer_metadata()['status']
+        for _ in range(30):
+            index_metadata = self.rest.get_indexer_metadata()['status']
+            if len(index_metadata) == 4:
+                break
+            self.sleep(10, "waiting for drop_replica to reflect in indexer metadata")
         self.assertEqual(len(index_metadata), 4, "No. of indexes are not matching.")
         for index in index_metadata:
             if index['indexName'] == idx1:
