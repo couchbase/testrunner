@@ -97,6 +97,8 @@ class QueryTests(BaseTestCase):
         self.index_type = self.input.param("index_type", 'GSI')
         self.skip_primary_index_for_collection = self.input.param("skip_primary_index_for_collection", False)
         self.skip_primary_index = self.input.param("skip_primary_index", False)
+        self.primary_index_timeout = self.input.param("primary_index_timeout", 300)
+        self.fail_on_primary_index_error = self.input.param("fail_on_primary_index_error", False)
         self.primary_indx_drop = self.input.param("primary_indx_drop", False)
         self.monitoring = self.input.param("monitoring", False)
         self.value_size = self.input.param("value_size", 0)
@@ -1972,14 +1974,34 @@ class QueryTests(BaseTestCase):
             return
         if self.flat_json:
             return
-        for bucket in self.buckets:
-            try:
-                self.with_retry(lambda: self.ensure_primary_indexes_exist(), eval=None, delay=1, tries=30)
-                self.primary_index_created = True
+        self.build_deferred_indexes()
+        # ensure_primary_indexes_exist() enumerates every keyspace itself, so it does not
+        # need re-running once per bucket; doing so multiplied the retry budget by
+        # len(self.buckets). Bound the whole phase with a deadline so an index that can
+        # never come online costs seconds, not the ~65 min per test seen in job 86079.
+        started = time.time()
+        deadline = started + self.primary_index_timeout
+        try:
+            while True:
+                try:
+                    self.ensure_primary_indexes_exist()
+                    break
+                except Exception as ex:
+                    if time.time() >= deadline:
+                        raise
+                    self.sleep(1, 'ensure_primary_indexes_exist failed: %s, retrying' % ex)
+            self.primary_index_created = True
+            for bucket in self.buckets:
                 self.log.info("-->waiting for indexes online, bucket:{}".format(bucket.name))
-                self._wait_for_index_online(bucket.name, '#primary')
-            except Exception as ex:
-                self.log.info(str(ex))
+                self._wait_for_index_online(bucket.name, '#primary',
+                                            timeout=max(1, deadline - time.time()),
+                                            build_deferred=True)
+        except Exception as ex:
+            self.log.error("create_primary_index_for_3_0_and_greater gave up after %ss (buckets=%s): %s"
+                           % (int(time.time() - started), [b.name for b in self.buckets], ex),
+                           exc_info=True)
+            if self.fail_on_primary_index_error:
+                self.fail("setUp could not ensure primary indexes exist: %s" % ex)
 
     def ensure_primary_indexes_exist(self):
         self.log.info("--> start: ensure_primary_indexes_exist..")
@@ -1999,6 +2021,42 @@ class QueryTests(BaseTestCase):
         self.log.info("-->before create indexes: {},{},{}".format(index_list, desired_indexes, current_indexes))
         self.create_desired_indexes(desired_index_set, current_index_set, desired_indexes)
         self.log.info("--> end: ensure_primary_indexes_exist..")
+
+    def build_deferred_indexes(self, primary_only=True, timeout=120):
+        """Bring bucket-level indexes stuck in 'deferred' state online.
+
+        ensure_primary_indexes_exist() asks for #primary in state 'online' and
+        make_hashable_index_set() folds 'state' into the comparison, so a #primary that
+        exists but is 'deferred' never matches. create_desired_indexes() then issues a
+        CREATE PRIMARY INDEX that fails with 4300 (already exists) and falls through to
+        wait_for_index_present(), which polls for status='online' and can never succeed
+        because no code path issues BUILD INDEX.
+
+        cbbackupmgr restore produces exactly this: it restores GSI definitions without
+        building them. Issue the missing BUILD INDEX, bounded at timeout per index and
+        always outside a retry loop. Best effort - this must never raise.
+
+        primary_only=True (the default) is what setUp uses: it is the narrowest change
+        that fixes the stall, and it cannot disturb suites that deliberately create
+        deferred secondary indexes. Callers that own every index in the cluster - e.g. a
+        restore test cleaning up after itself - can pass primary_only=False.
+        """
+        try:
+            deferred = [index for index in self.get_parsed_indexes()
+                        if index['state'] == 'deferred'
+                        and (index['is_primary'] or not primary_only)]
+        except Exception as ex:
+            self.log.info("-->could not list indexes to build deferred indexes: {0}".format(ex))
+            return
+        for index in deferred:
+            try:
+                self.log.info("-->building deferred index {0} on bucket:{1}".format(
+                    index['name'], index['bucket']))
+                self._wait_for_index_online(index['bucket'], index['name'],
+                                            timeout=timeout, build_deferred=True)
+            except Exception as ex:
+                self.log.warning("-->deferred index {0} on bucket:{1} did not come online: {2}".format(
+                    index['name'], index['bucket'], ex))
 
     def _wait_for_index_online(self, bucket, index_name, timeout=600, build_deferred=False):
         end_time = time.time() + timeout

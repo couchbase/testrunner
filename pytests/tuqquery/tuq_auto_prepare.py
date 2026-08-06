@@ -505,7 +505,7 @@ class QueryAutoPrepareTests(QueryTests):
     ''' If you drop a server the prepareds on that node should be removed'''
 
     def test_server_drop(self):
-        self.with_retry(lambda: self.ensure_primary_indexes_exist(), eval=None, delay=3, tries=20)
+        self.ensure_primary_indexes_exist()
         # try to move index to self.servers[0]
         try:
             query = """ALTER INDEX `#primary` ON %s WITH {"action":"move", 
@@ -1535,12 +1535,12 @@ class QueryAutoPrepareTests(QueryTests):
 
     def test_error_policy_strict_index_unavailable_prepared(self):
         """strict + saved prepared: stopping the indexer that hosts the only index replica raises on EXECUTE."""
-        index_nodes = self._get_index_nodes()
-        if len(index_nodes) < 2:
-            self.skipTest("Index unavailable scenario requires >= 2 index-service nodes")
+        host = self._pick_sacrificial_index_node()
+        if host is None:
+            self.skipTest("Index unavailable scenario requires an index-service node "
+                          "other than the query node")
         plan_name, idx = "ep_strict_idx_unavail_prep", "idx_ep_strict_unavail_prep"
-        host = index_nodes[0]
-        remote = None
+        downed_node = None
         try:
             self._cleanup_plan_stability_state()
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "prepared_only"')
@@ -1548,7 +1548,7 @@ class QueryAutoPrepareTests(QueryTests):
             self._create_index_for_plan(idx, self.query_bucket, "join_day", num_replica=0,
                                         nodes=["{0}:{1}".format(host.ip, host.port)])
             self._prepare_plan_statement(plan_name, self._plan_stability_statement_for_day(10), save=True)
-            remote = self._make_index_unavailable_via_node_down(host)
+            downed_node = self._make_index_unavailable_via_node_down(host)
             try:
                 self.run_cbq_query(query="EXECUTE {0}".format(plan_name))
                 self.fail("strict policy should raise while indexer is down")
@@ -1557,8 +1557,8 @@ class QueryAutoPrepareTests(QueryTests):
                                 "Unexpected error message for strict policy reprepare failure: {0}".format(str(ex)))
                 self.log.info("strict raised as expected: {0}".format(ex))
         finally:
-            if remote is not None:
-                self._restore_index_node(remote)
+            if downed_node is not None:
+                self._restore_index_node(downed_node)
             self.run_cbq_query(query="DROP INDEX {0} IF EXISTS ON {1}".format(idx, self.query_bucket))
             self._cleanup_plan_stability_state()
 
@@ -1639,13 +1639,13 @@ class QueryAutoPrepareTests(QueryTests):
 
     def test_error_policy_strict_index_unavailable_adhoc(self):
         """strict + saved ad-hoc: indexer down raises on rerun."""
-        index_nodes = self._get_index_nodes()
-        if len(index_nodes) < 2:
-            self.skipTest("Index unavailable scenario requires >= 2 index-service nodes")
+        host = self._pick_sacrificial_index_node()
+        if host is None:
+            self.skipTest("Index unavailable scenario requires an index-service node "
+                          "other than the query node")
         idx = "idx_ep_strict_unavail_adhoc"
         stmt = self._plan_stability_statement_for_day(14)
-        host = index_nodes[0]
-        remote = None
+        downed_node = None
         try:
             self._cleanup_plan_stability_state()
             self._create_index_for_plan(idx, self.query_bucket, "join_day", num_replica=0,
@@ -1657,7 +1657,7 @@ class QueryAutoPrepareTests(QueryTests):
             prepared_name = self._persisted_adhoc_name(stmt)
             self.assertIsNotNone(prepared_name, "Expected saved ad-hoc plan entry in QUERY_METADATA")
             self._set_error_policy("strict")
-            remote = self._make_index_unavailable_via_node_down(host)
+            downed_node = self._make_index_unavailable_via_node_down(host)
             try:
                 self.run_cbq_query(query="EXECUTE '{0}'".format(prepared_name))
                 self.fail("strict policy should raise while indexer is down")
@@ -1666,8 +1666,8 @@ class QueryAutoPrepareTests(QueryTests):
                                 "Unexpected error message for strict policy reprepare failure: {0}".format(str(ex)))
                 self.log.info("strict raised as expected: {0}".format(ex))
         finally:
-            if remote is not None:
-                self._restore_index_node(remote)
+            if downed_node is not None:
+                self._restore_index_node(downed_node)
             self.run_cbq_query(query="DROP INDEX {0} IF EXISTS ON {1}".format(idx, self.query_bucket))
             self._cleanup_plan_stability_state()
 
@@ -1731,12 +1731,12 @@ class QueryAutoPrepareTests(QueryTests):
 
     def test_error_policy_moderate_index_unavailable_prepared(self):
         """moderate + saved prepared: indexer down then up, EXECUTE succeeds, saved plan unchanged."""
-        index_nodes = self._get_index_nodes()
-        if len(index_nodes) < 2:
-            self.skipTest("Index unavailable scenario requires >= 2 index-service nodes")
+        host = self._pick_sacrificial_index_node()
+        if host is None:
+            self.skipTest("Index unavailable scenario requires an index-service node "
+                          "other than the query node")
         plan_name, idx = "ep_mod_idx_unavail_prep", "idx_ep_mod_unavail_prep"
-        host = index_nodes[0]
-        remote = None
+        downed_node = None
         try:
             self._cleanup_plan_stability_state()
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "prepared_only"')
@@ -1745,15 +1745,15 @@ class QueryAutoPrepareTests(QueryTests):
                                         nodes=["{0}:{1}".format(host.ip, host.port)])
             self._prepare_plan_statement(plan_name, self._plan_stability_statement_for_day(10), save=True)
             prior_persisted = self._persisted_prepared_doc(plan_name)
-            remote = self._make_index_unavailable_via_node_down(host)
-            self._restore_index_node(remote)
-            remote = None
+            downed_node = self._make_index_unavailable_via_node_down(host)
+            self._restore_index_node(downed_node)
+            downed_node = None
             self.run_cbq_query(query="EXECUTE {0}".format(plan_name))
             self.assertEqual(self._persisted_prepared_doc(plan_name), prior_persisted,
                              "moderate must not overwrite persisted prepared plan after index recovery")
         finally:
-            if remote is not None:
-                self._restore_index_node(remote)
+            if downed_node is not None:
+                self._restore_index_node(downed_node)
             self.run_cbq_query(query="DROP INDEX {0} IF EXISTS ON {1}".format(idx, self.query_bucket))
             self._cleanup_plan_stability_state()
 
@@ -1827,13 +1827,13 @@ class QueryAutoPrepareTests(QueryTests):
 
     def test_error_policy_moderate_index_unavailable_adhoc(self):
         """moderate + saved ad-hoc: indexer down then up, rerun succeeds, saved plan unchanged."""
-        index_nodes = self._get_index_nodes()
-        if len(index_nodes) < 2:
-            self.skipTest("Index unavailable scenario requires >= 2 index-service nodes")
+        host = self._pick_sacrificial_index_node()
+        if host is None:
+            self.skipTest("Index unavailable scenario requires an index-service node "
+                          "other than the query node")
         idx = "idx_ep_mod_unavail_adhoc"
         stmt = self._plan_stability_statement_for_day(17)
-        host = index_nodes[0]
-        remote = None
+        downed_node = None
         try:
             self._cleanup_plan_stability_state()
             self._create_index_for_plan(idx, self.query_bucket, "join_day", num_replica=0,
@@ -1846,15 +1846,15 @@ class QueryAutoPrepareTests(QueryTests):
             self.assertIsNotNone(prepared_name, "Expected saved ad-hoc plan entry in QUERY_METADATA")
             prior_persisted = self._persisted_adhoc_doc()
             self._set_error_policy("moderate")
-            remote = self._make_index_unavailable_via_node_down(host)
-            self._restore_index_node(remote)
-            remote = None
+            downed_node = self._make_index_unavailable_via_node_down(host)
+            self._restore_index_node(downed_node)
+            downed_node = None
             self.run_cbq_query(query="EXECUTE '{0}'".format(prepared_name))
             self.assertEqual(self._persisted_adhoc_doc(), prior_persisted,
                              "moderate must not overwrite persisted ad-hoc plan after index recovery")
         finally:
-            if remote is not None:
-                self._restore_index_node(remote)
+            if downed_node is not None:
+                self._restore_index_node(downed_node)
             self.run_cbq_query(query="DROP INDEX {0} IF EXISTS ON {1}".format(idx, self.query_bucket))
             self._cleanup_plan_stability_state()
 
@@ -1920,12 +1920,12 @@ class QueryAutoPrepareTests(QueryTests):
 
     def test_error_policy_flexible_index_unavailable_prepared(self):
         """flexible + saved prepared: indexer down then up; EXECUTE overwrites saved plan."""
-        index_nodes = self._get_index_nodes()
-        if len(index_nodes) < 2:
-            self.skipTest("Index unavailable scenario requires >= 2 index-service nodes")
+        host = self._pick_sacrificial_index_node()
+        if host is None:
+            self.skipTest("Index unavailable scenario requires an index-service node "
+                          "other than the query node")
         plan_name, idx = "ep_flex_idx_unavail_prep", "idx_ep_flex_unavail_prep"
-        host = index_nodes[0]
-        remote = None
+        downed_node = None
         try:
             self._cleanup_plan_stability_state()
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "prepared_only"')
@@ -1934,17 +1934,17 @@ class QueryAutoPrepareTests(QueryTests):
                                         nodes=["{0}:{1}".format(host.ip, host.port)])
             self._prepare_plan_statement(plan_name, self._plan_stability_statement_for_day(20), save=True)
             prior_persisted = self._persisted_prepared_doc(plan_name)
-            remote = self._make_index_unavailable_via_node_down(host)
-            self._restore_index_node(remote)
-            remote = None
+            downed_node = self._make_index_unavailable_via_node_down(host)
+            self._restore_index_node(downed_node)
+            downed_node = None
             self.run_cbq_query(query="EXECUTE {0}".format(plan_name))
             self.with_retry(lambda: self._persisted_prepared_doc(plan_name) != prior_persisted,
                             eval=True, delay=1, tries=20)
             self.assertNotEqual(self._persisted_prepared_doc(plan_name), prior_persisted,
                                 "flexible must overwrite persisted prepared plan after index recovery")
         finally:
-            if remote is not None:
-                self._restore_index_node(remote)
+            if downed_node is not None:
+                self._restore_index_node(downed_node)
             self.run_cbq_query(query="DROP INDEX {0} IF EXISTS ON {1}".format(idx, self.query_bucket))
             self._cleanup_plan_stability_state()
 
@@ -2024,13 +2024,13 @@ class QueryAutoPrepareTests(QueryTests):
 
     def test_error_policy_flexible_index_unavailable_adhoc(self):
         """flexible + saved ad-hoc: indexer down then up, rerun overwrites saved plan."""
-        index_nodes = self._get_index_nodes()
-        if len(index_nodes) < 2:
-            self.skipTest("Index unavailable scenario requires >= 2 index-service nodes")
+        host = self._pick_sacrificial_index_node()
+        if host is None:
+            self.skipTest("Index unavailable scenario requires an index-service node "
+                          "other than the query node")
         idx = "idx_ep_flex_unavail_adhoc"
         stmt = self._plan_stability_statement_for_day(23)
-        host = index_nodes[0]
-        remote = None
+        downed_node = None
         try:
             self._cleanup_plan_stability_state()
             self._create_index_for_plan(idx, self.query_bucket, "join_day", num_replica=0,
@@ -2043,17 +2043,17 @@ class QueryAutoPrepareTests(QueryTests):
             self.assertIsNotNone(prepared_name, "Expected saved ad-hoc plan entry in QUERY_METADATA")
             prior_persisted = self._persisted_adhoc_doc()
             self._set_error_policy("flexible")
-            remote = self._make_index_unavailable_via_node_down(host)
-            self._restore_index_node(remote)
-            remote = None
+            downed_node = self._make_index_unavailable_via_node_down(host)
+            self._restore_index_node(downed_node)
+            downed_node = None
             self.run_cbq_query(query="EXECUTE '{0}'".format(prepared_name))
             self.with_retry(lambda: self._persisted_adhoc_doc() != prior_persisted,
                             eval=True, delay=1, tries=20)
             self.assertNotEqual(self._persisted_adhoc_doc(), prior_persisted,
                                 "flexible must overwrite persisted ad-hoc plan after index recovery")
         finally:
-            if remote is not None:
-                self._restore_index_node(remote)
+            if downed_node is not None:
+                self._restore_index_node(downed_node)
             self.run_cbq_query(query="DROP INDEX {0} IF EXISTS ON {1}".format(idx, self.query_bucket))
             self._cleanup_plan_stability_state()
 
@@ -2428,17 +2428,82 @@ class QueryAutoPrepareTests(QueryTests):
             self.log.info("Falling back to self.servers for query nodes: {0}".format(ex))
             return list(self.servers[:self.nodes_init])
 
+    def _pick_sacrificial_index_node(self):
+        """Return an index node that is safe to stop, or None if there isn't one.
+
+        run_cbq_query() always targets self.master, and nothing re-points self.master when
+        a node dies. On a homogeneous cluster _get_index_nodes()[0] IS the master, so these
+        scenarios used to kill the very query endpoint they needed to observe the failure -
+        which is why they never reached their assertion. The index is pinned with
+        num_replica=0, so stopping a non-master index node makes it unavailable just the
+        same while leaving the query service up. Matches tuq_cluster_ops.py, which always
+        takes down the last node, never node 0.
+        """
+        for node in self._get_index_nodes():
+            if node.ip != self.master.ip:
+                return node
+        return None
+
     def _make_index_unavailable_via_node_down(self, host_node):
         self.log.info("Stopping indexer node {0}:{1} to force index unavailability".format(host_node.ip, host_node.port))
-        remote = RemoteMachineShellConnection(host_node)
-        remote.stop_server()
+        # Auto-failover defaults to enabled/120s/maxCount 1. An outage that overruns it gets
+        # the node failed over behind the test's back, and `systemctl start` does not rejoin
+        # a failed-over node - its index/n1ql/kv services then stay down for every test that
+        # follows, which is how one test poisoned an entire 13h suite run (job 88753).
+        self._autofailover_prior = None
+        try:
+            rest = RestConnection(self.master)
+            prior = rest.get_autofailover_settings()
+            rest.update_autofailover_settings(False, prior.timeout)
+            self._autofailover_prior = (prior.enabled, prior.timeout)
+        except Exception as ex:
+            self.log.warning("Could not disable auto-failover before stopping {0}: {1}".format(host_node.ip, ex))
+        self.stop_server(host_node, wait_till_stopped=True)
         self.sleep(20)
-        return remote
+        return host_node
 
-    def _restore_index_node(self, remote):
-        self.log.info("Starting back the indexer node")
-        remote.start_server()
-        self.sleep(30)
+    def _restore_index_node(self, host_node):
+        self.log.info("Starting back the indexer node {0}".format(host_node.ip))
+        self.start_server(host_node)
+        # Diagnostic only, and this runs from a `finally`: RestConnection() contacts the node
+        # in its constructor and raises if it is not up yet, which would mask the test's real
+        # assertion error.
+        try:
+            if not RestHelper(RestConnection(host_node)).is_ns_server_running(timeout_in_seconds=180):
+                self.log.warning("ns_server on {0} did not come back healthy".format(host_node.ip))
+        except Exception as ex:
+            self.log.warning("Could not confirm ns_server on {0} is back: {1}".format(host_node.ip, ex))
+        self._readd_node_if_failed_over(host_node)
+        if getattr(self, '_autofailover_prior', None) is not None:
+            try:
+                RestConnection(self.master).update_autofailover_settings(*self._autofailover_prior)
+            except Exception as ex:
+                self.log.warning("Could not restore auto-failover settings: {0}".format(ex))
+            self._autofailover_prior = None
+
+    def _readd_node_if_failed_over(self, host_node):
+        """A node that was auto-failed-over stays out of the cluster after a restart.
+
+        Recovery order follows pytests/gsi/gsi_autofailover.py. Best effort: this runs from
+        a test's `finally`, so it must never mask the real assertion error.
+        """
+        try:
+            rest = RestConnection(self.master)
+            membership = next((node.clusterMembership for node in rest.get_nodes(get_all_nodes=True)
+                               if node.ip == host_node.ip), None)
+            if membership != 'inactiveFailed':
+                return
+            self.log.info("Node {0} was failed over ({1}); adding it back".format(host_node.ip, membership))
+            otp_nodes = rest.node_statuses()
+            otp_id = "ns_1@{0}".format(host_node.ip)
+            rest.add_back_node(otp_id)
+            rest.set_recovery_type(otpNode=otp_id, recoveryType="full")
+            rest.rebalance(otpNodes=[node.id for node in otp_nodes])
+            if not rest.monitorRebalance(stop_if_loop=True):
+                self.log.error("Rebalance after adding back {0} did not finish".format(host_node.ip))
+            rest.reset_autofailover()
+        except Exception as ex:
+            self.log.error("Could not re-add failed-over node {0}: {1}".format(host_node.ip, ex))
 
     def _restart_all_query_services(self, query_nodes):
         for node in query_nodes:

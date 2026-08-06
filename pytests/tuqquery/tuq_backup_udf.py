@@ -6,6 +6,14 @@ from collection.collections_n1ql_client import CollectionsN1QL
 
 class QueryBackupUDFTests(QueryTests):
 
+    # Keyspaces the three test_restore_map conf cases create via
+    # `cbbackupmgr restore --map-data ... --auto-create-buckets`. A leaked bucket1b carries
+    # a restored 'deferred' primary index that stalls QueryTests.setUp for every later test
+    # in the suite (job 86079).
+    MAP_LEAKED_BUCKETS = ["bucket1b"]
+    MAP_LEAKED_SCOPES = [("bucket1", "scope1b")]
+    MAP_LEAKED_COLLECTIONS = [("bucket1", "scope1", "collection1b")]
+
     def setUp(self):
         super(QueryBackupUDFTests, self).setUp()
         self.log.info("==============  QueryFilterTests setup has started ==============")
@@ -43,10 +51,54 @@ class QueryBackupUDFTests(QueryTests):
         function_names = ["adder"]
         self.log.info("Create math library")
         self.create_library("math", functions, function_names)
+        # Recover from a previous run that was aborted before tearDown could clean up:
+        # a leftover bucket1b would stall setUp for every test in this suite.
+        try:
+            self.cleanup_map_artifacts()
+        except Exception as ex:
+            self.log.warning(f"-->suite_setUp: pre-run cleanup failed: {ex}")
         self.log.info("==============  QueryBackupUDFTests suite_setup has completed ==============")
+
+    def cleanup_map_artifacts(self):
+        """Idempotent. Safe when the artifacts were never created (non-map cases) and when
+        the test body already failed."""
+        # BaseTestCase.setUp() invokes tearDown() before QueryTests.setUp() has set
+        # use_rest/rest, so on test #1 (suite_setUp) this runs against a half-built
+        # object. Nothing has been restored at that point, so there is nothing to clean.
+        if not (hasattr(self, 'use_rest') and hasattr(self, 'rest')):
+            self.log.info("-->cleanup_map_artifacts: setUp has not run yet, nothing to clean up")
+            return
+        for bucket_name, scope_name, collection_name in self.MAP_LEAKED_COLLECTIONS:
+            self.run_cbq_query(f"DROP COLLECTION `{bucket_name}`.`{scope_name}`.`{collection_name}` IF EXISTS")
+        for bucket_name, scope_name in self.MAP_LEAKED_SCOPES:
+            self.run_cbq_query(f"DROP SCOPE `{bucket_name}`.`{scope_name}` IF EXISTS")
+        # self.buckets was cached in QueryTests.setUp before the restore created bucket1b,
+        # so get_bucket_from_name()/ensure_bucket_does_not_exist() cannot see it. Re-read
+        # from the cluster instead.
+        for bucket_name in self.MAP_LEAKED_BUCKETS:
+            if bucket_name not in [b.name for b in self.rest.get_buckets()]:
+                continue
+            self.log.info(f"-->cleanup_map_artifacts: deleting leaked bucket {bucket_name}")
+            self.rest.delete_bucket(bucket_name)
+            end_time = time.time() + 120
+            while time.time() < end_time:
+                if bucket_name not in [b.name for b in self.rest.get_buckets()]:
+                    break
+                self.sleep(5, f"waiting for bucket {bucket_name} to be deleted")
+            else:
+                self.log.error(f"-->cleanup_map_artifacts: bucket {bucket_name} still present after "
+                               f"120s; later tests in this suite may stall in setUp")
+        self.buckets = self.rest.get_buckets()
 
     def tearDown(self):
         self.log.info("==============  QueryBackupUDFTests tearDown has started ==============")
+        try:
+            self.cleanup_map_artifacts()
+        except Exception as ex:
+            # Never raise from tearDown - it would be reported as a second error and would
+            # mask the real failure from the test body.
+            self.log.error(f"-->tearDown: cleanup of restore --map-data artifacts failed: {ex}",
+                           exc_info=True)
         self.log.info("==============  QueryBackupUDFTests tearDown has completed ==============")
         super(QueryBackupUDFTests, self).tearDown()
 
@@ -103,6 +155,11 @@ class QueryBackupUDFTests(QueryTests):
             bar_command += f" --disable-{disable}-query"
         shell = RemoteMachineShellConnection(self.master)
         output = shell.execute_command(bar_command)
+        # cbbackupmgr restores GSI definitions without building them, so a restored
+        # #primary lands 'deferred'. Left alone it makes QueryTests.setUp unsatisfiable
+        # for every later test in the suite (job 86079). This suite owns every index in
+        # the cluster and creates no deferred indexes of its own, so build them all.
+        self.build_deferred_indexes(primary_only=False)
         return output
 
     def drop_udf(self):

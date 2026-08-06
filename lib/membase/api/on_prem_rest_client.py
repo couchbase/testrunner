@@ -265,6 +265,13 @@ class RestConnection(object):
     POST = "POST"
     PUT = "PUT"
 
+    # How long _http_request keeps re-dialing a host that will not accept a connection,
+    # independent of the per-request `timeout`. Sized to still bridge an ns_server restart
+    # for the callers that stop/start couchbase-server and then issue a REST call with no
+    # readiness wait of their own (basetestcase.change_log_info and friends).
+    CONNECT_RETRY_BUDGET = 120
+    CONNECT_RETRY_MAX_BACKOFF = 30
+
     def __new__(cls, serverInfo={}, check_connectivity=True,
                 max_retry_count=5, conn_timeout=120):
         # allow port to determine
@@ -1114,14 +1121,24 @@ class RestConnection(object):
         return ""
 
     def _http_request(self, api, method='GET', params='',
-                      headers=None, timeout=120, disable_ssl_certificate_validation=True):
+                      headers=None, timeout=120, disable_ssl_certificate_validation=True,
+                      connect_timeout=None):
         if not headers:
             headers = self._create_headers()
-        end_time = time.time() + timeout
+        # `timeout` is the per-request socket budget and must stay untouched: query_tool
+        # passes 1300 because a live N1QL query may legitimately run that long. It used to
+        # double as the reconnect deadline too, so re-dialing a refused port inherited the
+        # same 1300s - and the unclamped doubling below overshot it to 1533s. One dead
+        # :8093 then cost 25.5 min per call and burned a 13h build (job 88753). Bound the
+        # reconnect budget separately and much tighter.
+        if connect_timeout is None:
+            connect_timeout = min(timeout, self.CONNECT_RETRY_BUDGET)
+        end_time = time.time() + connect_timeout
         log.debug("Executing {0} request for following api {1} with Params: {2}  and Headers: {3}"\
                                                                 .format(method, api, params, headers))
         count = 1
         t1 = 3
+        last_error = None
         while True:
             try:
                 try:
@@ -1161,23 +1178,24 @@ class RestConnection(object):
                     log.debug(''.join(traceback.format_stack()))
                     return False, content, response
             except socket.error as e:
+                last_error = e
                 if count < 4:
                     log.error("socket error while connecting to {0} error {1} ".format(api, e))
-                if time.time() > end_time:
-                    log.error("Giving up due to {2}! Tried {0} connect {1} times.".format(
-                        api, count, e))
-                    raise ServerUnavailableException(ip=self.ip)
             except (AttributeError, httplib2.ServerNotFoundError) as e:
+                last_error = e
                 if count < 4:
                     log.error("ServerNotFoundError error while connecting to {0} error {1} "\
                                                                               .format(api, e))
-                if time.time() > end_time:
-                    log.error("Giving up due to {2}! Tried {0} connect {1} times.".\
-                              format(api, count, e))
-                    raise ServerUnavailableException(ip=self.ip)
+            # Deadline is checked *before* sleeping. Checking it after, as this used to,
+            # meant the loop always overshot end_time by one full (already doubled) sleep.
+            # The try block above always returns, so reaching here means we caught an error.
+            if time.time() + t1 > end_time:
+                log.error("Giving up due to {2}! Tried {0} connect {1} times.".format(
+                    api, count, last_error))
+                raise ServerUnavailableException(ip=self.ip)
             time.sleep(t1)
             count += 1
-            t1 *= 2
+            t1 = min(t1 * 2, self.CONNECT_RETRY_MAX_BACKOFF)
 
     def urllib_request(self, api, verb='GET', params='', headers=None, timeout=100, try_count=3):
         if headers is None:
