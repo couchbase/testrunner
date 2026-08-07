@@ -239,7 +239,8 @@ class CollectionsIndexScanConsistency(BaseSecondaryIndexingTests):
             count_query = f'Select count(*) from {bucket} where price >= 0;'
             named_collection_query_context = f'default:'
             scan_vectors_before_mutations = self.get_mutation_vectors()
-            gen_create = SDKDataLoader(num_ops=10 ** 3, percent_create=100, json_template="Hotel",
+            new_default_docs_num = 10 ** 3
+            gen_create = SDKDataLoader(num_ops=new_default_docs_num, percent_create=100, json_template="Hotel",
                                        percent_update=0, percent_delete=0, scope='_default',
                                        collection='_default', output=True)
             tasks = self.data_ops_javasdk_loader_in_batches(sdk_data_loader=gen_create, batch_size=1000)
@@ -269,7 +270,9 @@ class CollectionsIndexScanConsistency(BaseSecondaryIndexingTests):
                 count_result = count_task.result()['results'][0]['$1']
             self.assertTrue(len(result) > 0,
                             "scan_doc_1 which was inserted before scan request with request_plus is not in result")
-            self.assertEqual(len(meta_id_result_after_new_inserts), 2,
+            # Was hardcoded to 2 (stale copy-paste); now computed from the actual docs loaded above.
+            expected_new_matches = sum(1 for seq in range(new_default_docs_num) if str(seq).startswith('100'))
+            self.assertEqual(len(meta_id_result_after_new_inserts), expected_new_matches,
                              "request plus scan is not able to wait for new inserted docs")
             self.assertEqual(count_result, num_of_docs, "Docs count not matching.")
         except Exception as err:
