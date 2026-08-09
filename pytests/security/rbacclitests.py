@@ -1,6 +1,7 @@
 import json
 from threading import Thread
-from membase.api.rest_client import RestConnection
+from membase.api.rest_client import RestConnection, RestHelper
+from membase.helper.bucket_helper import BucketOperationHelper
 from TestInput import TestInputSingleton
 from clitest.cli_base import CliBaseTest
 from remote.remote_util import RemoteMachineShellConnection
@@ -123,8 +124,18 @@ class rbacclitests(BaseTestCase):
         self.assertTrue(valueVerification, "Values for one of the fields is not matching")
 
     def _create_bucket(self, remote_client, bucket="default", bucket_type="couchbase", bucket_port=11211,
-                        bucket_ramsize=200, bucket_replica=1, wait=False, enable_flush=None, enable_index_replica=None, \
+                        bucket_ramsize=256, bucket_replica=1, wait=False, enable_flush=None, enable_index_replica=None, \
                        user=None,password=None):
+        # Ensure a clean slate: a stray bucket of the same name left over from
+        # a previous test/run 
+        rest = RestConnection(self.master)
+        if RestHelper(rest).bucket_exists(bucket):
+            self.log.warning("Bucket '{0}' already exists, deleting it before "
+                             "re-creating via CLI".format(bucket))
+            rest.delete_bucket(bucket)
+            self.assertTrue(BucketOperationHelper.wait_for_bucket_deletion(bucket, rest, 60),
+                            "Bucket '{0}' was not deleted in time".format(bucket))
+
         options = "--bucket={0} --bucket-type={1} --bucket-ramsize={2} --bucket-replica={3}".\
             format(bucket, bucket_type, bucket_ramsize, bucket_replica)
         options += (" --enable-flush={0}".format(enable_flush), "")[enable_flush is None]
@@ -208,7 +219,7 @@ class rbacclitests(BaseTestCase):
         bucket_port = self.input.param("bucket_port", 11211)
         bucket_replica = self.input.param("bucket_replica", 1)
         bucket_password = self.input.param("bucket_password", None)
-        bucket_ramsize = self.input.param("bucket_ramsize", 200)
+        bucket_ramsize = self.input.param("bucket_ramsize", 256)
         wait = self.input.param("wait", False)
         enable_flush = self.input.param("enable_flush", None)
         enable_index_replica = self.input.param("enable_index_replica", None)
@@ -235,7 +246,7 @@ class rbacclitests(BaseTestCase):
         enable_index_replica_new = self.input.param("enable_index_replica_new", None)
         bucket_ramsize_new = self.input.param("bucket_ramsize_new", None)
         bucket = self.input.param("bucket", "default")
-        bucket_ramsize = self.input.param("bucket_ramsize", 200)
+        bucket_ramsize = self.input.param("bucket_ramsize", 256)
         bucket_replica = self.input.param("bucket_replica", 1)
         enable_flush = self.input.param("enable_flush", None)
         enable_index_replica = self.input.param("enable_index_replica", None)
