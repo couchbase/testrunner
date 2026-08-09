@@ -7106,6 +7106,23 @@ class RestConnection(object):
             return Exception(content)
         return content
 
+    def get_eventing_in_use_encryption_keys(self):
+        """
+        Returns the DEK ids currently in use for eventing log encryption. Sample
+        response:
+            ["", "key1", "key2"]
+        An empty-string ("") entry means unencrypted (plaintext) log data is
+        still present on disk.
+        """
+        api = self.eventing_baseUrl + 'getInUseEncryptionKeys'
+        headers = self._create_headers()
+        status, content, header = self._http_request(api, 'GET', headers=headers)
+        try:
+            json_parsed = json.loads(content)
+        except (TypeError, ValueError):
+            json_parsed = content
+        return status, json_parsed
+
     def create_function(self, name, body, function_scope=None, username="Administrator", password="password"):
         authorization = self.get_authorization(username, password)
         url = "api/v1/functions/" + name

@@ -49,6 +49,7 @@ class EventingEncryptionAtRest(EventingBaseTest):
 
         self.app_log_max_size = self.input.param("app_log_max_size", 41943040)
         self.app_log_max_files = self.input.param("app_log_max_files", 10)
+        self.app_log_size_tolerance = self.input.param("app_log_size_tolerance", 1.4)
         self.rotation_wait_timeout = self.input.param("rotation_wait_timeout", 180)
         self.dek_rotation_interval = self.input.param("dek_rotation_interval", 60)
         self.num_rotations = self.input.param("num_rotations", 5)
@@ -152,6 +153,43 @@ class EventingEncryptionAtRest(EventingBaseTest):
             file_path, is_encrypted, details))
         return is_encrypted
 
+    # Header layout: \x00 + "Couchbase Encrypted" + \x00 + 3 version bytes +
+    # \x00\x00\x00\x24 + 36-char DEK id (UUID) = 64 bytes total.
+    _DEK_ID_RE = _re.compile(
+        r'[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}')
+
+    def _extract_file_key_id(self, node, file_path):
+        """
+        Read an encrypted file's header and return the embedded DEK id (UUID),
+        or None if the header can't be read or contains no DEK id (plaintext).
+        """
+        header_read, decoded, _ = self.ear_helper.get_file_header_text(
+            node, file_path, bytes_to_read=64)
+        if not header_read:
+            return None
+        match = self._DEK_ID_RE.search(decoded)
+        return match.group(0) if match else None
+
+    def _get_in_use_log_dek_ids(self):
+        """
+        GET /getInUseEncryptionKeys :: which DEK(s) eventing currently reports
+        as in-use for log encryption.
+        Returns (active_ids, has_plaintext_marker):
+          - active_ids: non-empty DEK id strings currently in use
+          - has_plaintext_marker: True if an "" entry is present, meaning some
+            on-disk log data is still unencrypted
+        """
+        status, response = self.rest.get_eventing_in_use_encryption_keys()
+        if not status:
+            raise Exception(
+                "Failed to fetch in-use encryption keys for eventing logs: {}".format(
+                    response))
+        self.log.info("Eventing getInUseEncryptionKeys: {}".format(response))
+        ids = response if isinstance(response, list) else []
+        has_plaintext_marker = "" in ids
+        active_ids = [key_id for key_id in ids if key_id]
+        return active_ids, has_plaintext_marker
+
     def _create_log_encryption_secret(self, rotation_interval_seconds=None):
         params = EncryptionUtil.create_secret_params(
             name=EncryptionUtil.generate_random_name("EventingLogSecret"),
@@ -215,6 +253,26 @@ class EventingEncryptionAtRest(EventingBaseTest):
             "(baseline {} files, current {} files)".format(
                 log_dir, timeout, baseline_count, len(files)))
 
+    def _wait_for_all_files_encryption_state(self, node, log_dir, expected_encrypted, timeout):
+        """
+        Poll log_dir until every file on disk matches expected_encrypted.
+        Used after triggering force re-encryption/decryption, since the
+        conversion of already-written files happens asynchronously.
+        """
+        deadline = time.time() + timeout
+        files = []
+        while time.time() < deadline:
+            files = self._list_log_files(node, log_dir)
+            if files and all(
+                    self._file_is_encrypted(node, path) == expected_encrypted
+                    for path in files):
+                return files
+            self.sleep(5, "Waiting for all files in {} to become {}".format(
+                log_dir, "encrypted" if expected_encrypted else "decrypted"))
+        self.fail(
+            "Not all files in {} reached expected_encrypted={} within {}s: {}".format(
+                log_dir, expected_encrypted, timeout, files))
+
     def _find_state_change_pair(self, node, files_newest_first,
                                 expected_old_encrypted, expected_new_encrypted):
         """
@@ -273,18 +331,42 @@ class EventingEncryptionAtRest(EventingBaseTest):
         return None
 
     def _assert_no_file_exceeds_max_size(self, node, log_dir):
+        """
+        Files can overshoot app_log_max_size slightly
+        Allow a per-file tolerance range
+        Verify the aggregate size of all files stays within total capacity
+        """
+        tolerance = self.app_log_size_tolerance
+        per_file_cap = self.app_log_max_size * tolerance
         files = self._list_log_files(node, log_dir)
+        total_size = 0
+        oversized = []
         for path in files:
             size = self._get_file_size(node, path)
             if size is None:
                 self.log.warning("Could not get size for {}".format(path))
                 continue
-            self.log.info("File size: {} = {} bytes (max: {})".format(
-                path, size, self.app_log_max_size))
-            self.assertLessEqual(
-                size, self.app_log_max_size,
-                "Log file {} exceeds app_log_max_size: {} > {}".format(
-                    path, size, self.app_log_max_size))
+            total_size += size
+            self.log.info("File size: {} = {} bytes (max: {}, tolerance cap: {})".format(
+                path, size, self.app_log_max_size, int(per_file_cap)))
+            if size > per_file_cap:
+                oversized.append((path, size))
+
+        self.assertFalse(
+            oversized,
+            "Log file(s) exceed app_log_max_size ({}) beyond {}x tolerance: {}".format(
+                self.app_log_max_size, tolerance, oversized))
+
+        total_capacity = len(files) * self.app_log_max_size
+        self.log.info("Total size across {} file(s): {} bytes (capacity: {}, "
+                       "tolerance cap: {})".format(
+                           len(files), total_size, total_capacity,
+                           int(total_capacity * tolerance)))
+        self.assertLessEqual(
+            total_size, total_capacity * tolerance,
+            "Total size of all log files {} exceeds capacity of {} files x "
+            "app_log_max_size ({}) beyond {}x tolerance".format(
+                total_size, len(files), self.app_log_max_size, tolerance))
 
     def _drive_rotations_to_count(self, node, log_dir, target_count, timeout):
         deadline = time.time() + timeout
@@ -884,25 +966,18 @@ class EventingEncryptionAtRest(EventingBaseTest):
         self._assert_app_log_non_empty(applogs)
         self.undeploy_and_delete_function(body)
 
-    def test_log_encryption_force_rotate_and_reencrypt(self):
+    def test_log_encryption_drop_deks_reencrypt_and_decrypt(self):
         """
-        Force log re-encryption test (POST /controller/dropEncryptionAtRestDeks/log):
-        Unlike DEK rotation (which generates a new active DEK while retaining old ones),
-        force re-encryption drops all existing DEKs and re-encrypts all log data with a
-        freshly generated active DEK so every byte on disk is under a single new key.
-        - Pin dekRotationInterval high to prevent background rotation during setup
-        - Create a KEK, enable log encryption, deploy function
-        - Verify initial log files are encrypted
-        - Trigger force log re-encryption; eventing rotates the active log on receipt
-        - Wait for log rotation
-        - Verify the new active log is still encrypted
-        - Verify pre-re-encryption files remain encrypted
-        - Verify /getAppLog serves content spanning files from both DEK generations
+        Drop-DEKs re-encrypt/decrypt test (POST /controller/dropEncryptionAtRestDeks/log):
+        - Deploy function before enabling encryption so early files are plaintext
+        - Enable log encryption, pin dekRotationInterval, trigger mutations to
+          rotate into a mixed plaintext + encrypted state
+        - Trigger drop-DEKs; verify /getInUseEncryptionKeys reports a brand-new
+          active DEK and every file (old plaintext + newly encrypted) is now
+          encrypted under it
+        - Disable log encryption and trigger drop-DEKs again; verify every file
+          is decrypted back to plaintext and no DEK remains in use
         """
-        key_id = self._create_log_encryption_secret()
-        self._set_log_encryption_method("encryptionKey", key_id=key_id)
-        self._configure_dek_rotation(self.STABLE_INTERVAL_S, self.STABLE_INTERVAL_S)
-
         body = self._create_and_deploy_function()
         log_dir = self._get_log_dir()
         eventing_node = self.get_nodes_from_services_map(
@@ -912,11 +987,45 @@ class EventingEncryptionAtRest(EventingBaseTest):
         files_before = self._list_log_files(eventing_node, log_dir)
         self.assertGreater(
             len(files_before), 0,
-            "No eventing log files found before force re-encryption in {}".format(log_dir))
+            "No eventing log files found before enabling encryption in {}".format(log_dir))
         for path in files_before:
-            self.assertTrue(
+            self.assertFalse(
                 self._file_is_encrypted(eventing_node, path),
-                "Pre-re-encryption file {} is not encrypted".format(path))
+                "Pre-state file {} unexpectedly encrypted".format(path))
+
+        key_id = self._create_log_encryption_secret()
+        self._set_log_encryption_method("encryptionKey", key_id=key_id)
+        self._configure_dek_rotation(self.STABLE_INTERVAL_S, self.STABLE_INTERVAL_S)
+        self._trigger_more_mutations()
+
+        files_mixed = self._wait_for_rotation(
+            eventing_node, log_dir, baseline_count=len(files_before),
+            timeout=self.rotation_wait_timeout)
+
+        latest_mixed = files_mixed[0]
+        self.assertTrue(
+            self._file_is_encrypted(eventing_node, latest_mixed),
+            "Latest log {} is not encrypted after enabling log encryption".format(
+                latest_mixed))
+        pre_state_files = [f for f in files_mixed if _re.search(r'\.\d+$', f)]
+        self.assertTrue(
+            pre_state_files, "No rotated pre-state files found to establish mixed state")
+        for path in pre_state_files:
+            self.assertFalse(
+                self._file_is_encrypted(eventing_node, path),
+                "Pre-state file {} is already encrypted before force re-encryption".format(
+                    path))
+
+        dek_ids_before, has_plaintext_before = self._get_in_use_log_dek_ids()
+        self.assertTrue(
+            has_plaintext_before,
+            "Expected a plaintext marker while mixed state exists: {}".format(
+                dek_ids_before))
+        self.assertEqual(
+            len(dek_ids_before), 1,
+            "Expected exactly one active DEK in the mixed state, got {}".format(
+                dek_ids_before))
+        initial_dek_id = dek_ids_before[0]
 
         status, response = self.rest.trigger_log_reencryption()
         self.assertTrue(status,
@@ -925,24 +1034,142 @@ class EventingEncryptionAtRest(EventingBaseTest):
 
         self._trigger_more_mutations()
         files_after = self._wait_for_rotation(
+            eventing_node, log_dir, baseline_count=len(files_mixed),
+            timeout=self.rotation_wait_timeout)
+
+        dek_ids_after, has_plaintext_after = self._get_in_use_log_dek_ids()
+        self.assertFalse(
+            has_plaintext_after,
+            "Unexpected plaintext marker after force re-encryption: {}".format(
+                dek_ids_after))
+        self.assertEqual(
+            len(dek_ids_after), 1,
+            "Expected exactly one active DEK after force re-encryption, got {}".format(
+                dek_ids_after))
+        new_dek_id = dek_ids_after[0]
+        self.assertNotEqual(
+            new_dek_id, initial_dek_id,
+            "Force re-encryption did not rotate the active DEK; still {}".format(
+                initial_dek_id))
+
+        for path in files_after:
+            self.assertTrue(
+                self._file_is_encrypted(eventing_node, path),
+                "File {} is not encrypted after force re-encryption".format(path))
+            file_key_id = self._extract_file_key_id(eventing_node, path)
+            self.assertEqual(
+                file_key_id, new_dek_id,
+                "File {} is encrypted under {} instead of the new active DEK {}".format(
+                    path, file_key_id, new_dek_id))
+
+        applogs = self.get_app_logs(
+            self.function_name, size=self.logsize, aggregate=self.aggregate)
+        self._assert_app_log_non_empty(applogs)
+
+        self._set_log_encryption_method("disabled")
+        status, response = self.rest.trigger_log_reencryption()
+        self.assertTrue(status,
+                        "Failed to trigger decryption: {}".format(response))
+        self.log.info("Log decryption triggered: {}".format(response))
+
+        self._wait_for_all_files_encryption_state(
+            eventing_node, log_dir, expected_encrypted=False,
+            timeout=self.rotation_wait_timeout)
+
+        dek_ids_final, has_plaintext_final = self._get_in_use_log_dek_ids()
+        self.assertTrue(
+            has_plaintext_final,
+            "Expected a plaintext marker after decryption, got {}".format(dek_ids_final))
+        self.assertFalse(
+            dek_ids_final,
+            "Expected no active DEK after decryption, got {}".format(dek_ids_final))
+
+        self.undeploy_and_delete_function(body)
+
+    def test_log_encryption_force_encrypt_mixed_state_with_current_dek(self):
+        """
+        Force-encrypt with current DEK test (POST /controller/forceEncryptionAtRest/log):
+        - Deploy function before enabling encryption so early files are plaintext
+        - Enable log encryption and trigger mutations to rotate into a mixed
+          plaintext + encrypted state
+        - Capture the currently active DEK via /getInUseEncryptionKeys
+        - Trigger force-encrypt; verify every file (old plaintext + new) is now
+          encrypted under that SAME DEK, with no rotation and no plaintext
+          marker left in /getInUseEncryptionKeys
+        """
+        body = self._create_and_deploy_function()
+        log_dir = self._get_log_dir()
+        eventing_node = self.get_nodes_from_services_map(
+            service_type="eventing", get_all_nodes=False)
+        self.sleep(15, "Wait for initial app-log writes to settle")
+
+        files_before = self._list_log_files(eventing_node, log_dir)
+        self.assertGreater(
+            len(files_before), 0,
+            "No eventing log files found before enabling encryption in {}".format(log_dir))
+        for path in files_before:
+            self.assertFalse(
+                self._file_is_encrypted(eventing_node, path),
+                "Pre-state file {} unexpectedly encrypted".format(path))
+
+        key_id = self._create_log_encryption_secret()
+        self._set_log_encryption_method("encryptionKey", key_id=key_id)
+        self._trigger_more_mutations()
+
+        files_after = self._wait_for_rotation(
             eventing_node, log_dir, baseline_count=len(files_before),
             timeout=self.rotation_wait_timeout)
 
         latest_after = files_after[0]
         self.assertTrue(
             self._file_is_encrypted(eventing_node, latest_after),
-            "Latest log {} is not encrypted after force re-encryption".format(latest_after))
-
-        pre_reencrypt_files = [f for f in files_after if _re.search(r'\.\d+$', f)]
-        for path in pre_reencrypt_files:
-            self.assertTrue(
+            "Latest log {} is not encrypted before force encryption".format(latest_after))
+        pre_state_files = [f for f in files_after if _re.search(r'\.\d+$', f)]
+        self.assertTrue(
+            pre_state_files, "No rotated pre-state files found to establish mixed state")
+        for path in pre_state_files:
+            self.assertFalse(
                 self._file_is_encrypted(eventing_node, path),
-                "Pre-re-encryption file {} lost encryption after force re-encryption".format(
-                    path))
+                "Pre-state file {} is already encrypted before force encryption".format(path))
 
-        applogs = self.get_app_logs(
-            self.function_name, size=self.logsize, aggregate=self.aggregate)
-        self._assert_app_log_non_empty(applogs)
+        dek_ids_before, has_plaintext_before = self._get_in_use_log_dek_ids()
+        self.assertTrue(
+            has_plaintext_before,
+            "Expected a plaintext marker while mixed state exists: {}".format(
+                dek_ids_before))
+        self.assertEqual(
+            len(dek_ids_before), 1,
+            "Expected exactly one active DEK in the mixed state, got {}".format(
+                dek_ids_before))
+        active_dek_id = dek_ids_before[0]
+
+        status, response = self.rest.force_log_encryption_at_rest()
+        self.assertTrue(status,
+                        "Failed to trigger force log encryption: {}".format(response))
+        self.log.info("Force log encryption with current DEK triggered: {}".format(response))
+
+        files_final = self._wait_for_all_files_encryption_state(
+            eventing_node, log_dir, expected_encrypted=True,
+            timeout=self.rotation_wait_timeout)
+
+        for path in files_final:
+            file_key_id = self._extract_file_key_id(eventing_node, path)
+            self.assertEqual(
+                file_key_id, active_dek_id,
+                "File {} is encrypted under {} instead of the pre-existing active "
+                "DEK {}; force encryption should reuse the current DEK, not rotate "
+                "it".format(path, file_key_id, active_dek_id))
+
+        dek_ids_after, has_plaintext_after = self._get_in_use_log_dek_ids()
+        self.assertFalse(
+            has_plaintext_after,
+            "Unexpected plaintext marker remains after force encryption: {}".format(
+                dek_ids_after))
+        self.assertEqual(
+            dek_ids_after, [active_dek_id],
+            "Active DEK changed after force encryption: before={} after={}".format(
+                [active_dek_id], dek_ids_after))
+
         self.undeploy_and_delete_function(body)
 
     def test_log_encryption_dek_continuous_rotation(self):
