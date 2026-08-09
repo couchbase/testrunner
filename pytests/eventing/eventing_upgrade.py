@@ -6,6 +6,9 @@ from membase.api.rest_client import RestHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from lib.testconstants import STANDARD_BUCKET_PORT
 from lib.membase.api.rest_client import RestConnection
+from lib.remote.remote_util import RemoteMachineShellConnection
+from lib.couchbase_helper.encryption_at_rest_helper import EncryptionAtRestHelper
+from lib.membase.helper.encryption_at_rest_helper import EncryptionUtil
 from membase.api.exception import RebalanceFailedException
 from pytests.security.ntonencryptionBase import ntonencryptionBase
 from pytests.security.jwt_utils import JWTUtils
@@ -44,6 +47,10 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
         self.upgrade_version = self.input.param("upgrade_version")
         #self.exported_handler_version = self.input.param("exported_handler_version", '6.6.1')
         self.enable_n2n_encryption_and_tls = self.input.param("enable_n2n_encryption_and_tls", False)
+        self.is_encryption = self.input.param("is_encryption", False)
+        if self.is_encryption:
+            self.created_secret_ids = []
+            self._log_encryption_enabled = False
         self.kill_eventing_producer = self.input.param("kill_eventing_producer", False)
         self.failover_type = self.input.param("failover_type", "hard")
         self.recovery_type = self.input.param("recovery_type", "delta")
@@ -74,6 +81,17 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
                 cbas_rest.execute_statement_on_cbas("DISCONNECT LINK Local", None)
         except Exception:
             log.exception("Analytics teardown cleanup failed")
+        # Clean up encryption-at-rest secrets/log encryption
+        if getattr(self, '_log_encryption_enabled', False):
+            try:
+                self.rest.configure_encryption_at_rest({"log.encryptionMethod": "disabled"})
+            except Exception as e:
+                log.warning("Failed to disable log encryption in tearDown: {}".format(e))
+        for secret_id in getattr(self, 'created_secret_ids', []):
+            try:
+                self.rest.delete_secret(secret_id)
+            except Exception as e:
+                log.warning("Failed to delete encryption secret {}: {}".format(secret_id, e))
         super(EventingUpgrade, self).tearDown()
         log.info("==============  EventingUpgrade tearDown has completed ==============")
 
@@ -104,6 +122,8 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
         self._setup_fts_index()
         self._setup_analytics()
         self._deploy_post_upgrade_handlers()
+        # Encryption at Rest
+        self._verify_encryption_at_rest_post_upgrade()
         # Validation cycles
         self._run_full_mutation_cycle()
         self._run_pause_resume_cycle()
@@ -138,6 +158,8 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
         self._setup_fts_index()
         self._setup_analytics()
         self._deploy_post_upgrade_handlers()
+        # Encryption at Rest
+        self._verify_encryption_at_rest_post_upgrade()
         # Validation cycles
         self._run_full_mutation_cycle()
         self._run_pause_resume_cycle()
@@ -172,6 +194,8 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
         self._setup_fts_index()
         self._setup_analytics()
         self._deploy_post_upgrade_handlers()
+        # Encryption at Rest
+        self._verify_encryption_at_rest_post_upgrade()
         # Validation cycles
         self._run_full_mutation_cycle()
         self._run_pause_resume_cycle()
@@ -213,6 +237,8 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
         self._setup_fts_index()
         self._setup_analytics()
         self._deploy_post_upgrade_handlers()
+        # Encryption at Rest
+        self._verify_encryption_at_rest_post_upgrade()
         # Validation cycles
         self._run_full_mutation_cycle()
         self._run_pause_resume_cycle()
@@ -741,6 +767,81 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
             self.deploy_handler_by_name(handler)
         self.all_handler_names.extend(post_upgrade_handlers)
 
+    ###########################################################################
+    # Encryption at Rest
+    ###########################################################################
+
+    def _create_log_encryption_secret(self):
+        params = EncryptionUtil.create_secret_params(
+            name=EncryptionUtil.generate_random_name("UpgradeLogSecret"),
+            usage=["log-encryption"],
+        )
+        status, response = self.rest.create_secret(params)
+        if not status:
+            self.fail("Failed to create log-encryption secret: {}".format(response))
+        secret_id = json.loads(response).get("id")
+        if secret_id is None:
+            self.fail("Log-encryption secret created but no id returned: {}".format(response))
+        log.info("Created log-encryption secret with id: {}".format(secret_id))
+        self.created_secret_ids.append(secret_id)
+        return secret_id
+
+    def _set_log_encryption_method(self, method, key_id=None):
+        params = {"log.encryptionMethod": method}
+        if method == "encryptionKey":
+            if key_id is None:
+                raise Exception("encryptionKey method requires a key_id")
+            params["log.encryptionKeyId"] = key_id
+        status, response = self.rest.configure_encryption_at_rest(params)
+        if not status:
+            self.fail("Failed to set log encryption to {}: {}".format(method, response))
+        self._log_encryption_enabled = (method != "disabled")
+        log.info("Configured log encryption: method={} key_id={}".format(method, key_id))
+
+    def _get_eventing_log_dir(self):
+        eventing_log_root = "/opt/couchbase/var/lib/couchbase/data/@eventing"
+        if self.global_function_scope:
+            return eventing_log_root
+        bucket_uuid = "b_" + self.rest.fetch_bucket_uuid(self.src_bucket_name)
+        manifest = self.rest.get_bucket_manifest(self.src_bucket_name)
+        scope_id = None
+        for scope in manifest["scopes"]:
+            if scope["name"] == "_default":
+                scope_id = "s_" + scope["uid"]
+                break
+        if scope_id is None:
+            raise Exception("_default scope not found in bucket {}".format(self.src_bucket_name))
+        return "{}/{}/{}".format(eventing_log_root, bucket_uuid, scope_id)
+
+    def _verify_log_encrypted_on_node(self, node):
+        ear_helper = EncryptionAtRestHelper(log)
+        log_dir = self._get_eventing_log_dir()
+        shell = RemoteMachineShellConnection(node)
+        cmd = "ls -1t {}/*.log* 2>/dev/null | head -1".format(log_dir)
+        output, _ = shell.execute_command(cmd)
+        shell.disconnect()
+        log_files = [p.strip() for p in output if p.strip()]
+        if not log_files:
+            log.warning("No log files found in {} on {}".format(log_dir, node.ip))
+            return
+        latest_log = log_files[0]
+        is_encrypted, details = ear_helper.verify_file_encryption_magic_bytes(node, latest_log)
+        self.assertTrue(is_encrypted,
+                        "Active log file {} is not encrypted post-upgrade. Details: {}".format(
+                            latest_log, details))
+        log.info("Verified active log {} is encrypted on {}".format(latest_log, node.ip))
+
+    def _verify_encryption_at_rest_post_upgrade(self):
+        """If is_encryption=True, enable eventing log encryption on the fully
+        upgraded cluster and verify the active log is encrypted."""
+        if not getattr(self, 'is_encryption', False):
+            return
+        log.info("Verifying Encryption at Rest functionality post-upgrade")
+        key_id = self._create_log_encryption_secret()
+        self._set_log_encryption_method("encryptionKey", key_id=key_id)
+        eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
+        self._verify_log_encrypted_on_node(eventing_node)
+
     def _run_full_mutation_cycle(self, include_fts_analytics=True):
         """Load data, verify all handlers processed, delete data, verify cleanup."""
         doc_count = self.docs_per_day * 2016
@@ -1226,7 +1327,6 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
                 self.src_bucket_name, [b.name for b in self.buckets]))
 
 # TO-DO: pending patches to track for this suite
-#   - Chaos Tests from Morpheus
 #   - Import/Export Handlers
 #   - Base64/XATTRS
 #   - OnDeploy
