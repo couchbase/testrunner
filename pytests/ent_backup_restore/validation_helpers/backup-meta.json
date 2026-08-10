@@ -27,6 +27,8 @@
   "disable_analytics_queries": true,
   "preserve_collection_settings": false,
   "disable_external_catalogs": false,
+  "disable_continuous_backup": false,
+  "disable_external_collections": false,
   "is_encrypted": false,
   "version": 1
 }
