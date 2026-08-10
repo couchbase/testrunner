@@ -533,14 +533,15 @@ class IndexVector(object):
             index_query = index_queries[index_order]
         if use_bhive:
             if custom_index_fields:
-                if ",vec VECTOR" in custom_index_fields:
-                    custom_index_fields = custom_index_fields.replace(",vec VECTOR", "")
+                vec_field_token = f"vec {vector_type} VECTOR"
+                if f",{vec_field_token}" in custom_index_fields:
+                    custom_index_fields = custom_index_fields.replace(f",{vec_field_token}", "")
                     if custom_name:
                         index_query = f'CREATE VECTOR INDEX {custom_name} IF NOT EXISTS ON {collection}({vector_field} {vector_type} VECTOR) INCLUDE({custom_index_fields}) WITH {vector_definition}'
                     else:
                         index_query = f'CREATE VECTOR INDEX vector_bhive_index_{similarity}_custom IF NOT EXISTS ON {collection}({vector_field} {vector_type} VECTOR) INCLUDE({custom_index_fields}) WITH {vector_definition}'
-                elif "vec VECTOR" in custom_index_fields:
-                    custom_index_fields = custom_index_fields.replace("vec VECTOR", "")
+                elif vec_field_token in custom_index_fields:
+                    custom_index_fields = custom_index_fields.replace(vec_field_token, "")
                     if custom_name:
                         index_query = f'CREATE VECTOR INDEX {custom_name} IF NOT EXISTS ON {collection}({vector_field} {vector_type} VECTOR) WITH {vector_definition}'
                     else:
