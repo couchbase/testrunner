@@ -25,9 +25,6 @@ class CollectionsN1QL(object):
         result =  self.n1ql_helper.create_scope(server=self.node, keyspace=keyspace, bucket_name=bucket_name,
                                              scope_name=scope_name,
                                              poll_interval=poll_interval, timeout=timeout)
-        if result:
-            # waiting for additional time according to https://issues.couchbase.com/browse/MB-39500
-            time.sleep(10)
         return result
 
     def delete_collection(self, keyspace="default", bucket_name="", scope_name="", collection_name="",

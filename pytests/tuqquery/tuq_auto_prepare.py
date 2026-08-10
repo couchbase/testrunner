@@ -18,7 +18,6 @@ class QueryAutoPrepareTests(QueryTests):
         self.log.info("==============  QueryAutoPrepareTests suite_setup has started ==============")
         if self.load_collections:
             self.run_cbq_query(query='CREATE INDEX idx on default(name)')
-            self.sleep(5)
             self.wait_for_all_indexes_online()
             self.collections_helper.create_scope(bucket_name="default", scope_name="test2")
             self.collections_helper.create_collection(bucket_name="default", scope_name="test2",
@@ -29,7 +28,6 @@ class QueryAutoPrepareTests(QueryTests):
                 query="CREATE INDEX idx1 on default:default.test2.{0}(name)".format(self.collections[0]))
             self.run_cbq_query(
                 query="CREATE INDEX idx2 on default:default.test2.{0}(name)".format(self.collections[1]))
-            self.sleep(5)
             self.wait_for_all_indexes_online()
             self.run_cbq_query(
                 query=('INSERT INTO default:default.test2.{0}'.format(self.collections[
@@ -38,7 +36,6 @@ class QueryAutoPrepareTests(QueryTests):
                 query=('INSERT INTO default:default.test2.{0}'.format(self.collections[1]) + '(KEY, VALUE) VALUES ("key2", { "type" : "hotel", "name" : "new hotel" })'))
             self.run_cbq_query(
                 query=('INSERT INTO default:default.test2.{0}'.format(self.collections[1]) + '(KEY, VALUE) VALUES ("key3", { "type" : "hotel", "name" : "new hotel" })'))
-            self.sleep(20)
         self.log.info("==============  QueryAutoPrepareTests suite_setup has completed ==============")
         self.log_config_info()
 

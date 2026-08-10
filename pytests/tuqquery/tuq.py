@@ -190,29 +190,23 @@ class QueryTests(BaseTestCase):
             pass
         if self.docs_per_day > 0:
             self.log.info("--> docs_per_day>0..generating TuqGenerators...")
-            self.gen_results = TuqGenerators(self.log, self.generate_full_docs_list(self.gens_load))
+            # generate_full_docs_list() is deterministic, and was previously called a
+            # second time here - ~14s per setUp at doc-per-day=49 (job 86079, 50.8% of a
+            # median test). Reuse the list built above when it exists. Sharing one list is
+            # safe: TuqGenerators assigns self.full_set once (tuq_generators.py:18) and
+            # only ever reads it (:330,:332,:481-491), and self.full_list is read-only too.
+            full_docs_list = getattr(self, 'full_list', None)
+            if full_docs_list is None:
+                full_docs_list = self.generate_full_docs_list(self.gens_load)
+            self.gen_results = TuqGenerators(self.log, full_docs_list)
             self.log.info("--> End: docs_per_day>0..generating TuqGenerators...")
         if str(self.__class__).find('QueriesUpgradeTests') == -1 and str(self.__class__).find('ClusterOpsLargeMetaKV') == -1 and str(self.__class__).find('FlexIndexTests') == -1:
             if not (self.analytics and self.skip_primary_index_for_collection):
                 self.log.info("--> start: create_primary_index_for_3_0_and_greater...")
                 self.create_primary_index_for_3_0_and_greater()
                 self.log.info("--> End: create_primary_index_for_3_0_and_greater...")
-        # self.log.info('-' * 100)
-        # self.log.info('Temp fix for MB-16888')
-        # if self.cluster_ops == False:
-        #    output, error = self.shell.execute_command("killall -9 cbq-engine")
-        #    output1, error1 = self.shell.execute_command("killall -9 indexer")
-        #    if (len(error) == 0 or len(error1) == 0):
-        #        self.sleep(30, 'wait for indexer')
-        #    else:
-        #        if (len(error) > 0):
-        #            self.log.info("Error executing shell command: killall -9 cbq-engine! Error - " + str(error[0]))
-        #        if (len(error1) > 0):
-        #            self.log.info("Error executing shell command: killall -9 indexer! Error - " + str(error1[0]))
-        # self.log.info('-' * 100)
         if self.analytics:
             self.setup_analytics()
-            # self.sleep(30, 'wait for analytics setup')
         if self.monitoring:
             self.run_cbq_query('delete from system:prepareds')
             self.run_cbq_query('delete from system:completed_requests')
@@ -259,7 +253,8 @@ class QueryTests(BaseTestCase):
                         if self.primary_index_collections:
                             self.run_cbq_query(query="CREATE PRIMARY INDEX ON default:default.{0}.{1}".format(self.scope, self.collections[0]))
                             self.run_cbq_query(query="CREATE PRIMARY INDEX ON default:default.{0}.{1}".format(self.scope, self.collections[1]))
-                        self.sleep(5)
+                        # No fixed sleep here: wait_for_all_indexes_online() already polls
+                        # each index to 'online' (1s granularity, 600s budget).
                         self.wait_for_all_indexes_online()
                 if self.analytics:
                     self.analytics = False
@@ -274,7 +269,10 @@ class QueryTests(BaseTestCase):
                     query=('INSERT INTO default:default.{0}.{1}'.format(self.scope, self.collections[0]) + ' (KEY, VALUE) VALUES ("key3", { "nested" : {"fields": "fake"}, "name" : "old hotel" })'))
                 self.run_cbq_query(
                     query=('INSERT INTO default:default.{0}.{1}'.format(self.scope, self.collections[0]) + ' (KEY, VALUE) VALUES ("key4", { "numbers": [1,2,3,4] , "name" : "old hotel" })'))
-                time.sleep(20)
+                # No fixed sleep after the INSERTs: run_cbq_query sends
+                # scan_consistency=REQUEST_PLUS by default (self.scan_consistency, set in
+                # setUp), so the next query already waits for the index to reflect these
+                # mutations. This blind 20s was ~20s of every collections suite_setUp.
                 if changed:
                     self.analytics = True
         except Exception as ex:
