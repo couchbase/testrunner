@@ -269,7 +269,9 @@ class CollectionsIndexScanConsistency(BaseSecondaryIndexingTests):
                 count_result = count_task.result()['results'][0]['$1']
             self.assertTrue(len(result) > 0,
                             "scan_doc_1 which was inserted before scan request with request_plus is not in result")
-            self.assertEqual(len(meta_id_result_after_new_inserts), 2,
+            # Was hardcoded to 2 (stale copy-paste); now computed from the 1000 new docs loaded above (gen_create's num_ops) that match the doc_100% id pattern
+            expected_new_matches = sum(1 for seq in range(10 ** 3) if str(seq).startswith('100'))
+            self.assertEqual(len(meta_id_result_after_new_inserts), expected_new_matches,
                              "request plus scan is not able to wait for new inserted docs")
             self.assertEqual(count_result, num_of_docs, "Docs count not matching.")
         except Exception as err:

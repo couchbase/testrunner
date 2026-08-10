@@ -3721,7 +3721,8 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                 "index_metadata"] = RestConnection(self.index_servers[0]).get_indexer_metadata()
             total_index_item_count += total_item_count_after
             total_partition_count += self.get_num_partitions_for_index(
-                self.rest.get_indexer_metadata(), index)
+            # Use a fresh RestConnection(self.index_servers[0]) instead of stale self.rest (bound to a node at setUp time that may have since been failed over/rebalanced out, causing connection refused)
+                RestConnection(self.index_servers[0]).get_indexer_metadata(), index)
 
         self.assertEqual(total_index_item_count, bucket_item_count,
                          "Item count in index do not match after cluster ops.")
@@ -4179,7 +4180,8 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         # Run same query again and check if results match from before recovery
         scan_query = "select name,mutated from default where name > 'a' and mutated >=0;"
         try:
-            result_after = self.n1ql_helper.run_cbq_query(query=scan_query, min_output_size=10000000,
+            # Removed min_output_size kwarg: run_cbq_query() has no such parameter, so passing it always raised TypeError, masked below as "Scan failed"
+            result_after = self.n1ql_helper.run_cbq_query(query=scan_query,
                                            server=self.n1ql_node)
         except Exception as ex:
             self.log.info(str(ex))
