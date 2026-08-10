@@ -218,6 +218,9 @@ def fetch_ini_from_github(ini_file, repo, ref):
 
 def get_available_servers_count(options=None, is_addl_pool=False,
                                 os_version="", pool_id=None):
+    if options.is_dynamic_vms == "true" and not is_addl_pool:
+        return int(Server_Manager_Obj.get_dynamic_vms_available_count(
+            os_type=os_version))
     if options.serverType == DOCKER:
         count = Server_Manager_Obj.get_available_count(os_type=os_version,
                                                        pool_id=pool_id,
@@ -265,6 +268,15 @@ def get_servers(options=None, descriptor="", test=None, how_many=0,
     if options.serverType in CLOUD_SERVER_TYPES:
         return get_servers_cloud(options, descriptor, how_many, is_addl_pool,
                                  os_version, pool_id)
+
+    if options.is_dynamic_vms == "true" and not is_addl_pool:
+        ip_list = Server_Manager_Obj.get_dynamic_vms(
+            username=descriptor,
+            count=how_many,
+            os_type=os_version,
+            pool_id=pool_id,
+            expires_in_minutes=test['timeLimit'] if test else None)
+        return ip_list, None
 
     if options.serverType == DOCKER:
         ip_list = Server_Manager_Obj.get_dockers(
@@ -1219,7 +1231,7 @@ def main():
                 internal_servers = None
                 unreachable_servers = []
                 how_many = curr_job['serverCount'] - len(servers)
-                if options.check_vm == "True":
+                if options.check_vm == "True" and options.is_dynamic_vms != "true":
                     while how_many > 0:
                         unchecked_servers, _ = get_servers(
                             options=options,
@@ -1517,8 +1529,14 @@ def release_servers(options, descriptor):
     if options.serverType in CLOUD_SERVER_TYPES:
         descriptor = urllib.parse.unquote(descriptor)
         release_servers_cloud(options, descriptor)
-    else:
-        Server_Manager_Obj.release_servers(username=descriptor)
+        return
+    if options.is_dynamic_vms == "true":
+        Server_Manager_Obj.release_dynamic_vms(username=descriptor)
+    # Always also run the static-pool release: an addl pool (addPoolId) is
+    # always booked from the static QE-server-pool bucket regardless of
+    # is_dynamic_vms, and this is a harmless no-op if descriptor never
+    # booked anything there (e.g. a pure dynamic-VM job with no addl pool).
+    Server_Manager_Obj.release_servers(username=descriptor)
 
 
 if __name__ == "__main__":
