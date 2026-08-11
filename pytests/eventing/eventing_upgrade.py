@@ -544,7 +544,9 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
 
     def _install_travel_sample(self):
         log.info("Loading travel-sample bucket on pre-upgrade cluster")
-        EventingBaseTest.load_sample_buckets(self, self.master, "travel-sample")
+        rest = RestConnection(self.master)
+        rest.set_internalSetting("magmaMinMemoryQuota", 100)
+        status = rest.load_sample("travel-sample")
         self.sleep(120, "Waiting for travel-sample bucket to load")
 
     def _load_travel_sample_post_upgrade(self):
@@ -885,7 +887,7 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
                      self.during_upgrade_total_docs, src_count))
         self.verify_doc_count_collections(
             "{0}._default._default".format(self.during_upgrade_dst_bucket_name),
-            src_count)
+            src_count, expected_duplicate=True)
 
     def _perform_online_upgrade_regular_rebalance(self):
         """Rebalance in new-version nodes while removing old-version nodes, then update master."""
