@@ -491,6 +491,9 @@ def extract_individual_tests_from_query_result(col_rel_version,
         if options.branch != "master":
             try:
                 subprocess.run(
+                    ["git", "fetch", "--depth", "1", "origin",
+                     options.branch], check=True)
+                subprocess.run(
                     ["git", "checkout", "origin/" + options.branch,
                      "--", data['config']], check=True)
             except Exception:
