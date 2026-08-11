@@ -641,7 +641,7 @@ class NodeHelper:
 
     def wait_for_couchbase_reachable(self):
         duration, event, timeout = 5, "Waiting {0}s for {1} to be reachable..", 180
-        if params["use_hostnames"] or params["enable_ipv6"]:
+        if params["use_hostnames"] or params["enable_ipv6"] or "windows" in self.get_os():
             timeout = 600
         start_time = time.time()
         log.info("Waiting for couchbase to be reachable")
