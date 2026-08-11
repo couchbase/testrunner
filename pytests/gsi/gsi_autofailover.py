@@ -70,6 +70,8 @@ class GSIAutofailover(AutoFailoverBaseTest, BaseSecondaryIndexingTests):
 
     def setUp(self):
         super(GSIAutofailover, self).setUp()
+        if not self.isSparse and ('Sparse' in self.json_template or 'MARCO' in self.json_template):
+            self.isSparse = True
         self.log.info("==============  GSIAutofailover setup has started ==============")
         # Synchronize cluster time before running tests to prevent time-related failures
         self.sync_cluster_time()
