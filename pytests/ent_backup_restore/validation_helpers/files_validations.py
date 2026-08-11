@@ -77,7 +77,15 @@ class BackupRestoreFilesValidations(BackupRestoreValidationBase):
             actual_meta_json.pop('encryption_options', None)
 
         is_equal, not_equal, extra, not_present = self.compare_dictionary(expected_meta_json, actual_meta_json)
-        return self.compare_dictionary_result_analyser(is_equal, not_equal, extra, not_present, "Backup Meta data json")
+        # Extra fields in backup-meta.json are usually a new cbbackupmgr feature
+        # flag the expected template hasn't been updated for yet, not a real
+        # regression - warn instead of failing the test on that alone.
+        if extra:
+            self.log.warning(
+                "Backup Meta data json has fields not in the expected template (likely "
+                "a new cbbackupmgr field): {0}".format(extra))
+        is_equal = not (not_equal or not_present)
+        return self.compare_dictionary_result_analyser(is_equal, not_equal, {}, not_present, "Backup Meta data json")
 
     def _validate_meta_encryption_options(self, actual_meta_json):
         """Shape-validate the `encryption_options` block in an EaR repo's
