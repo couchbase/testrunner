@@ -155,16 +155,26 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.skip_cleanup = self.input.param("skip_cleanup", False)
         self.index_loglevel = self.input.param("index_loglevel", None)
         self.bhive_index = self.input.param("bhive_index", False)
-        # KNOWN BUG: GSI metadata_repo_v2 files (WAL + kvstore-N sstables) come
-        # back plaintext (no encryption magic header) on every node, in every
-        # encryption-at-rest test observed so far — independent of rebalance,
-        # key rotation/expiry, or DEK drop. Actual index data files
-        # (plasma_shard_data, data_files_key_id) are correctly encrypted, so
-        # this is isolated to the metadata store. Until that's root-caused,
-        # tests can set skip_metadata_validation=True to bypass the
-        # [metadata_repo] check in _run_common_encryption_verifiers so the
-        # rest of encryption validation can still run and be trusted.
-        self.skip_metadata_validation = self.input.param("skip_metadata_validation", False)
+        # GSI metadata_repo_v2 files (WAL + kvstore-N sstables) are governed by
+        # the cluster/file-level ("other") encryption key, which is provisioned
+        # LATER than the per-bucket data key during file-EAR rollout. So there's
+        # a window where index data files are already encrypted (bucket key
+        # present) while the metadata store is still plaintext ("other" key ==
+        # <unencrypted>). Validating in that window produced false
+        # [metadata_repo] failures. The metadata store IS encrypted once the
+        # "other" key lands (confirmed via indexer.log: "[metadata_repo_v2]
+        # Encryption enabled with keyID ..."). _wait_for_other_encryption_key
+        # gates validation on the "other" key being in use (see
+        # other_key_wait_timeout). Note metadata_repo files do NOT carry the
+        # "Couchbase Encrypted" magic header, so verify_gsi_metadata_repo_encrypted
+        # validates via key-ID body grep only.
+        # Max seconds to wait for the cluster/file-level ("other") encryption
+        # key to be provisioned on the index nodes before running encryption
+        # validation. During file-EAR rollout the per-bucket data key lands
+        # before the "other" key that governs the metadata store, so checking
+        # too early yields false [metadata_repo] plaintext failures. See
+        # _wait_for_other_encryption_key.
+        self.other_key_wait_timeout = self.input.param("other_key_wait_timeout", 300)
         self.cleanup_info = {}
         self.data_model = self.input.param("data_model", "sentence-transformers/all-MiniLM-L6-v2")
         self.vector_dim = self.input.param("vector_dim", "384")
@@ -343,6 +353,25 @@ class BaseSecondaryIndexingTests(QueryTests):
             inst_ids = set()
         return inst_ids
 
+    def _wait_for_other_encryption_key(self, index_nodes, expected_key_id,
+                                       encrypted_bucket_names):
+        """Gate encryption validation on the cluster/file-level ("other") key.
+
+        Runs before any encryption verifier so we don't validate while the
+        metadata store is still plaintext mid-rollout. Only waits when
+        encryption is actually expected (an expected key ID or encrypted
+        buckets were supplied) — otherwise it returns immediately. Non-fatal:
+        on timeout it logs a warning and lets validation proceed (the
+        metadata_repo verifier will still catch a genuinely-unencrypted store).
+        """
+        if not expected_key_id and not encrypted_bucket_names:
+            # No encryption expected in this call — nothing to wait for.
+            return
+        self.gsi_encryption_helper.wait_for_indexer_other_key_in_use(
+            index_nodes,
+            timeout=getattr(self, "other_key_wait_timeout", 300),
+        )
+
     def _run_common_encryption_verifiers(self, _safe_run, helper, index_nodes,
                                          bucket_key_map, expected_key_id,
                                          encrypted_bucket_names, query_node,
@@ -366,16 +395,9 @@ class BaseSecondaryIndexingTests(QueryTests):
                   encrypted_bucket_names=encrypted_bucket_names,
                   bucket_key_map=bucket_key_map,
                   per_node_bucket_key_map=per_node_bkm)
-        if getattr(self, "skip_metadata_validation", False):
-            self.log.warning(
-                "[metadata_repo] SKIPPED — skip_metadata_validation=True. "
-                "KNOWN BUG: metadata_repo_v2 files are plaintext on disk; "
-                "skipping this check for now until root-caused."
-            )
-        else:
-            _safe_run("metadata_repo",
-                      helper.verify_gsi_metadata_repo_encrypted,
-                      index_nodes, expected_key_id=expected_key_id)
+        _safe_run("metadata_repo",
+                  helper.verify_gsi_metadata_repo_encrypted,
+                  index_nodes, expected_key_id=expected_key_id)
 
         # Optional plaintext-leakage scan (needs a query node + bucket names).
         if query_node and encrypted_bucket_names:
@@ -617,6 +639,11 @@ class BaseSecondaryIndexingTests(QueryTests):
         """
         self.log.info("=== Starting GSI MOI encryption validation ===")
         helper = self.gsi_encryption_helper
+        # Ensure the cluster/file-level ("other") encryption key that governs
+        # the metadata store is provisioned before validating anything.
+        self._wait_for_other_encryption_key(
+            index_nodes, expected_key_id, encrypted_bucket_names
+        )
         results = {}
         bucket_key_map = self._build_bucket_key_map_safe(
             index_nodes, encrypted_bucket_names
@@ -711,6 +738,11 @@ class BaseSecondaryIndexingTests(QueryTests):
         """
         self.log.info("=== Starting GSI Plasma/BHive encryption validation ===")
         helper = self.gsi_encryption_helper
+        # Ensure the cluster/file-level ("other") encryption key that governs
+        # the metadata store is provisioned before validating anything.
+        self._wait_for_other_encryption_key(
+            index_nodes, expected_key_id, encrypted_bucket_names
+        )
         results = {}
         bucket_key_map = self._build_bucket_key_map_safe(
             index_nodes, encrypted_bucket_names

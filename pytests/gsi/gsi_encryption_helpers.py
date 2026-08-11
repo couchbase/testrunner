@@ -2350,10 +2350,13 @@ class GSIEncryptionHelpers:
                 key ID list returned by ``_get_indexer_in_use_key_ids``). Required.
 
         Empty (0-byte) files — e.g. a WAL segment caught mid-rotation — are
-        skipped rather than verified: an empty file has no body for `xxd` to
-        find a magic header in, so treating it like any other file would
-        always misclassify it as PLAINTEXT regardless of whether encryption
-        is actually working.
+        skipped rather than verified: an empty file has no body to grep for a
+        key ID, so treating it like any other file would always misclassify it
+        as a key miss regardless of whether encryption is actually working.
+
+        Note: metadata_repo wal/sstable files do NOT carry the
+        "Couchbase Encrypted" magic header, so verification relies solely on
+        the key-ID body grep — the magic-header check is not used here.
 
         Returns:
             dict: ``{node_ip: {"status": "passed"/"failed"/"skipped",
@@ -2435,27 +2438,18 @@ class GSIEncryptionHelpers:
                         node, fpath, key_ids
                     )
                     if not found:
-                        # A missing expected-key match doesn't tell us WHY it's
-                        # missing — the file could be genuinely plaintext, or
-                        # it could still be encrypted under a previous/stale
-                        # key (e.g. a superseded sstable left behind by a
-                        # compaction that rewrote the "live" data but didn't
-                        # touch every old file). Disambiguate by checking for
-                        # the encryption magic header independently of key ID.
-                        is_encrypted, magic_details = self.verify_file_encryption_magic_bytes(
-                            node, fpath
+                        # metadata_repo wal/sstable files do NOT carry the
+                        # "Couchbase Encrypted" magic header, so we can't use it
+                        # to disambiguate plaintext from a stale key — the only
+                        # signal we have is whether any expected key ID appears
+                        # in the file body. A miss means the file is not
+                        # encrypted under any expected key (genuinely plaintext,
+                        # or encrypted under a previous/stale key).
+                        classification = (
+                            f"KEY_NOT_FOUND (expected key(s) {key_ids} not found "
+                            f"in file body — plaintext or encrypted under a "
+                            f"previous key)"
                         )
-                        if is_encrypted:
-                            classification = (
-                                f"STALE_KEY (magic header present, but expected "
-                                f"key(s) {key_ids} not found — likely encrypted "
-                                f"under a previous key)"
-                            )
-                        else:
-                            classification = (
-                                f"PLAINTEXT (no encryption magic header found: "
-                                f"{magic_details})"
-                            )
                         failed_files.append((fpath, classification))
                         self.log.warning(
                             f"[metadata_repo] Node {node.ip}: key(s) {key_ids} "
@@ -2491,6 +2485,107 @@ class GSIEncryptionHelpers:
                 shell.disconnect()
 
         return results
+
+    # Values that appear in a GetInUseKeys "other" entry when the datatype is
+    # NOT actually encrypted yet (the endpoint reports a placeholder rather
+    # than a real key-ID UUID).
+    _UNENCRYPTED_KEY_PLACEHOLDERS = ("", "unencrypted", "<unencrypted>", "none")
+
+    def get_indexer_other_in_use_key_ids(self, rest):
+        """Return the real key IDs for the top-level ``"other"`` datatype from
+        a node's ``GetInUseKeys`` response.
+
+        The ``"other"`` datatype is the cluster/file-level encryption key that
+        governs the GSI *metadata* store (``@2i/metadata_repo_v2``) — as
+        opposed to the ``"service_bucket <uuid>"`` datatypes that govern the
+        per-bucket index data files. Placeholder markers (``""``,
+        ``"unencrypted"``, ``"<unencrypted>"``) are filtered out, so an empty
+        return means the metadata store is NOT yet encrypted on that node.
+
+        Args:
+            rest: ``RestConnection`` to the index node to query.
+
+        Returns:
+            list[str]: real ``"other"`` key IDs in use (empty if none / on error).
+        """
+        try:
+            status, resp = rest.get_indexer_in_use_encryption_keys()
+        except Exception as exc:
+            self.log.warning(f"[other-key] GetInUseKeys request failed: {exc}")
+            return []
+        if not status or not isinstance(resp, dict):
+            self.log.warning(f"[other-key] GetInUseKeys returned non-dict: {resp!r}")
+            return []
+        other = resp.get("other", [])
+        if not isinstance(other, list):
+            other = [other]
+        return [
+            str(k) for k in other
+            if k is not None
+            and str(k).strip().lower() not in self._UNENCRYPTED_KEY_PLACEHOLDERS
+        ]
+
+    def wait_for_indexer_other_key_in_use(self, index_nodes, timeout=300,
+                                          interval=15, label=""):
+        """Block until every node reports a real ``"other"`` datatype key in
+        ``GetInUseKeys`` — i.e. the cluster/file-level encryption key that
+        governs the GSI metadata store has actually been provisioned.
+
+        This closes a rollout race: during file-EAR enablement the per-bucket
+        data key is provisioned *before* the ``"other"`` key, so index data
+        files are already encrypted while ``@2i/metadata_repo_v2`` is still
+        plaintext for a short window. Running encryption validation in that
+        window produces false ``[metadata_repo]`` failures (observed: data key
+        present at node start, ``"other"`` key only enabled ~10 min later).
+
+        Non-fatal by design: returns ``True`` once all nodes converge, ``False``
+        on timeout. The caller decides whether to proceed — the downstream
+        ``verify_gsi_metadata_repo_encrypted`` check will still catch a
+        genuinely-never-encrypted metadata store after the wait elapses.
+
+        Args:
+            index_nodes: index server objects to gate on.
+            timeout: max seconds to wait for convergence.
+            interval: seconds between polls.
+            label: optional log prefix.
+
+        Returns:
+            bool: True if all nodes have an ``"other"`` key in use, else False.
+        """
+        if not index_nodes:
+            return True
+        deadline = time.time() + timeout
+        pending = {node.ip: node for node in index_nodes}
+        while pending and time.time() < deadline:
+            still_pending = {}
+            for ip, node in pending.items():
+                other_keys = self.get_indexer_other_in_use_key_ids(RestConnection(node))
+                if other_keys:
+                    self.log.info(
+                        f"{label}[other-key] node {ip}: 'other' encryption key "
+                        f"in use: {other_keys}"
+                    )
+                else:
+                    still_pending[ip] = node
+            pending = still_pending
+            if pending:
+                self.log.info(
+                    f"{label}[other-key] waiting for 'other' encryption key on "
+                    f"nodes {sorted(pending)} (metadata store not yet encrypted) ..."
+                )
+                time.sleep(interval)
+        if pending:
+            self.log.warning(
+                f"{label}[other-key] 'other' encryption key NOT in use on nodes "
+                f"{sorted(pending)} after {timeout}s — metadata store may still "
+                f"be plaintext; proceeding with validation anyway"
+            )
+            return False
+        self.log.info(
+            f"{label}[other-key] 'other' encryption key confirmed in use on all "
+            f"{len(index_nodes)} node(s)"
+        )
+        return True
 
     def verify_storage_stats_rest(self, index_nodes, expected_key_id=None,
                                   encrypted_bucket_names=None,
