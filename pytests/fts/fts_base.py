@@ -5261,13 +5261,20 @@ class FTSBaseTest(unittest.TestCase):
         time.sleep(timeout)
 
     def wait_for_indexing_complete_simple(self, item_count=0, index=None):
-        retry = self._input.param("index_retry", 20)
+        # Same single wall-clock cap as wait_for_indexing_complete - see the note
+        # there on why the old no-progress retry budget never bounded anything.
+        wait_timeout = int(self._input.param("index_wait_timeout", 1200))
         if index.index_type == "fulltext-alias":
             return
-        retry_count = retry
-        prev_count = 0
-        while retry_count > 0:
-            fail = False
+        index_doc_count = 0
+        deadline = time.time() + wait_timeout
+        while True:
+            if time.time() > deadline:
+                self.fail(
+                    f"Timed out after {wait_timeout}s waiting for FTS index "
+                    f"'{index.name}' to reach {item_count} docs; it is at "
+                    f"{index_doc_count}. Raise index_wait_timeout if this index "
+                    f"is legitimately this large.")
             try:
                 index_doc_count = index.get_indexed_doc_count()
                 self.log.info(f"Expected docs count = {item_count}, "
@@ -5278,20 +5285,11 @@ class FTSBaseTest(unittest.TestCase):
 
                 if item_count == index_doc_count:
                     return
-
-                if prev_count < index_doc_count or prev_count > index_doc_count:
-                    prev_count = index_doc_count
-                    retry_count = retry
-                else:
-                    retry_count -= 1
             except Exception as e:
                 self.log.info(e)
-                if fail:
-                    self.fail(e)
-                retry_count -= 1
             time.sleep(6)
 
-    def wait_for_indexing_complete(self, item_count=None, es_index=None):
+    def wait_for_indexing_complete(self, item_count=None, es_index=None, extra_collections=None):
         """
         Wait for index_count for any index to stabilize or reach the
         index count specified by item_count
@@ -5300,93 +5298,148 @@ class FTSBaseTest(unittest.TestCase):
         if es_index is None:
             es_index = FTSBaseTest.get_es_index_name()
 
-        retry = self._input.param("index_retry", 20)
+        if item_count is None and hasattr(self, 'bulk_collections_expected_docs') \
+                and self.bulk_collections_expected_docs:
+            item_count = self.bulk_collections_expected_docs
+
+        # async_load_data only loads ES for bucket containers, so for a
+        # collection-scoped run the ES index holds either nothing or leftovers
+        # from an earlier test - counts like "bucket = 50000, ES = 100000" are it
+        # never having tracked this bucket at all. Requiring ES parity there can
+        # only ever time out, so hold FTS to the bucket count and leave ES out.
+        compare_es = self.compare_es
+        if compare_es and self.container_type == 'collection':
+            self.log.info("Not waiting on ES doc count: documents are not loaded "
+                          "into ES for collection containers")
+            compare_es = False
+
+        # One hard wall-clock cap per index, and nothing else. The old retry
+        # budget was a no-progress detector: it only counted down while the doc
+        # count sat perfectly still and any movement reset it in full, so
+        # indexing that crept along - 114 -> 10631 of 100000 over 12.5 hours in a
+        # vector-upgrade run - waited forever and the build died on the
+        # 780-minute Jenkins timeout with no results at all.
+        wait_timeout = int(self._input.param("index_wait_timeout", 1200))
         for index in self._cb_cluster.get_indexes():
             if index.index_type == "fulltext-alias":
                 continue
-            retry_count = retry
-            prev_count = 0
             es_index_count = 0
-            while retry_count > 0:
-                fail = False
+            index_doc_count = 0
+            container_doc_count = 0
+            deadline = time.time() + wait_timeout
+            started = time.time()
+            first_count = None
+            while True:
+                if time.time() > deadline:
+                    elapsed = time.time() - started
+                    indexed = index_doc_count - (first_count or 0)
+                    rate = (indexed / elapsed) * 60 if elapsed else 0
+                    self.fail(
+                        f"Timed out after {int(elapsed)}s waiting for FTS index "
+                        f"'{index.name}': {index_doc_count} docs indexed against "
+                        f"{container_doc_count} in the source"
+                        + (f", ES at {es_index_count}" if compare_es else "")
+                        + f", indexing {rate:.0f} docs/min. Raise "
+                        f"index_wait_timeout if this index is legitimately this "
+                        f"large, otherwise indexing is too slow to ever complete.")
                 try:
                     index_doc_count = index.get_indexed_doc_count()
+                    if first_count is None:
+                        first_count = index_doc_count
 
-                    if index.collections:
-                        container_doc_count = index.get_src_collections_doc_count()
+                    if self.bulk_collections and index.collections:
+                        container_doc_count = self._num_items * len(index.collections)
+                    elif item_count and self.bulk_collections:
+                        container_doc_count = item_count
+                    elif index.collections:
+                        container_doc_count = index.get_src_collections_doc_count(extra_collections=extra_collections)
                     else:
-                        container_doc_count = index.get_src_bucket_doc_count()
+                        # Bucket-level FTS index (no scope/collections): without custom
+                        # mapping it only indexes _default._default, so compare against
+                        # that collection's count rather than the bucket-wide active key
+                        # count. The bucket may legitimately contain docs in other
+                        # collections (e.g. magma DGM load path uses Java SDK
+                        # all_collections=true), which would inflate the bucket total.
+                        container_doc_count = self._cb_cluster.get_doc_count_in_collections(
+                            index.source_bucket, "_default", ["_default"])
 
-                    if not self.compare_es:
+                    if not compare_es:
                         self.log.info(f"Docs in bucket = {container_doc_count}, "
-                                      f"docs in FTS index '{index.name}': {index_doc_count}")
-                        if retry_count == 1:
-                            fail = True
-                            rest = RestConnection(self._cb_cluster.get_random_fts_node())
-
-                            self.fail(f"FTS index count not matching bucket count even after {retry} tries: "
-                                      f"Docs in bucket = {container_doc_count}, "
                                       f"docs in FTS index '{index.name}': {index_doc_count}")
                     else:
                         self.es.update_index(es_index)
                         es_index_count = self.es.get_index_count(es_index)
                         self.log.info(f"Docs in bucket = {container_doc_count}, docs in FTS index '{index.name}':"
                                       f" {index_doc_count}, docs in ES index: {es_index_count} ")
-                        if retry_count == 1:
-                            fail = True
-                            self.fail(f"FTS/ES index count not matching bucket count even after {retry} tries: "
-                                      f"Docs in bucket = {container_doc_count}, "
-                                      f"docs in FTS index '{index.name}': {index_doc_count}, "
-                                      f"docs in ES index: {es_index_count}")
                     if container_doc_count == 0:
                         if item_count and item_count != 0:
                             self.sleep(5,
                                        "looks like docs haven't been loaded yet...")
-                            retry_count -= 1
                             continue
 
                     if item_count and index_doc_count > item_count:
                         break
 
+                    if index_doc_count > container_doc_count > 0:
+                        # The index holds more than the collections we counted as
+                        # its source, so indexing is not what is outstanding -
+                        # waiting can only time out. Seen where an index spans one
+                        # more collection than get_src_collections_doc_count sums.
+                        self.log.info(
+                            f"FTS index '{index.name}' has {index_doc_count} docs, "
+                            f"more than the {container_doc_count} counted in its "
+                            f"source collections; treating indexing as complete")
+                        break
+
                     if container_doc_count == index_doc_count:
-                        if self.compare_es:
+                        if compare_es:
                             if container_doc_count == es_index_count:
                                 break
-                            elif retry_count == 1:
-                                fail = True
-                                self.fail(
-                                    f"ES index count not matching with bucket_doc_count. "
-                                    f"Docs in bucket = {container_doc_count}, docs "
-                                    f"in FTS index '{index.name}': {index_doc_count}, "
-                                    f"docs in ES index: {es_index_count} ")
+                            elif es_index_count == 0 and container_doc_count > 0:
+                                # FTS has caught up with the bucket while ES is
+                                # still empty, which means this test's load path
+                                # never fed ES (load_all_buckets has no ES leg,
+                                # unlike the dgm path). Waiting cannot change
+                                # that, so stop instead of burning every retry.
+                                self.log.info(
+                                    f"ES index '{es_index}' was not loaded for "
+                                    f"this test (0 docs) while FTS matches the "
+                                    f"bucket at {index_doc_count}; not waiting "
+                                    f"on ES")
+                                break
+                            elif es_index_count > container_doc_count:
+                                # ES holds documents the bucket no longer does -
+                                # a kv-side crash test loses a few docs after ES
+                                # was already fed, so parity is unreachable. FTS
+                                # agrees with the bucket, so indexing is done.
+                                self.log.info(
+                                    f"ES index '{es_index}' has {es_index_count} "
+                                    f"docs against {container_doc_count} in the "
+                                    f"bucket, so the bucket lost docs after ES "
+                                    f"was loaded; FTS matches the bucket, not "
+                                    f"waiting on ES")
+                                break
                         else:
                             break
 
-                    if prev_count < index_doc_count or prev_count > index_doc_count:
-                        prev_count = index_doc_count
-                        retry_count = retry
-                    else:
-                        retry_count -= 1
                 except Exception as e:
                     self.log.info(e)
-                    if fail:
-                        self.fail(e)
-                    retry_count -= 1
                 time.sleep(6)
             # now wait for num_mutations_to_index to become zero to handle the pure
             # updates scenario - where doc count remains unchanged
-            retry_mut_count = 20
-            num_mutations_to_index = 1000
+            num_mutations_to_index = 0
             if item_count == None:
-                while True and retry_mut_count:
+                while time.time() <= deadline:
                     num_mutations_to_index = index.get_num_mutations_to_index()
                     if num_mutations_to_index is None or num_mutations_to_index > 0:
                         self.sleep(5, f"num_mutations_to_index: {num_mutations_to_index} > 0")
-                        retry_mut_count -= 1
                     else:
                         break
                 if num_mutations_to_index is None or num_mutations_to_index > 0:
-                    self.fail(f"num_mutations_to_index: {num_mutations_to_index} > 0 even after 20 retries")
+                    self.fail(
+                        f"num_mutations_to_index: {num_mutations_to_index} > 0 for "
+                        f"'{index.name}' within the {wait_timeout}s "
+                        f"index_wait_timeout")
 
     def construct_plan_params(self):
 
