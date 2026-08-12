@@ -6518,13 +6518,20 @@ class FTSBaseTest(unittest.TestCase):
         time.sleep(timeout)
 
     def wait_for_indexing_complete_simple(self, item_count=0, index=None):
-        retry = self._input.param("index_retry", 200)
+        # Same single wall-clock cap as wait_for_indexing_complete - see the note
+        # there on why the old no-progress retry budget never bounded anything.
+        wait_timeout = int(self._input.param("index_wait_timeout", 1200))
         if index.index_type == "fulltext-alias":
             return
-        retry_count = retry
-        prev_count = 0
-        while retry_count > 0:
-            fail = False
+        index_doc_count = 0
+        deadline = time.time() + wait_timeout
+        while True:
+            if time.time() > deadline:
+                self.fail(
+                    f"Timed out after {wait_timeout}s waiting for FTS index "
+                    f"'{index.name}' to reach {item_count} docs; it is at "
+                    f"{index_doc_count}. Raise index_wait_timeout if this index "
+                    f"is legitimately this large.")
             try:
                 index_doc_count = index.get_indexed_doc_count()
                 self.log.info(f"Expected docs count = {item_count}, "
@@ -6535,17 +6542,8 @@ class FTSBaseTest(unittest.TestCase):
 
                 if item_count == index_doc_count:
                     return
-
-                if prev_count < index_doc_count or prev_count > index_doc_count:
-                    prev_count = index_doc_count
-                    retry_count = retry
-                else:
-                    retry_count -= 1
             except Exception as e:
                 self.log.info(e)
-                if fail:
-                    self.fail(e)
-                retry_count -= 1
             time.sleep(6)
 
     def wait_for_indexing_complete(self, item_count=None, es_index=None, extra_collections=None):
@@ -6572,17 +6570,39 @@ class FTSBaseTest(unittest.TestCase):
                           "into ES for collection containers")
             compare_es = False
 
-        retry = self._input.param("index_retry", 200)
+        # One hard wall-clock cap per index, and nothing else. The old retry
+        # budget was a no-progress detector: it only counted down while the doc
+        # count sat perfectly still and any movement reset it in full, so
+        # indexing that crept along - 114 -> 10631 of 100000 over 12.5 hours in a
+        # vector-upgrade run - waited forever and the build died on the
+        # 780-minute Jenkins timeout with no results at all.
+        wait_timeout = int(self._input.param("index_wait_timeout", 1200))
         for index in self._cb_cluster.get_indexes():
             if index.index_type == "fulltext-alias":
                 continue
-            retry_count = retry
-            prev_count = 0
             es_index_count = 0
-            while retry_count > 0:
-                fail = False
+            index_doc_count = 0
+            container_doc_count = 0
+            deadline = time.time() + wait_timeout
+            started = time.time()
+            first_count = None
+            while True:
+                if time.time() > deadline:
+                    elapsed = time.time() - started
+                    indexed = index_doc_count - (first_count or 0)
+                    rate = (indexed / elapsed) * 60 if elapsed else 0
+                    self.fail(
+                        f"Timed out after {int(elapsed)}s waiting for FTS index "
+                        f"'{index.name}': {index_doc_count} docs indexed against "
+                        f"{container_doc_count} in the source"
+                        + (f", ES at {es_index_count}" if compare_es else "")
+                        + f", indexing {rate:.0f} docs/min. Raise "
+                        f"index_wait_timeout if this index is legitimately this "
+                        f"large, otherwise indexing is too slow to ever complete.")
                 try:
                     index_doc_count = index.get_indexed_doc_count()
+                    if first_count is None:
+                        first_count = index_doc_count
 
                     if self.bulk_collections and index.collections:
                         container_doc_count = self._num_items * len(index.collections)
@@ -6603,29 +6623,15 @@ class FTSBaseTest(unittest.TestCase):
                     if not compare_es:
                         self.log.info(f"Docs in bucket = {container_doc_count}, "
                                       f"docs in FTS index '{index.name}': {index_doc_count}")
-                        if retry_count == 1:
-                            fail = True
-                            rest = RestConnection(self._cb_cluster.get_random_fts_node())
-
-                            self.fail(f"FTS index count not matching bucket count even after {retry} tries: "
-                                      f"Docs in bucket = {container_doc_count}, "
-                                      f"docs in FTS index '{index.name}': {index_doc_count}")
                     else:
                         self.es.update_index(es_index)
                         es_index_count = self.es.get_index_count(es_index)
                         self.log.info(f"Docs in bucket = {container_doc_count}, docs in FTS index '{index.name}':"
                                       f" {index_doc_count}, docs in ES index: {es_index_count} ")
-                        if retry_count == 1:
-                            fail = True
-                            self.fail(f"FTS/ES index count not matching bucket count even after {retry} tries: "
-                                      f"Docs in bucket = {container_doc_count}, "
-                                      f"docs in FTS index '{index.name}': {index_doc_count}, "
-                                      f"docs in ES index: {es_index_count}")
                     if container_doc_count == 0:
                         if item_count and item_count != 0:
                             self.sleep(5,
                                        "looks like docs haven't been loaded yet...")
-                            retry_count -= 1
                             continue
 
                     if item_count and index_doc_count > item_count:
@@ -6670,41 +6676,27 @@ class FTSBaseTest(unittest.TestCase):
                                     f"was loaded; FTS matches the bucket, not "
                                     f"waiting on ES")
                                 break
-                            elif retry_count == 1:
-                                fail = True
-                                self.fail(
-                                    f"ES index count not matching with bucket_doc_count. "
-                                    f"Docs in bucket = {container_doc_count}, docs "
-                                    f"in FTS index '{index.name}': {index_doc_count}, "
-                                    f"docs in ES index: {es_index_count} ")
                         else:
                             break
 
-                    if prev_count < index_doc_count or prev_count > index_doc_count:
-                        prev_count = index_doc_count
-                        retry_count = retry
-                    else:
-                        retry_count -= 1
                 except Exception as e:
                     self.log.info(e)
-                    if fail:
-                        self.fail(e)
-                    retry_count -= 1
                 time.sleep(6)
             # now wait for num_mutations_to_index to become zero to handle the pure
             # updates scenario - where doc count remains unchanged
-            retry_mut_count = self._input.param("mutation_retry", 200)
             num_mutations_to_index = 0
             if item_count == None:
-                while True and retry_mut_count:
+                while time.time() <= deadline:
                     num_mutations_to_index = index.get_num_mutations_to_index()
                     if num_mutations_to_index is None or num_mutations_to_index > 0:
                         self.sleep(5, f"num_mutations_to_index: {num_mutations_to_index} > 0")
-                        retry_mut_count -= 1
                     else:
                         break
                 if num_mutations_to_index is None or num_mutations_to_index > 0:
-                    self.fail(f"num_mutations_to_index: {num_mutations_to_index} > 0 even after {self._input.param('mutation_retry', 100)} retries")
+                    self.fail(
+                        f"num_mutations_to_index: {num_mutations_to_index} > 0 for "
+                        f"'{index.name}' within the {wait_timeout}s "
+                        f"index_wait_timeout")
 
     def construct_plan_params(self):
 
