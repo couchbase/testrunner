@@ -5832,10 +5832,6 @@ class FTSBaseTest(unittest.TestCase):
         if es_index is None:
             es_index = FTSBaseTest.get_es_index_name()
 
-        if item_count is None and hasattr(self, 'bulk_collections_expected_docs') \
-                and self.bulk_collections_expected_docs:
-            item_count = self.bulk_collections_expected_docs
-
         # async_load_data only loads ES for bucket containers, so for a
         # collection-scoped run the ES index holds either nothing or leftovers
         # from an earlier test - counts like "bucket = 50000, ES = 100000" are it
@@ -5881,11 +5877,7 @@ class FTSBaseTest(unittest.TestCase):
                     if first_count is None:
                         first_count = index_doc_count
 
-                    if self.bulk_collections and index.collections:
-                        container_doc_count = self._num_items * len(index.collections)
-                    elif item_count and self.bulk_collections:
-                        container_doc_count = item_count
-                    elif index.collections:
+                    if index.collections:
                         container_doc_count = index.get_src_collections_doc_count(extra_collections=extra_collections)
                     else:
                         # Bucket-level FTS index (no scope/collections): without custom
@@ -5956,6 +5948,19 @@ class FTSBaseTest(unittest.TestCase):
                         else:
                             break
 
+                except (AttributeError, NameError) as e:
+                    # Retrying is for a cluster that is not answering yet. A
+                    # missing attribute or name means the code in this loop is
+                    # wrong, so every retry fails identically and the only
+                    # outcome is the hard timeout - which reports doc counts and
+                    # says nothing about the real error. Surface it on the first
+                    # pass instead. Deliberately narrow: KeyError and TypeError
+                    # do show up here transiently (stats not published yet, a
+                    # REST call returning None mid-compare) and must stay
+                    # retryable.
+                    raise Exception(
+                        f"Bug in wait_for_indexing_complete while polling index "
+                        f"'{index.name}': {type(e).__name__}: {e}") from e
                 except Exception as e:
                     self.log.info(e)
                 time.sleep(6)
