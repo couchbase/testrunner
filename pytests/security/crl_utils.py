@@ -173,7 +173,11 @@ class CRLUtils:
 
         Args:
             revoked_serials: list of int serial numbers to mark revoked
-            this_update / next_update: datetime, defaults to now / now+30d
+            this_update: datetime, defaults to 1 day ago — or, when next_update
+                is itself in the past, to 1 day before next_update (RFC 5280
+                requires nextUpdate to be after thisUpdate, and `cryptography`
+                enforces it)
+            next_update: datetime, defaults to now+30d (or now-30d if expired)
             crl_number: optional int, adds a CRLNumber extension
             expired: if True and next_update not given, sets next_update to
                 30 days in the past (server rejects genuinely-expired CRLs at
@@ -194,6 +198,9 @@ class CRLUtils:
                 now - datetime.timedelta(days=1) if expired
                 else now + datetime.timedelta(days=30)
             )
+        if this_update is None:
+            this_update = min(now - datetime.timedelta(days=1),
+                              next_update - datetime.timedelta(days=1))
         builder = x509.CertificateRevocationListBuilder().issuer_name(
             ca_cert.subject
         ).last_update(this_update).next_update(next_update)

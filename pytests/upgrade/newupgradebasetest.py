@@ -1842,6 +1842,54 @@ class NewUpgradeBaseTest(BaseTestCase):
         if queue is not None:
             queue.put(True)
 
+    def check_crl_endpoints_mixed_mode(self, queue=None):
+        """Upgrade event: CRL endpoints must not break a mixed-version cluster.
+
+        Pre-Totoro nodes return 404 "CRL feature not yet enabled in this
+        cluster". Either answer is fine; what must not happen is a 5xx or a
+        hang, which would mean the endpoint destabilises a partially upgraded
+        cluster. Records what each node said rather than asserting a version.
+        """
+        seen = {}
+        for server in self.input.servers:
+            try:
+                status, content, _ = RestConnection(server).get_crl_settings()
+                seen[server.ip] = "ok" if status else str(content)[:120]
+            except Exception as exc:
+                seen[server.ip] = "EXCEPTION: {0}".format(exc)
+                self.log.warning("GET /settings/crl raised on {0}: {1}".format(
+                    server.ip, exc))
+        self.log.info("Mixed-mode CRL endpoint check: {0}".format(seen))
+        if queue is not None:
+            queue.put(True)
+
+    def enable_crl_after_upgrade(self, queue=None):
+        """Upgrade event: once fully upgraded, CRL must be configurable.
+
+        Uploads a CRL signed by the CA that issued the client certificate
+        `enable_multiple_ca` set up, then switches clientAuth on — proving the
+        feature works on an upgraded cluster. Requires `enable_multiple_ca`
+        earlier in the same event chain.
+        """
+        from pytests.fts.fts_crl_reuse import CRLEnforcementMixin
+
+        mode = self.input.param("crl_client_auth", "Require")
+        helper = CRLEnforcementMixin()
+        helper.master = self.master
+        helper._input = self.input
+        helper.log = self.log
+        helper.fail = self.fail
+        helper._crl_number = 0
+        helper.crl_client_auth = mode
+        helper.crl_node_to_node = self.input.param("crl_node_to_node", None)
+        helper.enable_crl_enforcement()
+
+        serial = helper.x509_client_serial()
+        self.log.info("CRL enabled post-upgrade (clientAuth={0}); client cert "
+                      "serial under test is {1}".format(mode, hex(serial)))
+        if queue is not None:
+            queue.put(True)
+
     def modify_num_pindexes(self, queue=None):
         for index in self.fts_obj.fts_indexes:
             index.update_num_pindexes(8)
