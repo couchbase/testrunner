@@ -5611,8 +5611,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.drop_index_node_resources_utilization_validations()
 
     def test_scans_after_removing_vector_field_from_some_docs(self):
-        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
-                                      skip_default_scope=self.skip_default)
+        self._setup_data_for_indexing(skip_default_scope=self.skip_default)
         for namespace in self.namespaces:
             definitions = self.gsi_util_obj.get_index_definition_list(
                 dataset=self.json_template,
@@ -5660,8 +5659,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
     def test_scans_after_updating_dimensions_of_vector_field_and_reverting_back(self):
         data_node = self.get_nodes_from_services_map(service_type="kv")
-        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
-                                      skip_default_scope=self.skip_default)
+        self._setup_data_for_indexing(skip_default_scope=self.skip_default)
         for namespace in self.namespaces:
             definitions = self.gsi_util_obj.get_index_definition_list(
                 dataset=self.json_template,

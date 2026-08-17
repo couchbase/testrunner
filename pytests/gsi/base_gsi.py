@@ -1539,7 +1539,9 @@ class BaseSecondaryIndexingTests(QueryTests):
         for doc in filtered_docs_result:
             doc_id = doc.get('doc_id')
             sparse_vec = doc.get('sparse')
-            if sparse_vec and len(sparse_vec) == 2:
+            # Some docs may carry invalid/scalar sparse values (e.g. tests that upsert
+            # a scalar into the sparse field); skip anything that isn't a [indices, values] pair
+            if isinstance(sparse_vec, (list, tuple)) and len(sparse_vec) == 2:
                 doc_indices, doc_values = sparse_vec[0], sparse_vec[1]
                 # Compute sparse dot product
                 score = self._compute_sparse_dot_product(query_indices, query_values, doc_indices, doc_values)
@@ -4654,7 +4656,9 @@ class BaseSecondaryIndexingTests(QueryTests):
         for doc in all_docs:
             doc_id = doc.get('doc_id')
             sparse_vec = doc.get('sparse')
-            if sparse_vec and len(sparse_vec) == 2 and doc_id:
+            # Skip docs whose sparse field isn't a valid [indices, values] pair
+            # (e.g. scalar values upserted by invalid-input tests)
+            if isinstance(sparse_vec, (list, tuple)) and len(sparse_vec) == 2 and doc_id:
                 doc_indices, doc_values = sparse_vec[0], sparse_vec[1]
                 score = self._compute_sparse_dot_product(query_indices, query_values,
                                                          doc_indices, doc_values)
