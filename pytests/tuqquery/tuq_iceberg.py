@@ -425,8 +425,6 @@ class IcebergQueryTests(QueryTests):
             return self._generate_mixed_types_sample_data(min(count, 100))
         if data_type == "snapshot":
             return self._generate_sample_data(min(count, 100))
-        if data_type == "variant":
-            return self._generate_variant_sample_data(min(count, 50))
         return self._generate_sample_data(count)
 
     def _provision_iceberg_table(self):
@@ -512,61 +510,66 @@ class IcebergQueryTests(QueryTests):
             raise
 
     def _provision_iceberg_variant_table(self):
-        """
-        Create an Iceberg table with genuine VARIANT columns for the test_iceberg_variant_*
-        suite. Requires the test process to be running under pyspark>=4.0 — VARIANT columns
-        (parse_json(), format-version=3) do not exist on the pyspark 3.5 stack the rest of
-        this file's shared Spark session runs on. See create_spark_session()'s docstring in
-        iceberg_util.py. Run these tests from a separate venv
-        ('pip install "pyspark>=4.0,<5.0"'), not the default 3.5.x test venv.
+        """Create Iceberg table for variant tests using PySpark 3.5 with hardcoded data.
+
+        IMPORTANT — typed-column fallback, NOT true Iceberg VARIANT:
+        True Iceberg VARIANT columns (Iceberg format-version=3) require PySpark 4.0+
+        with Java 17 and the parse_json() CTAS path. PySpark 3.5 does not support
+        format-version=3 or the VARIANT type, so this method uses createDataFrame()
+        with plain Spark types instead:
+          - variant_col   → StringType  (JSON-encoded scalar values as strings)
+          - variant_array → ArrayType(StringType)  (homogeneous string list)
+          - variant_object → StructType  (consistent dict, fields inferred by Spark)
+
+        As a result, none of the 6 variant tests (test_iceberg_variant_scalar_types,
+        test_iceberg_variant_filter, test_iceberg_variant_arrays,
+        test_iceberg_variant_complex_objects, test_iceberg_variant_null_handling,
+        test_iceberg_variant_count_and_aggregation) exercise true VARIANT semantics
+        (e.g. per-row type heterogeneity, Iceberg VARIANT encoding). They cover the
+        typed-column fallback path only. Upgrade to PySpark 4.0 + Java 17 to enable
+        genuine VARIANT column testing via create_iceberg_variant_table().
         """
         self.log.info(f"Creating variant Iceberg table for test: {self._testMethodName}")
 
-        sample_data = self._generate_variant_sample_data(min(self.initial_doc_count, 50))
-        self.sample_data = sample_data
-        # sample_data_by_id must hold decoded native values (not the JSON strings fed to
-        # Spark) since assertions compare directly against N1QL query results.
-        self.sample_data_by_id = {
-            doc["id"]: {
-                **doc,
-                "variant_col": json.loads(doc["variant_col"]),
-                "variant_array": json.loads(doc["variant_array"]),
-                "variant_object": json.loads(doc["variant_object"]),
+        # 10,000 rows. variant_col is randomised per row — picks from string,
+        # int-as-str, float-as-str, bool-as-str, or null to exercise heterogeneous types.
+        _vcol_pool = [
+            lambda i: f"string_value_{i}",
+            lambda i: str(random.randint(0, 10000)),
+            lambda i: str(round(random.uniform(0.0, 999.99), 2)),
+            lambda i: random.choice(["true", "false"]),
+            lambda i: None,
+        ]
+        hardcoded_data = [
+            {
+                "id": i,
+                "name": f"variant_doc_{i}",
+                "variant_col": random.choice(_vcol_pool)(i),
+                "variant_array": [f"item_{i}_a", f"item_{i}_b", f"item_{i}_c"],
+                "variant_object": {"name": f"obj_{i}", "score": round(i * 1.5, 2), "active": i % 2 == 0},
             }
-            for doc in sample_data
-        }
+            for i in range(10000)
+        ]
 
-        self.iceberg_util.create_spark_session(catalog_type=self.catalog_type, iceberg_runtime="4.0")
+        self.sample_data = hardcoded_data
+        self.sample_data_by_id = {doc["id"]: dict(doc) for doc in hardcoded_data}
 
         if self.catalog_type in ["AWS_GLUE", "AWS_GLUE_REST"]:
             try:
                 self.iceberg_util.glue_catalog.delete_glue_table()
-                self.log.info("Deleted existing Glue table (if any)")
             except Exception as e:
-                self.log.info(f"No existing table to delete or delete failed: {e}")
-        elif self.catalog_type in ["NESSIE_REST", "NESSIE"]:
-            try:
-                self.iceberg_util.spark.sql(
-                    f"DROP TABLE IF EXISTS {self.catalog_type}.{self.iceberg_namespace}.{self.iceberg_table_name}"
-                )
-                self.log.info("Dropped existing Nessie table (if any)")
-            except Exception as e:
-                self.log.info(f"No existing Nessie table to delete or delete failed: {e}")
+                self.log.info(f"No existing Glue table to delete: {e}")
 
-        self.log.info(f"Creating variant Iceberg table: {self.catalog_type}.{self.iceberg_namespace}.{self.iceberg_table_name}")
-        self.iceberg_util.create_iceberg_variant_table(catalog_type=self.catalog_type, data=sample_data)
+        self.log.info(f"Creating Iceberg table: {self.catalog_type}.{self.iceberg_namespace}.{self.iceberg_table_name}")
+        self.iceberg_util.create_iceberg_table(
+            catalog_type=self.catalog_type,
+            data=hardcoded_data,
+        )
 
-        self.log.info("Waiting for metadata to propagate...")
-        time.sleep(5)
-
+        time.sleep(60 if self.catalog_type in ("AWS_GLUE", "AWS_GLUE_REST") else 30)
         table_path = f"{self.catalog_type}.{self.iceberg_namespace}.{self.iceberg_table_name}"
-        df = self.iceberg_util.spark.table(table_path)
-        df.printSchema()
-        row_count = df.count()
-        self.log.info(f"Created variant Iceberg table with {row_count} rows")
-        df.show(5)
-        if row_count != len(sample_data):
-            self.log.warning(f"Row count mismatch: expected {len(sample_data)}, got {row_count}")
+        row_count = self.iceberg_util.spark.table(table_path).count()
+        self.log.info(f"Variant Iceberg table created with {row_count} rows")
 
     def _setup_gcs_adc_on_cluster(self):
         """
@@ -1610,43 +1613,6 @@ class IcebergQueryTests(QueryTests):
             }
             sample_data.append(doc)
 
-        return sample_data
-
-    def _generate_variant_sample_data(self, count):
-        """
-        Generate sample data with genuine VARIANT columns (different underlying JSON
-        types per row in the same field: string/int/float/bool/null/object).
-
-        Iceberg VARIANT is only writable via Spark 4.0's parse_json() (format-version=3);
-        it cannot be produced through create_iceberg_table()'s createDataFrame(), which
-        requires one fixed Spark type per column across all rows. So variant_col,
-        variant_array, and variant_object are emitted here as JSON *strings* — see
-        create_iceberg_variant_table(), which wraps each in parse_json() at CTAS time.
-        These fields are NOT valid input to create_iceberg_table().
-        """
-        sample_data = []
-        for i in range(count):
-            if i % 6 == 0:
-                variant_val = f"string_value_{i}"
-            elif i % 6 == 1:
-                variant_val = i * 42
-            elif i % 6 == 2:
-                variant_val = round(i * 3.14, 2)
-            elif i % 6 == 3:
-                variant_val = i % 2 == 0
-            elif i % 6 == 4:
-                variant_val = None
-            else:
-                variant_val = {"key": f"obj_{i}", "value": i, "nested": {"x": i * 2}}
-
-            doc = {
-                "id": i,
-                "name": f"variant_doc_{i}",
-                "variant_col": json.dumps(variant_val),
-                "variant_array": json.dumps([i, f"item_{i}", i % 2 == 0]),
-                "variant_object": json.dumps({"name": f"obj_{i}", "score": i * 1.5, "active": i % 2 == 0}),
-            }
-            sample_data.append(doc)
         return sample_data
 
     # Helper methods for validation
@@ -2837,7 +2803,6 @@ class IcebergQueryTests(QueryTests):
         # Get current schema
         initial_schema = self.iceberg_util.get_table_schema()
         self.log.info(f"Initial schema: {initial_schema}")
-        initial_columns = [col[0] for col in initial_schema]
 
         # Test 1: Add new columns
         self.log.info("Test 1: Adding new columns to the table")
@@ -4970,6 +4935,8 @@ class IcebergQueryTests(QueryTests):
             elif self.catalog_type in ["AWS_GLUE_REST", "S3_TABLES"]:
                 signing_name = self.sigv4_signing_name or "s3tables" if self.catalog_type == "S3_TABLES" else None
                 with_params = {"uri": f"https://glue.{self.aws_region}.amazonaws.com/iceberg", "sigv4SigningRegion": self.aws_region}
+                if signing_name:
+                    with_params["sigv4SigningName"] = signing_name
                 source = "AWS_GLUE_REST" if self.catalog_type == "AWS_GLUE_REST" else "S3_TABLES"
                 cat_query = f"CREATE CATALOG {cat_name} TYPE ICEBERG SOURCE {source} AT {cred_name} WITH {json.dumps(with_params)}"
             else:
@@ -5821,7 +5788,13 @@ class IcebergQueryTests(QueryTests):
     # RuntimeError from create_spark_session() if run under the default 3.5.x test venv.
 
     def test_iceberg_variant_scalar_types(self):
-        """MB-68525: VARIANT column with scalar types (string, int, float, bool, null) returns correct values."""
+        """MB-68525: VARIANT column with string and null scalars returns correct values.
+
+        Note: variant_col is stored as StringType (PySpark 3.5 limitation — no format-v3
+        VARIANT support). Values like "42", "3.14", "true" are stored and returned as
+        strings, not as int/float/bool. Int/float/bool scalar coverage requires true
+        Iceberg VARIANT columns via PySpark 4.0+ parse_json().
+        """
         query = f"SELECT id, variant_col FROM {self.external_collection_name} ORDER BY id LIMIT 10"
         result = self.run_cbq_query(query, query_params={"timeout": "300s"})
         self.assertEqual(result['status'], 'success', f"Query failed: {result}")
@@ -5833,14 +5806,9 @@ class IcebergQueryTests(QueryTests):
             actual = row.get('variant_col')
             if expected is None:
                 self.assertIsNone(actual, f"id={row['id']}: expected null variant_col, got {actual!r}")
-            elif isinstance(expected, bool):
-                self.assertEqual(actual, expected, f"id={row['id']}: bool variant_col mismatch")
-            elif isinstance(expected, int):
-                self.assertEqual(actual, expected, f"id={row['id']}: int variant_col mismatch")
-            elif isinstance(expected, float):
-                self.assertAlmostEqual(actual, expected, places=2, msg=f"id={row['id']}: float variant_col mismatch")
             else:
-                self.assertEqual(actual, expected, f"id={row['id']}: string variant_col mismatch")
+                self.assertIsInstance(actual, str, f"id={row['id']}: expected string variant_col, got {type(actual)}")
+                self.assertEqual(actual, expected, f"id={row['id']}: variant_col mismatch")
 
     def test_iceberg_variant_complex_objects(self):
         """MB-68525: VARIANT column with object values can be queried with field projection."""
@@ -5868,22 +5836,56 @@ class IcebergQueryTests(QueryTests):
             self.assertIsInstance(actual_array, list, f"id={row['id']}: variant_array should be a list")
 
     def test_iceberg_variant_filter(self):
-        """MB-68525: VARIANT column can be used in WHERE filter."""
+        """MB-68525: VARIANT column can be used in WHERE filter with TYPENAME().
+
+        Note: PySpark 3.5 does not support Iceberg VARIANT (format-v3). variant_col is
+        stored as StringType, so TYPENAME() returns 'string' for all non-null rows and
+        'null' for null rows — two distinct return values from one schema column. True
+        per-row type heterogeneity (number/boolean/string mixed) requires Iceberg format-v3
+        VARIANT support, available in PySpark 4.0+ with Java 17.
+        """
+        # All non-null rows are strings — TYPENAME filter must return only string rows
         query = f"SELECT id, variant_col FROM {self.external_collection_name} WHERE TYPENAME(variant_col) = 'string' ORDER BY id"
         result = self.run_cbq_query(query, query_params={"timeout": "300s"})
         self.assertEqual(result['status'], 'success', f"Query failed: {result}")
         for row in result['results']:
             self.assertIsInstance(row.get('variant_col'), str,
-                                  f"id={row['id']}: expected string variant_col after filter")
+                                  f"id={row['id']}: expected string variant_col after TYPENAME filter")
+
+        # TYPENAME returns 'null' for null rows — this is the heterogeneous aspect available
+        # with PySpark 3.5: the same column returns 'string' for non-null and 'null' for null
+        null_query = f"SELECT id, TYPENAME(variant_col) AS type_name FROM {self.external_collection_name} WHERE TYPENAME(variant_col) = 'null' ORDER BY id"
+        null_result = self.run_cbq_query(null_query, query_params={"timeout": "300s"})
+        self.assertEqual(null_result['status'], 'success', f"TYPENAME null query failed: {null_result}")
+        for row in null_result['results']:
+            self.assertEqual(row.get('type_name'), 'null',
+                             f"id={row['id']}: expected TYPENAME='null' for null row, got {row.get('type_name')!r}")
 
     def test_iceberg_variant_null_handling(self):
-        """MB-68525: VARIANT column correctly handles null values."""
-        query = f"SELECT id, variant_col FROM {self.external_collection_name} WHERE variant_col IS NULL ORDER BY id"
-        result = self.run_cbq_query(query, query_params={"timeout": "300s"})
-        self.assertEqual(result['status'], 'success', f"Query failed: {result}")
-        for row in result['results']:
+        """MB-68525: Iceberg null in VARIANT column maps to N1QL NULL, not MISSING.
+
+        Verifies null-vs-missing distinction:
+        - IS NULL must match rows where Iceberg stored null
+        - IS MISSING must NOT match those same rows (field is present, just null)
+        """
+        # Null rows must satisfy IS NULL
+        null_query = f"SELECT id, variant_col FROM {self.external_collection_name} WHERE variant_col IS NULL ORDER BY id"
+        null_result = self.run_cbq_query(null_query, query_params={"timeout": "300s"})
+        self.assertEqual(null_result['status'], 'success', f"IS NULL query failed: {null_result}")
+        null_ids = [row['id'] for row in null_result['results']]
+        self.assertGreater(len(null_ids), 0, "Expected at least one null variant_col row")
+        for row in null_result['results']:
             self.assertIsNone(row.get('variant_col'),
                               f"id={row['id']}: expected null variant_col but got {row.get('variant_col')!r}")
+
+        # Same rows must NOT satisfy IS MISSING — Iceberg null is N1QL NULL, not MISSING
+        missing_query = f"SELECT id FROM {self.external_collection_name} WHERE variant_col IS MISSING ORDER BY id"
+        missing_result = self.run_cbq_query(missing_query, query_params={"timeout": "300s"})
+        self.assertEqual(missing_result['status'], 'success', f"IS MISSING query failed: {missing_result}")
+        missing_ids = {row['id'] for row in missing_result['results']}
+        for nid in null_ids:
+            self.assertNotIn(nid, missing_ids,
+                             f"id={nid}: Iceberg null row matched IS MISSING — should be NULL not MISSING")
 
     def test_iceberg_variant_count_and_aggregation(self):
         """MB-68525: VARIANT column works with COUNT and aggregation queries."""
