@@ -1,9 +1,11 @@
 import getopt
+import io
 import re
 import subprocess
 import sys
 import threading
 import time
+import traceback
 import os
 from couchbase_helper.cluster import Cluster
 
@@ -404,6 +406,15 @@ class NodeHelper:
                 except Exception as e:
                     log.warning("install_cb: Exception {0} occurred on {1}, retrying..".format(e,
                                                                                          self.ip))
+                    buf = io.StringIO()
+                    traceback.print_exc(file=buf)
+                    tb_lines = buf.getvalue().splitlines()
+                    width = max(len(l) for l in tb_lines) + 4
+                    border = '-' * width
+                    log.warning(border)
+                    for line in tb_lines:
+                        log.warning('- ' + line.ljust(width - 4) + ' -')
+                    log.warning(border)
                     self.wait_for_completion(duration, event)
             if not installed:
                 log.error("install_cb: install command never returned success on {0} after {1}s. Marking node as install-failed.".format(self.ip, timeout))
