@@ -1,84 +1,71 @@
 #!/usr/bin/env bash
-# Robustly download a huge Jenkins consoleText.
 #
-# Jenkins streams /consoleText with no Content-Length and no byte-range support,
-# so a single curl gets cut off partway through a ~300MB log ("transfer closed
-# with outstanding read data remaining"). The progressiveText API *does* accept a
-# start offset, so we fetch in chunks, advancing by however many bytes actually
-# landed. A truncated chunk is harmless: we just resume from where it stopped.
+# Download a Jenkins consoleText for a *completed* build.
 #
 # Usage: ./fetch_console.sh <build-url> [outfile]
 #   ./fetch_console.sh http://qe-jenkins1.sc.couchbase.com/job/core_dump_checker/390/ console.txt
+#   ./fetch_console.sh <build-url> - | ./panics.py -      # stream, nothing on disk
 #
-# Re-running with an existing outfile resumes where it left off. Pass "-" as the
-# outfile to stream to stdout instead (no resume), e.g.
-#   ./fetch_console.sh <build-url> - | ./panics.py -
+# The whole trick is `--compressed`. These logs are ~300MB of highly repetitive
+# service output, and Jenkins will gzip them: build 390 came down as 9.9MB on the
+# wire in 23s, expanding to the full 301,547,401 bytes.
+#
+# That matters because an uncompressed request does not survive the trip. The
+# server closes it partway through at an unpredictable point -- "curl: (18)
+# transfer closed with outstanding read data remaining" at 23MB and again at
+# 109MB on consecutive attempts -- and /consoleText sends no Content-Length and
+# rejects HTTP Range, so there is nothing to resume from.
+#
+# Resuming via /logText/progressiveText?start=N is a dead end, for the record:
+# `start` indexes Jenkins' raw stored log rather than the text it serves, and
+# X-Text-Size only ever reports the constant total, never a next offset. An
+# earlier version advanced `start` by the bytes received and produced 520MB of
+# output for a 301MB log. Splicing chunks by content does not rescue it either:
+# the log repeats near-identical lines by the million, so an overlap probe
+# matches in the wrong place. Compression sidesteps all of it.
 
 set -uo pipefail
 
 BUILD_URL="${1:?usage: fetch_console.sh <build-url> [outfile]}"
 OUT="${2:-console.txt}"
 BUILD_URL="${BUILD_URL%/}"
-PROG="$BUILD_URL/logText/progressiveText"
 
-# Seconds per chunk attempt. Each attempt keeps whatever it received.
-CHUNK_SECONDS="${CHUNK_SECONDS:-100}"
-MAX_ATTEMPTS="${MAX_ATTEMPTS:-200}"
+MAX_TIME="${MAX_TIME:-900}"
+ATTEMPTS="${ATTEMPTS:-3}"
 
-total=$(curl -sS -m 60 -D - -o /dev/null "$PROG?start=0" 2>/dev/null \
-        | tr -d '\r' | awk 'tolower($1)=="x-text-size:"{print $2}')
+if [[ "$OUT" == "-" ]]; then
+  exec curl -sS --compressed --max-time "$MAX_TIME" "$BUILD_URL/consoleText"
+fi
 
-if [[ -z "${total:-}" ]]; then
-  echo "Could not read X-Text-Size from $PROG -- is the build URL right / VPN up?" >&2
+# Refuse a build that is still running: its console keeps growing, so the
+# download is a moving target and the classification would be partial.
+building=$(curl -sS -m 60 "$BUILD_URL/api/json?tree=building" 2>/dev/null \
+           | tr -d '{}" ' | sed -n 's/.*building:\([a-z]*\).*/\1/p')
+if [[ "$building" == "true" ]]; then
+  echo "ERROR: $BUILD_URL is still building; wait for it to finish." >&2
   exit 1
 fi
-echo "Total log size: $total bytes ($((total / 1048576)) MB)" >&2
 
-# Resume support: if OUT already exists, pick up at its current size.
-offset=0
-if [[ "$OUT" == "-" ]]; then
-  :   # streaming to stdout; nothing to resume from
-elif [[ -f "$OUT" ]]; then
-  offset=$(wc -c < "$OUT" | tr -d ' ')
-  if (( offset >= total )); then
-    echo "$OUT already has $offset bytes; nothing to do." >&2
+for attempt in $(seq 1 "$ATTEMPTS"); do
+  echo "Downloading console log, gzipped (attempt $attempt/$ATTEMPTS)..." >&2
+  curl -sS --compressed --max-time "$MAX_TIME" -o "$OUT" \
+       -w "  wire %{size_download} bytes in %{time_total}s\n" \
+       "$BUILD_URL/consoleText" >&2
+  rc=$?
+  got=$(wc -c < "$OUT" 2>/dev/null | tr -d ' ')
+  got="${got:-0}"
+
+  # A complete console log for a finished build ends with Jenkins' own
+  # "Finished: SUCCESS/FAILURE/ABORTED" line. Cheap and unambiguous.
+  if tail -c 4096 "$OUT" 2>/dev/null | tr -d '\r' | grep -q '^Finished: '; then
+    echo "Done: $OUT ($got bytes, $(tail -c 4096 "$OUT" | tr -d '\r' \
+          | grep '^Finished: ' | tail -1))" >&2
     exit 0
   fi
-  echo "Resuming existing $OUT at offset $offset" >&2
-else
-  : > "$OUT"
-fi
 
-tmp=$(mktemp "${TMPDIR:-/tmp}/jenkins-chunk.XXXXXX")
-trap 'rm -f "$tmp"' EXIT
-
-attempt=0
-while (( offset < total )); do
-  (( attempt++ ))
-  if (( attempt > MAX_ATTEMPTS )); then
-    echo "Giving up after $MAX_ATTEMPTS attempts at offset $offset/$total" >&2
-    exit 1
-  fi
-
-  # Partial transfers are expected; ignore curl's exit status and use byte count.
-  curl -sS -m "$CHUNK_SECONDS" -o "$tmp" "$PROG?start=$offset" 2>/dev/null
-  got=$(wc -c < "$tmp" | tr -d ' ')
-
-  if (( got == 0 )); then
-    echo "  chunk at $offset returned 0 bytes; retrying in 5s" >&2
-    sleep 5
-    continue
-  fi
-
-  # Chunks are contiguous byte ranges, so plain concatenation rebuilds the file
-  # exactly -- including lines split across a chunk boundary.
-  if [[ "$OUT" == "-" ]]; then
-    cat "$tmp"
-  else
-    cat "$tmp" >> "$OUT"
-  fi
-  offset=$(( offset + got ))
-  printf '  %d / %d bytes (%d%%)\n' "$offset" "$total" "$(( offset * 100 / total ))" >&2
+  echo "  incomplete after $got bytes (curl rc=$rc); no 'Finished:' line." >&2
+  [[ "$attempt" -lt "$ATTEMPTS" ]] && sleep 10
 done
 
-echo "Done: $OUT ($offset bytes)" >&2
+echo "ERROR: could not download a complete console log after $ATTEMPTS attempts." >&2
+exit 1

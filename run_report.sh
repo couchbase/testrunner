@@ -53,6 +53,18 @@ if [[ -n "${RESOLVED:-}" ]]; then
   echo "Upstream build number: $RESOLVED"
   echo "$RESOLVED" > "$OUT/upstream_build.txt"
 fi
+
+RESULT=$(curl -sS -m 60 "$TARGET/api/json?tree=result" 2>/dev/null \
+         | tr -d '{}" ' | sed -n 's/.*result:\([A-Z]*\).*/\1/p')
+if [[ -n "${RESULT:-}" ]]; then
+  echo "Upstream result      : $RESULT"
+  echo "$RESULT" > "$OUT/upstream_result.txt"
+  if [[ "$RESULT" != "SUCCESS" ]]; then
+    echo "  NOTE: a non-SUCCESS upstream build often stopped early, so its log" >&2
+    echo "  may be missing whole scan phases (the server scan, which is the only" >&2
+    echo "  place a build version appears, is usually the last one to run)." >&2
+  fi
+fi
 echo "$TARGET" > "$OUT/upstream_url.txt"
 
 if ! ./fetch_console.sh "$TARGET" "$CONSOLE"; then
@@ -64,24 +76,37 @@ echo
 echo "--- classifying ---"
 # One parse writes every variant, including reports/by-component/<comp>.txt.
 # Re-running the script per report would re-read the ~300MB log each time.
-if ! ./panics.py "$CONSOLE" --all-reports "$OUT"; then
+if ! ./panics.py "$CONSOLE" --all-reports "$OUT" --build-url "$TARGET"; then
   echo "ERROR: panics.py failed" >&2
   exit 1
 fi
 
 echo
-echo "--- panics by component ---"
+echo "--- panics by component (attributed, plus same-block related) ---"
 for f in "$OUT"/by-component/*.txt; do
   [[ -e "$f" ]] || continue
   comp=$(basename "$f" .txt)
-  printf '%-14s ' "$comp"
-  grep -m1 '^Showing' "$f" | sed 's/Showing *: //; s/ *(.*//'
+  n=$(grep -m1 '^Showing' "$f" | sed -E 's/^Showing[^0-9]*([0-9]+).*/\1/')
+  printf '  %-14s %s signature(s)\n' "$comp" "${n:-?}"
 done
+echo "  (these exceed the per-component counts above, which exclude the"
+echo "   same-block related signatures -- see 'same-block' in the reports)"
+
+echo
+echo "--- builds seen (where the log states one) ---"
+python3 - "$OUT/metrics.json" <<'PY' || true
+import json, sys
+m = json.load(open(sys.argv[1]))
+seen = m.get("builds_seen") or []
+at_scan = m.get("node_builds_at_scan") or []
+print("  from panic markers : %s" % (", ".join(seen) or "none"))
+print("  nodes at scan time : %s" % (", ".join(at_scan) or "none"))
+PY
 
 echo
 echo "--- top signatures ---"
-grep -E "^(#[0-9]+ |  panic :|  frame :|  how   :)" "$OUT/panics_all.txt" \
-  | head -60 | cut -c1-140 || true
+grep -E "^(#[0-9]+ |  panic :|  frame :|  how   :|  build :|  build\?:|  link  :)" \
+  "$OUT/panics_all.txt" | head -80 | cut -c1-160 || true
 
 if [[ "$KEEP_CONSOLE" != "1" ]]; then
   echo

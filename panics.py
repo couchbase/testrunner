@@ -47,6 +47,17 @@ its logfile, or its top stack frame -- and the report says which of those it
 used, because a component read off a frame is solid while one guessed from
 surrounding log text is not.
 
+Build versions: the console log only states one on a server-scan marker
+("=== panic found in 8.0.3-5895 ==="), so that is the only authoritative source.
+Archive-scanned panics get no version -- the log simply does not carry it -- and
+the version in a suite name is NOT it (e.g. "..._vector_sift_7.6_P0" ran on
+8.0.3-5921). Where a node's build is known from the scan it is reported on a
+separate "build?:" line, never merged with the authoritative value.
+
+Locating a panic: pass --build-url to print the upstream console URL, and use
+the reported "in log: line N" to find the panic inside it. There is no per-panic
+deep link, because Jenkins cannot address a console line -- see console_link().
+
 Usage:
     ./panics.py console.txt                     # every unique panic, most frequent first
     ./panics.py console.txt --list-components   # what components/areas are present
@@ -54,7 +65,7 @@ Usage:
     ./panics.py console.txt --component search --related --full
     ./panics.py console.txt --area fts,xdcr     # by test area instead
     ./panics.py console.txt --min-sites 5       # hide one-off noise
-    ./panics.py console.txt --all-reports reports/   # every variant, single parse
+    ./panics.py console.txt --all-reports reports/ --build-url <upstream-build-url>
     ./panics.py console.txt --json              # machine-readable
     ./fetch_console.sh <build-url> - | ./panics.py -    # stream, no 300MB on disk
 """
@@ -77,7 +88,10 @@ SECTION_RE = re.compile(
 
 # "<logpath>:" is a grep match, "<logpath>-" is grep -A context. Both belong to
 # the same log region.
-LINE_RE = re.compile(r"^(?P<path>\S*?\.(?:log|txt|out))(?P<sep>[:-])(?P<rest>.*)$")
+# Extensions are listed explicitly on purpose. Broadening this to any extension
+# would make stack-frame lines like ".../src/runtime/panic.go:1181 +0x18" look
+# like a new log path and split a region in half.
+LINE_RE = re.compile(r"^(?P<path>\S*?\.(?:log|txt|out|json))(?P<sep>[:-])(?P<rest>.*)$")
 
 # A genuine panic token: lowercase "panic"/"fatal error" not glued inside a
 # base64-ish blob. Rejects "OpANicFdfi..." (wrong case) and "abcpanicdef".
@@ -186,6 +200,9 @@ GOROUTINE_RE = re.compile(r"^\s*goroutine \d+ \[[^\]]*\]:", re.M)
 ERLANG_TAIL_RE = re.compile(r'(?:\\?")?(?:\.\.\.)?(?:\\?")?>>.*$')
 # `..."">>` right before the wrapper closes means Erlang elided the message.
 ELIDED_RE = re.compile(r'\.\.\.\\?"?>>')
+# The core-dump check prints the node's build on its own line: "['8.1.0-2181\n']"
+COREDUMP_VERSION_RE = re.compile(r"^\[\s*'([5-9]\.\d+\.\d+-\d{3,5})")
+
 # A frame the log cut off mid-symbol tells us nothing reliable.
 TRUNCATED_FRAME_RE = re.compile(r'["<>]|\.\.\.')
 # "pkg/path.(*Type).Method(args)" or "pkg/path.Func(args)". The trailing "(" is
@@ -296,10 +313,28 @@ class Parser(object):
         self.dropped_fp = 0
         self.raw_hits = 0
         self.block_id = 0
+        # Line numbers let the report say where in the console a panic is.
+        # (Byte offsets are useless as links: Jenkins' progressiveText `start`
+        # indexes the raw stored log, not the text it serves.)
+        self.offset = 0
+        self.line_no = 0
+        self.context_offset = 0     # the "checking:"/section line above the block
+        self.marker_offset = 0
+        # The console log only states a build version in two places: on a
+        # server-scan panic marker, and on the core-dump check's version line.
+        # Collect both, keyed by node, so archive panics can at least be
+        # annotated with what that node was running when it was scanned.
+        self.node_versions = {}
 
     def feed(self, stream):
+        """`stream` yields bytes lines so line numbering is encoding-independent."""
+        offset = 0
         for raw in stream:
-            for rec in self.line(raw.rstrip("\n")):
+            self.offset = offset
+            self.line_no += 1
+            offset += len(raw)
+            line = raw.decode("utf-8", "replace").rstrip("\r\n")
+            for rec in self.line(line):
                 yield rec
         for rec in self.close_region():
             yield rec
@@ -313,6 +348,13 @@ class Parser(object):
             self.section_host = sm.group("host")
             self.archive = None
             self.version = ""
+            self.context_offset = self.offset
+            return
+
+        # "['8.1.0-2181\n']" -- the core-dump check printing the node's build.
+        cv = COREDUMP_VERSION_RE.match(line)
+        if cv and self.section_host:
+            self.node_versions.setdefault(self.section_host, cv.group(1))
             return
 
         if line.startswith(CHECKING):
@@ -320,6 +362,7 @@ class Parser(object):
                 yield rec
             self.in_block = False
             self.archive = line[len(CHECKING):].strip()
+            self.context_offset = self.offset
             return
 
         mm = MARKER_RE.search(line)
@@ -328,9 +371,17 @@ class Parser(object):
                 yield rec
             self.in_block = True
             self.block_id += 1
+            self.marker_offset = self.offset
+            if not self.archive:
+                # Server scan: the marker itself is the most specific anchor.
+                self.context_offset = self.offset
             self.version = (mm.group("version") or "").strip()
             hp = HOST_PREFIX_RE.match(line)
             self.node_hint = hp.group("host") if hp else ""
+            if self.version:
+                host = self.node_hint or self.section_host
+                if host:
+                    self.node_versions[host] = self.version
             return
 
         if not self.in_block:
@@ -415,6 +466,10 @@ class Parser(object):
             "component": "", "severity": "", "error": "", "stack": "",
             "event_time": "", "truncated": False, "region": "",
             "block": self.block_id,
+            "offset": self.context_offset,
+            "marker_offset": self.marker_offset,
+            "line": self.line_no,
+            "node_version": "",
             "scan": "archive" if self.archive else "server",
         }
         nm = NODE_RE.search(path)
@@ -500,7 +555,8 @@ def group(records):
             "message": rec["message"], "frame": rec["frame"],
             "frames": Counter(), "components": Counter(), "count": 0, "trunc": 0,
             "nodes": Counter(), "suites": Counter(), "logfiles": Counter(),
-            "versions": Counter(), "scans": Counter(), "tests": set(),
+            "versions": Counter(), "node_versions": Counter(),
+            "dates": Counter(), "lines": [], "scans": Counter(), "tests": set(),
             "attributions": Counter(), "areas": Counter(),
             "blocks": set(), "sibling_messages": Counter(),
             "sibling_frames": Counter(), "sibling_components": Counter(),
@@ -517,6 +573,12 @@ def group(records):
             g["suites"][rec["suite"]] += 1
         if rec["version"]:
             g["versions"][rec["version"]] += 1
+        if rec["node_version"]:
+            g["node_versions"][rec["node_version"]] += 1
+        if rec["collected"]:
+            g["dates"][rec["collected"][:8]] += 1
+        if len(g["lines"]) < 25 and rec["line"] not in g["lines"]:
+            g["lines"].append(rec["line"])
         g["scans"][rec["scan"]] += 1
         g["blocks"].add(rec["block"])
         g["logfiles"][rec["logfile"]] += 1
@@ -539,15 +601,30 @@ def absorb(dst, src):
     dst["count"] += src["count"]
     dst["trunc"] += src["trunc"]
     for field in ("components", "nodes", "suites", "logfiles", "frames",
-                  "versions", "scans", "attributions", "areas",
-                  "sibling_messages", "sibling_frames", "sibling_components"):
+                  "versions", "node_versions", "dates", "scans", "attributions",
+                  "areas", "sibling_messages", "sibling_frames",
+                  "sibling_components"):
         dst[field].update(src[field])
     dst["tests"] |= src["tests"]
     dst["blocks"] |= src["blocks"]
+    merged = dst["lines"] + [n for n in src["lines"] if n not in dst["lines"]]
+    dst["lines"] = sorted(merged)[:25]
     if len(src["frame"]) > len(dst["frame"]):
         dst["frame"] = src["frame"]
     if len(src["example"]["stack"]) > len(dst["example"]["stack"]):
         dst["example"] = src["example"]
+
+
+def attach_node_versions(records, node_versions):
+    """A panic block only states a version on the server scan. For archive
+    panics, note what that node was running when core_dump_checker scanned it --
+    but keep it in a separate field, never merged with the authoritative value:
+    nodes get reimaged constantly, so a months-old archive was very likely
+    collected on a different build than the one the node runs today."""
+    for rec in records:
+        if not rec["version"]:
+            rec["node_version"] = node_versions.get(rec["node"], "")
+    return records
 
 
 def merge_truncated(groups):
@@ -634,7 +711,35 @@ def label(g):
                     for c, n in g["components"].most_common())
 
 
-def report(groups, show_full, out):
+def archive_link(base_url, archive):
+    """Turn a collected-archive path into a URL, if the team serves those paths
+    somewhere. The archive path is the strongest per-panic identifier the log
+    carries, so this is the closest thing to a per-panic link that can actually
+    work -- but only the team knows the base, hence the opt-in flag."""
+    if not base_url or not archive:
+        return ""
+    path = archive
+    for prefix in ("/data/workspace/", "/data/", "/"):
+        if path.startswith(prefix):
+            path = path[len(prefix):]
+            break
+    return "%s/%s" % (base_url.rstrip("/"), path)
+
+
+def console_link(build_url):
+    """Link to the upstream build's console.
+
+    Deliberately NOT a per-panic deep link. Jenkins offers no way to address a
+    line: /logText/progressiveText?start=N indexes the raw stored log, not the
+    text it returns, and the two drift apart by megabytes -- a "deep link" built
+    from a text offset lands somewhere unrelated. Use the reported line number
+    and the archive path to locate the panic within the log instead."""
+    if not build_url:
+        return ""
+    return "%s/consoleFull" % build_url.rstrip("/")
+
+
+def report(groups, show_full, out, build_url="", archive_base=""):
     for i, g in enumerate(sorted(groups.values(), key=lambda x: -x["count"]), 1):
         out.write("=" * 100 + "\n")
         out.write("#%-3d %s  (%d crash site%s, %d node%s, %d suite%s)\n" % (
@@ -663,7 +768,23 @@ def report(groups, show_full, out):
             "%s x%d" % (k, v) for k, v in g["logfiles"].most_common(4)))
         if g["versions"]:
             out.write("  build : %s\n" % ", ".join(
-                "%s x%d" % (k, v) for k, v in g["versions"].most_common(4)))
+                "%s x%d" % (k, v) for k, v in g["versions"].most_common(6)))
+        if g["node_versions"] and not g["versions"]:
+            # Deliberately a separate, hedged line -- see attach_node_versions().
+            out.write("  build?: %s\n" % ", ".join(
+                "%s x%d" % (k, v) for k, v in g["node_versions"].most_common(4)))
+            out.write("          ^ what these nodes ran when scanned, not "
+                      "necessarily the build that crashed --\n"
+                      "            compare against 'dated' above; nodes are "
+                      "reimaged between runs\n")
+        elif not g["versions"]:
+            out.write("  build : unknown (not stated in the console log for "
+                      "archive-scanned panics)\n")
+        if g["dates"]:
+            days = sorted(g["dates"])
+            span = days[0] if len(days) == 1 else "%s .. %s" % (days[0], days[-1])
+            out.write("  dated : %s (%d distinct day%s)\n" % (
+                span, len(days), "" if len(days) == 1 else "s"))
         out.write("  scan  : %s\n" % ", ".join(
             "%s x%d" % (k, v) for k, v in g["scans"].most_common()))
         if g["areas"]:
@@ -682,6 +803,16 @@ def report(groups, show_full, out):
             out.write("  sample: %s\n" % ex["archive"])
         elif ex["logpath"]:
             out.write("  sample: %s on %s\n" % (ex["logpath"], ex["node"] or "?"))
+        out.write("  in log: line %d%s\n" % (
+            ex["line"],
+            "" if len(g["lines"]) < 2 else
+            " (also lines %s)" % ", ".join(str(n) for n in g["lines"][1:4])))
+        link = console_link(build_url)
+        if link:
+            out.write("  console: %s\n" % link)
+        alink = archive_link(archive_base, ex["archive"])
+        if alink:
+            out.write("  archive: %s\n" % alink)
         if ex["event_time"]:
             out.write("  when  : %s\n" % ex["event_time"])
         if show_full and ex["stack"]:
@@ -724,10 +855,14 @@ def build_metrics(groups, records, parser):
                  "frames": v["frames"]})
             for k, v in per_comp.items()),
         "by_test_area": areas.most_common(),
+        "builds_seen": sorted(set(
+            v for g in groups.values() for v in g["versions"])),
+        "node_builds_at_scan": sorted(set(
+            v for g in groups.values() for v in g["node_versions"])),
     }
 
 
-def json_payload(selected):
+def json_payload(selected, build_url="", archive_base=""):
     return [{
         "message": g["message"], "frame": g["frame"],
         "frames": g["frames"].most_common(),
@@ -741,7 +876,12 @@ def json_payload(selected):
         "suites": g["suites"].most_common(),
         "logfiles": g["logfiles"].most_common(),
         "versions": g["versions"].most_common(),
+        "node_versions_at_scan": g["node_versions"].most_common(),
+        "dates": sorted(g["dates"]),
         "scans": g["scans"].most_common(),
+        "console_lines": g["lines"],
+        "console_url": console_link(build_url),
+        "archive_url": archive_link(archive_base, g["example"]["archive"]),
         "tests": sorted(g["tests"]),
         "sample_archive": g["example"]["archive"],
         "sample_logpath": g["example"]["logpath"],
@@ -761,6 +901,14 @@ def write_header(out, groups, selected, records, parser):
     out.write("  identified by frame only     : %d signatures "
               "(panic header outside grep window)\n" % len(headerless))
     out.write("  with no component attributed : %d signatures\n" % len(unattributed))
+    server_regions = sum(1 for r in records if r["scan"] == "server")
+    if not server_regions:
+        out.write("Build versions                 : unavailable -- this log has "
+                  "no server-scan section, and that is\n"
+                  "                                 the only place a build "
+                  "version appears. (An aborted upstream\n"
+                  "                                 build often stops before "
+                  "that phase.)\n")
     comps = all_components(groups)
     out.write("Signatures per component       : %s\n" % (", ".join(
         "%s=%d" % (k, v) for k, v in comps.most_common()) or "none"))
@@ -805,7 +953,8 @@ def all_components(groups):
     return comps
 
 
-def write_all_reports(outdir, groups, records, parser):
+def write_all_reports(outdir, groups, records, parser, build_url="",
+                      archive_base=""):
     """Emit every report variant from a single parse -- the console log is ~300MB,
     so re-reading it once per report wastes minutes in CI."""
     if not os.path.isdir(outdir):
@@ -825,10 +974,11 @@ def write_all_reports(outdir, groups, records, parser):
     for name, sel, full in variants:
         with open(path(name), "w") as fh:
             write_header(fh, groups, sel, records, parser)
-            report(sel, full, fh)
+            report(sel, full, fh, build_url, archive_base)
 
     with open(path("panics_all.json"), "w") as fh:
-        json.dump(json_payload(select(groups)), fh, indent=2)
+        json.dump(json_payload(select(groups), build_url, archive_base), fh,
+                  indent=2)
         fh.write("\n")
 
     # One file per component, so each team can open just their own artifact.
@@ -841,7 +991,7 @@ def write_all_reports(outdir, groups, records, parser):
             fh.write("Panics attributed to component: %s\n" % comp)
             fh.write("(includes signatures whose same-block sibling pointed here)\n\n")
             write_header(fh, groups, sel, records, parser)
-            report(sel, True, fh)
+            report(sel, True, fh, build_url, archive_base)
 
     with open(path("summary.txt"), "w") as fh:
         write_header(fh, groups, select(groups), records, parser)
@@ -865,6 +1015,12 @@ def main():
                     help="hide signatures with fewer than N crash sites")
     ap.add_argument("--list-components", action="store_true",
                     help="list the components and test areas found, then exit")
+    ap.add_argument("--archive-base-url", default="",
+                    help="base URL that serves the collected /data/workspace "
+                         "archives; turns each panic's diag.zip path into a link")
+    ap.add_argument("--build-url", default="",
+                    help="upstream core_dump_checker build URL; turns each panic "
+                         "into a clickable deep link into that console log")
     ap.add_argument("--full", action="store_true", help="print full stack traces")
     ap.add_argument("--json", action="store_true", help="emit JSON")
     ap.add_argument("--metrics", action="store_true",
@@ -874,21 +1030,24 @@ def main():
                          "(use this in CI instead of running the script repeatedly)")
     args = ap.parse_args()
 
-    stream = sys.stdin if args.logfile == "-" else open(
-        args.logfile, "r", encoding="utf-8", errors="replace")
+    # Binary read: the log mixes encodings across services, and decoding per
+    # line keeps one bad byte from killing the parse.
+    stream = sys.stdin.buffer if args.logfile == "-" else open(args.logfile, "rb")
     parser = Parser()
     try:
         records = list(parser.feed(stream))
     finally:
-        if stream is not sys.stdin:
+        if args.logfile != "-":
             stream.close()
 
+    attach_node_versions(records, parser.node_versions)
     groups = merge_truncated(group(records))
     correlate_blocks(groups, records)
     backfill_components(groups)
 
     if args.all_reports:
-        summary = write_all_reports(args.all_reports, groups, records, parser)
+        summary = write_all_reports(args.all_reports, groups, records, parser,
+                                    args.build_url, args.archive_base_url)
         with open(summary) as fh:
             sys.stdout.write(fh.read())
         return
@@ -915,12 +1074,14 @@ def main():
         return
 
     if args.json:
-        json.dump(json_payload(selected), sys.stdout, indent=2)
+        json.dump(json_payload(selected, args.build_url, args.archive_base_url),
+                  sys.stdout, indent=2)
         sys.stdout.write("\n")
         return
 
     write_header(sys.stdout, groups, selected, records, parser)
-    report(selected, args.full, sys.stdout)
+    report(selected, args.full, sys.stdout, args.build_url,
+           args.archive_base_url)
 
 
 if __name__ == "__main__":
