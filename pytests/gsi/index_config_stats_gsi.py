@@ -884,7 +884,7 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests, QueryHelperT
         )
         errors = []
         for node in index_nodes:
-            remote = RemoteMachineShellConnection(node, verbose=False)
+            remote = RemoteMachineShellConnection(node)
             try:
                 self.log.info(f"{label}Restarting indexer on {node.ip}")
                 remote.stop_indexer()
@@ -1022,7 +1022,7 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests, QueryHelperT
         """
         errors = []
         for index_node in index_nodes:
-            shell = RemoteMachineShellConnection(index_node, verbose=False)
+            shell = RemoteMachineShellConnection(index_node)
             try:
                 pid = self._get_indexer_pid(shell, index_node.ip, label=label)
                 if pid is None:
@@ -1182,7 +1182,7 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests, QueryHelperT
         # the test would wrongly look like the flag doesn't work.
         original_sysfs_settings = {}
         for index_node in index_nodes:
-            shell = RemoteMachineShellConnection(index_node, verbose=False)
+            shell = RemoteMachineShellConnection(index_node)
             try:
                 original_sysfs_settings[index_node.ip] = (
                     self._capture_sysfs_thp_settings(shell, index_node.ip)
@@ -1193,7 +1193,7 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests, QueryHelperT
         try:
             # ---- Phase 0c: Force THP on at the OS level on every index node ----
             for index_node in index_nodes:
-                shell = RemoteMachineShellConnection(index_node, verbose=False)
+                shell = RemoteMachineShellConnection(index_node)
                 try:
                     self._write_sysfs_thp_settings(
                         shell, index_node.ip,
@@ -1284,7 +1284,7 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests, QueryHelperT
         finally:
             # ---- Cleanup: put each node's OS-level THP posture back the way it was ----
             for index_node in index_nodes:
-                shell = RemoteMachineShellConnection(index_node, verbose=False)
+                shell = RemoteMachineShellConnection(index_node)
                 try:
                     self._write_sysfs_thp_settings(
                         shell, index_node.ip,
