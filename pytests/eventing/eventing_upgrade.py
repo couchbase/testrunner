@@ -1,14 +1,15 @@
-import json, logging, os, queue, time
+import json, logging, os, queue, time, requests
 from threading import Thread
 
 from eventing.eventing_base import EventingBaseTest
 from membase.api.rest_client import RestHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
-from lib.testconstants import STANDARD_BUCKET_PORT
+from lib.testconstants import STANDARD_BUCKET_PORT, MIN_KV_QUOTA, INDEX_QUOTA, CBAS_QUOTA, EVENTING_QUOTA
 from lib.membase.api.rest_client import RestConnection
 from lib.remote.remote_util import RemoteMachineShellConnection
 from lib.couchbase_helper.encryption_at_rest_helper import EncryptionAtRestHelper
 from lib.membase.helper.encryption_at_rest_helper import EncryptionUtil
+from lib.collection.collections_rest_client import CollectionsRest
 from membase.api.exception import RebalanceFailedException
 from pytests.security.ntonencryptionBase import ntonencryptionBase
 from pytests.security.jwt_utils import JWTUtils
@@ -26,23 +27,38 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
         log.info("==============  EventingUpgrade setup has started ==============")
         TestInputSingleton.input.test_params.setdefault('bucket_size', 100)
         TestInputSingleton.input.test_params.setdefault('bucket_storage', 'couchstore')
+        TestInputSingleton.input.test_params.setdefault('src_bucket_name', 'eventing_src')
+        TestInputSingleton.input.test_params.setdefault('dst_bucket_name', 'eventing_dst')
+        TestInputSingleton.input.test_params.setdefault('dst_bucket_name1', 'eventing_dst_timers')
+        TestInputSingleton.input.test_params.setdefault('metadata_bucket_name', 'metadata')
+        TestInputSingleton.input.test_params.setdefault('host', 'local')
         super(EventingUpgrade, self).setUp()
+        try:
+            requests.get(self.hostname, timeout=10)
+        except requests.exceptions.RequestException as e:
+            raise Exception(
+                "Curl handler target '{0}' is not reachable. Failing fast instead of "
+                "running the full upgrade cycle but fail due to curl connection failures. "
+                "Underlying error: {1}".format(self.hostname, e))
         self.init_nodes = False
         self.rest = RestConnection(self.master)
         self.server = self.master
         self.queue = queue.Queue()
-        self.src_bucket_name = self.input.param('src_bucket_name', 'src_bucket')
-        self.eventing_log_level = self.input.param('eventing_log_level', 'INFO')
-        self.dst_bucket_name = self.input.param('dst_bucket_name', 'dst_bucket')
-        self.dst_bucket_name1 = self.input.param('dst_bucket_name1', 'dst_bucket1')
-        self.dst_bucket_curl = self.input.param('dst_bucket_curl', 'dst_bucket_curl')
-        self.source_bucket_mutation = self.input.param('source_bucket_mutation', 'source_bucket_mutation')
-        self.metadata_bucket_name = self.input.param('metadata_bucket_name', 'metadata')
-        self.n1ql_op_dst = self.input.param('n1ql_op_dst', 'n1ql_op_dst')
-        self.analytics_dst = self.input.param('analytics_dst', 'analytics_dst')
-        self.fts_dst = self.input.param('fts_dst', 'fts_dst')
-        self.during_upgrade_src_bucket_name = self.input.param('during_upgrade_src_bucket_name', 'during_upgrade_src_bucket')
-        self.during_upgrade_dst_bucket_name = self.input.param('during_upgrade_dst_bucket_name', 'during_upgrade_dst_bucket')
+        self.num_test_buckets = 7
+        self.bucket_ram_mb = 100
+        self.travel_sample_ram_mb = 300
+        self.fts_quota_mb = 1024
+        self.during_upgrade_src_bucket_name = self.input.param('during_upgrade_src_bucket_name', 'eventing_during_upgrade_src')
+        self.during_upgrade_dst_bucket_name = self.input.param('during_upgrade_dst_bucket_name', 'eventing_during_upgrade_dst')
+        self.n1ql_bucket_name = self.input.param('n1ql_op_dst', 'n1ql_op_dst')
+        self.event_scope_name = self.input.param('event_scope_name', 'event')
+        self.src_collection_name = 'src'
+        self.sbm_collection_name = 'sbm'
+        self.on_deploy_collection_name = 'on_deploy'
+        self.curl_collection_name = self.input.param('curl_collection_name', 'curl')
+        self.analytics_collection_name = self.input.param('analytics_collection_name', 'analytics')
+        self.fts_collection_name = self.input.param('fts_collection_name', 'fts')
+        self.n1ql_collection_name = 'coll_0'
         self.gens_load = self.generate_docs(self.docs_per_day)
         self.upgrade_version = self.input.param("upgrade_version")
         #self.exported_handler_version = self.input.param("exported_handler_version", '6.6.1')
@@ -63,6 +79,10 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
         # Handler tracking — populated during deploy, used by pause/resume helpers
         self.all_handler_names = []
         log.info("==============  EventingUpgrade setup has completed ==============")
+
+    def _verify_doc_count(self, namespace, expected_count, *args, **kwargs):
+        log.info("Verifying doc count for {0}, expecting {1}".format(namespace, expected_count))
+        return self.verify_doc_count_collections(namespace, expected_count, *args, **kwargs)
 
     def tearDown(self):
         """Clean up FTS index, analytics link, then delegate to parent tearDown."""
@@ -118,7 +138,7 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
         # Re-assert memory quotas after upgrade — new version may auto-detect different values
         self._set_memory_quotas()
         # Post-upgrade features: collections, FTS, analytics, new handlers
-        self._create_collections_on_all_buckets()
+        self._create_event_scope_collections()
         self._setup_fts_index()
         self._setup_analytics()
         self._deploy_post_upgrade_handlers()
@@ -154,7 +174,7 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
         # Re-assert memory quotas after upgrade — new nodes may have different auto-detected values
         self._set_memory_quotas()
         # Post-upgrade features: collections, FTS, analytics, new handlers
-        self._create_collections_on_all_buckets()
+        self._create_event_scope_collections()
         self._setup_fts_index()
         self._setup_analytics()
         self._deploy_post_upgrade_handlers()
@@ -189,7 +209,7 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
         # Re-assert memory quotas after upgrade — swapped nodes may have different auto-detected values
         self._set_memory_quotas()
         # Post-upgrade features: collections, travel-sample, FTS, analytics, new handlers
-        self._create_collections_on_all_buckets()
+        self._create_event_scope_collections()
         self._load_travel_sample_post_upgrade()
         self._setup_fts_index()
         self._setup_analytics()
@@ -232,7 +252,7 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
         self._verify_pre_upgrade_handlers_survived()
         self._set_memory_quotas()
         # Post-upgrade features: collections, travel-sample, FTS, analytics, new handlers
-        self._create_collections_on_all_buckets()
+        self._create_event_scope_collections()
         self._load_travel_sample_post_upgrade()
         self._setup_fts_index()
         self._setup_analytics()
@@ -303,7 +323,7 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
         self._switch_master(node1)
         self.add_built_in_server_user()
         self.wait_for_handler_state("bucket_op", "deployed")
-        self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * 2016)
+        self._verify_doc_count("{0}._default._default".format(self.dst_bucket_name), self.docs_per_day * 2016)
 
         # Remove node2 (second eventing node) from the cluster
         log.info("Removing second eventing node (node2) from cluster")
@@ -337,7 +357,7 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
             self.fail("Rebalance-in of new eventing node should succeed after eventing producer recovered")
 
         self.wait_for_handler_state("bucket_op", "deployed")
-        self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * 2016)
+        self._verify_doc_count("{0}._default._default".format(self.dst_bucket_name), self.docs_per_day * 2016)
 
         self.undeploy_function_by_name("bucket_op")
         self.rest.delete_single_function("bucket_op", self.function_scope)
@@ -396,7 +416,7 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
 
         if deploy_functions:
             self.wait_for_handler_state("bucket_op", "deployed")
-            self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * 2016)
+            self._verify_doc_count("{0}._default._default".format(self.dst_bucket_name), self.docs_per_day * 2016)
 
         # Add a new eventing node - hangs if functions are present
         log.info("Step 3: adding new eventing node")
@@ -438,7 +458,7 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
 
         if deploy_functions:
             self.wait_for_handler_state("bucket_op", "deployed")
-            self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * 2016)
+            self._verify_doc_count("{0}._default._default".format(self.dst_bucket_name), self.docs_per_day * 2016)
             self.undeploy_function_by_name("bucket_op")
             self.rest.delete_single_function("bucket_op", self.function_scope)
 
@@ -449,10 +469,13 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
     # Common Helper Methods — shared by offline and online upgrade tests
     ###########################################################################
 
+    def _ns(self, bucket, collection, scope=None):
+        return "{0}.{1}.{2}".format(bucket, scope or self.event_scope_name, collection)
+
     def _set_memory_quotas(self):
         """Set explicit service memory quotas right after cluster setup, before
         any buckets exist, so auto-detected quotas don't over-commit RAM on small
-        test machines (KV=1500, Index=256, FTS=3000, CBAS=1024, Eventing=512)."""
+        test machines (KV=computed, Index=256, FTS=1024, CBAS=1024, Eventing=512)."""
         rest = RestConnection(self.master)
         # Delete default bucket if it exists (e.g., when run without default_bucket=False)
         try:
@@ -461,12 +484,13 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
                 self.sleep(5, "Waiting for default bucket deletion before setting memory quota")
         except Exception:
             pass
+        kv_quota = max(MIN_KV_QUOTA, self.num_test_buckets * self.bucket_ram_mb + self.travel_sample_ram_mb)
         quotas = {
-            'memoryQuota': 1500,
-            'indexMemoryQuota': 256,
-            'ftsMemoryQuota': 3000,
-            'cbasMemoryQuota': 1024,
-            'eventingMemoryQuota': 512,
+            'memoryQuota': kv_quota,
+            'indexMemoryQuota': INDEX_QUOTA,
+            'ftsMemoryQuota': self.fts_quota_mb,
+            'cbasMemoryQuota': CBAS_QUOTA,
+            'eventingMemoryQuota': EVENTING_QUOTA,
         }
         for service, mb in quotas.items():
             log.info("Setting {0} = {1}MB".format(service, mb))
@@ -475,11 +499,12 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
                 log.error("FAILED to set {0} to {1}MB — API returned False".format(service, mb))
             else:
                 log.info("Successfully set {0} = {1}MB".format(service, mb))
-        log.info("Service memory quotas set: KV=1500, Index=256, FTS=3000, CBAS=1024, Eventing=512")
+        log.info("Service memory quotas set: KV={0}, Index={1}, FTS={2}, CBAS={3}, Eventing={4}".format(
+            kv_quota, INDEX_QUOTA, self.fts_quota_mb, CBAS_QUOTA, EVENTING_QUOTA))
 
     def _create_upgrade_buckets(self):
         """Create all buckets needed by the upgrade test (quotas already set)."""
-        self.bucket_size = 100
+        self.bucket_size = self.bucket_ram_mb
         log.info("Creating the required buckets in the initial version")
         bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
                                                    replicas=self.num_replicas,
@@ -487,15 +512,11 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
         bucket_names = [
             self.src_bucket_name,
             self.dst_bucket_name,
-            self.metadata_bucket_name,
             self.dst_bucket_name1,
-            self.dst_bucket_curl,
-            self.source_bucket_mutation,
-            self.n1ql_op_dst,
-            self.analytics_dst,
-            self.fts_dst,
+            self.metadata_bucket_name,
             self.during_upgrade_src_bucket_name,
             self.during_upgrade_dst_bucket_name,
+            self.n1ql_bucket_name,
         ]
         for i, name in enumerate(bucket_names):
             self.cluster.create_standard_bucket(name=name, port=STANDARD_BUCKET_PORT + 1 + i,
@@ -510,6 +531,7 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
         if not self.during_upgrade_src_bucket:
             self.fail("during_upgrade_src_bucket '{0}' not found in cluster buckets: {1}".format(
                 self.during_upgrade_src_bucket_name, [b.name for b in self.buckets]))
+        self._create_event_scope_collections()
 
     def _load_pre_upgrade_data(self):
         """Load generated docs into source bucket before upgrade."""
@@ -545,13 +567,17 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
             self.kill_producer(eventing_node)
             self.sleep(120, "Waiting for eventing producer to restart")
 
-    def _create_pre_upgrade_handler(self, appname, appcode, meta_bucket="metadata",
-                                    src_bucket="src_bucket",
+    def _create_pre_upgrade_handler(self, appname, appcode, meta_bucket=None,
+                                    src_bucket=None,
                                     bucket_bindings=None,
                                     dcp_stream_boundary="everything"):
         """Create a handler with bucket-level bindings for pre-upgrade (old version without collections)."""
+        if meta_bucket is None:
+            meta_bucket = self.metadata_bucket_name
+        if src_bucket is None:
+            src_bucket = self.src_bucket_name
         if bucket_bindings is None:
-            bucket_bindings = ["dst_bucket.dst_bucket.rw"]
+            bucket_bindings = ["dst_bucket.{0}.rw".format(self.dst_bucket_name)]
         body = {}
         body['appname'] = appname
         script_dir = os.path.dirname(__file__)
@@ -585,7 +611,8 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
         self.rest = RestConnection(self.restServer)
         log.info("Deploying pre-upgrade handlers on initial version")
         self._create_pre_upgrade_handler("bucket_op", "handler_code/delete_doc_bucket_op.js")
-        self._create_pre_upgrade_handler("timers", "handler_code/bucket_op_with_timers_upgrade.js", bucket_bindings=["dst_bucket.dst_bucket1.rw"])
+        self._create_pre_upgrade_handler("timers", "handler_code/bucket_op_with_timers_upgrade.js",
+            bucket_bindings=["dst_bucket.{0}.rw".format(self.dst_bucket_name1)])
         self._create_pre_upgrade_handler("during_upgrade_handler", "handler_code/delete_doc_bucket_op.js",
             src_bucket=self.during_upgrade_src_bucket_name,
             bucket_bindings=["dst_bucket.{0}.rw".format(self.during_upgrade_dst_bucket_name)])
@@ -662,13 +689,20 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
         self.wait_for_handler_state("bucket_op", "undeployed")
         self.wait_for_handler_state("timers", "deployed")
         self.deploy_handler_by_name("bucket_op")
-        self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * 2016)
-        self.verify_doc_count_collections("dst_bucket1._default._default", self.docs_per_day * 2016)
+        self._verify_doc_count("{0}._default._default".format(self.dst_bucket_name), self.docs_per_day * 2016)
+        self._verify_doc_count("{0}._default._default".format(self.dst_bucket_name1), self.docs_per_day * 2016)
 
-    def _create_collections_on_all_buckets(self):
-        buckets = RestConnection(self.master).get_buckets()
-        for bucket in buckets:
-            self.create_scope_collection(bucket.name, "event", "coll_0")
+    def _create_event_scope_collections(self):
+        collections_rest = CollectionsRest(self.master)
+        collections_rest.create_scope(self.src_bucket_name, self.event_scope_name)
+        collections_rest.create_collection(self.src_bucket_name, self.event_scope_name, self.src_collection_name)
+        collections_rest.create_collection(self.src_bucket_name, self.event_scope_name, self.sbm_collection_name)
+        collections_rest.create_scope(self.dst_bucket_name, self.event_scope_name)
+        for collection_name in (self.on_deploy_collection_name, self.curl_collection_name,
+                                self.analytics_collection_name, self.fts_collection_name):
+            collections_rest.create_collection(self.dst_bucket_name, self.event_scope_name, collection_name)
+        collections_rest.create_scope(self.n1ql_bucket_name, self.event_scope_name)
+        collections_rest.create_collection(self.n1ql_bucket_name, self.event_scope_name, self.n1ql_collection_name)
 
     def _setup_fts_index(self):
         """Create the FTS index on travel-sample and wait for it to ingest.
@@ -732,35 +766,41 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
         self.add_built_in_server_user()
         self.restServer = self.get_nodes_from_services_map(service_type="eventing")
         self.rest = RestConnection(self.restServer)
+        meta_ns = "{0}._default._default".format(self.metadata_bucket_name)
+        src_ns = self._ns(self.src_bucket_name, self.src_collection_name)
+        sbm_ns = self._ns(self.src_bucket_name, self.sbm_collection_name)
         # Core handlers: sbm, curl, n1ql, on_deploy
         self.create_function_with_collection(
             "sbm", "handler_code/ABO/insert_sbm.js",
-            src_namespace="source_bucket_mutation.event.coll_0",
-            collection_bindings=["src_bucket.source_bucket_mutation.event.coll_0.rw"])
-        self.hostname = "http://qa.sc.couchbase.com/"
+            src_namespace=sbm_ns, meta_namespace=meta_ns,
+            collection_bindings=["src_bucket.{0}.rw".format(sbm_ns)])
         self.create_function_with_collection(
             "curl", "handler_code/ABO/curl_get.js",
-            src_namespace="src_bucket.event.coll_0",
-            collection_bindings=["dst_bucket.dst_bucket_curl.event.coll_0.rw"],
+            src_namespace=src_ns, meta_namespace=meta_ns,
+            collection_bindings=["dst_bucket.{0}.rw".format(
+                self._ns(self.dst_bucket_name, self.curl_collection_name))],
             is_curl=True)
         self.create_function_with_collection(
             "n1ql", "handler_code/collections/n1ql_insert_update.js",
-            src_namespace="src_bucket.event.coll_0")
+            src_namespace=src_ns, meta_namespace=meta_ns)
         self.create_function_with_collection(
             "on_deploy", "handler_code/ondeploy_basic_bucket_op.js",
-            src_namespace="src_bucket.event.coll_0",
-            collection_bindings=["dst_bucket.dst_bucket.event.coll_0.rw"])
+            src_namespace=src_ns, meta_namespace=meta_ns,
+            collection_bindings=["dst_bucket.{0}.rw".format(
+                self._ns(self.dst_bucket_name, self.on_deploy_collection_name))])
         post_upgrade_handlers = ["sbm", "curl", "n1ql", "on_deploy"]
         # Optional: analytics and FTS handlers (require travel-sample)
         if include_fts_analytics:
             self.create_function_with_collection(
                 "analytics", "handler_code/analytics/analytics_basic_select.js",
-                src_namespace="src_bucket.event.coll_0",
-                collection_bindings=["dst_bucket.analytics_dst.event.coll_0.rw"])
+                src_namespace=src_ns, meta_namespace=meta_ns,
+                collection_bindings=["dst_bucket.{0}.rw".format(
+                    self._ns(self.dst_bucket_name, self.analytics_collection_name))])
             self.create_function_with_collection(
                 "fts_query", "handler_code/fts_query_support/match_query.js",
-                src_namespace="src_bucket.event.coll_0",
-                collection_bindings=["dst_bucket.fts_dst.event.coll_0.rw"])
+                src_namespace=src_ns, meta_namespace=meta_ns,
+                collection_bindings=["dst_bucket.{0}.rw".format(
+                    self._ns(self.dst_bucket_name, self.fts_collection_name))])
             post_upgrade_handlers.extend(["analytics", "fts_query"])
         # Deploy all handlers
         for handler in post_upgrade_handlers:
@@ -845,20 +885,23 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
     def _run_full_mutation_cycle(self, include_fts_analytics=True):
         """Load data, verify all handlers processed, delete data, verify cleanup."""
         doc_count = self.docs_per_day * 2016
+        sbm_ns = self._ns(self.src_bucket_name, self.sbm_collection_name)
+        src_ns = self._ns(self.src_bucket_name, self.src_collection_name)
+        n1ql_ns = self._ns(self.n1ql_bucket_name, self.n1ql_collection_name)
         # Load data into collection sources
-        self.load_data_to_collection(doc_count, namespace="source_bucket_mutation.event.coll_0")
-        self.load_data_to_collection(doc_count, namespace="src_bucket.event.coll_0")
+        self.load_data_to_collection(doc_count, namespace=sbm_ns)
+        self.load_data_to_collection(doc_count, namespace=src_ns)
         # Verify existing handlers
-        self.verify_doc_count_collections("dst_bucket_curl.event.coll_0", doc_count)
-        self.verify_doc_count_collections("n1ql_op_dst.event.coll_0", doc_count)
-        self.verify_doc_count_collections("source_bucket_mutation.event.coll_0", doc_count * 2)
+        self._verify_doc_count(self._ns(self.dst_bucket_name, self.curl_collection_name), doc_count)
+        self._verify_doc_count(n1ql_ns, doc_count)
+        self._verify_doc_count(sbm_ns, doc_count * 2)
         # Verify FTS/analytics handlers if deployed
         if include_fts_analytics:
-            self.verify_doc_count_collections("analytics_dst.event.coll_0", doc_count)
-            self.verify_doc_count_collections("fts_dst.event.coll_0", doc_count)
+            self._verify_doc_count(self._ns(self.dst_bucket_name, self.analytics_collection_name), doc_count)
+            self._verify_doc_count(self._ns(self.dst_bucket_name, self.fts_collection_name), doc_count)
         # Delete data from all sources
-        self.load_data_to_collection(doc_count, namespace="source_bucket_mutation.event.coll_0", is_delete=True)
-        self.load_data_to_collection(doc_count, namespace="src_bucket.event.coll_0", is_delete=True)
+        self.load_data_to_collection(doc_count, namespace=sbm_ns, is_delete=True)
+        self.load_data_to_collection(doc_count, namespace=src_ns, is_delete=True)
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False, batch_size=self.batch_size, op_type='delete')
         rest = RestConnection(self.master)
         dst_cleanup = rest.get_bucket_by_name(self.dst_bucket_name) + \
@@ -868,14 +911,14 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
         else:
             self.load(self.gens_load, buckets=dst_cleanup, verify_data=False, batch_size=self.batch_size, op_type='delete')
         # Verify all destinations are empty
-        self.verify_doc_count_collections("dst_bucket_curl.event.coll_0", 0)
-        self.verify_doc_count_collections("n1ql_op_dst.event.coll_0", 0)
-        self.verify_doc_count_collections("source_bucket_mutation.event.coll_0", doc_count)
-        self.verify_doc_count_collections("dst_bucket._default._default", 0)
-        self.verify_doc_count_collections("dst_bucket1._default._default", 0)
+        self._verify_doc_count(self._ns(self.dst_bucket_name, self.curl_collection_name), 0)
+        self._verify_doc_count(n1ql_ns, 0)
+        self._verify_doc_count(sbm_ns, doc_count)
+        self._verify_doc_count("{0}._default._default".format(self.dst_bucket_name), 0)
+        self._verify_doc_count("{0}._default._default".format(self.dst_bucket_name1), 0)
         if include_fts_analytics:
-            self.verify_doc_count_collections("analytics_dst.event.coll_0", 0)
-            self.verify_doc_count_collections("fts_dst.event.coll_0", 0)
+            self._verify_doc_count(self._ns(self.dst_bucket_name, self.analytics_collection_name), 0)
+            self._verify_doc_count(self._ns(self.dst_bucket_name, self.fts_collection_name), 0)
 
     def _pause_all_handlers(self):
         for name in self.all_handler_names:
@@ -888,23 +931,25 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
     def _run_pause_resume_cycle(self, include_fts_analytics=True):
         """Pause all handlers, load data while paused, resume, verify processing."""
         doc_count = self.docs_per_day * 2016
+        sbm_ns = self._ns(self.src_bucket_name, self.sbm_collection_name)
+        src_ns = self._ns(self.src_bucket_name, self.src_collection_name)
         self._pause_all_handlers()
         # Load data while handlers are paused
-        self.load_data_to_collection(doc_count, namespace="source_bucket_mutation.event.coll_0")
-        self.load_data_to_collection(doc_count, namespace="src_bucket.event.coll_0")
-        self.load_data_to_collection(doc_count, namespace="src_bucket._default._default")
+        self.load_data_to_collection(doc_count, namespace=sbm_ns)
+        self.load_data_to_collection(doc_count, namespace=src_ns)
+        self.load_data_to_collection(doc_count, namespace="{0}._default._default".format(self.src_bucket_name))
         # Resume all handlers
         self._resume_all_handlers()
         # Verify handlers processed the mutations after resume
-        self.verify_doc_count_collections("dst_bucket_curl.event.coll_0", doc_count)
-        self.verify_doc_count_collections("n1ql_op_dst.event.coll_0", doc_count)
-        self.verify_doc_count_collections("source_bucket_mutation.event.coll_0", doc_count * 3)
-        self.verify_doc_count_collections("dst_bucket._default._default", doc_count)
+        self._verify_doc_count(self._ns(self.dst_bucket_name, self.curl_collection_name), doc_count)
+        self._verify_doc_count(self._ns(self.n1ql_bucket_name, self.n1ql_collection_name), doc_count)
+        self._verify_doc_count(sbm_ns, doc_count * 3)
+        self._verify_doc_count("{0}._default._default".format(self.dst_bucket_name), doc_count)
         if include_fts_analytics:
-            self.verify_doc_count_collections("analytics_dst.event.coll_0", doc_count)
-            self.verify_doc_count_collections("fts_dst.event.coll_0", doc_count)
+            self._verify_doc_count(self._ns(self.dst_bucket_name, self.analytics_collection_name), doc_count)
+            self._verify_doc_count(self._ns(self.dst_bucket_name, self.fts_collection_name), doc_count)
         self.sleep(300)  # wait for timers to fire
-        self.verify_doc_count_collections("dst_bucket1._default._default", doc_count)
+        self._verify_doc_count("{0}._default._default".format(self.dst_bucket_name1), doc_count)
 
     def _verify_jwt_auth(self):
         """Verify eventing handler lifecycle operations work with JWT authentication."""
@@ -951,8 +996,10 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
         # Test handler lifecycle with JWT: create, deploy, pause, resume, undeploy, delete
         body = self.create_function_with_collection(
             "jwt_test", "handler_code/no_op.js",
-            src_namespace="src_bucket.event.coll_0",
-            collection_bindings=["dst_bucket.dst_bucket.event.coll_0.rw"])
+            src_namespace=self._ns(self.src_bucket_name, self.src_collection_name),
+            meta_namespace="{0}._default._default".format(self.metadata_bucket_name),
+            collection_bindings=["dst_bucket.{0}.rw".format(
+                self._ns(self.dst_bucket_name, self.on_deploy_collection_name))])
         self.deploy_function(body, jwt_token=jwt_token)
         self.pause_function(body, jwt_token=jwt_token)
         self.resume_function(body, jwt_token=jwt_token)
@@ -962,9 +1009,10 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
 
     def _verify_rbac(self):
         """Verify eventing_manage_functions role works after upgrade."""
-        payload = ("name=john&roles=data_reader[metadata],data_writer[metadata],"
-                   "data_writer[dst_bucket],data_dcp_reader[src_bucket],"
-                   "eventing_manage_functions[src_bucket:_default]&password=asdasd")
+        payload = ("name=john&roles=data_reader[{0}],data_writer[{0}],"
+                   "data_writer[{1}],data_dcp_reader[{2}],"
+                   "eventing_manage_functions[{2}:_default]&password=asdasd").format(
+            self.metadata_bucket_name, self.dst_bucket_name, self.src_bucket_name)
         self.rest.add_set_builtin_user(user_id="john", payload=payload)
         self._create_pre_upgrade_handler("test", "handler_code/no_op.js")
         self.deploy_handler_by_name("test")
@@ -977,10 +1025,30 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
     # Private helpers — offline upgrade only
     ###########################################################################
 
+    def _form_cluster_low_quota(self, servers, services):
+        set_services = self.initial_services(services)
+        if 4.5 > float(self.initial_version[:3]):
+            self.gsi_type = "forestdb"
+        self.quota = self._initialize_nodes(self.cluster, [servers[0]],
+                                            self.disabled_consistent_view,
+                                            self.rebalanceIndexWaitingDisabled,
+                                            self.rebalanceIndexPausingDisabled,
+                                            self.maxParallelIndexers,
+                                            self.maxParallelReplicaIndexers, self.port,
+                                            services=[set_services[0]])
+        if 5.0 <= float(self.initial_version[:3]):
+            self.add_built_in_server_user()
+        self.sleep(7, "wait to make sure node is ready")
+        self._set_memory_quotas()
+        for i in range(1, len(set_services)):
+            self.cluster.rebalance([servers[0]], [servers[i]], [],
+                                   use_hostnames=self.use_hostnames,
+                                   services=[set_services[i]])
+            self.sleep(10)
+
     def _install_and_setup_cluster(self):
         self._install(self.servers[:self.nodes_init])
-        self.operations(self.servers[:self.nodes_init], services="kv,index,n1ql-kv,eventing-kv,fts,cbas")
-        self._set_memory_quotas()
+        self._form_cluster_low_quota(self.servers[:self.nodes_init], "kv,index,n1ql-kv,eventing-kv,fts,cbas")
         self._install_travel_sample()
         self._capture_pre_upgrade_node_services()
 
@@ -1046,9 +1114,7 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
         self._install(self.servers[:self.nodes_init])
         self.initial_version = self.upgrade_version
         self._install(self.servers[self.nodes_init:self.num_servers])
-        self.operations(self.servers[:self.nodes_init],
-                        services="kv,index,n1ql-kv,eventing-kv,fts,cbas")
-        self._set_memory_quotas()
+        self._form_cluster_low_quota(self.servers[:self.nodes_init], "kv,index,n1ql-kv,eventing-kv,fts,cbas")
 
     def _eventing_background_load_loop(self, duration_secs=900, sleep_secs=30):
         bucket = self.during_upgrade_src_bucket[0]
@@ -1087,7 +1153,7 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
         log.info("Background load loop into during_upgrade_src_bucket completed: "
                  "{0} docs counted by loader, {1} docs actually in source".format(
                      self.during_upgrade_total_docs, src_count))
-        self.verify_doc_count_collections(
+        self._verify_doc_count(
             "{0}._default._default".format(self.during_upgrade_dst_bucket_name),
             src_count, expected_duplicate=True)
 
@@ -1120,6 +1186,7 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
         servers_out = self.servers[:self.nodes_init]
         self.cluster.rebalance(self.servers[:self.nodes_init], servers_in, servers_out, services=services,
                                sleep_before_rebalance=self.rebalance_settle_time)
+        self._switch_master(servers_in[0])
         self.sleep(300)
         self.log.info("Rebalance in all {0} nodes".format(self.input.param("upgrade_version", "")))
         self.log.info("Rebalanced out all old version nodes")
@@ -1161,6 +1228,7 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
                                sleep_before_rebalance=self.rebalance_settle_time)
         active_nodes.remove(self.servers[0])
         active_nodes.append(servers_in[0])
+        self.sleep(60, "Settling after ejecting old master via swap rebalance")
         # Discover the actual orchestrator on the fully-upgraded cluster
         status, content = ClusterOperationHelper.find_orchestrator(servers_in[0])
         self.assertTrue(status, msg="Unable to find orchestrator after swap rebalance: {0}:{1}".format(
@@ -1290,6 +1358,7 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
         active_nodes.remove(old_master)
         active_nodes.append(new_master)
 
+        self.sleep(60, "Settling after ejecting old master via failover upgrade")
         # Discover the actual orchestrator on the fully-upgraded cluster
         status, content = ClusterOperationHelper.find_orchestrator(new_master)
         self.assertTrue(status, msg="Unable to find orchestrator after failover upgrade: {0}:{1}".format(
