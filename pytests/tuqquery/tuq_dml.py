@@ -1778,3 +1778,80 @@ class DMLQueryTests(QueryTests):
 
         # Clean up
         self.run_cbq_query(f'DROP COLLECTION `{collection_name}` IF EXISTS', query_context='default._default')
+
+    ###################################################################################################################
+    # MB-72964 regression: ExpressionScan memory tracking underflow with named param in UPSERT FROM
+    ###################################################################################################################
+
+    def test_MB72964_upsert_from_named_param_memory_quota(self):
+        # MB-72964: parsedValue.Size() under-tracks memory for a named parameter containing a JSON
+        # array; SendUpsert releases full AnnotatedValue size -> uint64 underflow -> error 5500.
+        # Fixed in 8.0.4, 8.1.0, 7.6.13.
+        collection_name = "mb72964_upsert_test"
+        self.run_cbq_query(
+            f'CREATE COLLECTION `{collection_name}` IF NOT EXISTS',
+            query_context='default._default'
+        )
+        self.sleep(3)
+
+        docs = [
+            {"id": "user::1001", "doc": {"name": "Alex Rivera", "email": "alex.rivera@example.com",
+                                         "role": "admin", "status": "active"}},
+            {"id": "user::1002", "doc": {"name": "Sam Lee", "email": "sam.lee@example.com",
+                                         "role": "viewer", "status": "active"}},
+        ]
+
+        # Named param $docs: UPSERT FROM clause uses ExpressionScan to scan the array.
+        # A low memory_quota (500 bytes) triggers the underflow path that was fixed in MB-72964.
+        upsert_query = (
+            f'UPSERT INTO default._default.{collection_name}(KEY k, VALUE v) '
+            f'SELECT d.id AS k, d.doc AS v FROM $docs AS d'
+        )
+        query_params = {
+            '$docs': json.dumps(docs),
+            'memory_quota': '500',
+        }
+        try:
+            result = self.run_cbq_query(query=upsert_query, query_params=query_params)
+            self.assertEqual(
+                result['status'], 'success',
+                f'MB-72964 regression: UPSERT with named param $docs failed with error 5500 (memory underflow). '
+                f'Full result: {result}'
+            )
+            self.assertEqual(
+                result['metrics']['mutationCount'], len(docs),
+                f'Expected {len(docs)} mutations but got {result["metrics"].get("mutationCount")}'
+            )
+        except Exception as ex:
+            error_str = str(ex)
+            if '5500' in error_str:
+                self.fail(
+                    f'MB-72964 regression: got error 5500 (memory quota underflow) with named param in UPSERT FROM. '
+                    f'Error: {error_str}'
+                )
+            raise
+
+        # Verify inline array works the same way (baseline — was never affected by the bug).
+        inline_collection = "mb72964_inline_test"
+        self.run_cbq_query(
+            f'CREATE COLLECTION `{inline_collection}` IF NOT EXISTS',
+            query_context='default._default'
+        )
+        self.sleep(3)
+        inline_docs_literal = json.dumps(docs)
+        inline_query = (
+            f'UPSERT INTO default._default.{inline_collection}(KEY k, VALUE v) '
+            f'SELECT d.id AS k, d.doc AS v FROM {inline_docs_literal} AS d'
+        )
+        inline_result = self.run_cbq_query(
+            query=inline_query,
+            query_params={'memory_quota': '500'}
+        )
+        self.assertEqual(
+            inline_result['status'], 'success',
+            f'UPSERT with inline array failed unexpectedly: {inline_result}'
+        )
+
+        # Clean up
+        self.run_cbq_query(f'DROP COLLECTION `{collection_name}` IF EXISTS', query_context='default._default')
+        self.run_cbq_query(f'DROP COLLECTION `{inline_collection}` IF EXISTS', query_context='default._default')
