@@ -1,6 +1,8 @@
 
 """Shared encryption-at-rest primitives."""
 
+import re
+
 from lib.remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
 
@@ -11,24 +13,85 @@ class EncryptionAtRestHelper:
     def __init__(self, log):
         self.log = log
 
+    def get_os_type(self, node):
+        """Return the lower-cased OS type of a node ('windows', 'linux', ...)."""
+        shell = RemoteMachineShellConnection(node, verbose=False)
+        try:
+            return shell.extract_remote_info().type.lower()
+        finally:
+            shell.disconnect()
+
+    def to_shell_path(self, path, os_type):
+        """Rewrite a native path into one the node's shell accepts.
+
+        REST reports Windows paths as 'c:/Program Files/Couchbase/Server/...',
+        but every on-disk check here runs over cygwin sshd, which only resolves
+        '/cygdrive/c/Program Files/...'. The space is left unescaped -- callers
+        must wrap the result in double quotes when building a command.
+        """
+        if os_type != 'windows':
+            return path
+        path = path.replace('\\', '/')
+        drive = re.match(r'^([a-zA-Z]):/(.*)$', path)
+        if drive:
+            return "/cygdrive/{0}/{1}".format(drive.group(1).lower(), drive.group(2))
+        return path
+
+    def get_service_data_dir(self, node, subdir, os_type=None):
+        """Return the absolute, shell-usable '<data_path>/<subdir>' for a node.
+
+        Args:
+            node: Server object
+            subdir: per-service data directory, e.g. '@fts' or '@eventing'
+            os_type: pre-resolved OS type; looked up over SSH when omitted
+
+        Returns:
+            str: e.g. /opt/couchbase/var/lib/couchbase/data/@fts on Linux, or
+                 /cygdrive/c/Program Files/Couchbase/Server/var/lib/couchbase/data/@fts
+        """
+        if os_type is None:
+            os_type = self.get_os_type(node)
+        data_path = RestConnection(node).get_data_path().rstrip('/').rstrip('\\')
+        return "{0}/{1}".format(self.to_shell_path(data_path, os_type), subdir)
+
+    def _read_file_hex(self, shell, file_path, bytes_to_read):
+        """Read the first bytes of a remote file as a hex string.
+
+        `xxd` ships with vim, which is not installed on every image (notably the
+        cygwin environment on Windows nodes), so fall back to coreutils `od`.
+        """
+        output, _ = shell.execute_command(
+            f'xxd -l {bytes_to_read} -p "{file_path}" 2>/dev/null')
+        if output:
+            return ''.join(output).strip(), "xxd"
+        output, _ = shell.execute_command(
+            f'od -An -v -tx1 -N {bytes_to_read} "{file_path}" 2>/dev/null')
+        if output:
+            return ''.join(''.join(output).split()), "od"
+        return "", None
+
     def get_file_header_text(self, node, file_path, bytes_to_read=512):
         shell = RemoteMachineShellConnection(node, verbose=False)
-        cmd = f"xxd -l {bytes_to_read} -p {file_path} 2>/dev/null"
-        output, _ = shell.execute_command(cmd)
+        hex_str, reader = self._read_file_hex(shell, file_path, bytes_to_read)
+        if reader == "od":
+            self.log.debug(f"xxd unavailable on {node.ip}; read {file_path} with od")
 
-        if not output:
-            ls_out, _ = shell.execute_command(f"ls -la {file_path} 2>&1")
-            xxd_err_out, _ = shell.execute_command(f"xxd -l 64 {file_path} 2>&1")
-            file_type_out, _ = shell.execute_command(f"file {file_path} 2>&1")
+        if not hex_str:
+            ls_out, _ = shell.execute_command(f'ls -la "{file_path}" 2>&1')
+            xxd_err_out, _ = shell.execute_command(f'xxd -l 64 "{file_path}" 2>&1')
+            od_err_out, _ = shell.execute_command(f'od -An -v -tx1 -N 64 "{file_path}" 2>&1')
+            file_type_out, _ = shell.execute_command(f'file "{file_path}" 2>&1')
             shell.disconnect()
             ls_str = ' '.join(ls_out).strip() if ls_out else "no ls output"
             xxd_err_str = ' '.join(xxd_err_out).strip() if xxd_err_out else "(xxd also silent with stderr)"
+            od_err_str = ' '.join(od_err_out).strip() if od_err_out else "(od also silent with stderr)"
             file_type_str = ' '.join(file_type_out).strip() if file_type_out else "unknown"
-            diag = f"ls: [{ls_str}] | file: [{file_type_str}] | xxd -l 64 (with stderr): [{xxd_err_str}]"
-            return False, "", f"No output from xxd. {diag}"
+            diag = (f"ls: [{ls_str}] | file: [{file_type_str}] | "
+                    f"xxd -l 64 (with stderr): [{xxd_err_str}] | "
+                    f"od -N 64 (with stderr): [{od_err_str}]")
+            return False, "", f"No output from xxd or od. {diag}"
 
         shell.disconnect()
-        hex_str = ''.join(output).strip()
         try:
             raw_bytes = bytes.fromhex(hex_str)
             actual = raw_bytes.decode('ascii', errors='replace')
@@ -786,9 +849,7 @@ class EncryptionAtRestHelper:
         Returns:
             str: e.g. /opt/couchbase/var/lib/couchbase/data/@fts
         """
-        rest = RestConnection(node)
-        data_path = rest.get_data_path()
-        return f"{data_path.rstrip('/')}/{self.FTS_DATA_SUBDIR}"
+        return self.get_service_data_dir(node, self.FTS_DATA_SUBDIR)
 
     def _dir_exists(self, node, directory):
         """Return True if the directory exists on the node."""

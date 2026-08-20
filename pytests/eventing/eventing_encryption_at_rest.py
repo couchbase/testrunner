@@ -11,7 +11,7 @@ from pytests.eventing.eventing_base import EventingBaseTest
 
 log = logging.getLogger()
 
-EVENTING_LOG_ROOT = "/opt/couchbase/var/lib/couchbase/data/@eventing"
+EVENTING_DATA_SUBDIR = "@eventing"
 
 class EventingEncryptionAtRest(EventingBaseTest):
     STABLE_INTERVAL_S = 60000  # 1000 min — no accidental DEK rotation during setup
@@ -19,6 +19,7 @@ class EventingEncryptionAtRest(EventingBaseTest):
     def setUp(self):
         self.created_secret_ids = []
         self.log_encryption_enabled = False
+        self._log_root = None
         super(EventingEncryptionAtRest, self).setUp()
         handler_code = self.input.param("handler_code", "logger")
         if handler_code == "logger":
@@ -101,6 +102,22 @@ class EventingEncryptionAtRest(EventingBaseTest):
                 "Mutations not processed: current={} expected={}".format(current, expected)
             )
 
+    def _eventing_log_root(self):
+        """Absolute @eventing directory on the eventing node, resolved per OS.
+
+        The install prefix differs per platform (and is configurable), so it is
+        read from the node itself: on Windows the data path lives under
+        'c:/Program Files/...' and has to be rewritten to its cygwin form
+        before any of the shell checks below can see it.
+        """
+        if self._log_root is None:
+            eventing_node = self.get_nodes_from_services_map(
+                service_type="eventing", get_all_nodes=False)
+            self._log_root = self.ear_helper.get_service_data_dir(
+                eventing_node, EVENTING_DATA_SUBDIR)
+            self.log.info("Eventing log root: {}".format(self._log_root))
+        return self._log_root
+
     def _eventing_log_dir(self, bucket_name, scope_name):
         bucket_uuid = "b_" + self.rest.fetch_bucket_uuid(bucket_name)
         manifest = self.rest.get_bucket_manifest(bucket_name)
@@ -112,16 +129,18 @@ class EventingEncryptionAtRest(EventingBaseTest):
         if scope_id is None:
             raise Exception("Scope '{}' not found in bucket '{}' manifest".format(
                 scope_name, bucket_name))
-        return "{}/{}/{}".format(EVENTING_LOG_ROOT, bucket_uuid, scope_id)
+        return "{}/{}/{}".format(self._eventing_log_root(), bucket_uuid, scope_id)
 
     def _get_log_dir(self):
         if self.global_function_scope:
-            return EVENTING_LOG_ROOT
+            return self._eventing_log_root()
         return self._eventing_log_dir(self.src_bucket_name, "_default")
 
     def _list_log_files(self, node, log_dir):
         shell = RemoteMachineShellConnection(node)
-        cmd = "ls -1t {}/*.log* 2>/dev/null".format(log_dir)
+        # The directory is quoted (Windows install paths contain a space) while
+        # the glob is left outside the quotes so the shell still expands it.
+        cmd = 'ls -1t "{}"/*.log* 2>/dev/null'.format(log_dir)
         output, _ = shell.execute_command(cmd)
         shell.disconnect()
         return [path.strip() for path in output if path.strip()]
@@ -244,7 +263,10 @@ class EventingEncryptionAtRest(EventingBaseTest):
     def _get_file_size(self, node, file_path):
         shell = RemoteMachineShellConnection(node)
         output, _ = shell.execute_command(
-            "stat -c %s {} 2>/dev/null".format(file_path))
+            'stat -c %s "{}" 2>/dev/null'.format(file_path))
+        if not (output and output[0].strip().isdigit()):
+            output, _ = shell.execute_command(
+                'wc -c < "{}" 2>/dev/null'.format(file_path))
         shell.disconnect()
         if output and output[0].strip().isdigit():
             return int(output[0].strip())
@@ -283,7 +305,7 @@ class EventingEncryptionAtRest(EventingBaseTest):
 
     def _get_file_fingerprint(self, node, file_path, bytes_to_read=128):
         shell = RemoteMachineShellConnection(node)
-        cmd = "head -c {} {} | base64 | tr -d '\\n' 2>/dev/null".format(
+        cmd = 'head -c {} "{}" 2>/dev/null | base64 | tr -d \'\\n\''.format(
             bytes_to_read, file_path)
         output, _ = shell.execute_command(cmd)
         shell.disconnect()

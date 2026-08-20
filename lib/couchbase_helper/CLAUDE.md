@@ -9,11 +9,19 @@
 get_file_header_text(node, file_path, bytes_to_read=512)
 # → (header_read: bool, decoded: str, printable: str)
 ```
-Runs `xxd -l <N> -p <path> 2>/dev/null` remotely, joins hex lines, decodes
-hex → bytes → ASCII (`errors='replace'`).
+Runs `xxd -l <N> -p "<path>" 2>/dev/null` remotely, joins hex lines, decodes
+hex → bytes → ASCII (`errors='replace'`). Paths are quoted so Windows install
+paths (which contain a space) survive.
 
-When xxd returns no output: runs `ls -la`, `xxd -l 64 2>&1`, `file <path>` for
-diagnostics and returns `(False, "", "No output from xxd. ls:[...] | ...")`.
+`_read_file_hex(shell, file_path, bytes_to_read)` → `(hex_str, reader)` does the
+read and falls back to `od -An -v -tx1 -N <N> "<path>"` when `xxd` produces
+nothing — `xxd` ships with vim, which is absent from some images (notably the
+cygwin environment on Windows nodes). `od` output is whitespace-stripped into the
+same flat hex string, so callers see no difference.
+
+When neither reader produces output: runs `ls -la`, `xxd -l 64 2>&1`,
+`od -An -v -tx1 -N 64 2>&1`, `file <path>` for diagnostics and returns
+`(False, "", "No output from xxd or od. ls:[...] | ...")`.
 
 **Encrypted file header format** (observed from live rlstream.* files):
 ```
@@ -54,6 +62,21 @@ FFDC files: `query_ffdc_MAN_areq*`, `query_ffdc_MAN_creq*`, `query_ffdc_MAN_vita
 ```python
 get_log_path(node)  # Linux: /opt/couchbase/var/lib/couchbase/logs
 ```
+
+## OS-aware path resolution
+```python
+get_os_type(node)                              # 'windows' | 'linux' | ...
+to_shell_path(path, os_type)                   # 'c:/Program Files/...' → '/cygdrive/c/Program Files/...'
+get_service_data_dir(node, subdir, os_type=None)  # '<data_path>/<subdir>', shell-usable
+```
+`to_shell_path` is a no-op off Windows. On Windows it normalises backslashes and
+rewrites the drive letter to its cygwin mount — the space is left **unescaped**,
+so callers must wrap the result in double quotes when building a command (put a
+trailing glob outside the quotes: `ls -1t "<dir>"/*.log*`).
+
+`get_service_data_dir` reads the node's own data path over REST rather than
+assuming an install prefix; use it for any `@<service>` directory (`@fts`,
+`@eventing`, ...). `get_fts_data_path(node)` is the `@fts` wrapper.
 
 ## GSI methods (orchestrated by `base_gsi.validate_file_encryption`)
 
