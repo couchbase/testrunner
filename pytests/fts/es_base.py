@@ -250,9 +250,25 @@ class ElasticSearchBase(object):
 
     def restart_es(self):
         shell = RemoteMachineShellConnection(self.__host)
-        es_restart_cmd = "/etc/init.d/elasticsearch restart"
-        o, e = shell.execute_non_sudo_command(es_restart_cmd)
-        shell.log_command_output(o, e)
+        # ES 8.x on Debian 12 is systemd-managed and ships no init script, so the
+        # init.d command fails with "No such file or directory" and this method
+        # silently becomes a no-op - is_running() then reports the still-running
+        # old process and the restart is logged as a success. Try systemd first
+        # and keep init.d only as a fallback for older ES hosts.
+        restarted = False
+        for es_restart_cmd in ("systemctl restart elasticsearch",
+                               "/etc/init.d/elasticsearch restart"):
+            o, e = shell.execute_non_sudo_command(es_restart_cmd)
+            shell.log_command_output(o, e)
+            if not any("No such file or directory" in line or
+                       "not found" in line for line in (e or [])):
+                restarted = True
+                break
+        if not restarted:
+            self.__log.warning(
+                "Could not restart Elastic Search on %s: neither systemctl nor "
+                "/etc/init.d/elasticsearch worked. ES was left as it was."
+                % self.__host.ip)
 
         es_start = False
         for i in range(2):
@@ -514,6 +530,19 @@ class ElasticSearchBase(object):
         when multiple tests run concurrently on the same ES cluster.
         """
         try:
+            # This used to take a filename and read it here. Callers that were
+            # not updated pass a path instead of a body, and ES answers every
+            # such request with "The bulk request must be terminated by a
+            # newline" - a 400 that looks like a server or content-type problem
+            # rather than the argument mismatch it actually is. Fail loudly.
+            if isinstance(bulk_data, str):
+                bulk_data = bulk_data.encode()
+            if not bulk_data.endswith(b"\n"):
+                raise Exception(
+                    "ES bulk body for index '%s' is not newline-terminated NDJSON "
+                    "(got %s bytes starting %r) - load_bulk_data takes the request "
+                    "body, not a filename" % (index_name, len(bulk_data),
+                                              bulk_data[:80]))
             url = self.__connection_url + index_name + "/_bulk"
             status, content, _ = self._http_request(url,
                                                     'POST',

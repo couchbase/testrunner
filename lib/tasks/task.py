@@ -26,7 +26,8 @@ from remote.remote_util import RemoteMachineShellConnection
 from collection.collections_rest_client import CollectionsRest
 from collection.collections_stats import CollectionsStats
 from couchbase_helper.document import DesignDocument
-from couchbase_helper.documentgenerator import BatchedDocumentGenerator
+from couchbase_helper.documentgenerator import BatchedDocumentGenerator, \
+    get_sentence_encoder
 from couchbase_helper.stats_tools import StatsCommon
 from deepdiff import DeepDiff
 from membase.api.exception import BucketCreationException
@@ -1731,12 +1732,12 @@ class ESBulkLoadGeneratorTask(Task):
         self.set_result(True)
 
     def execute(self, task_manager):
-        # A fixed path here is shared by every loader task in this process and by
-        # any other testrunner job on the same slave. A concurrent writer
-        # truncates and rewrites the file between our write and our read, so the
-        # POST body starts mid-line and Elasticsearch rejects the whole batch
-        # with x_content_parse_exception. Keep the scratch file per task.
-        es_filename = "/tmp/es_bulk_{0}_{1}.txt".format(os.getpid(), id(self))
+        # The batch is handed to load_bulk_data as the NDJSON request body. It
+        # used to go through a scratch file under /tmp, which was shared by every
+        # loader task in this process and by any other testrunner job on the same
+        # slave, so a concurrent writer could truncate it between our write and
+        # our read and leave the POST body starting mid-line. Building the body in
+        # memory removes both the shared file and that race.
         es_bulk_docs = []
         loaded = 0
         failed = 0
@@ -1762,13 +1763,14 @@ class ESBulkLoadGeneratorTask(Task):
                 # logged and skipped leaves ES permanently short of the bucket,
                 # which then surfaces much later as an unexplained FTS/ES count
                 # mismatch in whichever test happens to run next.
+                # Every line, including the last, must be newline-terminated or
+                # Elasticsearch rejects the whole request with
+                # "The bulk request must be terminated by a newline [\n]".
+                bulk_body = "".join("{}\n".format(line)
+                                    for line in es_bulk_docs).encode()
                 status = False
                 for attempt in range(1, 4):
-                    es_file = open(es_filename, "wb")
-                    for line in es_bulk_docs:
-                        es_file.write("{}\n".format(line).encode())
-                    es_file.close()
-                    status = self.es_instance.load_bulk_data(es_filename, self.index_name)
+                    status = self.es_instance.load_bulk_data(bulk_body, self.index_name)
                     if status:
                         break
                     self.log.error("ES bulk load failed for batch of {0} docs "
@@ -1786,10 +1788,6 @@ class ESBulkLoadGeneratorTask(Task):
                 self.es_instance.update_index(self.index_name)
                 batched = 0
                 es_bulk_docs = []
-        try:
-            os.remove(es_filename)
-        except OSError:
-            pass
         indexed = self.es_instance.get_index_count(self.index_name)
         self.log.info("ES index count for '{0}': {1}".
                       format(self.index_name, indexed))
@@ -2027,12 +2025,11 @@ class ESRunQueryCompare(Task):
                               "---------------------------------------"
                               % str(self.query_index + 1))
             if "vector" in str(self.fts_query):
-                from sentence_transformers import SentenceTransformer
-                encoder = SentenceTransformer(self.llm_model)
+                encoder = get_sentence_encoder(self.llm_model)
                 vector_query = self.fts_query["vector"]
                 self.log.info(f"Searching for --> {vector_query}")
                 k = self.fts_query["k"]
-                search_vector = encoder.encode(vector_query)
+                search_vector = encoder.encode(vector_query, show_progress_bar=False)
                 self.fts_query["vector"] = search_vector.tolist()
             try:
                 if self.validation_data:

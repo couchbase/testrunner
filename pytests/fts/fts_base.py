@@ -53,7 +53,7 @@ from scripts.collect_server_info import cbcollectRunner
 from couchbase_helper.documentgenerator import *
 from tasks.taskmanager import TaskManager
 from collection.collections_rest_client import CollectionsRest
-from couchbase_helper.documentgenerator import JsonDocGenerator
+from couchbase_helper.documentgenerator import JsonDocGenerator, get_sentence_encoder
 from lib.membase.api.exception import FTSException
 from .es_base import ElasticSearchBase
 from security.rbac_base import RbacBase
@@ -2359,26 +2359,33 @@ class CouchbaseCluster:
         requested_fts_quota = TestInputSingleton.input.param("fts_quota", FTS_SERVICE_QUOTA)
         # Any node co-hosting kv and fts constrains the quota, not just the
         # master - topologies like ['kv','kv','kv,fts','kv,fts','fts'] put the
-        # squeeze on the middle nodes while the master looks clean. This runs from
-        # __init__, before init_cluster has assigned services from the cluster
-        # spec, so the ini services on self.__nodes do not describe the topology
-        # the test asked for yet - read the spec itself as well.
-        mixed_nodes = []
-        for node in self.__nodes:
-            node_services = (getattr(node, "services", "") or "kv").split(",")
-            if "kv" in node_services and "fts" in node_services:
-                mixed_nodes.append(node.ip)
+        # squeeze on the middle nodes while the master looks clean.
+        #
+        # This runs from __init__, which is handed a single-element node list
+        # ([first_node]), so neither self.__nodes nor its length describes the
+        # topology: every cluster looks like one co-located node from here.
+        # Read the topology the test actually asked for instead - the cluster
+        # spec when there is one, since that is what init_cluster will assign,
+        # and the ini services across every input server otherwise.
+        all_servers = TestInputSingleton.input.servers or self.__nodes
         spec = TestInputSingleton.input.param("cluster", "") or ""
         if isinstance(spec, (list, tuple)):
             spec = ",".join(spec)
         for letter, service in {'D': 'kv', 'F': 'fts', 'I': 'index', 'Q': 'n1ql'}.items():
             spec = spec.replace(letter, service)
-        for entry in re.split('[-,:]', spec):
-            entry_services = entry.replace('+', ',').split(',')
-            if "kv" in entry_services and "fts" in entry_services:
-                mixed_nodes.append("(from cluster spec: %s)" % entry)
-                break
-        fts_shares_a_kv_node = bool(mixed_nodes) or len(self.__nodes) == 1
+        mixed_nodes = []
+        if spec.strip():
+            for entry in re.split('[-,:]', spec):
+                entry_services = entry.replace('+', ',').split(',')
+                if "kv" in entry_services and "fts" in entry_services:
+                    mixed_nodes.append("(from cluster spec: %s)" % entry)
+                    break
+        else:
+            for node in all_servers:
+                node_services = (getattr(node, "services", "") or "kv").split(",")
+                if "kv" in node_services and "fts" in node_services:
+                    mixed_nodes.append(node.ip)
+        fts_shares_a_kv_node = bool(mixed_nodes) or len(all_servers) == 1
         index_quota = TestInputSingleton.input.param("index_quota", 600)
         kv_quota = TestInputSingleton.input.param("kv_quota", 3000)
         try:
@@ -6993,12 +7000,11 @@ class FTSBaseTest(unittest.TestCase):
 
         knn_combination_queries = []
         for vector_q in vector_queries:
-            from sentence_transformers import SentenceTransformer
-            encoder = SentenceTransformer(self.llm_model)
+            encoder = get_sentence_encoder(self.llm_model)
             vector_query = vector_q["vector"]
             self.log.info(f"Searching for --> {vector_query}")
             k = vector_q["k"]
-            search_vector = encoder.encode(vector_query)
+            search_vector = encoder.encode(vector_query, show_progress_bar=False)
             vector_q["vector"] = search_vector.tolist()
             if boosting:
                 vector_q['boost'] = round(random.uniform(0, 10), 1)
@@ -7495,8 +7501,7 @@ class FTSBaseTest(unittest.TestCase):
     def create_faiss_index(self, gen):
         import faiss
         import numpy as np
-        from sentence_transformers import SentenceTransformer
-        encoder = SentenceTransformer(self.llm_model)
+        encoder = get_sentence_encoder(self.llm_model)
         faiss_index = faiss.IndexFlatL2(encoder.get_sentence_embedding_dimension())
         # SDKDataLoader doesn't expose docs in-process (they're produced by a docker container),
         # so gen_docs is only present on the legacy DocumentGenerator family. Skip gracefully
@@ -7508,11 +7513,13 @@ class FTSBaseTest(unittest.TestCase):
                 "returning empty faiss index. Faiss-based comparison will be a no-op for this run."
             )
             return faiss_index
-        for k, v in docs.items():
-            l_vector = encoder.encode(v["learnings"])
-            _v = np.array([l_vector])
-            faiss.normalize_L2(_v)
-            faiss_index.add(_v)
+        # One batched encode rather than one call (and one progress bar) per doc.
+        # Order is preserved, so the faiss ids still line up with docs.items().
+        vectors = encoder.encode([v["learnings"] for v in docs.values()],
+                                 show_progress_bar=False)
+        _v = np.array(vectors)
+        faiss.normalize_L2(_v)
+        faiss_index.add(_v)
 
         return faiss_index
 

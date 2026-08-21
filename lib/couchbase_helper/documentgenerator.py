@@ -1,6 +1,7 @@
 import json
 import string
 import random
+from functools import lru_cache
 from random import choice
 from string import ascii_uppercase
 from string import ascii_lowercase
@@ -12,6 +13,20 @@ from testconstants import DEWIKI, ENWIKI, ESWIKI, FRWIKI, NAPADATASET, GEOJSONDA
 
 from lib.Cb_constants.CBServer import CbServer
 from .data import FIRST_NAMES, LAST_NAMES, DEPT, LANGUAGES
+
+
+@lru_cache(maxsize=None)
+def get_sentence_encoder(llm_model):
+    """
+    Load a SentenceTransformer once per model name and reuse it.
+
+    Constructing one is expensive - it reads the model off disk and builds the
+    torch modules - so callers that build one per document or per query re-pay
+    that cost thousands of times in a single test. Every caller wants the same
+    read-only model for the same name, so cache it on the name.
+    """
+    from sentence_transformers import SentenceTransformer
+    return SentenceTransformer(llm_model)
 
 
 class KVGenerator(object):
@@ -325,6 +340,7 @@ class JsonDocGenerator(KVGenerator):
         self.encoding = encoding
         self.vector_search = TestInputSingleton.input.param("vector_search", False)
         self.llm_model = TestInputSingleton.input.param("llm_model", "all-MiniLM-L6-v2")
+        self._learning_vectors = None
         if self.vector_search:
             fileobj = open("lib/couchbase_helper/vector/vector_data")
             self.learnings = fileobj.readlines()
@@ -446,11 +462,29 @@ class JsonDocGenerator(KVGenerator):
         return datetime.datetime(year, month, day, hour, min).isoformat()
 
     def generate_random_learnings(self):
-        from sentence_transformers import SentenceTransformer
         l = self.learnings[random.randint(0, len(self.learnings) - 1)]
-        encoder = SentenceTransformer(self.llm_model)
-        l_vector = encoder.encode(l)
-        return l, l_vector.tolist()
+        return l, self.get_learning_vector(l)
+
+    def get_learning_vector(self, learning):
+        """
+        Embedding for one line of the vector_data corpus.
+
+        This used to build a SentenceTransformer and encode a single string on
+        every call, and it is called once per generated document: a 10k-doc load
+        reloaded the model 10k times and printed 10k one-item "Batches" progress
+        bars. That is what left job 93285 with no time to run tests before the
+        780-minute build timeout.
+
+        The corpus is a fixed file of a few hundred lines and the model is
+        deterministic, so encode the whole corpus once in a single batch and look
+        each document's vector up from there.
+        """
+        if self._learning_vectors is None:
+            encoder = get_sentence_encoder(self.llm_model)
+            vectors = encoder.encode(self.learnings, show_progress_bar=False)
+            self._learning_vectors = dict(
+                zip(self.learnings, (v.tolist() for v in vectors)))
+        return self._learning_vectors[learning]
 
     def generate_dept(self):
         return DEPT[random.randint(0, len(DEPT) - 1)]
