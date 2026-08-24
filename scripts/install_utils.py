@@ -1948,7 +1948,7 @@ def __get_debug_binary_name(node, is_release_build=False):
         version = version.split("-")[0]
 
     if node.get_os() in install_constants.X86:
-        if float(params["cb_edition"][:3]) < 7.1 :
+        if float(version[:3]) < 7.1 :
             return "{0}-{1}-{2}.{3}.{4}".format(
                 params["cb_edition"] + "-debuginfo",
                 version,
@@ -1966,7 +1966,7 @@ def __get_debug_binary_name(node, is_release_build=False):
     # couchbase-server-enterprise-dbg_6.5.0-4557-debian8_amd64.deb
     #All the above ones replaced by couchbase-server-enterprise-dbg_6.5.0-4557-linux_amd64.deb in 7.1 and above
     elif node.get_os() in install_constants.LINUX_AMD64:
-        if float(params["cb_edition"][:3]) < 7.1 :
+        if float(version[:3]) < 7.1 :
             return "{0}_{1}-{2}_{3}.{4}".format(
                 params["cb_edition"] + "-dbg",
                 version,
