@@ -717,6 +717,12 @@ def post_provisioner(host, username, ssh_key_path, modify_hosts=False):
                 "echo 'SECURITY CONTEXT CHECK:' && (getenforce 2>/dev/null || aa-status 2>/dev/null | head -5 || echo 'No SELinux/AppArmor detected')",
                 # Handle security frameworks (SELinux for RHEL, AppArmor for Debian)
                 "sudo setenforce 0 2>/dev/null || sudo aa-complain /usr/sbin/sshd 2>/dev/null || echo 'Security framework handling attempted'",
+                # Stock RHEL/OEL 9+ images ship firewalld enabled, which REJECTs
+                # Couchbase ports (8091 etc.) -> installer sees [Errno 113] No route
+                # to host. Legacy `iptables -F` doesn't clear firewalld's own
+                # nftables table on these distros, so stop and disable the service.
+                "echo 'FIREWALL CHECK:' && (sudo systemctl is-active firewalld 2>/dev/null || echo 'firewalld not active')",
+                "sudo systemctl stop firewalld 2>/dev/null; sudo systemctl disable firewalld 2>/dev/null; echo 'firewalld disable attempted'",
                 # Install SFTP server if missing (distribution-specific approach)
                 "if command -v yum &> /dev/null; then sudo yum install -y openssh-sftp-server; elif command -v dnf &> /dev/null; then sudo dnf install -y openssh-sftp-server; elif command -v apt-get &> /dev/null; then sudo apt-get update && sudo apt-get install -y openssh-server; else echo 'No supported package manager found'; fi",
                 # Test SSH config before restart
@@ -937,6 +943,9 @@ AWS_AMI_MAP = {
         "oel8": {
             "x86_64": "ami-0b5aaeac901e41860"
         },
+        "oel9": {
+            "x86_64": "ami-01932a9759d496b6e"
+        },
         "rhel8": {
             "x86_64": "ami-07f5ef252bd61130b"
         },
@@ -1007,6 +1016,7 @@ AWS_OS_USERNAME_MAP = {
     "ubuntu26": "ubuntu",
     "ubuntu26nonroot": "ubuntu",
     "oel8": "ec2-user",
+    "oel9": "ec2-user",
     "rhel8": "ec2-user",
     "rhel9": "ec2-user",
     "suse15": "ec2-user",
