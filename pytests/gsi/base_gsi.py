@@ -4504,6 +4504,29 @@ class BaseSecondaryIndexingTests(QueryTests):
         with ThreadPoolExecutor() as executor:
             for query in all_queries:
                 tasks.append(executor.submit(self.run_cbq_query, query=query, server=query_node))
+            # Wait until at least one index has actually entered the "Building" state
+            # before triggering rebalance. Without this, create-index calls can still be
+            # retrying in the background (e.g. transient "Build Already In Progress"
+            # errors) so the indexer-busy precondition rebalance is expected to hit
+            # never actually engages, and rebalance succeeds instead of failing.
+            rest = RestConnection(self.master)
+            building = False
+            wait_timeout = 120
+            start_time = time.time()
+            while not building and time.time() - start_time < wait_timeout:
+                index_status = rest.get_index_status()
+                for index_info in index_status.values():
+                    for index_state in index_info.values():
+                        if index_state["status"] == "Building":
+                            building = True
+                            break
+                    if building:
+                        break
+                if not building:
+                    time.sleep(2)
+            if not building:
+                self.fail("No index reached 'Building' state within {0}s; cannot reliably "
+                          "trigger rebalance_during_ddl chaos action".format(wait_timeout))
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], nodes_in_list, nodes_out_list,
                                                      services=services_in, cluster_config=self.cluster_config)
         self.log.info(f"Rebalance task triggered. Sleeping for 60 seconds until the rebalance starts")

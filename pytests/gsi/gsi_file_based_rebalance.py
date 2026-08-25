@@ -1747,6 +1747,9 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
             self.log.info(f"Nodes chosen for metadata corruption {nodes_corrupt_list}")
             for node in nodes_corrupt_list:
                 self.corrupt_plasma_metadata(node)
+            # Corruption is intentionally injected by this chaos action, so the generic
+            # teardown log scan (check_gsi_logs_for_corruption) would otherwise flag it
+            self.skip_corruption_checks = True
         # rebalance operation
         if self.capella_run:
             if capella_rebalance == 'rebalance_in':
