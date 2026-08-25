@@ -19,6 +19,7 @@ INT_MAX = 2147483647
 AUTOPAUSE_POLL_INTERVAL = 5
 ERROR_API_POLL_INTERVAL = 10
 CONFLICT_KEY_PREFIX = "clog_conflict_"
+CLOG_SYSTEM_NS_ERR = "target cannot be system scope or system collection"
 
 
 class ConflictLoggingTests(XDCRNewBaseTest):
@@ -1518,6 +1519,121 @@ class ConflictLoggingTests(XDCRNewBaseTest):
                 self.log.info(f"Rejected invalid settings ({threshold},{duration}) as expected: {e}")
             if not rejected_ok:
                 self.fail(f"Invalid clog pause settings ({threshold},{duration}) were accepted")
+
+    def _replication_with_clog_params(self):
+        """Return the first (replication, mapping) pair the conf configured for conflict logging.
+
+        Taking `_get_all_replications()[0]` blind would tie the test to cluster ordering:
+        under bidirection the reverse replication carries no
+        `<bucket>@<cluster>=conflict_logging:...` param, so the test would fail for want
+        of a baseline mapping rather than for anything the server did.
+        """
+        for repl in self._get_all_replications():
+            bucket_name = repl.get_src_bucket().name
+            cluster_name = repl.get_src_cluster().get_name()
+            settings = self.conflict_logging_params.get(bucket_name, {}).get(cluster_name)
+            if settings:
+                return repl, dict(settings)
+        self.fail("No replication has conflict logging params configured; the conf must supply "
+                  "<bucket>@<cluster>=conflict_logging:<scope>.<collection>")
+
+    def _assert_clog_mapping_rejected(self, replication, mapping, label,
+                                      expected_err=CLOG_SYSTEM_NS_ERR):
+        """Assert the server refuses `mapping` AND names `expected_err` as the reason.
+
+        Asserting on the reason matters. A conflict-logging mapping can be refused for
+        reasons that have nothing to do with the check under test - the
+        cross-cluster-versioning gate, or a `loggingRules` value that is not a JSON
+        object - and both are refused before the target namespace is ever examined.
+        Treating any exception as success would let this test pass on a build that
+        still skips the validation MB-72666 restored.
+        """
+        try:
+            self._set_conflict_logging(replication, mapping)
+        except Exception as e:
+            if expected_err.lower() not in str(e).lower():
+                self.fail(f"{label}: mapping {mapping} was rejected, but not for the "
+                          f"expected reason '{expected_err}'. Server said: {e}")
+            self.log.info(f"{label}: rejected as expected ('{expected_err}')")
+            return
+        self.fail(f"{label}: mapping {mapping} was ACCEPTED; expected rejection with "
+                  f"'{expected_err}'")
+
+    def _assert_clog_mapping_accepted(self, replication, mapping, label):
+        """Assert the server accepts `mapping`."""
+        try:
+            self._set_conflict_logging(replication, mapping)
+        except Exception as e:
+            self.fail(f"{label}: valid mapping {mapping} was rejected: {e}")
+        self.log.info(f"{label}: accepted as expected")
+
+    def test_clog_mapping_validation_without_logging_rules(self):
+        """
+        MB-72666: conflict-logging mapping validation must run even when `loggingRules`
+        is absent.
+
+        goxdcr's ParseRules returned as soon as it found no `loggingRules` key, so
+        `Rules.Validate()` never ran on that path. A fallback target aimed at a system
+        scope or system collection was therefore accepted whenever `loggingRules` was
+        omitted, while the identical target was refused as soon as any `loggingRules`
+        key was present. Fixed by goxdcr 97d98c9, first shipped in 8.0.3-5843.
+
+        The `loggingRules`-present cases are the control: they exercise the validation
+        that already worked before the fix, so a build still carrying the bug fails
+        only the no-`loggingRules` cases. The positive cases guard the other direction,
+        that validation was not turned into a blanket refusal of mappings that omit
+        `loggingRules`.
+        """
+        # No document load: this test asserts on how the server validates a mapping, which
+        # is settled entirely at POST time, so setup_xdcr() alone is enough.
+        self._create_scopes_and_collections()
+        self.setup_xdcr()
+        self._setup_conflict_logging()
+
+        replication, valid = self._replication_with_clog_params()
+        clog_bucket = valid["bucket"]
+        valid_path = valid["collection"]
+        valid_scope = valid_path.split(".")[0] if "." in valid_path else "_default"
+
+        # `loggingRules` values must be JSON objects. A bare string is refused earlier
+        # as an invalid target type, which would mask the namespace check below.
+        valid_rule = {valid_scope: {"bucket": clog_bucket, "collection": valid_path}}
+
+        # MB-72666: no `loggingRules` key at all - the cases that regressed.
+        for label, mapping in [
+            ("system scope and collection", {"bucket": clog_bucket, "collection": "_system._query"}),
+            ("system scope", {"bucket": clog_bucket, "collection": "_system.foo"}),
+            ("underscore-prefixed collection", {"bucket": clog_bucket,
+                                                "collection": f"{valid_scope}._foo"}),
+        ]:
+            self._assert_clog_mapping_rejected(
+                replication, mapping, f"MB-72666 no loggingRules [{label}]")
+
+        # Control: the same class of target with `loggingRules` present. Correct even
+        # before the fix, so these stay red-proof on an affected build.
+        for label, mapping in [
+            ("system fallback target", {"bucket": clog_bucket, "collection": "_system._query",
+                                        "loggingRules": valid_rule}),
+            ("system target inside loggingRules",
+             {"bucket": clog_bucket, "collection": valid_path,
+              "loggingRules": {valid_scope: {"bucket": clog_bucket,
+                                             "collection": "_system._query"}}}),
+        ]:
+            self._assert_clog_mapping_rejected(
+                replication, mapping, f"control loggingRules present [{label}]")
+
+        # Positive: omitting `loggingRules` must still be accepted.
+        for label, mapping in [
+            ("valid target, no loggingRules", {"bucket": clog_bucket, "collection": valid_path}),
+            ("bucket only -> _default._default", {"bucket": clog_bucket}),
+            ("conflict logging disabled", {"disabled": True}),
+        ]:
+            self._assert_clog_mapping_accepted(replication, mapping, f"positive [{label}]")
+
+        # Restore the conf-supplied mapping so the suite's own verification sees the
+        # settings it configured rather than the last positive case above.
+        self._assert_clog_mapping_accepted(replication, valid, "restore configured mapping")
+        self._verify_conflict_logging_settings()
 
     def test_clog_autopause_on_threshold_breach(self):
         """
