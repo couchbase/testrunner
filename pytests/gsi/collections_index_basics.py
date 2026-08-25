@@ -39,7 +39,13 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
         self.buckets = self.rest.get_buckets()
         self.num_rqg_queries = self.input.param("num_rqg_queries", 45)
         self.rqg_debug_logs = self.input.param("rqg_debug_logs", False)
-        self.rqg = RandomQueryGenerator(self.username, self.password, debug=self.rqg_debug_logs)
+        # The RQG container has no TLS support, so it cannot reach a cluster running
+        # with strict n2n encryption / TLS enforcement. Skip it in those configurations.
+        self.skip_rqg = self.enforce_tls or self.x509enable or \
+            self.input.param("multiple_ca", False) or \
+            self.input.param("ntonencrypt", "disable") == "enable"
+        self.rqg = RandomQueryGenerator(self.username, self.password, debug=self.rqg_debug_logs,
+                                        skip_rqg=self.skip_rqg)
         if not self.capella_run and 'community' not in self.cb_version:
             self._create_server_groups()
             self.cb_version = float(self.cb_version.split('-')[0][0:3])
@@ -241,18 +247,15 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
         except Exception as err:
             self.fail(str(err))
         finally:
-            query = query_gen.generate_index_drop_query(namespace=collection_namespace)
-            self.run_cbq_query(query=query)
-            query = indx_gen.generate_index_drop_query(namespace=collection_namespace)
-            self.run_cbq_query(query=query)
-            query = primary_gen.generate_index_drop_query(namespace=collection_namespace)
-            self.run_cbq_query(query=query)
-
-            # Deleting pre-load-indexes
-            query = pre_load_idx_pri.generate_index_drop_query(namespace=collection_namespace)
-            self.run_cbq_query(query=query)
-            query = pre_load_idx_gsi.generate_index_drop_query(namespace=collection_namespace)
-            self.run_cbq_query(query=query)
+            # Indexes are created part way through the test, so on an early failure some
+            # of these will not exist. Drop them best-effort, otherwise an 'Index Not
+            # Found' raised here replaces the exception that actually failed the test.
+            for index_gen in [query_gen, indx_gen, primary_gen, pre_load_idx_pri, pre_load_idx_gsi]:
+                query = index_gen.generate_index_drop_query(namespace=collection_namespace)
+                try:
+                    self.run_cbq_query(query=query)
+                except Exception as err:
+                    self.log.info(f"Ignoring failure while dropping index: {query}. Error: {err}")
 
     def test_multiple_indexes_on_same_field(self):
         self.prepare_collection_for_indexing(num_of_docs_per_collection=self.num_of_docs_per_collection)

@@ -13,13 +13,21 @@ logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %
 
 
 class RandomQueryGenerator(BaseTestCase):
-    def __init__(self, username, password, debug=False):
+    def __init__(self, username, password, debug=False, skip_rqg=False):
 
         self.username = username
         self.password = password
-        self.docker_client = docker.from_env()
         self.docker_image = "sequoiatools/random_query_generator"
         self.debug = debug
+        # The RQG container connects over plain couchbase://<node>. With strict n2n
+        # encryption/TLS the non-TLS ports are closed and the Go SDK inside the
+        # container loops until 'unambiguous timeout', so skip the tool altogether.
+        self.skip_rqg = skip_rqg
+        if self.skip_rqg:
+            logging.info("Strict TLS/n2n encryption is enabled: skipping random_query_generator setup")
+            self.docker_client = None
+            return
+        self.docker_client = docker.from_env()
         # Check if Docker daemon is running and start it if not
         self._manage_docker_daemon()
         # Pulling the docker image
@@ -63,6 +71,10 @@ class RandomQueryGenerator(BaseTestCase):
             raise Exception(f"Failed to manage Docker daemon: {str(e)}") from e
 
     def random_query_generator(self, create_query, node, container_name="random_query_generator", dataset="hotel", num_queries=10):
+
+        if self.skip_rqg:
+            logging.info("Skipping random_query_generator run as strict TLS/n2n encryption is enabled")
+            return
 
         docker_run_params = f"-nodeAddress {node} -username {self.username} -password {self.password} -create_query \"{create_query}\" -dataset {dataset} -num_queries {num_queries}"
         logging.info(f"docker run command is : {docker_run_params}")
