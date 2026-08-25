@@ -3854,6 +3854,9 @@ class BaseSecondaryIndexingTests(QueryTests):
                         self.log.error(f"Indexer metadata {indexer_metadata}")
                         raise Exception(
                             f"Alternate shard ID value None for index {index_metadata['name']} with definition {index_metadata['definition']}")
+                if not index_metadata['alternateShardIds']:
+                    # mixed mode / affinity-disabled indexes carry no alternate shard IDs
+                    continue
                 # 2nd field of alternate shard ID should be the replica ID validation
                 if not specific_indexes:
                     for host in index_metadata['alternateShardIds']:
@@ -3922,7 +3925,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             self.log.info("All indexes have 2 alternate shard IDs and all primary indexes have 1 alt shard ID.")
             # replicas sharing slot IDs and instance IDs validation
             if not mixed_mode:
-                self.validate_replica_indexes(index_map=indexer_metadata)
+                self.validate_replica_indexes(index_map=indexer_metadata, specific_indexes=specific_indexes)
                 self.log.info("All replicas share slot IDs")
             # shard IDs unique to host validation
             self.validate_shard_unique_to_host(index_map=indexer_metadata, specific_index=specific_indexes)
@@ -4001,6 +4004,8 @@ class BaseSecondaryIndexingTests(QueryTests):
     def validate_shard_unique_to_host(self, index_map, specific_index=None):
         shard_host_map = {}
         for index_metadata in index_map:
+            if not index_metadata['alternateShardIds']:
+                continue
             if not specific_index:
                 for host in index_metadata['alternateShardIds']:
                     for partition in index_metadata['alternateShardIds'][host]:
@@ -4025,9 +4030,17 @@ class BaseSecondaryIndexingTests(QueryTests):
                                 else:
                                     shard_host_map[shard_entry] = host_ip
 
-    def validate_replica_indexes(self, index_map):
+    def validate_replica_indexes(self, index_map, specific_indexes=None):
         replicas_dict = {}
         for index in index_map:
+            if specific_indexes and index['name'] not in specific_indexes:
+                # Indexes outside the requested set can legitimately lack slot IDs (eg. created
+                # while shard affinity was disabled), the indexer does not retro-assign them.
+                continue
+            if not index['alternateShardIds']:
+                self.log.info(f"Skipping index {index['name']} for replica slot ID validation "
+                              f"since it has no alternate shard IDs")
+                continue
             if index['numReplica'] > 0:
                 if index['defnId'] in replicas_dict:
                     replicas_dict[index['defnId']].append(index)
