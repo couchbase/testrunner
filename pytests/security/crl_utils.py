@@ -185,10 +185,13 @@ class CRLUtils:
         """
         now = datetime.datetime.now(datetime.timezone.utc)
         if this_update is None:
-            this_update = now - datetime.timedelta(days=1)
+            this_update = (
+                now - datetime.timedelta(days=30) if expired
+                else now - datetime.timedelta(days=1)
+            )
         if next_update is None:
             next_update = (
-                now - datetime.timedelta(days=30) if expired
+                now - datetime.timedelta(days=1) if expired
                 else now + datetime.timedelta(days=30)
             )
         builder = x509.CertificateRevocationListBuilder().issuer_name(

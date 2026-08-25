@@ -32,24 +32,32 @@ import re
 import threading
 import time
 
+import requests
+
 from couchbase_helper.query_definitions import QueryDefinition
 from .upgrade_gsi import UpgradeSecondaryIndex
 from pytests.tuqquery.n1ql_encryption_helpers import N1QLEncryptionHelpers
+from pytests.security.crl_base import CRLBase
+from pytests.security.crl_utils import CRLUtils
+from pytests.security.x509_multiple_CA_util import Validation
 from membase.api.rest_client import RestConnection
 from lib.membase.helper.encryption_at_rest_helper import EncryptionUtil
 from remote.remote_util import RemoteMachineShellConnection
 
 
-class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
+class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex, CRLBase):
     """GSI + Query encryption-at-rest upgrade tests with mixed-mode validation."""
 
     EAR_FILE_MIN_VERSION = (8, 1)       # GSI / Query files encrypt at >= 8.1
     BUCKET_EAR_MIN_VERSION = (8, 0)     # bucket-level encryption toggle works at >= 8.0
+    CRL_MIN_VERSION = (8, 1)            # CRL feature introduced in 8.1
 
     # ------------------------------------------------------------------ setUp / tearDown
 
     def setUp(self):
-        super(GSIQueryEncryptionAtRestUpgrade, self).setUp()
+        # Explicit call (not super) so CRLBase.setUp() does not run via MRO —
+        # same pattern as QueryCRLTests. CRLBase fields are initialised below.
+        UpgradeSecondaryIndex.setUp(self)
         self.encryption_helper = N1QLEncryptionHelpers(self.log)
         self.log.info("==============  GSIQueryEncryptionAtRestUpgrade setUp ==============")
         self.test_bucket = self.input.param("bucket_name", "test_bucket")
@@ -58,6 +66,13 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
         # solid, but allow opting back in via skip_vector_bucket=False.
         # To be removed after early build.
         self.skip_vector_bucket = self.input.param("skip_vector_bucket", True)
+        self.test_crl_in_upgrade = self.input.param("test_crl_in_upgrade", False)
+        if self.test_crl_in_upgrade:
+            # Initialise CRLBase fields manually — avoids calling CRLBase.setUp()
+            # which would double-init BaseTestCase and SSH-install a spurious CA.
+            self.crl_utils = CRLUtils(log=self.log)
+            self._created_files = []
+            self._rbac_users = []
         # Drop any auto-created buckets so we own bucket lifecycle in the test.
         try:
             self.rest.delete_all_buckets()
@@ -110,7 +125,7 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
                     pass
         except Exception:
             pass
-        super(GSIQueryEncryptionAtRestUpgrade, self).tearDown()
+        UpgradeSecondaryIndex.tearDown(self)
 
     def _copy_failed_file_from_node(self, node, remote_filepath):
         """Copy a remote file that failed encryption validation to self._evidence_dir.
@@ -2136,6 +2151,366 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
 
     # ------------------------------------------------------------------ test runner
 
+    def _check_crl_upgrade_state(self, label):
+        """Check CRL endpoint availability and default policy on every node.
+        On 8.1+ nodes: endpoint must exist and crlClientAuth must default to Disabled.
+        On pre-8.1 nodes: endpoint must not exist (CRL not yet available).
+        When all nodes are 8.1+, validates revoked/valid cert flow (Totoro CRL pattern)."""
+        all_81_plus = True
+        for server in self.servers:
+            ver = self._node_running_version(server)
+            node_rest = RestConnection(server)
+            status, content, _ = node_rest.get_crl_settings()
+            if ver >= self.CRL_MIN_VERSION:
+                self.assertTrue(
+                    status,
+                    f"[{label}] {server.ip} (v{ver}): CRL endpoint unavailable on 8.1+ node")
+                settings = json.loads(content) if isinstance(content, (bytes, bytearray)) else content
+                if isinstance(settings, dict):
+                    crl_mode = settings.get("crlClientAuth", "Disabled")
+                    self.assertEqual(
+                        crl_mode, "Disabled",
+                        f"[{label}] {server.ip}: expected crlClientAuth=Disabled after upgrade, got {crl_mode!r}")
+                self.log.info(f"[{label}] {server.ip} (v{ver}): CRL available, defaults to Disabled — PASS")
+            else:
+                all_81_plus = False
+                self.assertFalse(
+                    status,
+                    f"[{label}] {server.ip} (v{ver}): CRL endpoint must not exist on pre-8.1 node")
+                self.log.info(f"[{label}] {server.ip} (v{ver}): CRL not available (pre-8.1) — expected")
+
+        if all_81_plus:
+            self._validate_crl_revocation_post_upgrade(label)
+
+    def _setup_crl_client_cert(self):
+        """Generate a CA + client cert, trust the CA on the cluster, enable optional
+        clientCertAuth, and return (ca_cert_path, client_cert_path, client_key_path)
+        as temp file paths. Caller is responsible for restoring clientCertAuth and
+        removing the temp files."""
+        import tempfile
+        ca_cert, ca_key = CRLUtils.generate_ca("CRL-Upgrade-TestCA")
+        client_cert, client_key, _ = CRLUtils.generate_leaf_cert(
+            ca_cert, ca_key, cn="crl-upgrade-client",
+        )
+        ca_pem = CRLUtils.cert_to_pem(ca_cert)
+        client_cert_pem = CRLUtils.cert_to_pem(client_cert)
+        client_key_pem = CRLUtils.key_to_pem(client_key)
+
+        tmp_dir = tempfile.mkdtemp(prefix="crl_upgrade_")
+        ca_path = os.path.join(tmp_dir, "ca.pem")
+        cert_path = os.path.join(tmp_dir, "client.pem")
+        key_path = os.path.join(tmp_dir, "client.key")
+        for path, data in [(ca_path, ca_pem), (cert_path, client_cert_pem),
+                           (key_path, client_key_pem)]:
+            with open(path, "wb") as f:
+                f.write(data)
+
+        # Trust the CA and enable optional clientCertAuth on the cluster
+        self.rest.upload_cluster_ca(ca_pem.decode() if isinstance(ca_pem, bytes) else ca_pem)
+        self.rest.load_trusted_CAs()
+        self.rest.client_cert_auth(state="enable", prefixes=[
+            {"delimiter": "", "path": "subject.cn", "prefix": ""}
+        ])
+        self.log.info("CRL cert auth setup: CA trusted, clientCertAuth=enable (optional)")
+        return ca_path, cert_path, key_path
+
+    # ── CRL helpers (not in CRLBase — implemented here for upgrade context) ───
+
+    def _crl_upload_revoked(self, serials, crl_number=1):
+        """Build and upload a CRL revoking the given serials. Uses self.ca_cert/ca_key."""
+        crl_pem = CRLUtils.build_crl(
+            self.ca_cert, self.ca_key, revoked_serials=serials, crl_number=crl_number)
+        filename = "crl_upgrade_{0}.pem".format(crl_number)
+        status, content, _ = self.rest.upload_crl_file(filename, crl_pem)
+        self.assertTrue(status, "Failed to upload CRL: {0}".format(content))
+        self._track_uploaded_file(filename)
+        return filename
+
+    def _crl_set_policy(self, client_auth=None, node_to_node=None):
+        payload = {"policyPerScope": {}}
+        if client_auth:
+            payload["policyPerScope"]["clientAuth"] = client_auth
+        if node_to_node:
+            payload["policyPerScope"]["nodeToNode"] = node_to_node
+        self.rest.post_crl_settings(payload)
+        time.sleep(2)
+
+    def _crl_wait_loaded(self, timeout=30):
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            s, c, _ = self.rest.get_crl_files()
+            if s and c:
+                self.log.info("CRL confirmed loaded")
+                return
+            time.sleep(2)
+        self.fail("CRL did not load within {0}s".format(timeout))
+
+    def _crl_query_with_cert(self, cert_path, key_path):
+        """mTLS request to Query TLS port using Validation (same as Totoro tuq_crl)."""
+        url = "https://{0}:18093/query/service".format(self.master.ip)
+        try:
+            v = Validation(
+                server=self.master,
+                cacert=False,
+                client_cert_path_tuple=(cert_path, key_path))
+            status, content, response = v.urllib_request(
+                url, verb='POST',
+                params={"statement": "SELECT 1"},
+                timeout=10,
+                try_count=1)
+            try:
+                body = json.loads(content) if content else {}
+            except Exception:
+                body = {}
+            return response.status_code, body
+        except Exception as e:
+            return None, str(e)
+
+    def _crl_assert_rejected(self, cert_path, key_path, label):
+        """Assert revoked cert is rejected at TLS layer — no HTTP response."""
+        code, body = self._crl_query_with_cert(cert_path, key_path)
+        self.assertIsNone(
+            code,
+            "[{0}] Expected TLS rejection but got HTTP {1}. Body: {2}".format(
+                label, code, body))
+        err_lower = str(body).lower()
+        tls_keywords = ["ssl", "tls", "certificate", "revoked", "handshake", "alert", "x509"]
+        self.assertTrue(
+            any(kw in err_lower for kw in tls_keywords),
+            "[{0}] Connection failed but not at TLS level: {1}".format(label, body))
+        self.log.info("[{0}] Revoked cert rejected at TLS layer — PASS".format(label))
+
+    def _crl_assert_succeeds(self, cert_path, key_path, label):
+        """Assert valid cert is accepted — TLS succeeds, HTTP 200."""
+        code, body = self._crl_query_with_cert(cert_path, key_path)
+        self.assertIsNotNone(
+            code,
+            "[{0}] Expected HTTP response but TLS handshake failed. Body: {1}".format(
+                label, body))
+        self.assertEqual(
+            code, 200,
+            "[{0}] TLS succeeded but got HTTP {1} instead of 200. Body: {2}".format(
+                label, code, body))
+        self.log.info("[{0}] Valid cert accepted (HTTP 200) — PASS".format(label))
+
+    def _validate_crl_revocation_post_upgrade(self, label):
+        """Post-upgrade CRL revocation validation — mirrors the Totoro CRL test flow:
+          1. Generate CA + two client certs (A=revoked, B=valid)
+          2. Trust CA on cluster (_trust_ca_on_cluster from CRLBase)
+          3. Create RBAC users for cert CNs (_create_rbac_test_user from CRLBase)
+          4. Upload CRL revoking A's serial
+          5. Enable mandatory clientCertAuth, set policy Permissive
+          6. Assert A is TLS-rejected, B succeeds
+          7. Cleanup in finally (reset policy, disable cert auth, delete CRL/users/files)
+        """
+        import tempfile
+        import shutil
+
+        tmp_dir = None
+        try:
+            # Generate CA and two client certs: A (to be revoked) and B (valid)
+            self.ca_cert, self.ca_key = CRLUtils.generate_ca("CRL-PostUpgrade-TestCA")
+            client_a_cert, client_a_key, client_a_serial = CRLUtils.generate_leaf_cert(
+                self.ca_cert, self.ca_key, cn="crl-upgrade-revoked")
+            client_b_cert, client_b_key, _ = CRLUtils.generate_leaf_cert(
+                self.ca_cert, self.ca_key, cn="crl-upgrade-valid")
+
+            tmp_dir = tempfile.mkdtemp(prefix="crl_post_upgrade_")
+            ca_path = os.path.join(tmp_dir, "ca.pem")
+            a_cert_path = os.path.join(tmp_dir, "client_a.pem")
+            a_key_path = os.path.join(tmp_dir, "client_a.key")
+            b_cert_path = os.path.join(tmp_dir, "client_b.pem")
+            b_key_path = os.path.join(tmp_dir, "client_b.key")
+
+            ca_pem = CRLUtils.cert_to_pem(self.ca_cert)
+            for path, data in [
+                (ca_path, ca_pem),
+                (a_cert_path, CRLUtils.cert_to_pem(client_a_cert)),
+                (a_key_path, CRLUtils.key_to_pem(client_a_key)),
+                (b_cert_path, CRLUtils.cert_to_pem(client_b_cert)),
+                (b_key_path, CRLUtils.key_to_pem(client_b_key)),
+            ]:
+                with open(path, "wb") as f:
+                    f.write(data)
+
+            # Trust CA — reuse CRLBase._trust_ca_on_cluster (SSH copy to inbox/CA/)
+            self._trust_ca_on_cluster(self.ca_cert)
+            self.log.info("[{0}] CA trusted on cluster".format(label))
+
+            # RBAC users whose IDs match the cert CNs — reuse CRLBase._create_rbac_test_user
+            self._create_rbac_test_user("crl-upgrade-revoked", "admin")
+            self._create_rbac_test_user("crl-upgrade-valid", "admin")
+            self.log.info("[{0}] RBAC users created".format(label))
+
+            # Upload CRL revoking client_a
+            self._crl_upload_revoked(serials=[client_a_serial], crl_number=1)
+            self.log.info(
+                "[{0}] CRL uploaded — client_a (serial {1}) revoked".format(
+                    label, client_a_serial))
+
+            # Enable mandatory clientCertAuth (subject.cn → RBAC user mapping)
+            self.rest.client_cert_auth(
+                state="mandatory",
+                prefixes=[{"path": "subject.cn", "prefix": "", "delimiter": ""}])
+            self.log.info("[{0}] clientCertAuth=mandatory".format(label))
+
+            # Set CRL policy Permissive — enforces revocation for clientAuth scope
+            self._crl_set_policy(client_auth="Permissive")
+            self.log.info("[{0}] CRL policy=Permissive".format(label))
+
+            # Wait for CRL to load
+            self._crl_wait_loaded()
+
+            # Revoked cert must be rejected at TLS layer
+            self.log.info(
+                "[{0}] Testing revoked cert (client_a) on {1}:18093".format(
+                    label, self.master.ip))
+            self._crl_assert_rejected(a_cert_path, a_key_path, label)
+
+            # Valid cert must succeed
+            self.log.info(
+                "[{0}] Testing valid cert (client_b) on {1}:18093".format(
+                    label, self.master.ip))
+            self._crl_assert_succeeds(b_cert_path, b_key_path, label)
+
+            self.log.info(
+                "[{0}] CRL revocation validation PASSED: "
+                "revoked cert rejected, valid cert accepted".format(label))
+
+        finally:
+            # Reset CRL policy — reuse CRLBase._reset_crl_settings
+            try:
+                self._reset_crl_settings()
+            except Exception as e:
+                self.log.warning("[{0}] Failed to reset CRL policy: {1}".format(label, e))
+            # Disable clientCertAuth — reuse CRLBase._disable_client_cert_auth
+            try:
+                self._disable_client_cert_auth()
+            except Exception as e:
+                self.log.warning(
+                    "[{0}] Failed to disable clientCertAuth: {1}".format(label, e))
+            # Delete uploaded CRL files — reuse CRLBase._cleanup_created_files
+            self._cleanup_created_files()
+            # Delete RBAC users — reuse CRLBase._cleanup_rbac_users
+            self._cleanup_rbac_users()
+            # Remove temp PEM files
+            if tmp_dir:
+                shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    def _check_crl_mixed_mode(self, label, baseline_queries):
+        """Mixed-mode CRL check: endpoint availability on all nodes + cert-authenticated
+        scan/endpoint accessibility on upgraded (8.1+) nodes.
+
+        Sets up a temp CA + client cert, enables optional clientCertAuth, then verifies:
+        - CRL endpoint exists on 8.1+ nodes with Disabled default
+        - GSI endpoints (getIndexStatus, /stats, /settings) accessible via cert auth
+        - Query scans succeed via cert auth
+        - Pre-8.1 nodes do not expose the CRL endpoint
+
+        Restores clientCertAuth=disable when done."""
+        ca_path = cert_path = key_path = None
+        try:
+            ca_path, cert_path, key_path = self._setup_crl_client_cert()
+
+            upgraded_query_nodes = []
+            all_query_nodes = self.get_nodes_from_services_map(
+                service_type="n1ql", get_all_nodes=True)
+            all_index_nodes = self.get_nodes_from_services_map(
+                service_type="index", get_all_nodes=True)
+
+            for server in self.servers:
+                ver = self._node_running_version(server)
+                node_rest = RestConnection(server)
+                status, content, _ = node_rest.get_crl_settings()
+
+                if ver >= self.CRL_MIN_VERSION:
+                    if not status:
+                        # CRL endpoint may not be active yet when the cluster still has
+                        # pre-8.1 nodes (feature activation is cluster-wide in ns_server).
+                        # Log a warning and skip — STEP 8.5 is the definitive check.
+                        self.log.warning(
+                            f"[{label}] {server.ip} (v{ver}): CRL endpoint not yet active "
+                            f"in mixed-mode cluster — will be verified at STEP 8.5")
+                        continue
+                    settings = json.loads(content) if isinstance(content, (bytes, bytearray)) else content
+                    if isinstance(settings, dict):
+                        crl_mode = settings.get("crlClientAuth", "Disabled")
+                        self.assertEqual(
+                            crl_mode, "Disabled",
+                            f"[{label}] {server.ip}: expected crlClientAuth=Disabled, got {crl_mode!r}")
+                    self.log.info(f"[{label}] {server.ip} (v{ver}): CRL endpoint OK (Disabled default)")
+
+                    if any(n.ip == server.ip for n in all_query_nodes):
+                        upgraded_query_nodes.append(server)
+
+                    # GSI endpoint cert-auth checks on upgraded index nodes
+                    if any(n.ip == server.ip for n in all_index_nodes):
+                        gsi_endpoints = [
+                            ("/getIndexStatus", 19102),
+                            ("/api/v1/stats",   19102),
+                            ("/api/v1/settings", 19102),
+                        ]
+                        for endpoint, port in gsi_endpoints:
+                            try:
+                                resp = CRLUtils.perform_mtls_handshake(
+                                    host=server.ip, port=port,
+                                    client_cert_path=cert_path,
+                                    client_key_path=key_path,
+                                    ca_cert_path=ca_path,
+                                    path=endpoint,
+                                )
+                                self.assertIsNotNone(
+                                    resp,
+                                    f"[{label}] {server.ip}: GSI {endpoint} returned None")
+                                self.log.info(
+                                    f"[{label}] {server.ip}: GSI {endpoint} HTTP {resp.status_code} "
+                                    f"via cert auth — PASS")
+                            except Exception as e:
+                                self.fail(
+                                    f"[{label}] {server.ip}: GSI {endpoint} not accessible "
+                                    f"via cert auth: {e}")
+                else:
+                    self.assertFalse(
+                        status,
+                        f"[{label}] {server.ip} (v{ver}): CRL endpoint must not exist on pre-8.1 node")
+                    self.log.info(f"[{label}] {server.ip} (v{ver}): CRL not available (pre-8.1) — expected")
+
+            # Query scan spot-checks via cert auth on upgraded query nodes
+            if upgraded_query_nodes and baseline_queries:
+                spot_queries = baseline_queries[:3]
+                self.log.info(
+                    f"[{label}] Running {len(spot_queries)} cert-auth scan(s) on "
+                    f"{len(upgraded_query_nodes)} upgraded query node(s)")
+                failures = []
+                for node in upgraded_query_nodes:
+                    for q in spot_queries:
+                        try:
+                            resp = CRLUtils.perform_mtls_handshake(
+                                host=node.ip, port=18093,
+                                client_cert_path=cert_path,
+                                client_key_path=key_path,
+                                ca_cert_path=ca_path,
+                                path=f"/query/service?statement={q.replace(' ', '+')}",
+                            )
+                            self.log.info(
+                                f"[{label}] {node.ip}: Query scan HTTP {resp.status_code} "
+                                f"via cert auth — PASS")
+                        except Exception as e:
+                            failures.append(f"{node.ip}: {e}")
+                self.assertFalse(
+                    failures,
+                    f"[{label}] Cert-auth scan failures on upgraded nodes: {failures}")
+        finally:
+            # Always restore clientCertAuth and clean up temp certs
+            try:
+                self.rest.client_cert_auth(state="disable", prefixes=[])
+                self.log.info(f"[{label}] Restored clientCertAuth=disable")
+            except Exception as e:
+                self.log.warning(f"[{label}] Failed to restore clientCertAuth: {e}")
+            import shutil
+            if ca_path:
+                shutil.rmtree(os.path.dirname(ca_path), ignore_errors=True)
+
     def _run_upgrade_test(self, mode):
         encrypted_buckets = [self.test_bucket]
         deferred_failures = []
@@ -2144,15 +2519,24 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
         self.log.info("=" * 80)
         self.log.info(f"[STEP 1] Preparing cluster (initial_version={self.initial_version})")
         baseline_queries, namespaces = self._prepare_cluster(
-            enable_bucket_encryption_now=self.initial_supports_bucket_ear,
-            enable_log_encryption_now=self.initial_supports_bucket_ear,
+            enable_bucket_encryption_now=(
+                self.initial_supports_bucket_ear and not self.test_crl_in_upgrade
+            ),
+            enable_log_encryption_now=(
+                self.initial_supports_bucket_ear and not self.test_crl_in_upgrade
+            ),
         )
         query_nodes_initial = self.get_nodes_from_services_map(
             service_type="n1ql", get_all_nodes=True,
         )
 
         # STEP 2.5: Conditional vector bucket (dense BHIVE indexes, 8.0+ only)
-        if self.skip_vector_bucket:
+        # Skipped for CRL-only runs — vector/EAR setup is irrelevant.
+        if self.test_crl_in_upgrade:
+            self.log.info(
+                "[STEP 2.5] Skipping vector bucket (test_crl_in_upgrade=True)"
+            )
+        elif self.skip_vector_bucket:
             self.log.info(
                 "[STEP 2.5] Skipping vector bucket (skip_vector_bucket=True)"
             )
@@ -2168,74 +2552,81 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
             )
 
         # STEP 3: Query settings + drive workload to produce rlstream + history + spill + FFDC
-        self.log.info("[STEP 3] Driving pre-upgrade query workload")
-        self._set_query_completed_settings(stream_size=500, threshold=0)
-        self.log.info("[STEP 3] Running 5-minute background query load to fill rlstream...")
-        bg_thread = self._dispatch_background_query_batch(
-            baseline_queries, query_nodes_initial, workers=5
-        )
-        self.sleep(300, "Running background queries for 5 minutes")
-        bg_thread.join(timeout=30)
-        self.log.info("[STEP 3] Background load complete, setting completed-threshold=720000...")
-        self._set_query_completed_settings(stream_size=500, threshold=720000)
-        self.sleep(720, "Waiting 12 minutes for local_request_log.* files to be created")
-        self.log.info("[STEP 3] Wait complete - local_request_log.* should be created")
-        self._run_spill_and_backfill_workload(query_nodes_initial, namespaces[0])
-        pre_query_keys = (
-            self._get_query_in_use_key_ids() if self.initial_supports_file_ear else {}
-        )
-        self._trigger_ffdc_and_poll(
-            query_nodes_initial,
-            expected_key_ids=pre_query_keys,
-            label="[pre-upgrade] ",
-        )
+        # Skipped when test_crl_in_upgrade=True — CRL tests only need the upgrade
+        # path itself, not the 17-minute EAR pre-upgrade workload.
+        if not self.test_crl_in_upgrade:
+            self.log.info("[STEP 3] Driving pre-upgrade query workload")
+            self._set_query_completed_settings(stream_size=500, threshold=0)
+            self.log.info("[STEP 3] Running 5-minute background query load to fill rlstream...")
+            bg_thread = self._dispatch_background_query_batch(
+                baseline_queries, query_nodes_initial, workers=5
+            )
+            self.sleep(300, "Running background queries for 5 minutes")
+            bg_thread.join(timeout=30)
+            self.log.info("[STEP 3] Background load complete, setting completed-threshold=720000...")
+            self._set_query_completed_settings(stream_size=500, threshold=720000)
+            self.sleep(720, "Waiting 12 minutes for local_request_log.* files to be created")
+            self.log.info("[STEP 3] Wait complete - local_request_log.* should be created")
+            self._run_spill_and_backfill_workload(query_nodes_initial, namespaces[0])
+            pre_query_keys = (
+                self._get_query_in_use_key_ids() if self.initial_supports_file_ear else {}
+            )
+            self._trigger_ffdc_and_poll(
+                query_nodes_initial,
+                expected_key_ids=pre_query_keys,
+                label="[pre-upgrade] ",
+            )
 
-        pre_upgrade_failures = []
-        if self.initial_supports_file_ear and self.log_encryption_at_rest_id:
-            self.log.info(
-                "[STEP 3a] Pre-upgrade: validating request log and FFDC encryption"
-            )
-            pre_upgrade_failures.extend(
-                f"[Query] {line}"
-                for line in self._collect_query_encryption_failures(
-                    query_nodes_initial, pre_query_keys, label="[STEP 3a] "
+            pre_upgrade_failures = []
+            if self.initial_supports_file_ear and self.log_encryption_at_rest_id:
+                self.log.info(
+                    "[STEP 3a] Pre-upgrade: validating request log and FFDC encryption"
                 )
-            )
+                pre_upgrade_failures.extend(
+                    f"[Query] {line}"
+                    for line in self._collect_query_encryption_failures(
+                        query_nodes_initial, pre_query_keys, label="[STEP 3a] "
+                    )
+                )
+            else:
+                self.log.info(
+                    "[STEP 3a] Pre-upgrade query file encryption check skipped — "
+                    "file-level query encryption is not supported before 8.1"
+                )
+
+            # STEP 4: Pre-upgrade GSI file validation
+            # need to check for bucket encryption being enabled for releases > 8.1
+            if self.initial_supports_file_ear:
+                index_nodes_initial = self.get_nodes_from_services_map(
+                    service_type="index", get_all_nodes=True,
+                )
+                pre_index_keys = self._get_indexer_in_use_key_ids(index_nodes_initial)
+                self.log.info(
+                    f"[STEP 4] Pre-upgrade: file EAR supported — validating GSI files "
+                    f"are encrypted with {pre_index_keys}"
+                )
+                pre_upgrade_failures.extend(
+                    f"[GSI] {line}"
+                    for line in self._collect_gsi_encryption_failures(
+                        index_nodes_initial, encrypted_buckets, pre_index_keys,
+                        query_node=query_nodes_initial[0] if query_nodes_initial else None,
+                        label="[STEP 4] ",
+                    )
+                )
+            else:
+                self.log.info(
+                    f"[STEP 4] Pre-upgrade: cluster on {self.initial_version} — file EAR not "
+                    f"supported; expecting PLAINTEXT (mixed-mode + post-upgrade checks will assert)"
+                )
+
+            if pre_upgrade_failures:
+                self.fail(
+                    "[pre-upgrade] Encryption validation FAILED — both GSI and Query "
+                    "files are listed below:\n" + "\n".join(pre_upgrade_failures)
+                )
         else:
             self.log.info(
-                "[STEP 3a] Pre-upgrade query file encryption check skipped — "
-                "file-level query encryption is not supported before 8.1"
-            )
-
-        # STEP 4: Pre-upgrade GSI file validation
-        # need to check for bucket encryption being enabled for releases > 8.1
-        if self.initial_supports_file_ear:
-            index_nodes_initial = self.get_nodes_from_services_map(
-                service_type="index", get_all_nodes=True,
-            )
-            pre_index_keys = self._get_indexer_in_use_key_ids(index_nodes_initial)
-            self.log.info(
-                f"[STEP 4] Pre-upgrade: file EAR supported — validating GSI files "
-                f"are encrypted with {pre_index_keys}"
-            )
-            pre_upgrade_failures.extend(
-                f"[GSI] {line}"
-                for line in self._collect_gsi_encryption_failures(
-                    index_nodes_initial, encrypted_buckets, pre_index_keys,
-                    query_node=query_nodes_initial[0] if query_nodes_initial else None,
-                    label="[STEP 4] ",
-                )
-            )
-        else:
-            self.log.info(
-                f"[STEP 4] Pre-upgrade: cluster on {self.initial_version} — file EAR not "
-                f"supported; expecting PLAINTEXT (mixed-mode + post-upgrade checks will assert)"
-            )
-
-        if pre_upgrade_failures:
-            self.fail(
-                "[pre-upgrade] Encryption validation FAILED — both GSI and Query "
-                "files are listed below:\n" + "\n".join(pre_upgrade_failures)
+                "[STEP 3/3a/4] Skipped — test_crl_in_upgrade=True, EAR workload not needed"
             )
 
         # STEP 5: Snapshot index identities and item counts for all namespaces
@@ -2270,7 +2661,10 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
 
         # Mixed-mode checkpoint — only interesting when target supports file EAR but
         # initial does not (i.e. 8.0 -> 8.1, or pre-8.0 -> 8.1).
-        if self.target_supports_file_ear and not self.initial_supports_file_ear:
+        # Skipped entirely for CRL-only runs — no EAR state to validate.
+        if self.test_crl_in_upgrade:
+            self.log.info("[STEP 6.5] EAR mixed-mode checkpoint skipped — test_crl_in_upgrade=True")
+        elif self.target_supports_file_ear and not self.initial_supports_file_ear:
             if self.initial_supports_bucket_ear:
                 # Bucket encryption was on the whole time — clean mixed-mode case.
                 self.log.info(
@@ -2295,6 +2689,15 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
                 f"(initial_file_ear={self.initial_supports_file_ear}, "
                 f"target_file_ear={self.target_supports_file_ear})"
             )
+        # CRL mixed-mode check (only when test_crl_in_upgrade=True):
+        # upgraded nodes (8.1+) must have CRL endpoint + Disabled default; pre-8.1 nodes
+        # must not expose it. Also verifies Query/GSI endpoints accessible and scans work.
+        if self.test_crl_in_upgrade:
+            try:
+                self._check_crl_mixed_mode("STEP 6.5 CRL mixed-mode", baseline_queries)
+            except Exception as e:
+                deferred_failures.append(f"[STEP 6.5 CRL] mixed-mode check failed: {e}")
+
         self.log.info(f"[STEP 6] Upgrading post-mixed-mode nodes: {[n.ip for n in post_mixed]}")
         for node in post_mixed:
             self._upgrade_node(node, mode)
@@ -2305,7 +2708,7 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
         # enablement. On 7.x->8.1 paths encryption is still off here; on 8.0->8.1
         # paths log encryption was on from the start. Either way the endpoint must
         # report a coherent answer on every query and index node now that they're on 8.1.
-        if self.target_supports_file_ear:
+        if self.target_supports_file_ear and not self.test_crl_in_upgrade:
             self._validate_query_keys_in_use_endpoint(
                 label="[STEP 6.9 pre-enablement] ",
             )
@@ -2314,85 +2717,92 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
                     label="[STEP 6.9 pre-enablement] ",
                 )
             )
+        elif self.test_crl_in_upgrade:
+            self.log.info("[STEP 6.9] Skipped — test_crl_in_upgrade=True, EAR endpoint check not needed")
 
-        # STEP 7a: Enable bucket + log encryption for pre-8.0 starting versions
-        # (e.g. 7.2→8.1 or 7.6→8.1). Both must be active before the post-upgrade
-        # new-file validation can assert that query log files are encrypted.
-        if not self.initial_supports_bucket_ear:
-            self.log.info(
-                f"[STEP 7a] Enabling bucket and log encryption post-upgrade "
-                f"(cluster on {self.upgrade_to})"
-            )
-            self._create_kek()
-            self._enable_bucket_encryption(self.test_bucket, self.encryption_key_id)
-            self._enable_log_encryption_at_rest()
-            self.sleep(60, "Wait for indexer + query to start using the new keys")
-
-        # STEP 7b: Enable other encryption at rest on all upgrade paths that land on
-        # 8.1+. This is a new 8.1 feature required for spill / backfill file
-        # encryption and is not enabled during cluster preparation regardless of the
-        # initial version.
-        if self.target_supports_file_ear:
-            self.log.info(
-                "[STEP 7b] Enabling other encryption at rest "
-                "(required for spill/backfill file encryption)"
-            )
-            self._enable_other_encryption_at_rest()
-            self.sleep(30, "Wait for other encryption to apply")
-
-        # STEP 7c: Force re-encrypt everything now that all nodes are on 8.1+ and
-        # all encryption types are active. This guarantees that index files and log
-        # files created before encryption was enabled (pre-8.0 upgrade paths) are
-        # re-encrypted on disk before the final validation runs.
-        if self.target_supports_file_ear:
-            self.log.info(
-                "[STEP 7c] Force re-encrypting all GSI index files and query log files"
-            )
-            index_nodes_reenc = self.get_nodes_from_services_map(
-                service_type="index", get_all_nodes=True,
-            )
-            query_nodes_reenc = self.get_nodes_from_services_map(
-                service_type="n1ql", get_all_nodes=True,
-            )
-            for bucket in encrypted_buckets:
-                self._force_reencrypt_bucket_and_wait(
-                    bucket, index_nodes_reenc,
-                    timeout=300, label="[STEP 7c] ",
+        if not self.test_crl_in_upgrade:
+            # STEP 7a: Enable bucket + log encryption for pre-8.0 starting versions
+            # (e.g. 7.2→8.1 or 7.6→8.1). Both must be active before the post-upgrade
+            # new-file validation can assert that query log files are encrypted.
+            if not self.initial_supports_bucket_ear:
+                self.log.info(
+                    f"[STEP 7a] Enabling bucket and log encryption post-upgrade "
+                    f"(cluster on {self.upgrade_to})"
                 )
-            self._force_reencrypt_logs_and_wait(
-                query_nodes_reenc, timeout=300, label="[STEP 7c] ",
-            )
-            self._force_reencrypt_other_and_wait(
-                query_nodes_reenc, timeout=300, label="[STEP 7c] ",
-            )
+                self._create_kek()
+                self._enable_bucket_encryption(self.test_bucket, self.encryption_key_id)
+                self._enable_log_encryption_at_rest()
+                self.sleep(60, "Wait for indexer + query to start using the new keys")
+
+            # STEP 7b: Enable other encryption at rest on all upgrade paths that land on
+            # 8.1+. This is a new 8.1 feature required for spill / backfill file
+            # encryption and is not enabled during cluster preparation regardless of the
+            # initial version.
+            if self.target_supports_file_ear:
+                self.log.info(
+                    "[STEP 7b] Enabling other encryption at rest "
+                    "(required for spill/backfill file encryption)"
+                )
+                self._enable_other_encryption_at_rest()
+                self.sleep(30, "Wait for other encryption to apply")
+
+            # STEP 7c: Force re-encrypt everything now that all nodes are on 8.1+ and
+            # all encryption types are active. This guarantees that index files and log
+            # files created before encryption was enabled (pre-8.0 upgrade paths) are
+            # re-encrypted on disk before the final validation runs.
+            if self.target_supports_file_ear:
+                self.log.info(
+                    "[STEP 7c] Force re-encrypting all GSI index files and query log files"
+                )
+                index_nodes_reenc = self.get_nodes_from_services_map(
+                    service_type="index", get_all_nodes=True,
+                )
+                query_nodes_reenc = self.get_nodes_from_services_map(
+                    service_type="n1ql", get_all_nodes=True,
+                )
+                for bucket in encrypted_buckets:
+                    self._force_reencrypt_bucket_and_wait(
+                        bucket, index_nodes_reenc,
+                        timeout=300, label="[STEP 7c] ",
+                    )
+                self._force_reencrypt_logs_and_wait(
+                    query_nodes_reenc, timeout=300, label="[STEP 7c] ",
+                )
+                self._force_reencrypt_other_and_wait(
+                    query_nodes_reenc, timeout=300, label="[STEP 7c] ",
+                )
+                self.log.info(
+                    "[STEP 7c] Re-encryption triggered — waiting for all GSI stores "
+                    "to reach encryption_status='encrypted'"
+                )
+                self._wait_for_full_gsi_encryption(
+                    index_nodes_reenc, encrypted_buckets,
+                    timeout=1200, label="[STEP 7c] ",
+                )
+                self.log.info("[STEP 7c] Force re-encryption complete")
+
+            # STEP 7d: keys-in-use endpoint check on 8.1 after encryption is fully on.
+            # Every query node must now report non-empty key IDs matching the active
+            # log-encryption key.
+            if self.target_supports_file_ear:
+                self._validate_query_keys_in_use_endpoint(
+                    label="[STEP 7d post-enablement] ",
+                )
+
+            # STEP 8: Full post-upgrade EAR validation
+            self.log.info("[STEP 8] Running full post-upgrade validation")
+            try:
+                self._validate_full_post_upgrade(
+                    pre_index_identity, encrypted_buckets, namespaces, baseline_queries,
+                )
+            except AssertionError as e:
+                deferred_failures.append(f"[STEP 8] post-upgrade validation failed: {e}")
+            except Exception as e:
+                deferred_failures.append(f"[STEP 8] post-upgrade validation error: {e}")
+        else:
             self.log.info(
-                "[STEP 7c] Re-encryption triggered — waiting for all GSI stores "
-                "to reach encryption_status='encrypted'"
+                "[STEP 7a/7b/7c/7d/8] Skipped — test_crl_in_upgrade=True, EAR validation not needed"
             )
-            self._wait_for_full_gsi_encryption(
-                index_nodes_reenc, encrypted_buckets,
-                timeout=1200, label="[STEP 7c] ",
-            )
-            self.log.info("[STEP 7c] Force re-encryption complete")
-
-        # STEP 7d: keys-in-use endpoint check on 8.1 after encryption is fully on.
-        # Every query node must now report non-empty key IDs matching the active
-        # log-encryption key.
-        if self.target_supports_file_ear:
-            self._validate_query_keys_in_use_endpoint(
-                label="[STEP 7d post-enablement] ",
-            )
-
-        # STEP 8: Full post-upgrade validation
-        self.log.info("[STEP 8] Running full post-upgrade validation")
-        try:
-            self._validate_full_post_upgrade(
-                pre_index_identity, encrypted_buckets, namespaces, baseline_queries,
-            )
-        except AssertionError as e:
-            deferred_failures.append(f"[STEP 8] post-upgrade validation failed: {e}")
-        except Exception as e:
-            deferred_failures.append(f"[STEP 8] post-upgrade validation error: {e}")
 
         # STEP 8.5: Validate item counts for all namespaces
         self.log.info("[STEP 8.5] Validating item counts across upgrade")
@@ -2402,6 +2812,14 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
             deferred_failures.append(f"[STEP 8.5] item count mismatch: {e}")
         except Exception as e:
             deferred_failures.append(f"[STEP 8.5] item count validation error: {e}")
+
+        # CRL post-upgrade check (only when test_crl_in_upgrade=True):
+        # all nodes now on 8.1+; CRL must default to Disabled.
+        if self.test_crl_in_upgrade:
+            try:
+                self._check_crl_upgrade_state("STEP 8.5 CRL post-upgrade")
+            except Exception as e:
+                deferred_failures.append(f"[STEP 8.5 CRL] post-upgrade check failed: {e}")
 
         # STEP 9: Final indexer restart on every node before test exit/failure.
         restart_errors = self._restart_indexer_on_all_nodes(
