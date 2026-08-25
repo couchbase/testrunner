@@ -697,21 +697,22 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
                     f"{label}{node.ip}: log encryption is NOT enabled but "
                     f"endpoint reports in-use log DEKs {log_ids}",
                 )
-            # TODO: Re-enable once MB-72285 is fixed — post-upgrade the
-            # /admin/encryption_at_rest endpoint does not return other keys in use.
+            # MB-72285 is fixed — the /admin/encryption_at_rest endpoint now
+            # reports the "other" keys in use post-upgrade, so these assertions
+            # are re-enabled.
             # https://jira.issues.couchbase.com/browse/MB-72285
-            # if other_enabled:
-            #     self.assertTrue(
-            #         len(other_ids) > 0,
-            #         f"{label}{node.ip}: other encryption is enabled but "
-            #         "endpoint reports no in-use other DEKs",
-            #     )
-            # else:
-            #     self.assertTrue(
-            #         len(other_ids) == 0,
-            #         f"{label}{node.ip}: other encryption is NOT enabled but "
-            #         f"endpoint reports in-use other DEKs {other_ids}",
-            #     )
+            if other_enabled:
+                self.assertTrue(
+                    len(other_ids) > 0,
+                    f"{label}{node.ip}: other encryption is enabled but "
+                    "endpoint reports no in-use other DEKs",
+                )
+            else:
+                self.assertTrue(
+                    len(other_ids) == 0,
+                    f"{label}{node.ip}: other encryption is NOT enabled but "
+                    f"endpoint reports in-use other DEKs {other_ids}",
+                )
         return node_key_ids
 
     def _get_indexer_in_use_key_ids(self, index_nodes):
@@ -739,6 +740,36 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
         if isinstance(response, dict):
             for v in response.values():
                 GSIQueryEncryptionAtRestUpgrade._extract_indexer_key_ids(v, out_set)
+
+    def _get_indexer_other_in_use_key_ids(self, index_nodes):
+        """Union of the indexer's cluster/file-level ("other") in-use DEK IDs.
+
+        The indexer GetInUseKeys response is grouped by datatype, e.g.
+        ``{"other": ["<dek-uuid>"], "service_bucket <uuid>": ["<dek-uuid>"], ...}``.
+        The GSI metadata store (``@2i/metadata_repo_v2``) is encrypted with the
+        "other" DEK — NOT the per-bucket/index data DEK — so metadata_repo
+        validation must assert against these keys specifically. Returns a sorted
+        list of the non-empty key IDs found under the "other" datatype across all
+        index nodes (empty list if the endpoint reports no "other" keys, e.g. when
+        other encryption is not enabled)."""
+        keys = set()
+        for node in index_nodes:
+            try:
+                rest = RestConnection(node)
+                status, response = rest.get_indexer_in_use_encryption_keys()
+                if not status or not isinstance(response, dict):
+                    continue
+                for label, ids in response.items():
+                    # Match the top-level "other" datatype bucket (label is
+                    # exactly "other" on the indexer endpoint).
+                    if str(label).strip().lower() != "other":
+                        continue
+                    self._extract_indexer_key_ids(ids, keys)
+            except Exception as e:
+                self.log.warning(
+                    f"get_indexer_in_use_encryption_keys (other) on {node.ip} failed: {e}"
+                )
+        return sorted(keys)
 
     # ------------------------------------------------------------------ spill / backfill
 
@@ -1596,9 +1627,16 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
         return file_path, details
 
     def _collect_gsi_encryption_failures(
-        self, index_nodes, encrypted_buckets, expected_key_id, query_node=None, label=""
+        self, index_nodes, encrypted_buckets, expected_key_id, query_node=None,
+        label="", metadata_key_id=None
     ):
         """Return a list of GSI file-encryption failures.
+
+        metadata_key_id: key ID (or list) governing the GSI metadata store
+        (the cluster/file-level "other" key). Passed straight through to the
+        metadata_repo verifier so ``@2i/metadata_repo_v2`` is validated against
+        the "other" key rather than the per-bucket/index data key. When None the
+        validator falls back to ``expected_key_id``.
 
         Any failing file is also copied off its node into self._evidence_dir for
         post-mortem inspection (mirrors the query-side failure collection)."""
@@ -1609,6 +1647,7 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
             encrypted_bucket_names=encrypted_buckets,
             query_node=query_node,
             fail_on_error=False,
+            metadata_key_id=metadata_key_id,
         )
         node_obj_map = {node.ip: node for node in index_nodes}
         failures = []
@@ -1864,10 +1903,29 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
             len(index_keys), 0,
             "[post-upgrade] no indexer in-use key IDs found — encryption not active?",
         )
+        # The GSI metadata store (@2i/metadata_repo_v2) is encrypted with the
+        # cluster/file-level ("other") DEK, not the per-bucket/index data DEK,
+        # so metadata_repo must be validated against the "other" key. Only look
+        # it up when other encryption is actually enabled; otherwise leave it
+        # None so the validator falls back to index_keys (pre-8.1 paths).
+        metadata_key_ids = None
+        if getattr(self, "other_encryption_at_rest_id", None):
+            metadata_key_ids = self._get_indexer_other_in_use_key_ids(index_nodes)
+            self.log.info(
+                f"[post-upgrade] metadata_repo will be validated against indexer "
+                f"'other' in-use key IDs: {metadata_key_ids or '[]'}"
+            )
+            if not metadata_key_ids:
+                self.log.warning(
+                    "[post-upgrade] other encryption is enabled but the indexer "
+                    "GetInUseKeys endpoint reported no 'other' key IDs — "
+                    "metadata_repo will fall back to index data keys"
+                )
+                metadata_key_ids = None
         validation_failures = []
         gsi_failures = self._collect_gsi_encryption_failures(
             index_nodes, encrypted_buckets, index_keys, query_node=query_nodes[0] if query_nodes else None,
-            label="[post-upgrade] "
+            label="[post-upgrade] ", metadata_key_id=metadata_key_ids
         )
         validation_failures.extend(f"[GSI] {line}" for line in gsi_failures)
         if not gsi_failures:

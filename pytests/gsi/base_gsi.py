@@ -357,13 +357,23 @@ class BaseSecondaryIndexingTests(QueryTests):
                                        encrypted_bucket_names):
         """Gate encryption validation on the cluster/file-level ("other") key.
 
-        Runs before any encryption verifier so we don't validate while the
-        metadata store is still plaintext mid-rollout. Only waits when
-        encryption is actually expected (an expected key ID or encrypted
-        buckets were supplied) — otherwise it returns immediately. Non-fatal:
-        on timeout it logs a warning and lets validation proceed (the
-        metadata_repo verifier will still catch a genuinely-unencrypted store).
+        Runs before any encryption verifier so we don't validate the metadata
+        store while it is still plaintext mid-rollout. Only waits when the
+        cluster/file-level ("other") encryption is actually enabled AND some
+        encryption is expected (an expected key ID or encrypted buckets were
+        supplied) — otherwise it returns immediately. The "other" key governs
+        ONLY the metadata store, which is skipped entirely when "other"
+        encryption is off (see _run_common_encryption_verifiers), so waiting for
+        it in that case would just burn the timeout for nothing. Non-fatal: on
+        timeout it logs a warning and lets validation proceed.
         """
+        other_enabled = bool(getattr(self, "enable_other_encryption_at_rest", False)) or (
+            getattr(self, "other_encryption_at_rest_id", None) not in (None, False)
+        )
+        if not other_enabled:
+            # "other" encryption is off — the metadata store is plaintext by
+            # design and its validation is skipped, so there is nothing to wait for.
+            return
         if not expected_key_id and not encrypted_bucket_names:
             # No encryption expected in this call — nothing to wait for.
             return
@@ -375,11 +385,19 @@ class BaseSecondaryIndexingTests(QueryTests):
     def _run_common_encryption_verifiers(self, _safe_run, helper, index_nodes,
                                          bucket_key_map, expected_key_id,
                                          encrypted_bucket_names, query_node,
-                                         per_node_bkm=None):
+                                         per_node_bkm=None, metadata_key_id=None):
         """Run engine-agnostic verifiers: error_files, storage_stats_rest,
         metadata_repo, plaintext_leakage (gated on query_node + samples),
         naming_leak.
         Called from validate_moi, validate_plasma_bhive, and validate_bhive.
+
+        metadata_key_id: key ID (or list) that governs the GSI metadata store
+        (``@2i/metadata_repo_v2``). The metadata store is encrypted with the
+        cluster/file-level ("other") encryption key, NOT the per-bucket/index
+        data key, so it must be validated against the "other" key rather than
+        ``expected_key_id``. When None, falls back to ``expected_key_id`` to
+        preserve behaviour for callers that don't distinguish the two (e.g.
+        bucket-only clusters where a single key covers everything).
         """
         _safe_run("error_files",
                   helper.verify_gsi_error_files_encrypted,
@@ -395,9 +413,29 @@ class BaseSecondaryIndexingTests(QueryTests):
                   encrypted_bucket_names=encrypted_bucket_names,
                   bucket_key_map=bucket_key_map,
                   per_node_bucket_key_map=per_node_bkm)
-        _safe_run("metadata_repo",
-                  helper.verify_gsi_metadata_repo_encrypted,
-                  index_nodes, expected_key_id=expected_key_id)
+        # The GSI metadata store (@2i/metadata_repo_v2) is encrypted ONLY by the
+        # cluster/file-level ("other") encryption key. When "other" encryption is
+        # not enabled the metadata store is plaintext by design, so validating it
+        # would be a false positive — skip it in that case. When it IS enabled,
+        # validate against the "other" key (metadata_key_id) rather than the
+        # per-bucket/index data key. A genuinely-plaintext metadata store while
+        # "other" encryption is enabled still fails, so real regressions are kept.
+        other_enabled = bool(getattr(self, "enable_other_encryption_at_rest", False)) or (
+            getattr(self, "other_encryption_at_rest_id", None) not in (None, False)
+        )
+        if other_enabled:
+            metadata_expected_key = metadata_key_id if metadata_key_id else expected_key_id
+            _safe_run("metadata_repo",
+                      helper.verify_gsi_metadata_repo_encrypted,
+                      index_nodes, expected_key_id=metadata_expected_key)
+        else:
+            skip_reason = ("metadata store not encrypted — cluster/file-level "
+                           "('other') encryption at rest is not enabled")
+            self.log.info(f"[metadata_repo] Skipping validation: {skip_reason}")
+            _safe_run("metadata_repo",
+                      lambda nodes: {n.ip: {"status": "skipped", "reason": skip_reason}
+                                     for n in nodes},
+                      index_nodes)
 
         # Optional plaintext-leakage scan (needs a query node + bucket names).
         if query_node and encrypted_bucket_names:
@@ -563,7 +601,8 @@ class BaseSecondaryIndexingTests(QueryTests):
     def validate_engine_encryption(self, engine_type, index_nodes,
                                    expected_key_id=None,
                                    encrypted_bucket_names=None,
-                                   query_node=None, fail_on_error=True):
+                                   query_node=None, fail_on_error=True,
+                                   metadata_key_id=None):
         """Dispatcher for engine-specific GSI encryption validation.
 
         engine_type is case-insensitive and accepts exactly:
@@ -586,6 +625,12 @@ class BaseSecondaryIndexingTests(QueryTests):
                 check when provided together with encrypted_bucket_names.
             fail_on_error: If True (default), raises AssertionError with a
                 consolidated summary after all verifiers have run.
+            metadata_key_id: Optional key ID (or list) governing the GSI
+                metadata store (``@2i/metadata_repo_v2``). The metadata store is
+                encrypted with the cluster/file-level ("other") key, not the
+                per-bucket/index data key, so pass the "other" key here to
+                validate metadata_repo against it. When None, falls back to
+                ``expected_key_id``.
 
         Returns:
             dict: per-category result dicts plus an '_overall' key.
@@ -601,6 +646,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                 encrypted_bucket_names=encrypted_bucket_names,
                 query_node=query_node,
                 fail_on_error=fail_on_error,
+                metadata_key_id=metadata_key_id,
             )
         elif engine_lower in ("plasma", "bhive"):
             return self.validate_plasma_bhive(
@@ -609,6 +655,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                 encrypted_bucket_names=encrypted_bucket_names,
                 query_node=query_node,
                 fail_on_error=fail_on_error,
+                metadata_key_id=metadata_key_id,
             )
         else:
             raise ValueError(
@@ -618,7 +665,7 @@ class BaseSecondaryIndexingTests(QueryTests):
 
     def validate_moi(self, index_nodes, expected_key_id=None,
                      encrypted_bucket_names=None, query_node=None,
-                     fail_on_error=True):
+                     fail_on_error=True, metadata_key_id=None):
         """Validate encryption for Memory-Optimized Index (MOI) storage.
 
         MOI is exclusive: a cluster configured as memory_optimized never has
@@ -687,7 +734,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self._run_common_encryption_verifiers(
             _safe_run, helper, index_nodes, bucket_key_map,
             expected_key_id, encrypted_bucket_names, query_node,
-            per_node_bkm=per_node_bkm
+            per_node_bkm=per_node_bkm, metadata_key_id=metadata_key_id
         )
         return self._finalize_encryption_results(
             "MOI", results, fail_on_error, index_nodes=index_nodes
@@ -695,7 +742,7 @@ class BaseSecondaryIndexingTests(QueryTests):
 
     def validate_plasma_bhive(self, index_nodes, expected_key_id=None,
                                encrypted_bucket_names=None, query_node=None,
-                               fail_on_error=True):
+                               fail_on_error=True, metadata_key_id=None):
         """Validate encryption for Plasma and BHive storage (non-MOI clusters).
 
         Plasma and BHive indexes can co-exist on the same cluster regardless of
@@ -812,7 +859,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self._run_common_encryption_verifiers(
             _safe_run, helper, index_nodes, bucket_key_map,
             expected_key_id, encrypted_bucket_names, query_node,
-            per_node_bkm=per_node_bkm
+            per_node_bkm=per_node_bkm, metadata_key_id=metadata_key_id
         )
         return self._finalize_encryption_results(
             "PLASMA/BHIVE", results, fail_on_error, index_nodes=index_nodes

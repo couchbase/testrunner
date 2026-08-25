@@ -424,21 +424,26 @@ class GSIEncryptionAtRestRebalance(GSIEncryptionAtRestBase, BaseSecondaryIndexin
             list: List of CREATE INDEX queries
         """
         all_queries = []
-        
+
         # Scalar indexes: cycle through replica counts 1, 2 (1-2 max)
         scalar_replica_counts = [1, 2]
         scalar_replica_idx = 0
-        
-        # Dense and Sparse indexes: NEVER create replicas (always 0)
-        # Scalar indexes: 1-2 replicas max
-        
+
+        # Vector indexes (dense composite, sparse BHIVE, sparse composite) must
+        # also carry at least one replica in the rebalance suite. With 0 replicas
+        # they are single-copy, so a rebalance-out / failover of their hosting
+        # node destroys the only copy and later scans fail with
+        # "No index available on keyspace ..." (observed for
+        # scompsparse_vector_only and dcompscalar_leading_vector). One replica
+        # (two copies) survives a single node removal.
+        vector_num_replica = 1
+
         # Dense BHIVE queries - 1 replica when scaled down to a single BHIVE
         # index, otherwise NO replicas (always 0) like every other vector type
         if dense_bhive_def:
-            bhive_num_replica = 1 if self.bhive_index_scale_down else 0
+            bhive_num_replica = vector_num_replica
             self.log.info(f"Creating dense BHIVE index with {bhive_num_replica} replica(s) "
-                          f"({'bhive_index_scale_down=True' if self.bhive_index_scale_down else 'dense/sparse never get replicas'}), "
-                          f"defer_build={defer_build}")
+                          f"(survives node removal), defer_build={defer_build}")
             queries = self.gsi_util_obj.get_create_index_list(
                 definition_list=dense_bhive_def,
                 namespace=namespace,
@@ -448,13 +453,13 @@ class GSIEncryptionAtRestRebalance(GSIEncryptionAtRestBase, BaseSecondaryIndexin
             )
             all_queries.extend(queries)
         
-        # Dense Composite queries - NO replicas (always 0)
+        # Dense Composite queries - 1 replica so they survive a node removal
         if dense_composite_def:
-            self.log.info(f"Creating dense composite index with 0 replicas (dense/sparse never get replicas), defer_build={defer_build}")
+            self.log.info(f"Creating dense composite index with {vector_num_replica} replica(s) (survives node removal), defer_build={defer_build}")
             queries = self.gsi_util_obj.get_create_index_list(
                 definition_list=dense_composite_def,
                 namespace=namespace,
-                num_replica=0,
+                num_replica=vector_num_replica,
                 bhive_index=False,
                 defer_build=defer_build
             )
@@ -486,25 +491,25 @@ class GSIEncryptionAtRestRebalance(GSIEncryptionAtRestBase, BaseSecondaryIndexin
                     all_queries.extend(queries)
                 scalar_replica_idx += 1
         
-        # Sparse BHIVE queries - NO replicas (always 0)
+        # Sparse BHIVE queries - 1 replica so they survive a node removal
         if sparse_bhive_def:
-            self.log.info(f"Creating sparse BHIVE index with 0 replicas (dense/sparse never get replicas), defer_build={defer_build}")
+            self.log.info(f"Creating sparse BHIVE index with {vector_num_replica} replica(s) (survives node removal), defer_build={defer_build}")
             queries = self.gsi_util_obj.get_create_index_list(
                 definition_list=sparse_bhive_def,
                 namespace=namespace,
-                num_replica=0,
+                num_replica=vector_num_replica,
                 bhive_index=True,
                 defer_build=defer_build
             )
             all_queries.extend(queries)
         
-        # Sparse Composite queries - NO replicas (always 0)
+        # Sparse Composite queries - 1 replica so they survive a node removal
         if sparse_composite_def:
-            self.log.info(f"Creating sparse composite index with 0 replicas (dense/sparse never get replicas), defer_build={defer_build}")
+            self.log.info(f"Creating sparse composite index with {vector_num_replica} replica(s) (survives node removal), defer_build={defer_build}")
             queries = self.gsi_util_obj.get_create_index_list(
                 definition_list=sparse_composite_def,
                 namespace=namespace,
-                num_replica=0,
+                num_replica=vector_num_replica,
                 bhive_index=False,
                 defer_build=defer_build
             )
@@ -747,45 +752,24 @@ class GSIEncryptionAtRestRebalance(GSIEncryptionAtRestBase, BaseSecondaryIndexin
         )
 
         try:
-            # Wait for the rebalance to actually start running before polling
-            # it to completion. Immediately after a just-failed rebalance
-            # (e.g. an indexer-kill retry), pools/default/rebalanceProgress
-            # can keep reporting that prior failure — same status='none',
-            # same errorMessage, same Operation Id — for a brief window before
-            # the orchestrator picks up the new operation. Polling straight
-            # into rebalance_reached() would catch that leftover error and
-            # report a false failure without a second rebalance ever having
-            # run. Tolerate it here for a bounded window instead; a cluster
-            # that's genuinely still stuck will still time out below with a
-            # clear message rather than a stale RebalanceFailedException.
-            self.log.info("Waiting for rebalance to start running...")
-            start_time = time.time()
-            timeout = 60
-            status = None
-            while status != 'running':
-                if time.time() - start_time > timeout:
-                    raise Exception(
-                        f"Rebalance did not start running within {timeout}s "
-                        f"(last status: {status}) — cluster may still be stuck "
-                        f"on a prior failed rebalance"
-                    )
-                try:
-                    status, _ = self.rest._rebalance_status_and_progress()
-                except Exception as ex:
-                    self.log.warning(
-                        f"Transient error while waiting for rebalance to start "
-                        f"(likely stale status from a prior failed rebalance): {ex}"
-                    )
-                    status = None
-                if status != 'running':
-                    self.sleep(2, f"Waiting for rebalance to run. Current status: {status}")
-            self.log.info("Rebalance is running")
-
-            # Wait for rebalance to complete
-            self.log.info("Waiting for rebalance to complete...")
-            reached = RestHelper(self.rest).rebalance_reached(retry_count=250)
+            # Wait on the rebalance TASK itself instead of polling for the
+            # transient 'running' status. async_rebalance runs add_node, the
+            # /controller/rebalance trigger, and completion monitoring on a
+            # background thread; on loaded/dynamic VMs the node-add alone can take
+            # minutes, so the rebalance may not even start within a fixed
+            # "wait for running" window. A poll for status=='running' then races
+            # that startup latency and misreports a slow-but-healthy rebalance as
+            # "did not start / stuck on a prior failed rebalance" (observed: the
+            # 60s wait expired ~14s before the rebalance actually began, even
+            # though it then completed successfully). rebalance.result() blocks
+            # for the entire operation the task launched — robust to slow
+            # startup — returns True on success, and raises on a genuine
+            # rebalance failure. It monitors the operation it launched, so it is
+            # not confused by a stale status from a prior failed rebalance
+            # (which is what the old poll loop was trying to guard against).
+            self.log.info("Waiting for rebalance task to complete...")
+            reached = rebalance.result()
             self.assertTrue(reached, "Rebalance failed, stuck or did not complete")
-            rebalance.result()
             self.log.info("Rebalance completed successfully")
         finally:
             # Always stop the workload threads whether rebalance succeeded or failed
@@ -2383,22 +2367,46 @@ class GSIEncryptionAtRestRebalance(GSIEncryptionAtRestBase, BaseSecondaryIndexin
 
             self.log.info("[STEP 8] Rebalance task triggered. Polling until rebalance is running...")
             self.sleep(3, "Waiting briefly before checking rebalance status")
-            status, _ = self.rest._rebalance_status_and_progress()
+            # This test must observe the rebalance in the 'running' state so it
+            # can kill the indexer mid-flight, so we poll for 'running' rather
+            # than waiting on the task result. But async_rebalance does add_node
+            # + the rebalance trigger on a background thread, and on loaded VMs
+            # that startup can take minutes — a tight fixed window races it and
+            # times out before the rebalance even begins (a healthy rebalance
+            # misreported as "did not start"). Poll while the rebalance task is
+            # still active (tolerant of slow startup); stop if it reaches
+            # 'running' (kill it), or if the task finishes first (it was too
+            # fast to interrupt — the result check below handles that).
+            status = None
             start_time = time.time()
-            timeout = 60
+            timeout = 300
             while status != 'running':
+                if getattr(rebalance, 'state', None) == 'FINISHED':
+                    self.log.warning(
+                        "[STEP 8] Rebalance finished before an observable 'running' "
+                        "state — too fast to kill the indexer mid-flight"
+                    )
+                    break
                 if time.time() - start_time > timeout:
                     raise Exception(
                         f"Rebalance did not start running within {timeout} seconds. "
                         f"Current status: {status}"
                     )
                 self.sleep(1, f"[STEP 8] Waiting for rebalance to run. Current status: {status}")
-                status, _ = self.rest._rebalance_status_and_progress()
-            self.log.info("[STEP 8] Rebalance is running; proceeding with indexer kill")
+                try:
+                    status, _ = self.rest._rebalance_status_and_progress()
+                except Exception as ex:
+                    self.log.warning(f"[STEP 8] Transient error reading rebalance status: {ex}")
+                    status = None
 
-            # Kill indexer to fail rebalance
-            self.log.info(f"[STEP 8] Killing indexer on node {node_to_kill.ip} to fail rebalance...")
-            self._kill_all_processes_index(node_to_kill)
+            # Kill indexer to fail rebalance (only meaningful while it's running)
+            if status == 'running':
+                self.log.info("[STEP 8] Rebalance is running; proceeding with indexer kill")
+                self.log.info(f"[STEP 8] Killing indexer on node {node_to_kill.ip} to fail rebalance...")
+                self._kill_all_processes_index(node_to_kill)
+            else:
+                self.log.info(f"[STEP 8] Skipping indexer kill on {node_to_kill.ip} — "
+                              "rebalance no longer running")
 
             # Wait for rebalance to fail
             try:
@@ -3238,20 +3246,37 @@ class GSIEncryptionAtRestRebalance(GSIEncryptionAtRestBase, BaseSecondaryIndexin
             )
 
             if toggle_encryption_during_rebalance:
-                # Poll until rebalance is confirmed running before toggling encryption
+                # Poll until rebalance is confirmed running before toggling
+                # encryption. Poll while the rebalance task is still active
+                # rather than a fixed 60s window: async_rebalance does its
+                # startup (node add/eject + trigger) on a background thread and
+                # on loaded VMs that can take minutes, so a tight 60s poll races
+                # the startup and times out before the rebalance begins. Stop on
+                # 'running' (toggle mid-flight) or if the task finishes first.
                 self.sleep(3, "[STEP 12] Waiting briefly before polling rebalance status")
-                rebal_status, _ = self.rest._rebalance_status_and_progress()
+                rebal_status = None
                 poll_start = time.time()
-                poll_timeout = 60
+                poll_timeout = 300
                 while rebal_status != 'running':
+                    if getattr(rebalance, 'state', None) == 'FINISHED':
+                        self.log.warning(
+                            "[STEP 12] Rebalance finished before an observable 'running' "
+                            "state — toggling encryption post-rebalance instead of mid-flight"
+                        )
+                        break
                     if time.time() - poll_start > poll_timeout:
                         raise Exception(
                             f"[STEP 12] Rebalance did not reach 'running' within {poll_timeout}s "
                             f"(current status: {rebal_status})"
                         )
                     self.sleep(2, f"[STEP 12] Waiting for rebalance to run (status={rebal_status})...")
-                    rebal_status, _ = self.rest._rebalance_status_and_progress()
-                self.log.info("[STEP 12] Rebalance is running; proceeding with encryption toggle")
+                    try:
+                        rebal_status, _ = self.rest._rebalance_status_and_progress()
+                    except Exception as ex:
+                        self.log.warning(f"[STEP 12] Transient error reading rebalance status: {ex}")
+                        rebal_status = None
+                if rebal_status == 'running':
+                    self.log.info("[STEP 12] Rebalance is running; proceeding with encryption toggle")
 
                 self.log.info("[STEP 12] Toggling encryption states while rebalance is in progress...")
 
@@ -4070,6 +4095,15 @@ class GSIEncryptionAtRestRebalance(GSIEncryptionAtRestBase, BaseSecondaryIndexin
                     cluster_config=self.cluster_config if hasattr(self, 'cluster_config') else None
                 )
 
+                # Poll only the index nodes that survive this rebalance. The
+                # rebalance-out/swap node (nodes_out_list) is ejected concurrently,
+                # so polling it for new key IDs would race the eject and raise
+                # "unable to reach the host" once it leaves the cluster. Surviving
+                # nodes observe the cluster-wide DEK drop just the same. Mirrors the
+                # surviving_nodes handling in the failover branches.
+                out_ips = {o.ip for o in nodes_out_list}
+                poll_nodes = [n for n in index_nodes if n.ip not in out_ips]
+
                 # Drop DEKs on all encrypted buckets in a background thread
                 dek_drop_result = {'error': None, 'new_key_ids': None}
 
@@ -4084,7 +4118,7 @@ class GSIEncryptionAtRestRebalance(GSIEncryptionAtRestBase, BaseSecondaryIndexin
                                     f"trigger_data_reencryption failed on '{bname}': {response}")
                             self.log.info(f"[DEK drop] Re-encryption triggered on '{bname}': {response}")
                         dek_drop_result['new_key_ids'] = self.poll_for_new_indexer_key_ids(
-                            index_nodes, baseline_key_ids, timeout=600, label="[DEK drop] "
+                            poll_nodes, baseline_key_ids, timeout=600, label="[DEK drop] "
                         )
                     except Exception as ex:
                         dek_drop_result['error'] = str(ex)
@@ -4128,20 +4162,41 @@ class GSIEncryptionAtRestRebalance(GSIEncryptionAtRestBase, BaseSecondaryIndexin
                     cluster_config=self.cluster_config if hasattr(self, 'cluster_config') else None
                 )
 
-                # Poll until rebalance is actively running
+                # Poll until rebalance is actively running so we can kill the
+                # indexer mid-flight. Poll while the rebalance task is still
+                # active rather than using a fixed 60s window: async_rebalance
+                # does add_node + the trigger on a background thread, and on
+                # loaded VMs that startup can take minutes, so a tight 60s poll
+                # races the startup latency and times out before the rebalance
+                # begins. Stop on 'running' (kill it) or if the task finishes
+                # first (too fast to interrupt).
                 self.log.info("[STEP 8] Waiting for rebalance to reach 'running' status...")
                 self.sleep(3, "[STEP 8] Brief initial wait")
-                status, _ = self.rest._rebalance_status_and_progress()
+                status = None
                 start_time = time.time()
                 while status != 'running':
-                    if time.time() - start_time > 60:
-                        raise Exception(f"Rebalance did not reach 'running' within 60s (status: {status})")
+                    if getattr(rebalance, 'state', None) == 'FINISHED':
+                        self.log.warning(
+                            "[STEP 8] Rebalance finished before an observable 'running' "
+                            "state — too fast to kill the indexer mid-flight"
+                        )
+                        break
+                    if time.time() - start_time > 300:
+                        raise Exception(f"Rebalance did not reach 'running' within 300s (status: {status})")
                     self.sleep(1, f"[STEP 8] Waiting for running status (current: {status})")
-                    status, _ = self.rest._rebalance_status_and_progress()
-                self.log.info("[STEP 8] Rebalance is running; killing indexer to fail it...")
+                    try:
+                        status, _ = self.rest._rebalance_status_and_progress()
+                    except Exception as ex:
+                        self.log.warning(f"[STEP 8] Transient error reading rebalance status: {ex}")
+                        status = None
 
-                self._kill_all_processes_index(node_to_kill)
-                self.log.info(f"[STEP 8] Indexer killed on {node_to_kill.ip}")
+                if status == 'running':
+                    self.log.info("[STEP 8] Rebalance is running; killing indexer to fail it...")
+                    self._kill_all_processes_index(node_to_kill)
+                    self.log.info(f"[STEP 8] Indexer killed on {node_to_kill.ip}")
+                else:
+                    self.log.info(f"[STEP 8] Skipping indexer kill on {node_to_kill.ip} — "
+                                  "rebalance no longer running")
 
                 # Drop DEKs immediately — rebalance is actively failing
                 self.log.info("[STEP 8] Triggering force re-encryption on all encrypted buckets "
@@ -4175,8 +4230,14 @@ class GSIEncryptionAtRestRebalance(GSIEncryptionAtRestBase, BaseSecondaryIndexin
                 self.sleep(120, "[STEP 9] Waiting 2 minutes for indexer recovery")
                 self.wait_until_indexes_online(timeout=600)
 
+                # Poll only the surviving index nodes — exclude the rebalance-out/
+                # swap target, which may be unreachable after the (failed) rebalance
+                # and would otherwise raise "unable to reach the host". The DEK drop
+                # is cluster-wide, so surviving nodes observe the new key IDs.
+                out_ips = {o.ip for o in nodes_out_list}
+                poll_nodes = [n for n in index_nodes if n.ip not in out_ips]
                 new_key_ids = self.poll_for_new_indexer_key_ids(
-                    index_nodes, baseline_key_ids, timeout=300, label="[STEP 9] "
+                    poll_nodes, baseline_key_ids, timeout=300, label="[STEP 9] "
                 )
                 self.log.info(f"[STEP 9] PASSED - System stabilized; new DEK key IDs: {new_key_ids}")
             except Exception as e:
