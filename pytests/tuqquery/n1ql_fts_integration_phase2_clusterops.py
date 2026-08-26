@@ -200,7 +200,15 @@ class N1qlFTSIntegrationPhase2ClusteropsTest(QueryTests):
         return None
 
     def load_test_buckets(self):
-        self.rest.load_sample("beer-sample")
+        # beer-sample needs 200MB; ensure KV quota has room beyond the default bucket
+        needed = self.bucket_size + 200
+        node_info = self.rest.get_nodes_self()
+        current_quota = node_info.memoryQuota
+        if current_quota < needed:
+            self.log.info("Raising KV quota from %sMB to %sMB for beer-sample" % (current_quota, needed))
+            self.rest.init_cluster_memoryQuota(memoryQuota=needed)
+        status = self.rest.load_sample("beer-sample")
+        self.assertTrue(status, "Failed to install beer-sample even after quota increase to %sMB" % needed)
         self.wait_for_buckets_status({"beer-sample": "healthy"}, 5, 120)
         self.wait_for_bucket_docs({"beer-sample": 7303}, 5, 120)
 

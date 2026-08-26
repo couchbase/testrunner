@@ -1455,7 +1455,7 @@ class QueryTests(BaseTestCase):
             return True
 
     def wait_for_buckets_status(self, bucket_status_map, delay, retries):
-        self.with_retry(lambda: self.buckets_status_ready(bucket_status_map), delay=delay, tries=retries)
+        self.with_retry(lambda: self.buckets_status_ready(bucket_status_map), eval=True, delay=delay, tries=retries)
 
     def wait_for_bucket_docs(self, bucket_doc_map, delay, retries):
         self.with_retry(lambda: self.buckets_docs_ready(bucket_doc_map), eval=True, delay=delay, tries=retries)

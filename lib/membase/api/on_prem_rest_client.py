@@ -3636,14 +3636,14 @@ class RestConnection(object):
         is_bucket_loaded = False
         response = ""
         api = '{0}{1}'.format(self.baseUrl, "pools/default/buckets/{}".format(bucket_name))
-        previous_doc_count = 0
+        previous_doc_count = -1
         while time.time() < max_time and max_error_retries > 0:
             time.sleep(poll_interval)
             status, content, response = self._http_request(api, method='GET')
             if status and content:
                 data = json.loads(content)
                 current_doc_count = int(data["basicStats"]["itemCount"])
-                if current_doc_count == previous_doc_count:
+                if current_doc_count > 0 and current_doc_count == previous_doc_count:
                     is_bucket_loaded = True
                     break
                 else:
