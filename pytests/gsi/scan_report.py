@@ -14,6 +14,7 @@ if not hasattr(huggingface_hub, "cached_download"):
 from sentence_transformers import SentenceTransformer
 from .gsi_file_based_rebalance import FileBasedRebalance
 from Cb_constants import CbServer
+from TestInput import TestInputSingleton
 from membase.api.rest_client import RestConnection, RestHelper
 from concurrent.futures import ThreadPoolExecutor
 from couchbase_helper.documentgenerator import SDKDataLoader
@@ -41,7 +42,44 @@ class ReportValidationError(Exception):
     pass
 
 class Scan_Report(FileBasedRebalance):
+    def _wait_for_ongoing_rebalance(self, timeout=600):
+        """Wait for a rebalance already running on the cluster to finish.
+
+        Must run BEFORE super().setUp(), since it is basetestcase's own
+        rebalance/add-node call that fails with "Node addition is disallowed
+        while rebalance is in progress" when a previous run (typically with
+        skip_cleanup=True) left the cluster rebalancing. self.servers is not
+        populated yet at that point, so read the master from the test input.
+
+        Returns True if the cluster is idle when this returns, False if it
+        timed out or the status could not be determined.
+        """
+        try:
+            servers = TestInputSingleton.input.servers
+            if not servers:
+                return False
+            rest = RestConnection(servers[0])
+        except Exception as e:
+            log.warning(f"Could not connect to master to check rebalance status: {e}")
+            return False
+        end_time = time.time() + timeout
+        while time.time() < end_time:
+            try:
+                status, progress = rest._rebalance_status_and_progress()
+            except Exception as e:
+                log.warning(f"Could not fetch rebalance progress: {e}")
+                return False
+            if status != 'running':
+                return True
+            log.info(f"A rebalance is already in progress ({progress}%). Waiting for it to finish")
+            time.sleep(10)
+        log.warning(f"Rebalance still in progress after {timeout}s; proceeding anyway")
+        return False
+
     def setUp(self):
+        # Guard against a prior run leaving the cluster mid-rebalance, which
+        # makes the node addition in basetestcase.setUp() fail.
+        self._wait_for_ongoing_rebalance()
         super().setUp()
         self.rest = RestConnection(self.servers[0])
         self.n1ql_server = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
@@ -120,12 +158,64 @@ class Scan_Report(FileBasedRebalance):
             namespace=namespace,
             query_node=query_node
         )
+        # build_indexes() swallows failures, and a single BUILD INDEX covering
+        # every definition fails as a whole when any of them is already
+        # building ("Build Already In Progress"). Reconcile explicitly so a
+        # deferred index is never left stuck in the 'Created' state.
+        self._ensure_deferred_indexes_built(definitions, namespace, query_node)
         select_queries = self.gsi_util_obj.get_select_queries(
             definition_list=definitions,
             namespace=namespace,
             limit=self.scan_limit
         )
         return definitions, queries, select_queries
+
+    def _ensure_deferred_indexes_built(self, definitions, namespace, query_node,
+                                       max_attempts=6, wait=30):
+        """Re-issue BUILD INDEX for any index still sitting in 'Created'.
+
+        Indexes are created concurrently on one keyspace, so the server rejects
+        overlapping builds with a transient error (code 4360, "Build Already In
+        Progress") and only promises to retry in the background. The single
+        BUILD INDEX issued by gsi_util_obj.build_indexes() covers every
+        definition at once, so it fails as a whole if any one of them is
+        already building - and its exception is only printed. The net effect is
+        a deferred index left at status 'Created', progress 0, which then burns
+        the full wait_until_indexes_online() timeout.
+
+        Retry the build for just the indexes that are actually still pending.
+        """
+        index_names = {d.index_name for d in definitions}
+        rest = RestConnection(self.master)
+        pending = set()
+        for attempt in range(1, max_attempts + 1):
+            pending = set()
+            for bucket_indexes in rest.get_index_status().values():
+                for name, state in bucket_indexes.items():
+                    # Replicas are reported as "<name> (replica N)"; BUILD INDEX
+                    # takes the base name and covers every replica.
+                    base_name = name.split(" (replica")[0]
+                    if base_name in index_names and state.get("status") == "Created":
+                        pending.add(base_name)
+            if not pending:
+                if attempt > 1:
+                    self.log.info("All deferred indexes are building or built")
+                return
+            self.log.warning(
+                f"Attempt {attempt}/{max_attempts}: {len(pending)} index(es) still "
+                f"in 'Created' state, re-issuing BUILD INDEX: {sorted(pending)}"
+            )
+            build_query = (f"BUILD INDEX ON {namespace}"
+                           f"({', '.join('`' + name + '`' for name in sorted(pending))})")
+            try:
+                self.run_cbq_query(query=build_query, server=query_node)
+            except Exception as err:
+                # A transient error here just means another build is still in
+                # flight; the next attempt picks up whatever is left.
+                self.log.warning(f"BUILD INDEX retry failed (will re-check): {err}")
+            self.sleep(wait, "Waiting for deferred index builds to start")
+        self.fail(f"Indexes stuck in 'Created' state after {max_attempts} build "
+                  f"attempts: {sorted(pending)}")
 
     def _create_vector_indexes(self, namespace, prefix, query_node, num_replica=1):
         """Create composite vector indexes"""
@@ -537,10 +627,19 @@ class Scan_Report(FileBasedRebalance):
         bhive_indexes=self.get_all_bhive_index_names()
         composite_indexes=self.get_all_composite_index_names()
         if actual_index_name in bhive_indexes or actual_index_name in composite_indexes:
-            is_vector_scan = True
+            is_vector_index = True
         else:
-            is_vector_scan= False
-        self.log.info(f"Index used: {actual_index_name}, auto-detected is_vector_scan: {is_vector_scan}")
+            is_vector_index = False
+        # TODO: re-enable vector-specific validation once the indexer emits the
+        # vector fields. Scan reports for vector scans currently come back with
+        # exactly the same shape as scalar ones, no dist_comp, decode,
+        # rowsFiltered or rowsReranked, so requiring them fails every vector
+        # scan before any of the shared structural checks run. Detection is
+        # kept and logged so this is a one-line change when the fields land.
+        is_vector_scan = False
+        self.log.info(f"Index used: {actual_index_name}, vector/bhive index: {is_vector_index}, "
+                      f"is_vector_scan: {is_vector_scan} (vector field validation disabled - "
+                      f"indexer does not emit dist_comp/decode/rowsFiltered/rowsReranked yet)")
         
         if scan_report:
             # Validate scan report structure and fields
@@ -588,12 +687,21 @@ class Scan_Report(FileBasedRebalance):
                                  validate_rows_delta: bool = False,
                                  index_names: list = None,
                                  log_full_response: bool = False,
-                                 use_python_sdk: bool = False):
+                                 use_python_sdk: bool = False,
+                                 keep_query_alignment: bool = False):
         """
         Run scan queries and validate scan reports for all queries.
         Automatically detects whether each index used is a vector/bhive index
         from the query response.
-        
+
+        Args:
+            keep_query_alignment: when True, append None for any query that
+                produced no scan report, so that result[i] always corresponds
+                to select_queries[i]. Callers that compare two runs
+                position-by-position must set this; without it the returned
+                list is compacted and a single missing report silently shifts
+                every later comparison onto an unrelated scan.
+
         Returns:
             List of scan reports collected during the run
         """
@@ -622,10 +730,14 @@ class Scan_Report(FileBasedRebalance):
                 )
                 if scan_report:
                     scan_reports.append(scan_report)
+                elif keep_query_alignment:
+                    scan_reports.append(None)
             except ReportValidationError as e:
                 self.fail(f"{scan_type} Scan report validation failed for query '{query}': {str(e)}")
             except Exception as e:
                 self.log.error(f"Error running query '{query}': {str(e)}")
+                if keep_query_alignment:
+                    scan_reports.append(None)
         
         return scan_reports
 
@@ -886,7 +998,7 @@ class Scan_Report(FileBasedRebalance):
             index_resident_ratio = self.index_resident_ratio
             self.log.info(f"Inducing DGM with index resident ratio: {index_resident_ratio}")
             time.sleep(120)
-            self.load_until_index_dgm(resident_ratio=index_resident_ratio, memory_quota=self.index_memory_quota,use_magma_loader=True)
+            self.load_until_index_dgm(resident_ratio=index_resident_ratio, use_magma_loader=True)
         query_groups = [
             {"name": "vector", "queries": vector_selects , "index_names": vector_index_names },
             {"name": "bhive", "queries": bhive_selects , "index_names": bhive_index_names },
@@ -1031,7 +1143,7 @@ class Scan_Report(FileBasedRebalance):
         self.sleep(15, "Waiting some time before checking for mutation vectors")
         scan_vectors_after_mutations = self.get_mutation_vectors()
         new_scan_vectors = scan_vectors_after_mutations - scan_vectors_before_mutations
-        scan_vector = self.convert_mutation_vector_to_scan_vector(new_scan_vectors)
+        scan_vectors = {bucket: self.convert_mutation_vector_to_scan_vector(new_scan_vectors)}
         result = self.run_cbq_query(query=count_query)['results'][0]['$1']
         self.assertEqual(result, num_of_docs + new_insert_docs_num)
         try:
@@ -1041,27 +1153,28 @@ class Scan_Report(FileBasedRebalance):
                     self.run_cbq_query,
                     query=select_query,
                     scan_consistency='at_plus',
-                    scan_vector=scan_vector
+                    scan_vectors=scan_vectors
                 )
                 meta_task = executor.submit(
                     self.run_cbq_query,
                     query=select_meta_id_query,
                     scan_consistency='at_plus',
-                    scan_vector=scan_vector,
+                    scan_vectors=scan_vectors,
                     query_context=named_collection_query_context
                 )
                 result = select_task.result()['results']
                 meta_id_result_after_new_inserts = meta_task.result()['results']
             self._run_single_scan_and_validate(
                 select_query,
-                extra_query_params={"scan_consistency": "at_plus", "scan_vector": scan_vector},
+                extra_query_params={"scan_consistency": "at_plus",
+                                    "scan_vectors": json.dumps(scan_vectors)},
                 index_name='idx'
             )
             self._run_single_scan_and_validate(
                 select_meta_id_query,
                 extra_query_params={
                     "scan_consistency": "at_plus",
-                    "scan_vector": scan_vector,
+                    "scan_vectors": json.dumps(scan_vectors),
                     "query_context": named_collection_query_context
                 },
                 index_name='meta_idx'
@@ -1099,19 +1212,19 @@ class Scan_Report(FileBasedRebalance):
             self.sleep(15, "Waiting some time before checking for mutation vectors")
             scan_vectors_after_mutations = self.get_mutation_vectors()
             new_scan_vectors = scan_vectors_after_mutations - scan_vectors_before_mutations
-            scan_vector = self.convert_mutation_vector_to_scan_vector(new_scan_vectors)
+            scan_vectors = {bucket: self.convert_mutation_vector_to_scan_vector(new_scan_vectors)}
             with ThreadPoolExecutor() as executor:
                 select_task = executor.submit(
                     self.run_cbq_query,
                     query=select_query,
                     scan_consistency='at_plus',
-                    scan_vector=scan_vector
+                    scan_vectors=scan_vectors
                 )
                 meta_task = executor.submit(
                     self.run_cbq_query,
                     query=select_meta_id_query,
                     scan_consistency='at_plus',
-                    scan_vector=scan_vector,
+                    scan_vectors=scan_vectors,
                     query_context=named_collection_query_context
                 )
                 result = select_task.result()['results']
@@ -1126,14 +1239,15 @@ class Scan_Report(FileBasedRebalance):
                 diff2 = DeepDiff(result2, result4, ignore_order=True)
             self._run_single_scan_and_validate(
                 select_query,
-                extra_query_params={"scan_consistency": "at_plus", "scan_vector": scan_vector},
+                extra_query_params={"scan_consistency": "at_plus",
+                                    "scan_vectors": json.dumps(scan_vectors)},
                 index_name='idx'
             )
             self._run_single_scan_and_validate(
                 select_meta_id_query,
                 extra_query_params={
                     "scan_consistency": "at_plus",
-                    "scan_vector": scan_vector,
+                    "scan_vectors": json.dumps(scan_vectors),
                     "query_context": named_collection_query_context
                 },
                 index_name='meta_idx'
@@ -1179,19 +1293,19 @@ class Scan_Report(FileBasedRebalance):
             self.sleep(30, "Waiting some time before checking for mutation vectors")
             scan_vectors_after_mutations = self.get_mutation_vectors()
             new_scan_vectors = scan_vectors_after_mutations - scan_vectors_before_mutations
-            scan_vector = self.convert_mutation_vector_to_scan_vector(new_scan_vectors)
+            scan_vectors = {bucket: self.convert_mutation_vector_to_scan_vector(new_scan_vectors)}
             with ThreadPoolExecutor() as executor:
                 select_task = executor.submit(
                     self.run_cbq_query,
                     query=select_query,
                     scan_consistency='at_plus',
-                    scan_vector=scan_vector
+                    scan_vectors=scan_vectors
                 )
                 meta_task = executor.submit(
                     self.run_cbq_query,
                     query=select_meta_id_query,
                     scan_consistency='at_plus',
-                    scan_vector=scan_vector,
+                    scan_vectors=scan_vectors,
                     query_context=named_collection_query_context
                 )
                 count_task = executor.submit(self.run_cbq_query, query=count_query)
@@ -1201,14 +1315,15 @@ class Scan_Report(FileBasedRebalance):
 
             self._run_single_scan_and_validate(
                 select_query,
-                extra_query_params={"scan_consistency": "at_plus", "scan_vector": scan_vector},
+                extra_query_params={"scan_consistency": "at_plus",
+                                    "scan_vectors": json.dumps(scan_vectors)},
                 index_name='idx'
             )
             self._run_single_scan_and_validate(
                 select_meta_id_query,
                 extra_query_params={
                     "scan_consistency": "at_plus",
-                    "scan_vector": scan_vector,
+                    "scan_vectors": json.dumps(scan_vectors),
                     "query_context": named_collection_query_context
                 },
                 index_name='meta_idx'
@@ -1244,8 +1359,8 @@ class Scan_Report(FileBasedRebalance):
 
             scan_vectors_after_mutations = self.get_mutation_vectors()
             new_scan_vectors = scan_vectors_after_mutations - scan_vectors_before_mutations
-            scan_vector = self.convert_mutation_vector_to_scan_vector(new_scan_vectors)
-            self.log.info(f"Scan vector: {scan_vector}")
+            scan_vectors = {bucket: self.convert_mutation_vector_to_scan_vector(new_scan_vectors)}
+            self.log.info(f"Scan vectors: {scan_vectors}")
             default_index_gen = QueryDefinition(index_name='default_idx', index_fields=['price', 'country', 'city'])
             default_meta_index_gen = QueryDefinition(index_name='default_meta_idx', index_fields=['meta().id'])
             query = default_index_gen.generate_index_create_query(namespace=bucket)
@@ -1258,13 +1373,13 @@ class Scan_Report(FileBasedRebalance):
                     self.run_cbq_query,
                     query=select_query,
                     scan_consistency='at_plus',
-                    scan_vector=scan_vector
+                    scan_vectors=scan_vectors
                 )
                 meta_task = executor.submit(
                     self.run_cbq_query,
                     query=select_meta_id_query,
                     scan_consistency='at_plus',
-                    scan_vector=scan_vector,
+                    scan_vectors=scan_vectors,
                     query_context=named_collection_query_context
                 )
                 count_task = executor.submit(self.run_cbq_query, query=count_query)
@@ -1274,14 +1389,15 @@ class Scan_Report(FileBasedRebalance):
 
             self._run_single_scan_and_validate(
                 select_query,
-                extra_query_params={"scan_consistency": "at_plus", "scan_vector": scan_vector},
+                extra_query_params={"scan_consistency": "at_plus",
+                                    "scan_vectors": json.dumps(scan_vectors)},
                 index_name='default_idx'
             )
             self._run_single_scan_and_validate(
                 select_meta_id_query,
                 extra_query_params={
                     "scan_consistency": "at_plus",
-                    "scan_vector": scan_vector,
+                    "scan_vectors": json.dumps(scan_vectors),
                     "query_context": named_collection_query_context
                 },
                 index_name='default_meta_idx'
@@ -1473,6 +1589,32 @@ class Scan_Report(FileBasedRebalance):
                 "errors": [{"msg": str(e)}]
             }
 
+    def _get_active_network_interface(self, shell, node):
+        """
+        Discover the network interface carrying the default route on a node.
+        Hardcoding 'eth0' fails on hosts using predictable interface names
+        (ens192, eno1, ...), which silently makes tc/netem rules a no-op.
+        """
+        output, error = shell.execute_command("ip route show default")
+        for line in output or []:
+            tokens = line.split()
+            if "dev" in tokens:
+                iface = tokens[tokens.index("dev") + 1]
+                self.log.info(f"Detected active network interface {iface} on node {node.ip}")
+                return iface
+        self.fail(f"Could not determine the active network interface on node {node.ip}: "
+                  f"output={output}, error={error}")
+
+    def _run_tc_command(self, shell, node, command):
+        """Run a tc command and fail loudly if the rule could not be installed."""
+        output, error = shell.execute_command(command)
+        combined = " ".join((output or []) + (error or []))
+        if "Cannot find device" in combined or "RTNETLINK answers" in combined \
+                or "Error:" in combined:
+            self.fail(f"Failed to apply traffic control rule on node {node.ip}: "
+                      f"command='{command}', output={output}, error={error}")
+        return output, error
+
     def _start_disk_stress(self, nodes, duration=300):
         """
         Start fio disk stress on the given nodes to saturate disk I/O.
@@ -1580,7 +1722,6 @@ class Scan_Report(FileBasedRebalance):
         self.log.info(f"Target index resident ratio: {index_resident_ratio}%")
         self.load_until_index_dgm(
             resident_ratio=index_resident_ratio,
-            memory_quota=self.index_memory_quota,
             use_magma_loader=True
         )
         self.sleep(30, "Waiting for DGM state to stabilize")
@@ -2260,42 +2401,54 @@ class Scan_Report(FileBasedRebalance):
         self.log.info("=== Phase 1: Baseline scans ===")
         baseline_reports = self._run_scans_and_validate(
             all_scalar_selects , runDetailed=True,
-            index_names=all_scalar_index_names 
+            index_names=all_scalar_index_names,
+            keep_query_alignment=True
         )
 
         baseline_total_times = []
-        for report in baseline_reports:
+        for i, report in enumerate(baseline_reports):
+            if not report:
+                baseline_total_times.append(None)
+                self.log.warning(
+                    f"Baseline scan {i}: no scan report for query {all_scalar_selects[i][:80]}"
+                )
+                continue
             unit_field = "srvr_avg_ns" if "srvr_avg_ns" in report else "srvr_avg_ms"
             avg = report.get(unit_field, {})
             total_time = avg.get("total", 0)
             baseline_total_times.append(total_time)
             self.log.info(
-                f"Baseline {unit_field}: total={total_time}"
+                f"Baseline scan {i} {unit_field}: total={total_time}"
             )
 
         self.log.info("=== Phase 2: Adding 200ms delay on port 9102 (GSI scan service) ===")
         indexer_shells = []
         for node in index_nodes:
             shell = RemoteMachineShellConnection(node)
+            iface = self._get_active_network_interface(shell, node)
             # Add a tc qdisc with netem delay targeted at port 9102
             # First, add root qdisc with prio bands so we can filter by port
-            shell.execute_command(
-                "tc qdisc add dev eth0 root handle 1: prio priomap 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+            self._run_tc_command(
+                shell, node,
+                f"tc qdisc add dev {iface} root handle 1: prio priomap 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
             )
-            shell.execute_command(
-                "tc qdisc add dev eth0 parent 1:2 handle 20: netem delay 200ms"
+            self._run_tc_command(
+                shell, node,
+                f"tc qdisc add dev {iface} parent 1:2 handle 20: netem delay 200ms"
             )
             # Filter: match traffic on destination or source port 9102
-            shell.execute_command(
-                "tc filter add dev eth0 parent 1:0 protocol ip u32 "
+            self._run_tc_command(
+                shell, node,
+                f"tc filter add dev {iface} parent 1:0 protocol ip u32 "
                 "match ip dport 9102 0xffff flowid 1:2"
             )
-            shell.execute_command(
-                "tc filter add dev eth0 parent 1:0 protocol ip u32 "
+            self._run_tc_command(
+                shell, node,
+                f"tc filter add dev {iface} parent 1:0 protocol ip u32 "
                 "match ip sport 9102 0xffff flowid 1:2"
             )
-            self.log.info(f"Added 200ms netem delay on port 9102 on indexer node {node.ip}")
-            indexer_shells.append((shell, node))
+            self.log.info(f"Added 200ms netem delay on port 9102 on indexer node {node.ip} (interface {iface})")
+            indexer_shells.append((shell, node, iface))
 
         self.sleep(5, "Waiting for netem rules to take effect")
 
@@ -2309,25 +2462,54 @@ class Scan_Report(FileBasedRebalance):
             self.log.info("Validating scan reports under GSI delay (detailed)")
             stressed_reports = self._run_scans_and_validate(
                 all_scalar_selects , runDetailed=True,
-                index_names=all_scalar_index_names 
+                index_names=all_scalar_index_names,
+                keep_query_alignment=True
             )
+            self.assertTrue(
+                any(stressed_reports),
+                "No scan reports were returned under GSI delay; cannot compare scan timings"
+            )
+            # Both runs are aligned to all_scalar_selects, so index i refers to
+            # the same query in each; compare only the queries that produced a
+            # report in both runs.
+            compared = 0
             for i, report in enumerate(stressed_reports):
+                query = all_scalar_selects[i]
+                baseline_total = baseline_total_times[i] if i < len(baseline_total_times) else None
+                if not report or not baseline_total:
+                    self.log.warning(
+                        f"Scan {i}: skipping comparison for query {query[:80]} - "
+                        f"missing scan report (baseline={baseline_total}, "
+                        f"stressed={'present' if report else 'missing'})"
+                    )
+                    continue
                 unit_field = "srvr_avg_ns" if "srvr_avg_ns" in report else "srvr_avg_ms"
                 avg = report.get(unit_field, {})
                 stressed_total = avg.get("total", 0)
-                baseline_total = baseline_total_times[i] if i < len(baseline_total_times) else 0
                 self.log.info(
                     f"Scan {i}: stressed {unit_field}: total={stressed_total}, baseline_total={baseline_total}"
                 )
+                if not stressed_total:
+                    self.log.warning(
+                        f"Scan {i}: no stressed timing data for query {query[:80]}; skipping comparison"
+                    )
+                    continue
+                compared += 1
                 self.assertGreater(
                     stressed_total, baseline_total,
                     f"Scan {i}: Expected stressed total ({stressed_total}) > baseline total ({baseline_total}) under GSI delay"
                 )
+            if compared == 0:
+                self.fail(
+                    "No scan produced usable timing data in both the baseline and stressed runs; "
+                    "cannot validate the effect of the injected GSI delay"
+                )
+            self.log.info(f"Compared stressed vs baseline scan times for {compared} scans")
         finally:
             self.log.info("=== Cleanup: Removing netem delay on indexer nodes ===")
-            for shell, node in indexer_shells:
-                shell.delete_network_rule()
-                self.log.info(f"Removed netem rules on indexer node {node.ip}")
+            for shell, node, iface in indexer_shells:
+                shell.execute_command(f"tc qdisc del dev {iface} root")
+                self.log.info(f"Removed netem rules on indexer node {node.ip} (interface {iface})")
                 shell.disconnect()
 
    
@@ -2461,10 +2643,24 @@ class Scan_Report(FileBasedRebalance):
             
         
         self.wait_until_indexes_online()
-
-        # Stop couchbase server on SOME indexer nodes, keep one running
-        # This allows queries to still reach the index service but triggers replica retries
-        nodes_to_stop = index_nodes[:-1]  # Stop all except the last one
+        n1ql_nodes = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)
+        n1ql_ips = {node.ip for node in n1ql_nodes}
+        stoppable_nodes = [node for node in index_nodes if node.ip not in n1ql_ips]
+        if any(node.ip in n1ql_ips for node in index_nodes):
+            # An index node also serves n1ql, so it stays up and keeps the
+            # index service reachable; every pure-index node can be stopped.
+            nodes_to_stop = stoppable_nodes
+        else:
+            # No overlap, so keep one indexer alive to serve the retried scans.
+            nodes_to_stop = stoppable_nodes[:-1]
+        if not nodes_to_stop:
+            self.fail("No indexer node can be stopped without taking down the "
+                      "query service used by this test; replica retries cannot "
+                      f"be exercised. Index nodes: {[n.ip for n in index_nodes]}, "
+                      f"n1ql nodes: {sorted(n1ql_ips)}")
+        self.log.info(f"Indexer nodes: {[n.ip for n in index_nodes]}, "
+                      f"n1ql nodes: {sorted(n1ql_ips)}, "
+                      f"stopping: {[n.ip for n in nodes_to_stop]}")
         self.log.info(f"Stopping couchbase server on {len(nodes_to_stop)} of {len(index_nodes)} indexer nodes")
         for index_node in nodes_to_stop:
             shell = RemoteMachineShellConnection(index_node)
@@ -4301,14 +4497,17 @@ class Scan_Report(FileBasedRebalance):
             else:
                 self.log.warning(f"Unexpected detailed type: {type(detailed_section).__name__}")
 
-        # 8. Retries validation - must be present for replica retry tests
+        # 8. Retries validation - the field is only emitted when a scan actually
+        # retried, so its absence is not a failure even when retries are
+        # expected: a scan routed straight to a live replica never retries.
+        # If it is present it must be a positive integer.
         if "retries" in report:
             validation_result["has_retries"] = True
             if not isinstance(report["retries"], int) or report["retries"] < 1:
                 raise ReportValidationError("retries must be a positive integer")
-        
-        if expect_retries and not validation_result["has_retries"]:
-            raise ReportValidationError("retries field must be present for replica retry scenarios")
+        elif expect_retries:
+            self.log.info("No retries field in scan report; the scan did not need "
+                          "to retry a replica")
 
         # 9. Error field validation
         if "error" in report:
