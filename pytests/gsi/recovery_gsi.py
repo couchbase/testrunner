@@ -668,7 +668,16 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             self.fail(f'Expected Created indexes {indexes_not_created} found to be not created')
         #rebalance out
         kv_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
-        node_out = kv_nodes[1]
+        # kv_nodes order follows the REST /pools/default node ordering, which is not the ini order.
+        # Never eject self.master here: all subsequent get_services_map() calls go through it, and
+        # an ejected master reports only itself, leaving self.index_nodes as None.
+        node_out = None
+        for kv_node in kv_nodes:
+            if kv_node.ip != self.master.ip:
+                node_out = kv_node
+                break
+        if node_out is None:
+            self.fail(f'No kv node other than the master {self.master.ip} available to rebalance out')
         rebalance = self.cluster.async_rebalance(
             self.servers[:self.nodes_init+1],
             [], [node_out])
