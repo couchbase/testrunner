@@ -634,10 +634,36 @@ class FailoverTests(FailoverBaseTest):
             for bucket in buckets:
                 if type.lower() == 'windows':
                     self.data_path = 'c:/Program\ Files/Couchbase/Server/var/lib/couchbase/data'
-                bucket_data_path = self.data_path + "/" + bucket.name + "/" + "check.txt"
-                full_path = self.data_path + "/" + bucket.name + "/"
+                    full_path = self.data_path + "/" + bucket.name + "/"
+                else:
+                    # Starting from 7.9, bucket data directories are named by bucket
+                    # UUID, not bucket name. Writing to the name-based path unconditionally
+                    # creates an unrelated phantom directory (never the real bucket data),
+                    # so the recovery check this file exists for silently checks nothing.
+                    # Resolve the UUID via REST and fall back to the legacy name-based path
+                    # for pre-7.9 servers where that directory is what's actually used.
+                    full_path = self.data_path + "/" + bucket.name + "/"
+                    try:
+                        bucket_info = RestConnection(serverMap[server.ip]).get_bucket_json(bucket.name)
+                        bucket_uuid = bucket_info.get('uuid')
+                        if bucket_uuid:
+                            uuid_path = self.data_path + "/" + bucket_uuid + "/"
+                            output, _ = shell.execute_command("test -d '{0}' && echo yes".format(uuid_path))
+                            if output and output[0].strip() == "yes":
+                                full_path = uuid_path
+                    except Exception as e:
+                        self.log.warning("Could not resolve UUID data dir for bucket {0}: {1}"
+                                        .format(bucket.name, e))
+                bucket_data_path = full_path + "check.txt"
                 map[bucket.name] = full_path
                 shell.create_file(bucket_data_path, "check")
+                if type.lower() != 'windows':
+                    # create_file() runs over a root SSH session. If the bucket data dir doesn't
+                    # already exist, its "mkdir -p" creates it as root too, not just check.txt --
+                    # and directory ownership (not file ownership) is what governs whether the
+                    # couchbase user can later delete entries from it. Chown both, or a later
+                    # rebalance's cleanup fails with {error,eacces}.
+                    shell.execute_command("chown couchbase:couchbase '{0}' '{1}'".format(full_path, bucket_data_path))
             fileMap[server.ip] = map
             shell.disconnect()
         return fileMap
