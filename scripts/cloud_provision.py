@@ -968,7 +968,7 @@ AWS_AMI_MAP = {
             "x86_64": "ami-0441302605ba7fdb4"
         },
         "oel10": {
-            "x86_64": "ami-0059431db83e2427a"
+            "x86_64": "ami-0e5524b25c2a7f49c"
         },
         "rhel10": {
             "x86_64": "ami-014722b0961444108"
@@ -1025,7 +1025,7 @@ AWS_OS_USERNAME_MAP = {
     "rocky9": "rocky",
     "alma10": "ec2-user",
     "rocky10": "rocky",
-    "oel10": "ec2-user",
+    "oel10": "cloud-user", # AMI specific
     "rhel10": "ec2-user",
     "rhel10nonroot": "ec2-user",
     "debian13": "admin",
