@@ -18,6 +18,15 @@ urllib3==2.3.0
 boto3==1.42.63            # AWS on-demand provisioning
 botocore==1.42.63
 google-cloud-compute==1.45.0
+azure-common==1.1.28
+azure-core==1.41.0
+azure-identity==1.25.3
+azure-mgmt-core==1.6.0
+azure-mgmt-resource==24.0.0
+azure-mgmt-storage==24.0.0
+azure-mgmt-network==24.0.0
+azure-mgmt-compute==24.0.0
+azure-storage-blob==12.27.1
 google-cloud-dns          # unpinned: not carried in requirements.txt
 dnspython                 # provides `dns.resolver`; unpinned for the same reason
 
