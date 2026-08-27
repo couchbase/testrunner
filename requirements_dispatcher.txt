@@ -1,0 +1,26 @@
+# Minimal dependency set to run scripts/testDispatcher_sdk4.py
+#   pip3 install -r requirements_dispatcher.txt
+#
+# Also required (not installable from PyPI):
+#   lib/capellaAPI  -> git submodule, install with `make init-submodules`
+# Versions are kept in sync with the top-level requirements.txt.
+
+# --- testDispatcher_sdk4.py direct imports ---
+couchbase==4.5.0          # PasswordAuthenticator / Cluster / ClusterOptions (SDK 4.x)
+requests==2.32.3
+httplib2==0.32.0          # Jenkins buildWithParameters calls
+paramiko==4.0.0           # remote slave / VM access
+
+# --- scripts/capella.py ---
+urllib3==2.3.0
+
+# --- scripts/cloud_provision.py (imported unconditionally by the dispatcher) ---
+boto3==1.42.63            # AWS on-demand provisioning
+botocore==1.42.63
+google-cloud-compute==1.45.0
+google-cloud-dns          # unpinned: not carried in requirements.txt
+dnspython                 # provides `dns.resolver`; unpinned for the same reason
+
+# --- scripts/server_manager.py, dynamic Windows VM support (lazy import) ---
+# Only needed when dispatching with dynamic VMs; safe to drop for static pools.
+XenAPI
