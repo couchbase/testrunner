@@ -444,7 +444,7 @@ def extract_individual_tests_from_query_result(col_rel_version,
     mailing_list = data['mailing_list'] \
         if 'mailing_list' in data else 'qa@couchbase.com'
     mode = data["mode"] \
-        if 'mode' in data else "java"
+        if 'mode' in data else "rest"
     slave = data['slave'] \
         if 'slave' in data else "P0"
     support_py3 = data["support_py3"] \
