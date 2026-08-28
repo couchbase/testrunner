@@ -70,6 +70,9 @@ class GSIEncryptionAtRestRebalance(GSIEncryptionAtRestBase, BaseSecondaryIndexin
         # in rebalance tests minimal so it doesn't inflate rebalance/build
         # time; see _get_query_definitions / _get_create_queries.
         self.bhive_index_scale_down = self.input.param("bhive_index_scale_down", False)
+        # Floor for wait_until_indexes_online: dense vector indexes train one at a
+        # time per node (indexer.vector.max_parallel_training defaults to 1).
+        self.index_online_timeout = self.input.param("index_online_timeout", 2400)
         self.failure_detected = False
         self.test_failures = []
         self.log.info("==============  GSIEncryptionAtRestRebalance setup has completed ==============")
@@ -79,6 +82,47 @@ class GSIEncryptionAtRestRebalance(GSIEncryptionAtRestBase, BaseSecondaryIndexin
         self._disable_cluster_level_encryption_at_rest()
         super(GSIEncryptionAtRestRebalance, self).tearDown()
         self.log.info("==============  GSIEncryptionAtRestRebalance tearDown has completed ==============")
+
+    def wait_until_indexes_online(self, timeout=1800, defer_build=False,
+                                  check_paused_index=False, schedule_index=False):
+        """Wait for every index in every bucket to reach an acceptable state.
+
+        Overrides the base version, which decides the verdict on the last bucket
+        alone (returning True while an earlier bucket is still building) and
+        reports a timeout only via a return value every caller here discards.
+        Either way the test rebalances mid-build and the indexer rejects it with
+        "index build is in progress for indexes: [...]". This raises instead,
+        and names the indexes still pending.
+        """
+        if defer_build:
+            ok = ("Ready", "Created")
+        elif check_paused_index:
+            ok = ("Paused", "Ready")
+        elif schedule_index:
+            ok = ("Ready", "Scheduled for Creation")
+        else:
+            ok = ("Ready",)
+
+        rest = RestConnection(self.master)
+        timeout = max(timeout, self.index_online_timeout)
+        deadline = time.time() + timeout
+        polls = 0
+        while True:
+            status = rest.get_index_status()
+            if not status:
+                self.log.error("No indexes are present, this check does not apply!")
+                return False
+            pending = sorted("%s:%s=%s" % (b, n, s.get("status"))
+                             for b, idxs in status.items() for n, s in idxs.items()
+                             if s.get("status") not in ok)
+            if not pending:
+                return True
+            if time.time() >= deadline:
+                self.fail("Indexes not online after %ss, still pending: %s" % (timeout, pending))
+            if polls % 12 == 0:
+                self.log.info("Waiting on %s index(es): %s" % (len(pending), pending))
+            polls += 1
+            time.sleep(10)
 
     def _disable_cluster_level_encryption_at_rest(self):
         """Disable config/log/audit/other encryption at rest left enabled by this test.
