@@ -148,12 +148,21 @@ class GoVectorLoader:
         if self.docker_client is None:
             raise RuntimeError("Docker is unavailable; cannot run GoVectorLoader container. "
                                "Either run on a machine with Docker or pre-load docs and set hierarchical_skip_doc_load=True.")
-        try:
-            cont = self.docker_client.containers.get("upgrade")
-            cont.stop()
-            cont.remove()
-        except Exception as e:
-            print(e)
+        # Remove any leftover container with this name from a previous run.
+        # Docker refuses to create a second container with an existing name
+        # (409 Conflict), which silently leaves the collection empty.
+        stale = None
+        if container_name:
+            try:
+                stale = self.docker_client.containers.get(container_name)
+            except Exception:
+                stale = None
+        if stale is not None:
+            try:
+                print(f"Removing stale container {container_name} ({stale.short_id})")
+                stale.remove(force=True)
+            except Exception as e:
+                print(f"Could not remove stale container {container_name}: {e}")
 
         try:
             docker_image = "sequoiatools/govectorloader"
@@ -193,7 +202,7 @@ class GoVectorLoader:
             try:
                 print(f"Running docker container {docker_image} with name {container_name}")
                 docker_output = self.docker_client.containers.run(docker_image, docker_run_params,
-                                                                  name=container_name)
+                                                                  name=container_name, remove=True)
                 # print(docker_output)
             except Exception as e:
                 print(f"Exception while running docker container: {e}")

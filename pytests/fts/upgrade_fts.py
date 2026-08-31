@@ -1742,6 +1742,23 @@ class UpgradeFTS(NewUpgradeBaseTest):
         govl.load_data(container_name="hvec_upgrade_loader")
         self.sleep(10, "Waiting for hierarchical vector data loading to complete")
 
+        # GoVectorLoader reports docker failures on stdout and returns normally,
+        # so confirm the docs actually landed. Without this an empty collection
+        # is indexed and the doc-count wait below can never be satisfied.
+        item_count = 0
+        for _ in range(12):
+            item_count = self.get_item_count(self.master, bucket_name)
+            if item_count >= num_docs:
+                break
+            self.sleep(10, f"Waiting for vector docs in {bucket_name} "
+                           f"({item_count}/{num_docs})")
+        if item_count < num_docs:
+            raise Exception(
+                f"GoVectorLoader failed to load hierarchical vector data into "
+                f"{bucket_name}: expected {num_docs} docs, found {item_count}. "
+                f"Check the 'hvec_upgrade_loader' docker container output above.")
+        log.info(f"Loaded {item_count} hierarchical vector documents into {bucket_name}")
+
     def _create_flat_fts_index_on_hierarchical_data(self, index_name, bucket_name, scope_name, collection_name):
         log.info(f"Creating flat FTS index '{index_name}' on {bucket_name}.{scope_name}.{collection_name}")
 
@@ -2060,6 +2077,7 @@ class UpgradeFTS(NewUpgradeBaseTest):
 
         start_time = 0
         interval = 10
+        doc_count = None
         while start_time < timeout:
             try:
                 doc_count = rest.get_fts_index_doc_count(index_name)
@@ -2073,8 +2091,9 @@ class UpgradeFTS(NewUpgradeBaseTest):
             self.sleep(interval, f"Waiting for indexing... ({start_time}/{timeout}s)")
             start_time += interval
 
-        log.error(f"Index '{index_name}' did not complete indexing within {timeout}s")
-        return False
+        raise Exception(
+            f"Index '{index_name}' did not reach {expected_docs} docs within "
+            f"{timeout}s (last count: {doc_count})")
 
     def test_hierarchical_upgrade_online(self):
         """
@@ -2143,7 +2162,7 @@ class UpgradeFTS(NewUpgradeBaseTest):
                                                     hvec_collection, hvec_dims, hvec_embedding_field)
 
         self._wait_for_index_completion(flat_index_name, hier_num_docs)
-        self._wait_for_index_completion(hvec_index_name, hvec_num_docs, timeout=36000)
+        self._wait_for_index_completion(hvec_index_name, hvec_num_docs, timeout=1800)
 
         log.info("Running pre-upgrade FTS queries...")
         errors = self._run_pre_upgrade_fts_queries(flat_index_name, hier_bucket)
