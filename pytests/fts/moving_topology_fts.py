@@ -3021,7 +3021,6 @@ class MovingTopFTS(FTSBaseTest):
             self.log.info(f"CYCLE {cycle}: Validation passed. "
                           f"Total indexes: {len(self._cb_cluster.get_indexes())}")
 
-        self.sleep(36000)
         self.log.info("=" * 70)
         self.log.info("FINAL: Dropping all indexes")
         self.log.info("=" * 70)
