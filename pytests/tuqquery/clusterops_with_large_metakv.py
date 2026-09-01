@@ -45,6 +45,13 @@ class ClusterOpsLargeMetaKV(QueryTests):
             rest.set_index_settings({"queryport.client.usePlanner": False})
             rest.set_service_memoryQuota(service='indexMemoryQuota', memoryQuota=self.index_ram)
         self.cbcluster = CouchbaseCluster(name='cluster', nodes=self.servers, log=self.log)
+        # CouchbaseCluster.__init__ posts all service quotas at once and swallows
+        # the rejection, leaving fts on its default. Set it on its own.
+        self.fts_quota = self.input.param("fts_quota", 3000)
+        master_rest = RestConnection(self.master)
+        master_rest.set_fts_ram_quota(self.fts_quota)
+        if int(master_rest.get_pools_default().get("ftsMemoryQuota")) != int(self.fts_quota):
+            self.fail("fts memory quota was not applied; requested {0}MB".format(self.fts_quota))
         self.log.info("==============  ClusterOpsLargeMetaKV setup has completed ==============")
 
     def tearDown(self):
