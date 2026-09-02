@@ -1984,6 +1984,10 @@ class CouchbaseCluster:
         bucket_params['flush_enabled'] = flush_enabled
         bucket_params['lww'] = lww
         bucket_params['maxTTL'] = maxttl
+        # No-op unless bucket_throttle_reserved / bucket_throttle_hard_limit
+        # were passed in the conf. Covers the default, sasl and standard
+        # buckets of every cluster in the chain
+        RestConnection.apply_bucket_throttle_params(bucket_params)
         return bucket_params
 
     def set_global_checkpt_interval(self, value):
@@ -3829,6 +3833,11 @@ class XDCRNewBaseTest(unittest.TestCase):
             None)
         for cluster in self.__cb_clusters:
             cluster.init_cluster(disabled_consistent_view)
+            # DCP is served by every node of the cluster, so the node level
+            # throttle settings go on all of them, source and target alike.
+            # No-op unless a throttle param was passed in the conf
+            RestConnection.apply_conf_node_throttle_settings(
+                cluster.get_nodes())
 
     def __set_free_servers(self):
         total_servers = self._input.servers

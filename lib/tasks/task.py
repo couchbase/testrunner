@@ -313,6 +313,12 @@ class BucketCreateTask(Task):
         self.storageBackend = bucket_params['bucket_storage']
         self.num_vbuckets = bucket_params["numVBuckets"] \
             if "numVBuckets" in bucket_params else None
+        # KV rate-limiting params (8.5+). Absent from hand built param dicts,
+        # so read them the same lenient way as numVBuckets
+        self.throttle_reserved = bucket_params["throttleReserved"] \
+            if "throttleReserved" in bucket_params else None
+        self.throttle_hard_limit = bucket_params["throttleHardLimit"] \
+            if "throttleHardLimit" in bucket_params else None
 
         if 'maxTTL' in bucket_params:
             self.maxttl = bucket_params['maxTTL']
@@ -369,7 +375,9 @@ class BucketCreateTask(Task):
                                    maxTTL=self.maxttl,
                                    compressionMode=self.compressionMode,
                                    storageBackend=self.storageBackend,
-                                   numVBuckets=self.num_vbuckets)
+                                   numVBuckets=self.num_vbuckets,
+                                   throttleReserved=self.throttle_reserved,
+                                   throttleHardLimit=self.throttle_hard_limit)
             else:
                 rest.create_bucket(bucket=self.bucket,
                                    ramQuotaMB=self.size,
@@ -382,7 +390,9 @@ class BucketCreateTask(Task):
                                    lww=self.lww,
                                    maxTTL=self.maxttl,
                                    compressionMode=self.compressionMode,
-                                   numVBuckets=self.num_vbuckets)
+                                   numVBuckets=self.num_vbuckets,
+                                   throttleReserved=self.throttle_reserved,
+                                   throttleHardLimit=self.throttle_hard_limit)
             self.state = CHECKING
             task_manager.schedule(self)
         except BucketCreationException as e:

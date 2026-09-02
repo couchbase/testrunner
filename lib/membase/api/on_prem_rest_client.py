@@ -3671,7 +3671,10 @@ class RestConnection(object):
                       maxTTL=None,
                       compressionMode='passive',
                       storageBackend='magma',
-                      numVBuckets=None):
+                      numVBuckets=None,
+                      throttleEnabled=None,
+                      throttleReserved=None,
+                      throttleHardLimit=None):
         api = '{0}{1}'.format(self.baseUrl, 'pools/default/buckets')
         init_params = {'name': bucket,
                        'ramQuotaMB': ramQuotaMB,
@@ -3724,6 +3727,16 @@ class RestConnection(object):
                 init_params['width'] = self.bucket_width
                 init_params['weight'] = self.bucket_weight
 
+        # Bucket level params of the KV rate-limiting feature (8.5+).
+        # 'is not None' and not truthiness: 0 is a valid value for both limits
+        if throttleEnabled is not None:
+            init_params['throttleEnabled'] = str(throttleEnabled).lower() \
+                if isinstance(throttleEnabled, bool) else throttleEnabled
+        if throttleReserved is not None:
+            init_params['throttleReserved'] = throttleReserved
+        if throttleHardLimit is not None:
+            init_params['throttleHardLimit'] = throttleHardLimit
+
         params = urllib.parse.urlencode(init_params)
 
         log.info("{0} with param: {1}".format(api, params))
@@ -3765,7 +3778,10 @@ class RestConnection(object):
                       compressionMode=None,
                       enableCrossClusterVersioning=None,
                       versionPruningWindowHrs=None,
-                      expiryPagerSleepTime=None):
+                      expiryPagerSleepTime=None,
+                      throttleEnabled=None,
+                      throttleReserved=None,
+                      throttleHardLimit=None):
         bucket_name = bucket.name if isinstance(bucket, Bucket) else bucket
         api = '{0}{1}{2}'.format(self.baseUrl, 'pools/default/buckets/', bucket_name)
         params_dict = {}
@@ -3789,6 +3805,15 @@ class RestConnection(object):
             params_dict["versionPruningWindowHrs"] = versionPruningWindowHrs
         if expiryPagerSleepTime:
             params_dict["expiryPagerSleepTime"] = expiryPagerSleepTime
+        # Bucket level params of the KV rate-limiting feature (8.5+).
+        # 'is not None' and not truthiness: 0 is a valid value for both limits
+        if throttleEnabled is not None:
+            params_dict["throttleEnabled"] = str(throttleEnabled).lower() \
+                if isinstance(throttleEnabled, bool) else throttleEnabled
+        if throttleReserved is not None:
+            params_dict["throttleReserved"] = throttleReserved
+        if throttleHardLimit is not None:
+            params_dict["throttleHardLimit"] = throttleHardLimit
 
         params = urllib.parse.urlencode(params_dict)
 
@@ -4027,16 +4052,173 @@ class RestConnection(object):
     @not_for_capella
     def update_memcached_settings(self, num_reader_threads="default",
                                   num_writer_threads="default",
-                                  num_storage_threads="default"):
+                                  num_storage_threads="default",
+                                  throttle_enabled=None,
+                                  node_capacity=None,
+                                  read_unit_size=None,
+                                  write_unit_size=None):
         api = self.baseUrl + "pools/default/settings/memcached/global"
-        params = {"num_reader_threads": num_reader_threads,
-                  "num_writer_threads": num_writer_threads,
-                  "num_storage_threads": num_storage_threads}
+        params = dict()
+        # Defaults are the literal string "default", so callers which omit
+        # these keep sending them exactly as before. Pass None to leave a
+        # thread setting untouched on the node
+        if num_reader_threads is not None:
+            params["num_reader_threads"] = num_reader_threads
+        if num_writer_threads is not None:
+            params["num_writer_threads"] = num_writer_threads
+        if num_storage_threads is not None:
+            params["num_storage_threads"] = num_storage_threads
+        # Node level params of the KV rate-limiting feature (8.5+). Sent only
+        # when explicitly requested, so the payload is unchanged otherwise
+        if throttle_enabled is not None:
+            if isinstance(throttle_enabled, bool):
+                throttle_enabled = str(throttle_enabled).lower()
+            params["throttle_enabled"] = throttle_enabled
+        if node_capacity is not None:
+            params["node_capacity"] = node_capacity
+        if read_unit_size is not None:
+            params["read_unit_size"] = read_unit_size
+        if write_unit_size is not None:
+            params["write_unit_size"] = write_unit_size
         params = urllib.parse.urlencode(params)
+        log.info("{0} with param: {1}".format(api, params))
         status, content, header = self._http_request(api, 'POST', params)
         if not status:
             raise Exception(content)
         return status
+
+    @not_for_capella
+    def get_memcached_settings(self):
+        """Read back the global memcached settings, throttle params included"""
+        api = self.baseUrl + "pools/default/settings/memcached/global"
+        status, content, header = self._http_request(api)
+        if not status:
+            raise Exception(content)
+        return json.loads(content)
+
+    """ KV data-service rate-limiting (8.5+, Totoro).
+
+    Node level params live on /pools/default/settings/memcached/global,
+    bucket level ones on the bucket endpoint. The conf param names match the
+    TAF suites so conf rows port over unchanged:
+
+        node_capacity, throttle_enabled, read_unit_size, write_unit_size
+        bucket_throttle_reserved, bucket_throttle_hard_limit
+
+    The conf driven entry points are no-ops when the conf asks for nothing,
+    which is what keeps existing suites on the REST payload they have today.
+    No edition or version gating is done: if a conf asks for the params they
+    get set and the server has the final say.
+    """
+
+    NODE_THROTTLE_PARAMS = ("throttle_enabled", "node_capacity",
+                            "read_unit_size", "write_unit_size")
+
+    @staticmethod
+    def get_conf_bucket_throttle_params():
+        """{rest_param: value} for the bucket throttle params in the conf"""
+        input_obj = TestInputSingleton.input
+        if input_obj is None:
+            return {}
+        params = dict()
+        reserved = input_obj.param("bucket_throttle_reserved", None)
+        hard_limit = input_obj.param("bucket_throttle_hard_limit", None)
+        if reserved is not None:
+            params["throttleReserved"] = reserved
+        if hard_limit is not None:
+            params["throttleHardLimit"] = hard_limit
+        return params
+
+    @staticmethod
+    def apply_bucket_throttle_params(bucket_params):
+        """Inject the bucket throttle params into a bucket_params dict.
+
+        Called at the tail of the various _create_bucket_params() helpers.
+        A static method because it touches no cluster, so callers do not pay
+        for a RestConnection they do not need. The dict is returned untouched
+        when no throttle param is present in the conf.
+        """
+        throttle_params = RestConnection.get_conf_bucket_throttle_params()
+        if throttle_params:
+            bucket_params.update(throttle_params)
+            log.info("Bucket throttle params: {0}".format(throttle_params))
+        return bucket_params
+
+    @staticmethod
+    def get_conf_node_throttle_params():
+        """{rest_param: value} for the node throttle params in the conf"""
+        input_obj = TestInputSingleton.input
+        if input_obj is None:
+            return {}
+        settings = dict()
+        for param in RestConnection.NODE_THROTTLE_PARAMS:
+            value = input_obj.param(param, None)
+            if value is not None:
+                settings[param] = value
+        return settings
+
+    @staticmethod
+    def apply_conf_node_throttle_settings(servers):
+        """Push the conf's node throttle settings on each of the given servers.
+
+        'node_capacity' is a per node setting and DCP is served by every node
+        of a cluster, so all the nodes under test are configured, not just the
+        master. Static and fanning out on purpose: the conf is checked before
+        anything is built, so a suite passing no throttle param does not pay
+        for one RestConnection per node.
+        """
+        settings = RestConnection.get_conf_node_throttle_params()
+        if not settings:
+            return
+        if not isinstance(servers, (list, tuple, set)):
+            servers = [servers]
+        for server in servers:
+            RestConnection(server).set_node_throttle_settings(**settings)
+
+    @not_for_capella
+    def set_node_throttle_settings(self, throttle_enabled=None,
+                                   node_capacity=None, read_unit_size=None,
+                                   write_unit_size=None):
+        """Set the node level throttle params on this node.
+
+        Thread params are passed as None so that configuring throttling does
+        not reset num_reader_threads and friends to "default" as a side effect
+        """
+        log.info("Setting node throttle params on {0}".format(self.ip))
+        return self.update_memcached_settings(
+            num_reader_threads=None, num_writer_threads=None,
+            num_storage_threads=None, throttle_enabled=throttle_enabled,
+            node_capacity=node_capacity, read_unit_size=read_unit_size,
+            write_unit_size=write_unit_size)
+
+    @not_for_capella
+    def get_node_throttle_settings(self):
+        """Read back only the node throttle params of this node"""
+        settings = self.get_memcached_settings()
+        return {key: settings[key] for key in RestConnection.NODE_THROTTLE_PARAMS
+                if key in settings}
+
+    @not_for_capella
+    def set_bucket_throttle_limits(self, bucket, throttle_reserved=None,
+                                   throttle_hard_limit=None,
+                                   throttle_enabled=None):
+        """Set the throttle limits of an existing bucket.
+
+        0 is a valid value for both limits, hence the 'is not None' tests
+        """
+        return self.change_bucket_props(
+            bucket, throttleEnabled=throttle_enabled,
+            throttleReserved=throttle_reserved,
+            throttleHardLimit=throttle_hard_limit)
+
+    @not_for_capella
+    def get_bucket_throttle_limits(self, bucket='default'):
+        """Read back the throttle limits the cluster reports for a bucket"""
+        bucket_name = bucket.name if isinstance(bucket, Bucket) else bucket
+        parsed = self.get_bucket_json(bucket_name)
+        return {key: parsed[key] for key in
+                ("throttleEnabled", "throttleReserved", "throttleHardLimit")
+                if key in parsed}
 
     def get_internalSettings(self, param):
             """allows to get internalSettings values for:
@@ -7984,7 +8166,8 @@ class Bucket(object):
                  bucket_storage=None, history_retention_bytes=4294967296, history_retention_secs=86400,
                  magma_key_tree_data_block_size=10096, magma_seq_tree_data_block_size=13107,
                  history_retention_collection_default=True, durabilityMinLevel=None,
-                 numVBuckets=None):
+                 numVBuckets=None, throttle_enabled=None,
+                 throttle_reserved=None, throttle_hard_limit=None):
         self.name = name
         self.port = port
         self.type = type
@@ -8010,6 +8193,11 @@ class Bucket(object):
         self.history_retention_secs = history_retention_secs
         self.magma_key_tree_data_block_size = magma_key_tree_data_block_size
         self.magma_seq_tree_data_block_size = magma_seq_tree_data_block_size
+        # KV rate-limiting (8.5+), populated by parse_get_bucket_json when the
+        # cluster reports them
+        self.throttle_enabled = throttle_enabled
+        self.throttle_reserved = throttle_reserved
+        self.throttle_hard_limit = throttle_hard_limit
 
 
     def __str__(self):
@@ -8302,6 +8490,12 @@ class RestParser(object):
         bucket.nodes = list()
         if 'numVBuckets' in parsed:
             bucket.num_vbuckets = parsed['numVBuckets']
+        if 'throttleEnabled' in parsed:
+            bucket.throttle_enabled = parsed['throttleEnabled']
+        if 'throttleReserved' in parsed:
+            bucket.throttle_reserved = parsed['throttleReserved']
+        if 'throttleHardLimit' in parsed:
+            bucket.throttle_hard_limit = parsed['throttleHardLimit']
         if 'vBucketServerMap' in parsed:
             vBucketServerMap = parsed['vBucketServerMap']
             serverList = vBucketServerMap['serverList']
