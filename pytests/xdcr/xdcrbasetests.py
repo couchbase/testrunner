@@ -468,6 +468,11 @@ class XDCRBaseTest(unittest.TestCase):
                 rest = RestConnection(node)
                 rest.init_node()
             self._setup_cluster(self._clusters_dic[key], disabled_consistent_view)
+            # DCP is served by every node of the cluster, so the node level
+            # throttle settings go on all of them, source and target alike.
+            # No-op unless a throttle param was passed in the conf
+            RestConnection.apply_conf_node_throttle_settings(
+                self._clusters_dic[key])
 
     # This method shall be overridden in case there are parameters that need to be initialized.
     def init_parameters_extended(self):
@@ -618,6 +623,9 @@ class XDCRBaseTest(unittest.TestCase):
         bucket_params['lww'] = lww
         if bucket_type == "membase":
             bucket_params['bucket_storage'] = self.bucket_storage
+        # No-op unless bucket_throttle_reserved / bucket_throttle_hard_limit
+        # were passed in the conf
+        RestConnection.apply_bucket_throttle_params(bucket_params)
         return bucket_params
 
     def _create_sasl_buckets(self, server, num_buckets, server_id, bucket_size):

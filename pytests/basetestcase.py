@@ -585,6 +585,12 @@ class OnPremBaseTestCase(unittest.TestCase):
             self.bucket_base_params['membase']['non_ephemeral']['size'] = self.bucket_size
             self.bucket_base_params['membase']['ephemeral']['size'] = self.bucket_size
 
+            # Node level KV throttle settings have to be in place before any
+            # bucket claims reserved units out of the node capacity.
+            # No-op unless a throttle param was passed in the conf
+            RestConnection.apply_conf_node_throttle_settings(
+                self.servers[:self.nodes_init])
+
             if str(self.__class__).find('upgrade_tests') == -1 and \
                     str(self.__class__).find('newupgradetests') == -1 and \
                     not self.skip_bucket_setup:
@@ -1234,6 +1240,10 @@ class OnPremBaseTestCase(unittest.TestCase):
             bucket_params['bucket_storage'] = bucket_storage
         if bucket_type == "ephemeral":
             bucket_params['bucket_storage'] = "couchstore"
+
+        # No-op unless bucket_throttle_reserved / bucket_throttle_hard_limit
+        # were passed in the conf
+        RestConnection.apply_bucket_throttle_params(bucket_params)
 
         return bucket_params
 
