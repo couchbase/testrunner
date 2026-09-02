@@ -104,7 +104,8 @@ class CRLUtils:
     @staticmethod
     def generate_leaf_cert(ca_cert, ca_key, cn, key_algorithm="rsa2048",
                             valid_days=825, extended_key_usage=None,
-                            crl_distribution_url=None, dns_names=None):
+                            crl_distribution_url=None, dns_names=None,
+                            email_sans=None):
         """
         Generate a leaf cert signed by ca_cert/ca_key, in memory.
 
@@ -118,6 +119,11 @@ class CRLUtils:
                 CRLDistributionPoints extension (informational only —
                 Couchbase does not auto-fetch from this, see CRL_INFO.md)
             dns_names: optional list of SAN DNS names (needed for node certs)
+            email_sans: optional list of SAN rfc822 (email) addresses. An
+                address at @internal.couchbase.com is what makes a certificate
+                an *internal client cert* — the certificate XDCR presents on
+                its intra-cluster surfaces, evaluated under the nodeToNode CRL
+                scope rather than clientAuth.
 
         Returns:
             tuple: (cert: x509.Certificate, key, serial: int)
@@ -148,14 +154,19 @@ class CRLUtils:
             )
             .add_extension(x509.ExtendedKeyUsage(extended_key_usage), critical=False)
         )
+        san_entries = []
         if dns_names:
-            names = []
             for name in dns_names:
                 try:
-                    names.append(x509.IPAddress(ipaddress.ip_address(name)))
+                    san_entries.append(x509.IPAddress(ipaddress.ip_address(name)))
                 except ValueError:
-                    names.append(x509.DNSName(name))
-            builder = builder.add_extension(x509.SubjectAlternativeName(names), critical=False)
+                    san_entries.append(x509.DNSName(name))
+        if email_sans:
+            for address in email_sans:
+                san_entries.append(x509.RFC822Name(address))
+        if san_entries:
+            builder = builder.add_extension(
+                x509.SubjectAlternativeName(san_entries), critical=False)
         if crl_distribution_url:
             dp = x509.DistributionPoint(
                 full_name=[x509.UniformResourceIdentifier(crl_distribution_url)],

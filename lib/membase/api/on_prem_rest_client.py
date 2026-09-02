@@ -7702,6 +7702,21 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'POST')
         return status, content, header
 
+    def reload_client_certificate(self):
+        """
+        POST /node/controller/reloadClientCertificate — reload this node's
+        internal client certificate from inbox/client_chain.pem +
+        inbox/client_pkey.key.
+
+        Per node, like reload_crl — not cluster-wide. No body. This is the
+        certificate goxdcr presents on its intra-cluster surfaces (P2P,
+        topology REST, conflict-log KV), so this call is what makes a rotated
+        internal certificate take effect without restarting goxdcr.
+        """
+        api = self.baseUrl + "node/controller/reloadClientCertificate"
+        status, content, header = self._http_request(api, 'POST')
+        return status, content, header
+
     def cbauth_crls_validate(self, certs, scope):
         """
         POST /_cbauth/crlsValidate — internal endpoint used by cbauth-registered
