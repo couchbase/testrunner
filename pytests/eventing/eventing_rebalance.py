@@ -13,6 +13,7 @@ from pytests.fts.fts_callable import FTSCallable
 from pytests.eventing.fts_query_definitions import ALL_QUERIES
 from membase.helper.cluster_helper import ClusterOperationHelper
 from pytests.security.jwt_utils import JWTUtils
+from pytests.eventing.eventing_crl_callable import EventingCRLCallable
 import logging
 import time
 
@@ -123,6 +124,13 @@ class EventingRebalance(EventingBaseTest):
             self.jit_provisioning = self.input.param('jit_provisioning', True)
             self.jwt_ttl = self.input.param('jwt_ttl', 3600)
             self.jwt_utils = JWTUtils(log=self.log)
+        # clientAuth CRL Configuration (Optional)
+        self.clientauth_crl = self.input.param('clientauth_crl', False)
+        if self.clientauth_crl:
+            eventing_ssl_port = self.input.param('eventing_ssl_port', 18096)
+            self.clientauth_crl_mode = self.input.param('clientauth_crl_mode', 'Require')
+            self.crl = EventingCRLCallable(self.master, self.servers, log=self.log,
+                                           eventing_ssl_port=eventing_ssl_port)
 
     def tearDown(self):
         log.info("==============  EventingRebalance tearDown has started ==============")
@@ -154,12 +162,82 @@ class EventingRebalance(EventingBaseTest):
                     cbas_rest.execute_statement_on_cbas("DISCONNECT LINK Local", None)
             except Exception as e:
                 log.exception("Analytics teardown cleanup failed: %s", str(e))
+        if getattr(self, 'clientauth_crl', False):
+            try:
+                self.crl.cleanup()
+            except Exception as e:
+                log.warning("clientAuth CRL cleanup failed: %s" % str(e))
         super(EventingRebalance, self).tearDown()
         log.info("==============  EventingRebalance tearDown has completed ==============")
+
+    def _setup_clientauth_crl_on_node(self, eventing_node):
+        """
+        Deploy a CA-signed node cert + enable clientCertAuth + revoke client 'a' on
+        `eventing_node`, the fixed target all clientAuth CRL probes in this test will
+        keep hitting regardless of whatever topology churn happens elsewhere in the
+        cluster. Call once, before the rebalance starts.
+        """
+        self.crl.trust_ca_on_cluster(self.crl.ca_cert, server=eventing_node)
+        self.crl.deploy_node_cert(eventing_node)
+        self._crl_clients, self._crl_ca_path = self.crl.setup_clientauth_crl(mode=self.clientauth_crl_mode)
+        # baseline diagnostics snapshot (filename, checksum, lastReload) -- compared
+        # against a post-rebalance snapshot later to confirm the CRL config itself
+        # wasn't silently reloaded/reset by the rebalance, not just that it still
+        # happens to behave correctly
+        self._crl_baseline_status = self.crl.wait_for_crl_poll_interval(self.crl.crl_filename)
+
+    def _diagnostics_entry_for_node(self, diagnostics, node):
+        for key, entry in diagnostics.items():
+            if key.split(":")[0] == node.ip:
+                return entry
+        return None
+
+    def _assert_clientauth_crl_state_persisted(self, eventing_node):
+        """
+        Compares the CRL file's diagnostics entry (checksum) on `eventing_node`
+        before vs. after the rebalance -- catches a silent reload/reset of the CRL
+        config that _assert_clientauth_crl_gating's behavior-only probe could miss.
+        """
+        current_status = self.crl.wait_for_crl_poll_interval(self.crl.crl_filename)
+        baseline_entry = self._diagnostics_entry_for_node(self._crl_baseline_status, eventing_node)
+        current_entry = self._diagnostics_entry_for_node(current_status, eventing_node)
+        self.assertIsNotNone(baseline_entry, "No pre-rebalance CRL baseline captured for {0}".format(eventing_node.ip))
+        self.assertIsNotNone(current_entry, "CRL file {0} no longer reported on {1} after rebalance".format(
+            self.crl.crl_filename, eventing_node.ip))
+        self.assertEqual(baseline_entry.get("checksum"), current_entry.get("checksum"),
+                         "CRL checksum for {0} changed across rebalance on {1}: {2} -> {3}".format(
+                             self.crl.crl_filename, eventing_node.ip,
+                             baseline_entry.get("checksum"), current_entry.get("checksum")))
+        log.info("clientAuth CRL state confirmed persisted across rebalance on {0} (checksum unchanged)".format(
+            eventing_node.ip))
+
+    def _assert_clientauth_crl_gating(self, eventing_node):
+        """
+        Revoked client ('a') must be TLS-rejected; the control client ('b') must
+        still be accepted -- proves clientAuth CRL enforcement survived whatever
+        topology change (node added/removed, KV swap) happened around this fixed
+        eventing node.
+        """
+        revoked, valid = self._crl_clients['a'], self._crl_clients['b']
+        self.assertFalse(
+            self.crl.probe_eventing_ssl(eventing_node, revoked['cert_path'], revoked['key_path'], self._crl_ca_path),
+            "Revoked clientAuth cert was NOT rejected on {0}".format(eventing_node.ip))
+        self.assertTrue(
+            self.crl.probe_eventing_ssl(eventing_node, valid['cert_path'], valid['key_path'], self._crl_ca_path),
+            "Valid clientAuth cert was unexpectedly rejected on {0}".format(eventing_node.ip))
+        log.info("clientAuth CRL gating confirmed on {0}: revoked cert rejected, valid cert accepted".format(
+            eventing_node.ip))
 
     def test_eventing_rebalance_in_when_existing_eventing_node_is_processing_mutations(self):
         # Setup JWT configuration if enabled
         jwt_token = self.setup_jwt_config() if self.jwt_auth else None
+
+        # clientAuth CRL setup if enabled -- the pre-existing eventing node is
+        # untouched by a rebalance-IN, so it stays a valid fixed target throughout
+        if getattr(self, 'clientauth_crl', False):
+            self._crl_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
+            self._setup_clientauth_crl_on_node(self._crl_node)
+            self._assert_clientauth_crl_gating(self._crl_node)
 
         # FTS setup if using FTS handler
         if getattr(self, 'is_fts', False):
@@ -204,6 +282,9 @@ class EventingRebalance(EventingBaseTest):
         if getattr(self, 'is_encryption', False):
             eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
             self._verify_log_encrypted_on_node(eventing_node)
+        if getattr(self, 'clientauth_crl', False):
+            self._assert_clientauth_crl_state_persisted(self._crl_node)
+            self._assert_clientauth_crl_gating(self._crl_node)
         if self.pause_resume:
             self.resume_function(body, jwt_token=jwt_token)
         # Run FTS validation if FTS handler is being used
@@ -287,7 +368,15 @@ class EventingRebalance(EventingBaseTest):
         if self.pause_resume:
             self.pause_function(body, jwt_token=jwt_token)
         # rebalance out a eventing node when eventing is processing mutations
-        nodes_out_ev = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
+        if getattr(self, 'clientauth_crl', False):
+            # fetch all eventing nodes up front so the clientAuth CRL target is
+            # guaranteed to be a DIFFERENT node than the one being rebalanced out
+            all_eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
+            nodes_out_ev, self._crl_node = all_eventing_nodes[0], all_eventing_nodes[1]
+            self._setup_clientauth_crl_on_node(self._crl_node)
+            self._assert_clientauth_crl_gating(self._crl_node)
+        else:
+            nodes_out_ev = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [nodes_out_ev])
         reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
@@ -297,6 +386,9 @@ class EventingRebalance(EventingBaseTest):
         remaining_ev_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
         if getattr(self, 'is_encryption', False):
             self._verify_log_encrypted_on_node(remaining_ev_node)
+        if getattr(self, 'clientauth_crl', False):
+            self._assert_clientauth_crl_state_persisted(self._crl_node)
+            self._assert_clientauth_crl_gating(self._crl_node)
         if self.pause_resume:
             self.resume_function(body, jwt_token=jwt_token)
         # Run FTS validation if FTS handler is being used
@@ -515,6 +607,13 @@ class EventingRebalance(EventingBaseTest):
         # Setup JWT configuration if enabled
         jwt_token = self.setup_jwt_config() if self.jwt_auth else None
 
+        # clientAuth CRL setup if enabled -- a KV swap doesn't change eventing
+        # membership, so the current eventing node stays a valid fixed target
+        if getattr(self, 'clientauth_crl', False):
+            self._crl_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
+            self._setup_clientauth_crl_on_node(self._crl_node)
+            self._assert_clientauth_crl_gating(self._crl_node)
+
         # FTS setup if using FTS handler
         if getattr(self, 'is_fts', False):
             self.load_sample_buckets(self.master, "travel-sample")
@@ -560,6 +659,9 @@ class EventingRebalance(EventingBaseTest):
         if getattr(self, 'is_encryption', False):
             self.sleep(15, "Waiting for bucket REST endpoint to stabilize post-KV-swap")
             self._verify_log_encrypted_on_node(eventing_node)
+        if getattr(self, 'clientauth_crl', False):
+            self._assert_clientauth_crl_state_persisted(self._crl_node)
+            self._assert_clientauth_crl_gating(self._crl_node)
         if self.pause_resume:
             self.resume_function(body, jwt_token=jwt_token)
         # Run FTS validation if FTS handler is being used

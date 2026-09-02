@@ -13,6 +13,7 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 from pytests.fts.fts_callable import FTSCallable
 from pytests.eventing.fts_query_definitions import ALL_QUERIES
 from pytests.security.jwt_utils import JWTUtils
+from pytests.eventing.eventing_crl_callable import EventingCRLCallable
 import logging
 import time
 
@@ -82,6 +83,14 @@ class EventingFailover(EventingBaseTest):
             self.jwt_ttl = self.input.param('jwt_ttl', 3600)
             self.jwt_utils = JWTUtils(log=self.log)
 
+        # clientAuth CRL Configuration (Optional)
+        self.clientauth_crl = self.input.param('clientauth_crl', False)
+        if self.clientauth_crl:
+            eventing_ssl_port = self.input.param('eventing_ssl_port', 18096)
+            self.clientauth_crl_mode = self.input.param('clientauth_crl_mode', 'Require')
+            self.crl = EventingCRLCallable(self.master, self.servers, log=self.log,
+                                           eventing_ssl_port=eventing_ssl_port)
+
     def tearDown(self):
         if getattr(self, '_log_encryption_enabled', False):
             try:
@@ -107,7 +116,69 @@ class EventingFailover(EventingBaseTest):
                     cbas_rest.execute_statement_on_cbas("DISCONNECT LINK Local", None)
         except Exception as e:
             log.exception("Analytics teardown cleanup failed: %s", str(e))
+        if getattr(self, 'clientauth_crl', False):
+            try:
+                self.crl.cleanup()
+            except Exception as e:
+                log.warning("clientAuth CRL cleanup failed: %s" % str(e))
         super(EventingFailover, self).tearDown()
+
+    def _setup_clientauth_crl_on_node(self, eventing_node):
+        """
+        Deploy a CA-signed node cert + enable clientCertAuth + revoke client 'a' on
+        `eventing_node`, the fixed target all clientAuth CRL probes in this test will
+        keep hitting regardless of whatever failover/recovery happens elsewhere in
+        the cluster. Call once, before the failover starts.
+        """
+        self.crl.trust_ca_on_cluster(self.crl.ca_cert, server=eventing_node)
+        self.crl.deploy_node_cert(eventing_node)
+        self._crl_clients, self._crl_ca_path = self.crl.setup_clientauth_crl(mode=self.clientauth_crl_mode)
+        # baseline diagnostics snapshot (filename, checksum, lastReload) -- compared
+        # against a post-failover snapshot later to confirm the CRL config itself
+        # wasn't silently reloaded/reset by the failover, not just that it still
+        # happens to behave correctly
+        self._crl_baseline_status = self.crl.wait_for_crl_poll_interval(self.crl.crl_filename)
+
+    def _diagnostics_entry_for_node(self, diagnostics, node):
+        for key, entry in diagnostics.items():
+            if key.split(":")[0] == node.ip:
+                return entry
+        return None
+
+    def _assert_clientauth_crl_state_persisted(self, eventing_node):
+        """
+        Compares the CRL file's diagnostics entry (checksum) on `eventing_node`
+        before vs. after the failover -- catches a silent reload/reset of the CRL
+        config that _assert_clientauth_crl_gating's behavior-only probe could miss.
+        """
+        current_status = self.crl.wait_for_crl_poll_interval(self.crl.crl_filename)
+        baseline_entry = self._diagnostics_entry_for_node(self._crl_baseline_status, eventing_node)
+        current_entry = self._diagnostics_entry_for_node(current_status, eventing_node)
+        self.assertIsNotNone(baseline_entry, "No pre-failover CRL baseline captured for {0}".format(eventing_node.ip))
+        self.assertIsNotNone(current_entry, "CRL file {0} no longer reported on {1} after failover".format(
+            self.crl.crl_filename, eventing_node.ip))
+        self.assertEqual(baseline_entry.get("checksum"), current_entry.get("checksum"),
+                         "CRL checksum for {0} changed across failover on {1}: {2} -> {3}".format(
+                             self.crl.crl_filename, eventing_node.ip,
+                             baseline_entry.get("checksum"), current_entry.get("checksum")))
+        log.info("clientAuth CRL state confirmed persisted across failover on {0} (checksum unchanged)".format(
+            eventing_node.ip))
+
+    def _assert_clientauth_crl_gating(self, eventing_node):
+        """
+        Revoked client ('a') must be TLS-rejected; the control client ('b') must
+        still be accepted -- proves clientAuth CRL enforcement survived whatever
+        failover/recovery happened around this fixed eventing node.
+        """
+        revoked, valid = self._crl_clients['a'], self._crl_clients['b']
+        self.assertFalse(
+            self.crl.probe_eventing_ssl(eventing_node, revoked['cert_path'], revoked['key_path'], self._crl_ca_path),
+            "Revoked clientAuth cert was NOT rejected on {0}".format(eventing_node.ip))
+        self.assertTrue(
+            self.crl.probe_eventing_ssl(eventing_node, valid['cert_path'], valid['key_path'], self._crl_ca_path),
+            "Valid clientAuth cert was unexpectedly rejected on {0}".format(eventing_node.ip))
+        log.info("clientAuth CRL gating confirmed on {0}: revoked cert rejected, valid cert accepted".format(
+            eventing_node.ip))
 
     def test_vb_shuffle_during_failover(self):
         # Setup JWT configuration if enabled
@@ -126,6 +197,11 @@ class EventingFailover(EventingBaseTest):
             self.fts_callable.wait_for_indexing_complete(item_count=self.fts_doc_count, idx=self.fts_index)
             self.sleep(30, "Waiting for FTS indexing to complete")
         eventing_server = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
+        # clientAuth CRL setup if enabled -- eventing_server[0] is never the node
+        # failed over below, so it stays a valid fixed target throughout
+        if getattr(self, 'clientauth_crl', False):
+            self._setup_clientauth_crl_on_node(eventing_server[0])
+            self._assert_clientauth_crl_gating(eventing_server[0])
         body = self.create_save_function_body(self.function_name, self.handler_code, jwt_token=jwt_token)
         self.deploy_function(body, jwt_token=jwt_token)
         if getattr(self, 'is_encryption', False):
@@ -150,6 +226,9 @@ class EventingFailover(EventingBaseTest):
         if getattr(self, 'is_encryption', False):
             self._verify_log_encrypted_on_node(eventing_server[0])
             self._trigger_dek_rotation_and_wait(eventing_server[0])
+        if getattr(self, 'clientauth_crl', False):
+            self._assert_clientauth_crl_state_persisted(eventing_server[0])
+            self._assert_clientauth_crl_gating(eventing_server[0])
         # Run FTS validation if FTS handler is being used
         if getattr(self, 'is_fts', False):
             self.run_fts_validation()
@@ -209,6 +288,11 @@ class EventingFailover(EventingBaseTest):
             self.fts_callable.wait_for_indexing_complete(item_count=self.fts_doc_count, idx=self.fts_index)
             self.sleep(30, "Waiting for FTS indexing to complete")
         eventing_server = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
+        # clientAuth CRL setup if enabled -- eventing_server[0] is never failed
+        # over below, so it stays a valid fixed target throughout
+        if getattr(self, 'clientauth_crl', False):
+            self._setup_clientauth_crl_on_node(eventing_server[0])
+            self._assert_clientauth_crl_gating(eventing_server[0])
         body = self.create_save_function_body(self.function_name, self.handler_code, jwt_token=jwt_token)
         self.deploy_function(body, jwt_token=jwt_token)
         if getattr(self, 'is_encryption', False):
@@ -235,6 +319,9 @@ class EventingFailover(EventingBaseTest):
         if getattr(self, 'is_encryption', False):
             self._verify_log_encrypted_on_node(eventing_server[0])
             self._trigger_dek_rotation_and_wait(eventing_server[0])
+        if getattr(self, 'clientauth_crl', False):
+            self._assert_clientauth_crl_state_persisted(eventing_server[0])
+            self._assert_clientauth_crl_gating(eventing_server[0])
         # Run FTS validation if FTS handler is being used
         if getattr(self, 'is_fts', False):
             self.run_fts_validation()
@@ -358,6 +445,11 @@ class EventingFailover(EventingBaseTest):
             self.fts_callable.wait_for_indexing_complete(item_count=self.fts_doc_count, idx=self.fts_index)
             self.sleep(30, "Waiting for FTS indexing to complete")
         eventing_server = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
+        # clientAuth CRL setup if enabled -- eventing_server[0] is never failed
+        # over below, so it stays a valid fixed target throughout
+        if getattr(self, 'clientauth_crl', False):
+            self._setup_clientauth_crl_on_node(eventing_server[0])
+            self._assert_clientauth_crl_gating(eventing_server[0])
         body = self.create_save_function_body(self.function_name, self.handler_code, jwt_token=jwt_token)
         self.deploy_function(body, jwt_token=jwt_token)
         if getattr(self, 'is_encryption', False):
@@ -383,6 +475,9 @@ class EventingFailover(EventingBaseTest):
         if getattr(self, 'is_encryption', False):
             self._verify_log_encrypted_on_node(eventing_server[0])
             self._trigger_dek_rotation_and_wait(eventing_server[0])
+        if getattr(self, 'clientauth_crl', False):
+            self._assert_clientauth_crl_state_persisted(eventing_server[0])
+            self._assert_clientauth_crl_gating(eventing_server[0])
         # Run FTS validation if FTS handler is being used
         if getattr(self, 'is_fts', False):
             self.run_fts_validation()

@@ -18,6 +18,7 @@ from pytests.eventing.eventing_base import EventingBaseTest
 from pytests.fts.fts_callable import FTSCallable
 from pytests.eventing.fts_query_definitions import ALL_QUERIES
 from pytests.security.jwt_utils import JWTUtils
+from pytests.eventing.eventing_crl_callable import EventingCRLCallable
 import logging
 import time
 
@@ -113,6 +114,14 @@ class EventingRecovery(EventingBaseTest):
             self.jwt_ttl = self.input.param('jwt_ttl', 3600)
             self.jwt_utils = JWTUtils(log=self.log)
 
+        # clientAuth CRL Configuration (Optional)
+        self.clientauth_crl = self.input.param('clientauth_crl', False)
+        if self.clientauth_crl:
+            eventing_ssl_port = self.input.param('eventing_ssl_port', 18096)
+            self.clientauth_crl_mode = self.input.param('clientauth_crl_mode', 'Require')
+            self.crl = EventingCRLCallable(self.master, self.servers, log=self.log,
+                                           eventing_ssl_port=eventing_ssl_port)
+
     def tearDown(self):
         if getattr(self, '_log_encryption_enabled', False):
             try:
@@ -138,13 +147,82 @@ class EventingRecovery(EventingBaseTest):
                     cbas_rest.execute_statement_on_cbas("DISCONNECT LINK Local", None)
             except Exception as e:
                 log.exception("Analytics teardown cleanup failed: %s", str(e))
+        if getattr(self, 'clientauth_crl', False):
+            try:
+                self.crl.cleanup()
+            except Exception as e:
+                log.warning("clientAuth CRL cleanup failed: %s" % str(e))
         super(EventingRecovery, self).tearDown()
+
+    def _setup_clientauth_crl_on_node(self, eventing_node):
+        """
+        Deploy a CA-signed node cert + enable clientCertAuth + revoke client 'a' on
+        `eventing_node`, the fixed target all clientAuth CRL probes in this test will
+        keep hitting regardless of whatever consumer/producer kill or server
+        restart happens to it. Call once, before that disruption starts.
+        """
+        self.crl.trust_ca_on_cluster(self.crl.ca_cert, server=eventing_node)
+        self.crl.deploy_node_cert(eventing_node)
+        self._crl_clients, self._crl_ca_path = self.crl.setup_clientauth_crl(mode=self.clientauth_crl_mode)
+        # baseline diagnostics snapshot (filename, checksum, lastReload) -- compared
+        # against a post-disruption snapshot later to confirm the CRL config itself
+        # wasn't silently reloaded/reset, not just that it still happens to behave
+        # correctly
+        self._crl_baseline_status = self.crl.wait_for_crl_poll_interval(self.crl.crl_filename)
+
+    def _diagnostics_entry_for_node(self, diagnostics, node):
+        for key, entry in diagnostics.items():
+            if key.split(":")[0] == node.ip:
+                return entry
+        return None
+
+    def _assert_clientauth_crl_state_persisted(self, eventing_node):
+        """
+        Compares the CRL file's diagnostics entry (checksum) on `eventing_node`
+        before vs. after the disruption -- catches a silent reload/reset of the
+        CRL config that _assert_clientauth_crl_gating's behavior-only probe could
+        miss (relevant here since couchbase-server itself, not just a subprocess,
+        gets stopped/started in test_is_balanced_after_stopping_couchbase_server).
+        """
+        current_status = self.crl.wait_for_crl_poll_interval(self.crl.crl_filename)
+        baseline_entry = self._diagnostics_entry_for_node(self._crl_baseline_status, eventing_node)
+        current_entry = self._diagnostics_entry_for_node(current_status, eventing_node)
+        self.assertIsNotNone(baseline_entry, "No pre-disruption CRL baseline captured for {0}".format(eventing_node.ip))
+        self.assertIsNotNone(current_entry, "CRL file {0} no longer reported on {1} after the disruption".format(
+            self.crl.crl_filename, eventing_node.ip))
+        self.assertEqual(baseline_entry.get("checksum"), current_entry.get("checksum"),
+                         "CRL checksum for {0} changed on {1}: {2} -> {3}".format(
+                             self.crl.crl_filename, eventing_node.ip,
+                             baseline_entry.get("checksum"), current_entry.get("checksum")))
+        log.info("clientAuth CRL state confirmed persisted on {0} (checksum unchanged)".format(eventing_node.ip))
+
+    def _assert_clientauth_crl_gating(self, eventing_node):
+        """
+        Revoked client ('a') must be TLS-rejected; the control client ('b') must
+        still be accepted -- proves clientAuth CRL enforcement survived whatever
+        consumer/producer kill or server restart happened on this fixed eventing
+        node.
+        """
+        revoked, valid = self._crl_clients['a'], self._crl_clients['b']
+        self.assertFalse(
+            self.crl.probe_eventing_ssl(eventing_node, revoked['cert_path'], revoked['key_path'], self._crl_ca_path),
+            "Revoked clientAuth cert was NOT rejected on {0}".format(eventing_node.ip))
+        self.assertTrue(
+            self.crl.probe_eventing_ssl(eventing_node, valid['cert_path'], valid['key_path'], self._crl_ca_path),
+            "Valid clientAuth cert was unexpectedly rejected on {0}".format(eventing_node.ip))
+        log.info("clientAuth CRL gating confirmed on {0}: revoked cert rejected, valid cert accepted".format(
+            eventing_node.ip))
 
     def test_killing_eventing_consumer_when_eventing_is_processing_mutations(self):
         # Setup JWT configuration if enabled
         jwt_token = self.setup_jwt_config() if self.jwt_auth else None
 
         eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
+        # clientAuth CRL setup if enabled -- eventing_node is the fixed target
+        # throughout (only its consumer subprocess gets killed, node stays put)
+        if getattr(self, 'clientauth_crl', False):
+            self._setup_clientauth_crl_on_node(eventing_node)
+            self._assert_clientauth_crl_gating(eventing_node)
         # FTS setup if using FTS handler
         if getattr(self, 'is_fts', False):
             self.load_sample_buckets(self.server, "travel-sample")
@@ -227,6 +305,9 @@ class EventingRecovery(EventingBaseTest):
         # kill eventing consumer when eventing is processing mutations
         self.kill_consumer(eventing_node)
         self.wait_for_handler_state(body['appname'], "deployed")
+        if getattr(self, 'clientauth_crl', False):
+            self._assert_clientauth_crl_state_persisted(eventing_node)
+            self._assert_clientauth_crl_gating(eventing_node)
         # Run FTS validation if FTS handler is being used
         self.run_fts_validation()
         if getattr(self, 'is_encryption', False):
@@ -257,6 +338,11 @@ class EventingRecovery(EventingBaseTest):
         jwt_token = self.setup_jwt_config() if self.jwt_auth else None
 
         eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
+        # clientAuth CRL setup if enabled -- eventing_node is the fixed target
+        # throughout (only its producer subprocess gets killed, node stays put)
+        if getattr(self, 'clientauth_crl', False):
+            self._setup_clientauth_crl_on_node(eventing_node)
+            self._assert_clientauth_crl_gating(eventing_node)
         # FTS setup if using FTS handler
         if getattr(self, 'is_fts', False):
             self.load_sample_buckets(self.server, "travel-sample")
@@ -343,6 +429,9 @@ class EventingRecovery(EventingBaseTest):
             self.resume_function(body, jwt_token=jwt_token)
         else:
             self.wait_for_handler_state(body['appname'], "deployed")
+        if getattr(self, 'clientauth_crl', False):
+            self._assert_clientauth_crl_state_persisted(eventing_node)
+            self._assert_clientauth_crl_gating(eventing_node)
         # Run FTS validation if FTS handler is being used
         self.run_fts_validation()
         if getattr(self, 'is_encryption', False):
@@ -1410,6 +1499,14 @@ class EventingRecovery(EventingBaseTest):
         nodes_out_list = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
         if len(nodes_out_list)<2:
             self.fail("Need two or more eventing nodes")
+        # clientAuth CRL setup if enabled -- fixed target is the first eventing
+        # node; couchbase-server itself gets stopped/started on it below, so this
+        # is the strongest persistence check of the three (survives a full
+        # process restart, not just a subprocess kill)
+        if getattr(self, 'clientauth_crl', False):
+            self._crl_node = nodes_out_list[0]
+            self._setup_clientauth_crl_on_node(self._crl_node)
+            self._assert_clientauth_crl_gating(self._crl_node)
         # FTS setup if using FTS handler
         if getattr(self, 'is_fts', False):
             self.load_sample_buckets(self.server, "travel-sample")
@@ -1449,6 +1546,9 @@ class EventingRecovery(EventingBaseTest):
                 servicesNeedRebalance=json_response['servicesNeedRebalance'][0]['services']
                 self.assertFalse('eventing' in servicesNeedRebalance,
                         msg="Eventing Nodes are not balanced, need rebalance after starting couchbase server."  )
+        if getattr(self, 'clientauth_crl', False):
+            self._assert_clientauth_crl_state_persisted(self._crl_node)
+            self._assert_clientauth_crl_gating(self._crl_node)
         # Run FTS validation if FTS handler is being used
         self.run_fts_validation()
         # Run analytics validation if analytics handler is being used
