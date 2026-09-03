@@ -262,6 +262,13 @@ class QueryCRLTests(QueryTests, CRLBase):
             time.sleep(2)
         self.fail(f"CRL did not load within {timeout}s")
 
+    def _set_allow_expired_crls(self, enabled=True):
+        value = "true" if enabled else "false"
+        status, content = self.rest.diag_eval(
+            "ns_config:set(allow_expired_crls, {0}).".format(value))
+        if not status:
+            self.fail("Failed to set allow_expired_crls={0}: {1}".format(value, content))
+
     def _set_policy(self, client_auth=None, node_to_node=None):
         payload = {"policyPerScope": {}}
         if client_auth:
@@ -417,19 +424,27 @@ class QueryCRLTests(QueryTests, CRLBase):
     def test_untrusted_crl_require_rejects_connection(self):
         """Section 1/3: Require — when the only CRL is from an untrusted issuer
         the server cannot validate revocation status, so it fails closed and rejects."""
-        untrusted_ca_cert, untrusted_ca_key = self.crl_utils.generate_ca("UntrustedCA2")
-        crl_pem = self.crl_utils.build_crl(
-            untrusted_ca_cert, untrusted_ca_key,
-            revoked_serials=[],
-            crl_number=101)
-        filename = "crl_untrusted_101.pem"
-        status, _, _ = self.rest.upload_crl_file(filename, crl_pem)
-        if status:
-            self._track_uploaded_file(filename)
-        self._set_policy(client_auth=self.REQUIRE)
-        # Require mode with only an untrusted CRL → undetermined → fail-closed → rejected
-        self._assert_tls_rejected(self.client_b_cert_path, self.client_b_key_path)
-        self.log.info("Untrusted CRL + Require: valid cert rejected (fail-closed) — PASS")
+        # suite_setUp uploads crl_test_1.pem (TestCA1 CRL) which persists across tests.
+        # Remove it so the only CRL in the system is the untrusted one below.
+        suite_crl = "crl_test_1.pem"
+        self.rest.delete_crl_file(suite_crl)
+        try:
+            untrusted_ca_cert, untrusted_ca_key = self.crl_utils.generate_ca("UntrustedCA2")
+            crl_pem = self.crl_utils.build_crl(
+                untrusted_ca_cert, untrusted_ca_key,
+                revoked_serials=[],
+                crl_number=101)
+            filename = "crl_untrusted_101.pem"
+            status, _, _ = self.rest.upload_crl_file(filename, crl_pem)
+            if status:
+                self._track_uploaded_file(filename)
+            self._set_policy(client_auth=self.REQUIRE)
+            # Require mode with only an untrusted CRL → undetermined → fail-closed → rejected
+            self._assert_tls_rejected(self.client_b_cert_path, self.client_b_key_path)
+            self.log.info("Untrusted CRL + Require: valid cert rejected (fail-closed) — PASS")
+        finally:
+            # Restore suite CRL so subsequent tests see the expected state
+            self._upload_revoked_crl(serials=[self.client_a_serial], crl_number=1)
 
     def test_crl_metadata_correct(self):
         """Section 1: CRL metadata fields (filename, issuer, thisUpdate, nextUpdate, crlNumber)
@@ -612,36 +627,44 @@ class QueryCRLTests(QueryTests, CRLBase):
     def test_expired_crl_permissive_allows_connection(self):
         """Section 3: Permissive — an expired CRL is treated as undetermined (fail-open).
         Client B (valid, not on any live CRL) must be allowed when the only CRL is expired."""
-        expired_crl_pem = self.crl_utils.build_crl(
-            self.ca_cert, self.ca_key,
-            revoked_serials=[self.client_a_serial],
-            crl_number=70,
-            expired=True)
-        filename = "crl_expired_70.pem"
-        status, content, _ = self.rest.upload_crl_file(filename, expired_crl_pem)
-        self.assertTrue(status, f"Failed to upload expired CRL: {content}")
-        self._track_uploaded_file(filename)
-        self._set_policy(client_auth=self.PERMISSIVE)
-        # Permissive + expired CRL → fail-open → valid cert allowed
-        self._assert_tls_succeeds(self.client_b_cert_path, self.client_b_key_path)
-        self.log.info("Expired CRL + Permissive: valid cert allowed (fail-open) — PASS")
+        self._set_allow_expired_crls(True)
+        try:
+            expired_crl_pem = self.crl_utils.build_crl(
+                self.ca_cert, self.ca_key,
+                revoked_serials=[self.client_a_serial],
+                crl_number=70,
+                expired=True)
+            filename = "crl_expired_70.pem"
+            status, content, _ = self.rest.upload_crl_file(filename, expired_crl_pem)
+            self.assertTrue(status, f"Failed to upload expired CRL: {content}")
+            self._track_uploaded_file(filename)
+            self._set_policy(client_auth=self.PERMISSIVE)
+            # Permissive + expired CRL → fail-open → valid cert allowed
+            self._assert_tls_succeeds(self.client_b_cert_path, self.client_b_key_path)
+            self.log.info("Expired CRL + Permissive: valid cert allowed (fail-open) — PASS")
+        finally:
+            self._set_allow_expired_crls(False)
 
     def test_expired_crl_require_rejects_connection(self):
         """Section 3: Require — an expired CRL cannot prove a cert is current, so
         the connection is rejected (fail-closed on any validation uncertainty)."""
-        expired_crl_pem = self.crl_utils.build_crl(
-            self.ca_cert, self.ca_key,
-            revoked_serials=[self.client_a_serial],
-            crl_number=71,
-            expired=True)
-        filename = "crl_expired_71.pem"
-        status, content, _ = self.rest.upload_crl_file(filename, expired_crl_pem)
-        self.assertTrue(status, f"Failed to upload expired CRL: {content}")
-        self._track_uploaded_file(filename)
-        self._set_policy(client_auth=self.REQUIRE)
-        # Require + expired CRL → fail-closed → valid cert rejected
-        self._assert_tls_rejected(self.client_b_cert_path, self.client_b_key_path)
-        self.log.info("Expired CRL + Require: valid cert rejected (fail-closed) — PASS")
+        self._set_allow_expired_crls(True)
+        try:
+            expired_crl_pem = self.crl_utils.build_crl(
+                self.ca_cert, self.ca_key,
+                revoked_serials=[self.client_a_serial],
+                crl_number=71,
+                expired=True)
+            filename = "crl_expired_71.pem"
+            status, content, _ = self.rest.upload_crl_file(filename, expired_crl_pem)
+            self.assertTrue(status, f"Failed to upload expired CRL: {content}")
+            self._track_uploaded_file(filename)
+            self._set_policy(client_auth=self.REQUIRE)
+            # Require + expired CRL → fail-closed → valid cert rejected
+            self._assert_tls_rejected(self.client_b_cert_path, self.client_b_key_path)
+            self.log.info("Expired CRL + Require: valid cert rejected (fail-closed) — PASS")
+        finally:
+            self._set_allow_expired_crls(False)
 
     def test_clientauth_rejection_is_tls_level_not_http(self):
         """Section 3: Revoked cert gets NO HTTP response — TLS level rejection."""

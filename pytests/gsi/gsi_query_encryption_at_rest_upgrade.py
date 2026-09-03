@@ -39,6 +39,7 @@ from .upgrade_gsi import UpgradeSecondaryIndex
 from pytests.tuqquery.n1ql_encryption_helpers import N1QLEncryptionHelpers
 from pytests.security.crl_base import CRLBase
 from pytests.security.crl_utils import CRLUtils
+from pytests.security.x509main import x509main
 from pytests.security.x509_multiple_CA_util import Validation
 from membase.api.rest_client import RestConnection
 from lib.membase.helper.encryption_at_rest_helper import EncryptionUtil
@@ -2247,10 +2248,12 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex, CRLBase):
 
     def _crl_query_with_cert(self, cert_path, key_path):
         """mTLS request to Query TLS port using Validation (same as Totoro tuq_crl)."""
-        url = "https://{0}:18093/query/service".format(self.master.ip)
+        query_nodes = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)
+        query_node = query_nodes[0] if query_nodes else self.master
+        url = "https://{0}:18093/query/service".format(query_node.ip)
         try:
             v = Validation(
-                server=self.master,
+                server=query_node,
                 cacert=False,
                 client_cert_path_tuple=(cert_path, key_path))
             status, content, response = v.urllib_request(
@@ -2293,6 +2296,31 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex, CRLBase):
                 label, code, body))
         self.log.info("[{0}] Valid cert accepted (HTTP 200) — PASS".format(label))
 
+    def _trust_ca_on_all_nodes(self, ca_pem):
+        """Copy ca_pem (bytes) to inbox/CA on every cluster node, then call
+        loadTrustedCAs once. Required for multi-node clusters because
+        loadTrustedCAs reads inbox/CA from all nodes in the cluster."""
+        import tempfile
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pem", mode="wb") as f:
+            f.write(ca_pem)
+            local_path = f.name
+        try:
+            for node in self.servers:
+                install_path = x509main(host=node).install_path
+                ca_dir = "{0}{1}/CA".format(install_path, x509main.CHAINFILEPATH)
+                shell = RemoteMachineShellConnection(node)
+                try:
+                    shell.execute_command("mkdir -p {0}".format(ca_dir))
+                    shell.copy_file_local_to_remote(
+                        local_path, "{0}/crl_test_ca.pem".format(ca_dir))
+                finally:
+                    shell.disconnect()
+        finally:
+            os.remove(local_path)
+        status, content = self.rest.load_trusted_CAs()
+        if not status:
+            self.fail("Failed to load trusted CAs: {0}".format(content))
+
     def _validate_crl_revocation_post_upgrade(self, label):
         """Post-upgrade CRL revocation validation — mirrors the Totoro CRL test flow:
           1. Generate CA + two client certs (A=revoked, B=valid)
@@ -2333,8 +2361,9 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex, CRLBase):
                 with open(path, "wb") as f:
                     f.write(data)
 
-            # Trust CA — reuse CRLBase._trust_ca_on_cluster (SSH copy to inbox/CA/)
-            self._trust_ca_on_cluster(self.ca_cert)
+            # Trust CA on every cluster node — loadTrustedCAs reads inbox/CA on
+            # all nodes, so the cert must be present on each one (not just master).
+            self._trust_ca_on_all_nodes(ca_pem)
             self.log.info("[{0}] CA trusted on cluster".format(label))
 
             # RBAC users whose IDs match the cert CNs — reuse CRLBase._create_rbac_test_user
@@ -2363,14 +2392,12 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex, CRLBase):
 
             # Revoked cert must be rejected at TLS layer
             self.log.info(
-                "[{0}] Testing revoked cert (client_a) on {1}:18093".format(
-                    label, self.master.ip))
+                "[{0}] Testing revoked cert (client_a) on query node:18093".format(label))
             self._crl_assert_rejected(a_cert_path, a_key_path, label)
 
             # Valid cert must succeed
             self.log.info(
-                "[{0}] Testing valid cert (client_b) on {1}:18093".format(
-                    label, self.master.ip))
+                "[{0}] Testing valid cert (client_b) on query node:18093".format(label))
             self._crl_assert_succeeds(b_cert_path, b_key_path, label)
 
             self.log.info(
