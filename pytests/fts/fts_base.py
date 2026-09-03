@@ -5195,8 +5195,12 @@ class FTSBaseTest(unittest.TestCase):
         self.enforce_tls = self._input.param("enforce_tls", False)
         self.server_grouping = self._input.param("server_grouping", None)
         self.delete_server_groups = self._input.param("delete_server_groups", False)
-        if self.use_https:
-            CbServer.use_https = True
+        # CbServer.use_https is process-global and every test in a suite runs in
+        # the same process. A test that raises in setUp never reaches tearDown,
+        # so re-derive the flag from this test's own params instead of inheriting
+        # whatever the previous test left behind. Paths that need TLS without the
+        # param -- multiple_ca, capella, strict n2n -- all set it later in setUp.
+        CbServer.use_https = bool(self.use_https)
         self.ipv4_only = self._input.param("ipv4_only", False)
         self.ipv6_only = self._input.param("ipv6_only", False)
         if self.collection.startswith("["):
@@ -5823,6 +5827,18 @@ class FTSBaseTest(unittest.TestCase):
 
     def setup_nton_encryption(self):
         self.log.info('Setting up node to node encyrption from ')
+        # 'strict' closes every non-loopback plaintext port cluster-wide, 8091
+        # included, so the REST client has to be moved onto the TLS ports before
+        # the level is applied. Otherwise every RestConnection built after this
+        # point still dials http://<ip>:8091 and fails with ECONNREFUSED, which
+        # reads as "the node went down" when the node is perfectly healthy.
+        # This mirrors what the multiple_ca path in setUp already does before it
+        # goes strict.
+        if self.ntonencrypt_level == 'strict':
+            self.log.info('Encryption level is strict -- switching the REST '
+                          'client to the TLS ports')
+            self.use_https = True
+            CbServer.use_https = True
         ntonencryptionBase().setup_nton_cluster(self._input.servers, clusterEncryptionLevel=self.ntonencrypt_level)
 
     def construct_serv_list(self, serv_str):

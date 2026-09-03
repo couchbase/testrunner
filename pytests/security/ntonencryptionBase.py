@@ -144,22 +144,31 @@ class ntonencryptionBase:
         Main function to disable node to node encryption
         """
         log.info ('Disable up node to node encryption - status = disable and clusterEncryptionLevel = control')
-        # During teardown a node may have been rebalanced/failed out (and its server
-        # stopped), so it is no longer reachable. Disabling settings on it is both
-        # impossible and unnecessary. Probe reachability and skip unreachable nodes so
-        # this best-effort cleanup doesn't abort the whole teardown with
-        # ServerUnavailableException. Reachable nodes behave exactly as before.
-        reachable = []
+        # Drop the encryption level first. Under 'strict' every non-loopback
+        # plaintext port is closed cluster-wide, so a RestConnection built here
+        # dials http://<ip>:8091 and gets ECONNREFUSED on *every* node -- probing
+        # reachability over plain REST before this point misreads the whole
+        # cluster as gone and turns this cleanup into a silent no-op, leaving the
+        # cluster strict for the rest of the run. These two steps go over SSH to
+        # localhost, which keeps working under strict.
         for server in servers:
             try:
-                RestConnection(server)
-                reachable.append(server)
+                self.change_cluster_encryption_cli([server],'control')
+                self.ntonencryption_cli([server],'disable')
             except Exception as e:
-                log.warning("Skipping unreachable node {0} during nton disable "
-                            "(rebalanced/failed out?): {1}".format(getattr(server, 'ip', server), e))
-        self.disable_autofailover(reachable)
-        self.change_cluster_encryption_cli(reachable,'control',update_to_all=True)
-        self.ntonencryption_cli(reachable,'disable',update_to_all=True)
+                log.warning("Could not disable n2n encryption on node {0} "
+                            "(unreachable over ssh?): {1}".format(getattr(server, 'ip', server), e))
+        CbServer.n2n_encryption = False
+        # During teardown a node may have been rebalanced/failed out (and its server
+        # stopped), so it is no longer reachable. Disabling autofailover on it is both
+        # impossible and unnecessary -- keep it best-effort so an unreachable node
+        # doesn't abort the whole teardown with ServerUnavailableException.
+        for server in servers:
+            try:
+                self.disable_autofailover([server])
+            except Exception as e:
+                log.warning("Skipping unreachable node {0} during autofailover "
+                            "disable (rebalanced/failed out?): {1}".format(getattr(server, 'ip', server), e))
 
     '''def get_ntonencryption_status(self,servers):'''
 
