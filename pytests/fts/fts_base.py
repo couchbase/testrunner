@@ -107,6 +107,13 @@ from .vector_dataset_generator.vector_dataset_loader import VectorLoader, GoVect
 from .docfilter_datagen.docfilter_datagen import DocFilterLoader
 from .synonym_datagen.synonym_datagen import SynonymDatagen
 
+# Built by JavaSdkSetup ('mvn -f java_sdk_client/collections/pom.xml clean
+# install') and shelled out to by SDKLoadDocumentsTask. Same path the loader
+# uses, resolved from the repo root rather than the cwd.
+JAVA_SDK_CLIENT_JAR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    "java_sdk_client", "collections", "target", "javaclient", "javaclient.jar")
+
 
 class RenameNodeException(FTSException):
     """Exception thrown when converting ip to hostname failed
@@ -1111,7 +1118,19 @@ class FTSIndex:
 
     def build_custom_index_params(self, index_params):
         if self.index_type == "fulltext-index":
-            mapping = INDEX_DEFAULTS.BLEVE_MAPPING
+            # Deep copy, never alias. The returned dict becomes this index's
+            # params, and callers keep adding to it - 'store', and for a
+            # collection index a 'doc_config' - so handing back the class
+            # attribute made every one of those edits a permanent edit to the
+            # default. Every test in a suite shares one process, so a single
+            # container_type=collection test used to leave
+            # doc_config.mode='scope.collection.type_field' behind, and the next
+            # bucket-level custom-map index inherited it: its type mappings are
+            # named 'emp'/'wiki' but the docs then resolve as
+            # '_default._default.emp', match no type mapping, and get indexed
+            # against a disabled default mapping. The index reports the full doc
+            # count while every field query returns 0 hits.
+            mapping = copy.deepcopy(INDEX_DEFAULTS.BLEVE_MAPPING)
             if TestInputSingleton.input.param("scoring_model", None):
                 mapping['mapping']['scoring_model'] = TestInputSingleton.input.param("scoring_model", None)
             if self.custom_map:
@@ -1124,7 +1143,7 @@ class FTSIndex:
         return mapping
 
     def build_custom_plan_params(self, plan_params):
-        plan = INDEX_DEFAULTS.PLAN_PARAMS
+        plan = copy.deepcopy(INDEX_DEFAULTS.PLAN_PARAMS)
         plan.update(plan_params)
         return plan
 
@@ -5248,10 +5267,25 @@ class FTSBaseTest(unittest.TestCase):
                     rest.delete_zone(zone)
 
         self.java_sdk_client = self._input.param("java_sdk_client", False)
-        # Build java_sdk_client jar for both regular java_sdk_client tests AND hierarchical mode
-        if self.java_sdk_client or self.hierarchical:
-            self.log.info("Building java_sdk_client jar via JavaSdkSetup")
-            JavaSdkSetup()
+        # The jar is needed by more than the java_sdk_client param. Any
+        # collection-scoped load goes SDKDataLoader -> SDKLoadDocumentsTask,
+        # which shells out to javaclient.jar, so a container_type=collection
+        # test needs the jar even though it never passes the param. Without it
+        # the loader fails with "Unable to access jarfile" on stderr and
+        # load_data raises carrying only an empty "(b'', None)", which reads as
+        # a cluster problem rather than a missing build artifact.
+        # bulk_collections is here too: __setup_bulk_collections flips
+        # container_type to 'collection' later in setUp, after this point.
+        # Only build when the jar is actually missing - JavaSdkSetup runs
+        # 'mvn clean install' and setUp runs once per test in the suite.
+        if (self.java_sdk_client or self.hierarchical
+                or self.container_type == 'collection' or self.bulk_collections):
+            if os.path.exists(JAVA_SDK_CLIENT_JAR):
+                self.log.info("java_sdk_client jar already built: {0}"
+                              .format(JAVA_SDK_CLIENT_JAR))
+            else:
+                self.log.info("Building java_sdk_client jar via JavaSdkSetup")
+                JavaSdkSetup()
         if self.capella_run:
             self.__setup_for_test_capella()
         else:

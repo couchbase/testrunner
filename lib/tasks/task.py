@@ -7135,6 +7135,8 @@ class MagmaDocLoader(Task):
 
 # Runs java sdk client directly on slave
 class SDKLoadDocumentsTask(Task):
+    JAVA_SDK_CLIENT_JAR = "java_sdk_client/collections/target/javaclient/javaclient.jar"
+
     def __init__(self, server, bucket, sdk_docloader):
         Task.__init__(self, "SDKLoadDocumentsTask")
         self.server = server
@@ -7146,7 +7148,22 @@ class SDKLoadDocumentsTask(Task):
 
     def execute_for_collection(self, collection, start_seq_num_shift=0):
         import subprocess
-        command = f"java -jar java_sdk_client/collections/target/javaclient/javaclient.jar " \
+        # Fail on the real reason. Without this the load dies on the java
+        # client's non-zero exit and the exception carries only stdout, which
+        # is empty because "Unable to access jarfile" goes to stderr - the test
+        # then reports "Exception in java sdk client to <ip>:<bucket> (b'', None)"
+        # and says nothing about the jar never having been built.
+        if not os.path.exists(self.JAVA_SDK_CLIENT_JAR):
+            self.state = FINISHED
+            self.set_exception(Exception(
+                "java sdk client jar not found at {0} (cwd {1}). It is built by "
+                "scripts/java_sdk_setup.JavaSdkSetup ('mvn -f "
+                "java_sdk_client/collections/pom.xml clean install'); check that "
+                "the java_sdk_client submodule is initialised "
+                "(make init-submodules) and that the build ran."
+                .format(self.JAVA_SDK_CLIENT_JAR, os.getcwd())))
+            return
+        command = f"java -jar {self.JAVA_SDK_CLIENT_JAR} " \
                   f"-i {self.server.ip} -u '{self.sdk_docloader.username}' -p '{self.sdk_docloader.password}' -b {self.bucket} " \
                   f"-s {self.sdk_docloader.scope} -c {collection} " \
                   f"-n {self.sdk_docloader.num_ops} -pc {self.sdk_docloader.percent_create} -pu {self.sdk_docloader.percent_update} " \
@@ -7166,13 +7183,28 @@ class SDKLoadDocumentsTask(Task):
                 command = command + ",".join(arr_fields_to_update)
         self.log.info(command)
         try:
-            proc = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True)
+            # Capture stderr too: the java client reports jvm and connection
+            # failures there, and it was being thrown away, leaving the
+            # exception below with nothing but an empty stdout to report.
+            proc = subprocess.Popen(command, stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE, shell=True)
             out = proc.communicate(timeout=self.sdk_docloader.timeout)
             if self.sdk_docloader.get_sdk_logs:
                 self.sdk_docloader.set_sdk_results(out)
                 self.log.info(out[0].decode("utf-8"))
+            stdout = (out[0] or b"").decode("utf-8", "replace").strip()
+            stderr = (out[1] or b"").decode("utf-8", "replace").strip()
+            if stderr:
+                # stderr used to be inherited and land in the console; keep it
+                # visible now that it is piped, whether or not the load failed.
+                self.log.error("java sdk client stderr: {0}".format(stderr))
             if proc.returncode != 0:
-                raise Exception("Exception in java sdk client to {}:{}\n{}".format(self.server.ip, self.bucket, out))
+                raise Exception(
+                    "Exception in java sdk client to {0}:{1} (exit {2})\n"
+                    "command: {3}\nstdout: {4}\nstderr: {5}"
+                    .format(self.server.ip, self.bucket, proc.returncode,
+                            re.sub(r"-p '[^']*'", "-p '<redacted>'", command),
+                            stdout or "<empty>", stderr or "<empty>"))
         except Exception as e:
             proc.terminate()
             self.state = FINISHED

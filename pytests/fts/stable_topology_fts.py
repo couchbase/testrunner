@@ -957,7 +957,9 @@ class StableTopFTS(FTSBaseTest):
                                   scope=index_scope, collections=index_collections)
         self.wait_for_indexing_complete()
         from .fts_base import INDEX_DEFAULTS
-        alias_def = INDEX_DEFAULTS.ALIAS_DEFINITION
+        # copy: the targets added below would otherwise stay on the class
+        # attribute and be inherited by every later alias in the same process
+        alias_def = copy.deepcopy(INDEX_DEFAULTS.ALIAS_DEFINITION)
         alias_def['targets'][index.name] = {}
         alias_def['targets'][index.name]['indexUUID'] = index.get_uuid()
         index.delete()
