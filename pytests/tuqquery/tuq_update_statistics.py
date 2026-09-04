@@ -1037,4 +1037,128 @@ class QueryUpdateStatsTests(QueryTests):
             except Exception:
                 pass
 
+    def test_mb73586_index_stats_with_zero_residency(self):
+        """
+        MB-73586: UPDATE STATISTICS INDEX ALL must capture non-zero index stats
+        even when the index memory residence ratio is 0.
+
+        Verification steps per Bingjie Miao (bug reporter):
+          1. Load travel-sample, all indexes built (done in setUp via load_sample=True).
+          2. Restart server so indexes are 0% memory resident.
+          3. UPDATE STATISTICS FOR `travel-sample`.inventory.route INDEX ALL
+          4. SELECT * FROM system:dictionary WHERE `bucket`="travel-sample" AND `keyspace`="route"
+          5. Each index entry in 'indexes' has an 'indexStats' list; inside that list:
+             numPages/numItems/avgPageSize/avgItemSize must NOT be 0;
+             resRatio MUST be 0 (confirms stats captured while truly 0% resident).
+
+        system:dictionary shape (Bingjie's example):
+          { "indexName": "...",
+            "indexStats": [{ "avgItemSize": N, "avgPageSize": N,
+                             "numItems": N, "numPages": N, "resRatio": 0 }],
+            "updated": "..." }
+        """
+        bucket = "travel-sample"
+        scope = "inventory"
+        collection = "route"
+
+        # travel-sample is already loaded and indexes are online via setUp (load_sample=True).
+        self.wait_for_all_indexes_online(build_deferred=True)
+
+        # Restart couchbase on all index nodes to flush in-memory pages → 0% residency.
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        if not index_nodes:
+            index_nodes = [self.master]
+        for node in index_nodes:
+            shell = RemoteMachineShellConnection(node)
+            try:
+                shell.stop_couchbase()
+                self.sleep(5)
+                shell.start_couchbase()
+            finally:
+                shell.disconnect()
+
+        # Wait for indexer back up and indexes online (they start at 0% residency after restart).
+        self.sleep(30)
+        self.wait_for_all_indexes_online(build_deferred=False)
+
+        # Log residency for route indexes to confirm the scenario before capturing stats.
+        index_node = index_nodes[0]
+        indexer_rest = RestConnection(index_node)
+        storage_stats = indexer_rest.get_index_storage_stats()
+        zero_residency_found = False
+        for index_key in storage_stats:
+            if collection not in index_key:
+                continue
+            for shard_stats in storage_stats[index_key].values():
+                if isinstance(shard_stats, dict) and "MainStore" in shard_stats:
+                    rr = shard_stats["MainStore"].get("resident_ratio", 1)
+                    self.log.info("MB-73586: {0} resident_ratio={1}".format(index_key, rr))
+                    if rr == 0:
+                        zero_residency_found = True
+        if not zero_residency_found:
+            self.log.warning(
+                "MB-73586: No route index at resident_ratio=0 right after restart "
+                "-- indexes may have warmed up. Continuing to verify stats anyway."
+            )
+
+        # Step 3: UPDATE STATISTICS INDEX ALL (Bingjie's exact operation).
+        self.run_cbq_query(
+            "UPDATE STATISTICS FOR `{0}`.`{1}`.`{2}` INDEX ALL".format(bucket, scope, collection)
+        )
+        self.sleep(3)
+
+        # Step 4: Query system:dictionary exactly as Bingjie specified (keyspace only, no scope).
+        result = self.run_cbq_query(
+            "SELECT * FROM system:dictionary WHERE `bucket` = '{0}' AND `keyspace` = '{1}'".format(
+                bucket, collection)
+        )
+        self.assertGreater(
+            len(result['results']), 0,
+            "MB-73586: No system:dictionary entry for {0}.{1}.{2}".format(bucket, scope, collection)
+        )
+
+        dictionary = result['results'][0].get('dictionary', {})
+        indexes = dictionary.get('indexes', [])
+        self.assertGreater(
+            len(indexes), 0,
+            "MB-73586: 'indexes' empty in system:dictionary for {0}.{1} -- "
+            "pre-fix CBO drops all stats when resident_ratio=0".format(scope, collection)
+        )
+
+        # Step 5: Validate stats inside indexStats list for each index.
+        # All stat fields must be non-zero; resRatio must be 0 (confirms 0%-residency scenario).
+        stat_fields = ['numPages', 'numItems', 'avgPageSize', 'avgItemSize']
+        for idx in indexes:
+            index_name = idx.get('indexName', 'unknown')
+            stats_list = idx.get('indexStats', [])
+            self.assertGreater(
+                len(stats_list), 0,
+                "MB-73586: 'indexStats' empty for index '{0}'".format(index_name)
+            )
+            for stats_entry in stats_list:
+                self.log.info("MB-73586: index={0} indexStats={1}".format(index_name, stats_entry))
+                self.assertIn('resRatio', stats_entry,
+                    "MB-73586: 'resRatio' missing from indexStats for index '{0}'".format(index_name))
+                self.assertEqual(
+                    stats_entry['resRatio'], 0,
+                    "MB-73586: resRatio={0} for index '{1}' -- expected 0 (0%% residency not achieved)".format(
+                        stats_entry['resRatio'], index_name)
+                )
+                for field in stat_fields:
+                    self.assertIn(
+                        field, stats_entry,
+                        "MB-73586: field '{0}' missing from indexStats for index '{1}'".format(
+                            field, index_name)
+                    )
+                    self.assertNotEqual(
+                        stats_entry[field], 0,
+                        "MB-73586: '{0}'=0 for index '{1}' at resRatio=0 -- "
+                        "pre-fix: CBO ignores stats at 0%% residency. Full entry: {2}".format(
+                            field, index_name, stats_entry)
+                    )
+
+        self.log.info(
+            "MB-73586: All route indexes have non-zero stats at 0%% memory residency -- fix verified"
+        )
+
 
