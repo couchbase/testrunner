@@ -69,7 +69,11 @@ class OpsChangeCasTests(CasBaseTest):
                         if ops == 'update':
                             client.memcached(key).cas(key, 0, 0, cas_old, "{0}-{1}".format("mysql-new-value", x))
                         else:
-                            client.memcached(key).touch(key, 10)
+                            # touch only bumps the CAS when the absolute expiry
+                            # changes (see VBucket::processGetAndUpdateTtl), and
+                            # expiry has a 1 second granularity - a constant TTL
+                            # is a no-op for iterations landing in the same second
+                            client.memcached(key).touch(key, 10 + x)
 
                         o_new, cas_new, d_new = client.memcached(key).get(key)
                         d_new = d_new.decode("utf-8")
