@@ -679,7 +679,12 @@ class ThreePassPlanner(BaseSecondaryIndexingTests):
 
         #ensuring the number shards are the same before and after rebalance
         shard_list_post_rebalance = self.fetch_shard_id_list()
-        self.assertEqual(len(shard_list_post_rebalance), len(shard_list_before_rebalance), f"shard list before rebalance {shard_list_before_rebalance}, shard list after rebalance {shard_list_post_rebalance}")
+        # no alternate shard IDs exist before the rebalance when the dealer was toggled off,
+        # so there is no before count to compare against in that case
+        if not self.toggle_on_off_shard_dealer:
+            self.assertEqual(len(shard_list_post_rebalance), len(shard_list_before_rebalance), f"shard list before rebalance {shard_list_before_rebalance}, shard list after rebalance {shard_list_post_rebalance}")
+        else:
+            self.assertTrue(shard_list_post_rebalance, "no alternate shard IDs assigned during rebalance")
 
         if self.rebalance_type == "rebalance_out":
             self.create_index_post_initial_index_creation(collection_namespace=collection_namespace)
