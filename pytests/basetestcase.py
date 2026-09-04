@@ -2635,9 +2635,13 @@ class OnPremBaseTestCase(unittest.TestCase):
             return priority
 
     def expire_pager(self, servers, val=10):
+        # exp_pager_stime is applied cluster wide through the bucket REST
+        # endpoint (ClusterOperationHelper.flushctl_set), so one call per
+        # bucket is enough. Looping over 'servers' also hits nodes that were
+        # failed over or rebalanced out; those are no longer provisioned and
+        # answer 404 for the bucket endpoint
         for bucket in self.buckets:
-            for server in servers:
-                ClusterOperationHelper.flushctl_set(server, "exp_pager_stime", val, bucket)
+            ClusterOperationHelper.flushctl_set(self.master, "exp_pager_stime", val, bucket)
         self.sleep(val, "wait for expiry pager to run on all these nodes")
 
     def set_auto_compaction(self, rest, parallelDBAndVC="false", dbFragmentThreshold=None, viewFragmntThreshold=None,
