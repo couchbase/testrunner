@@ -254,8 +254,8 @@ class EvictionKV(EvictionBase):
         # Validation
         for stat_key, stat_val in cbstat_expected.items():
             self.assertEqual(str(all_stats[stat_key]), stat_val,
-                             "Cbstat '%s' mismatch. Expected %s != %s (actual)"
-                             % (stat_key, all_stats[stat_key], stat_val))
+                             "Cbstat '%s' mismatch. Expected %s, actual %s"
+                             % (stat_key, stat_val, all_stats[stat_key]))
 
         vb_details = cbstat.vbucket_details("default")
         self.assertEqual(int(vb_details["0"]["seqlist_deleted_count"]), 0,

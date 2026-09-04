@@ -282,7 +282,10 @@ class OnPremBaseTestCase(unittest.TestCase):
                 self._upgrade_addr_family(self.upgrade_addr_family)
 
             self.set_alternate_address_all_nodes()
-            if self.bucket_storage == 'magma':
+            # Ephemeral buckets are never magma backed (bucket_storage is
+            # forced to couchstore in _create_bucket_params), so the magma
+            # quota / fullEviction defaults must not clobber their settings
+            if self.bucket_storage == 'magma' and self.bucket_type != 'ephemeral':
                 RestConnection(self.master).set_internalSetting("magmaMinMemoryQuota", 100)
                 if self.bucket_size < 256:
                     self.bucket_size = 256
