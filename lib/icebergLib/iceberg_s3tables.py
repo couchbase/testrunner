@@ -90,6 +90,24 @@ class S3TablesCatalog:
 
         self.grant_lakeformation_permissions()
 
+    def _lakeformation_catalog_id(self):
+        """Return the Glue catalog ID holding this run's S3 Tables namespace.
+
+        Table buckets are federated into Glue as <account>:s3tablescatalog/<bucket>,
+        the same identifier the query catalog uses as its warehouse. Falls back to the
+        account ID when the bucket ARN is unavailable.
+        """
+        arn = self.state.s3_table_bucket_arn
+        if not arn:
+            return self.state.aws_account_id
+        try:
+            # arn:aws:s3tables:<region>:<account>:bucket/<bucket-name>
+            bucket_name = arn.split(":")[5].split("/")[1]
+        except IndexError:
+            print(f"Could not parse table bucket name from ARN {arn}, using account ID as catalog")
+            return self.state.aws_account_id
+        return f"{self.state.aws_account_id}:s3tablescatalog/{bucket_name}"
+
     def grant_lakeformation_permissions(self):
         """Grant Lake Formation permissions so the active principal can read the S3 Tables catalog."""
         principal_arn = self.state.get_lakeformation_principal_arn()
@@ -105,22 +123,28 @@ class S3TablesCatalog:
                   "(IAM role has direct S3 Tables access).")
             return
 
+        # S3 Tables namespaces are federated into Glue under a per-bucket catalog
+        # (<account>:s3tablescatalog/<bucket>), not the account's default catalog.
+        # Granting against the account ID looks for icebergdb in the default catalog,
+        # where it only exists if the AWS_GLUE suite happens to have left one behind.
+        catalog_id = self._lakeformation_catalog_id()
+
         database_resource = {
             'Database': {
-                'CatalogId': self.state.aws_account_id,
+                'CatalogId': catalog_id,
                 'Name': self.state.database_name
             }
         }
         table_resource = {
             'Table': {
-                'CatalogId': self.state.aws_account_id,
+                'CatalogId': catalog_id,
                 'DatabaseName': self.state.database_name,
                 'Name': self.state.table_name
             }
         }
         table_wildcard_resource = {
             'Table': {
-                'CatalogId': self.state.aws_account_id,
+                'CatalogId': catalog_id,
                 'DatabaseName': self.state.database_name,
                 'TableWildcard': {}
             }
@@ -144,10 +168,15 @@ class S3TablesCatalog:
                     break
                 elif e.response['Error']['Code'] == 'InvalidInputException' and 'Database not found' in str(e):
                     if db_attempt < max_db_attempts:
-                        print(f"LF database not yet visible (attempt {db_attempt}/{max_db_attempts}), retrying in 5s...")
+                        print(f"LF database not yet visible in catalog {catalog_id} "
+                              f"(attempt {db_attempt}/{max_db_attempts}), retrying in 5s...")
                         import time
                         time.sleep(5)
                     else:
+                        print(f"Database {self.state.database_name} never became visible in Glue "
+                              f"catalog {catalog_id}. If this persists, check that S3 Tables "
+                              f"integration with AWS analytics services is enabled for this "
+                              f"account/region — without it the federated catalog is never created.")
                         raise e
                 else:
                     raise e
