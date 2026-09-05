@@ -500,7 +500,10 @@ class x509main:
         copy_host = copy.deepcopy(self.host)
         if non_local_CA_upload:
             self.non_local_CA_upload(server=copy_host, allow=True)
-        x509main(copy_host)._setup_node_certificates()
+        # reload_cert=False: the node cert isn't signed by a CA the cluster trusts yet
+        # (that upload happens next), so reloading here would always 400. Let
+        # _new_upload_cluster_ca_certificate() reload only after the CA is trusted.
+        x509main(copy_host)._setup_node_certificates(reload_cert=False)
         x509main(copy_host)._new_upload_cluster_ca_certificate(user, password)
         if state is not None:
             self.write_client_cert_json_new(state, paths, prefixs, delimeters)

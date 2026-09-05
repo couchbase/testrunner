@@ -108,10 +108,30 @@ class x509tests(BaseTestCase):
     def tearDown(self):
         self.log.info ("Into Teardown")
         self._reset_original()
+        self._cleanup_uploaded_trusted_cas()
         shell = RemoteMachineShellConnection(x509main.SLAVE_HOST)
         shell.execute_command("rm " + x509main.CACERTFILEPATH)
         shell.disconnect()
         super(x509tests, self).tearDown()
+
+    def _cleanup_uploaded_trusted_cas(self):
+        # Every setup_master()/_upload_cluster_ca_certificate() call in this suite uploads a
+        # fresh CA that ns_server never removes on its own (regenerate-cert only replaces the
+        # node's own cert, leaving old uploaded CAs marked "unused" in the trust store forever).
+        # Left alone, this trust store grows across every test/build on these shared lab nodes,
+        # and each new upload's cert-regeneration cascade gets progressively slower until it
+        # reliably outlasts a validate call landing right after rebalance.
+        try:
+            rest = RestConnection(self.master)
+            for ca in rest.get_trusted_CAs():
+                if ca.get('type') != 'uploaded':
+                    continue
+                try:
+                    rest.delete_trusted_CA(ca['id'])
+                except Exception as e:
+                    self.log.warn("Could not delete uploaded trusted CA id {0}: {1}".format(ca.get('id'), e))
+        except Exception as e:
+            self.log.warn("Could not clean up uploaded trusted CAs during teardown: {0}".format(e))
 
     def _reset_original(self):
         self.log.info ("Reverting to original state - regenerating certificate and removing inbox folder")
@@ -190,6 +210,24 @@ class x509tests(BaseTestCase):
             return True
         else:
             return False
+
+    def _wait_for_mandatory_ssl_login(self, server, timeout=240, poll_interval=10):
+        # Each setup_master() call in the servs_inout loop uploads its own CA, which
+        # gets replicated cluster-wide and makes every node regenerate its node/client
+        # certs. check_rebalance_complete() doesn't wait for that async regeneration to
+        # settle, so a validate call landing mid-regeneration can transiently 401.
+        # On this lab pool that settle can stall for minutes at a time (observed: a
+        # node's cb_dist inter-node connection flapping stalled cert/CA propagation
+        # for ~3 minutes) rather than resolving in seconds, hence the generous timeout.
+        elapsed = 0
+        status = None
+        while elapsed <= timeout:
+            status = x509main(server)._validate_mandatory_state_ssl_login()
+            if status == 200:
+                return status
+            self.sleep(poll_interval, "waiting for node cert/CA state to settle on {0}".format(server.ip))
+            elapsed += poll_interval
+        return status
 
     def _extract_certs(self, raw_content):
         certs = ""
@@ -326,7 +364,7 @@ class x509tests(BaseTestCase):
 
         for server in self.servers:
             if self.client_cert_state == "mandatory":
-                status = x509main(server)._validate_mandatory_state_ssl_login()
+                status = self._wait_for_mandatory_ssl_login(server)
                 self.assertEqual(status, 200, "Not able to login via SSL code")
             else:
                 status = x509main(server)._validate_ssl_login(verify=self.verify_ssl)
@@ -348,7 +386,7 @@ class x509tests(BaseTestCase):
         self.assertTrue(self.check_rebalance_complete(rest), "Issue with rebalance")
         for server in servs_inout:
             if self.client_cert_state == "mandatory":
-                status = x509main(server)._validate_mandatory_state_ssl_login()
+                status = self._wait_for_mandatory_ssl_login(server)
                 self.assertEqual(status, 200, "Not able to login via SSL code")
             else:
                 status = x509main(server)._validate_ssl_login(verify=self.verify_ssl)
@@ -370,7 +408,7 @@ class x509tests(BaseTestCase):
         self.assertTrue(self.check_rebalance_complete(rest), "Issue with rebalance")
         for server in servs_inout:
             if self.client_cert_state == "mandatory":
-                status = x509main(server)._validate_mandatory_state_ssl_login()
+                status = self._wait_for_mandatory_ssl_login(server)
                 self.assertEqual(status, 200, "Not able to login via SSL code")
             else:
                 status = x509main(server)._validate_ssl_login(verify=self.verify_ssl)
@@ -399,7 +437,7 @@ class x509tests(BaseTestCase):
 
         for server in servs_inout:
             if self.client_cert_state == "mandatory":
-                status = x509main(server)._validate_mandatory_state_ssl_login()
+                status = self._wait_for_mandatory_ssl_login(server)
                 self.assertEqual(status, 200, "Not able to login via SSL code")
             else:
                 status = x509main(server)._validate_ssl_login(verify=self.verify_ssl)
@@ -414,7 +452,7 @@ class x509tests(BaseTestCase):
 
         for server in servs_inout:
             if self.client_cert_state == "mandatory":
-                status = x509main(server)._validate_mandatory_state_ssl_login()
+                status = self._wait_for_mandatory_ssl_login(server)
                 self.assertEqual(status, 200, "Not able to login via SSL code")
             else:
                 status = x509main(server)._validate_ssl_login(verify=self.verify_ssl)
@@ -446,7 +484,7 @@ class x509tests(BaseTestCase):
         self.sleep(30)
         for server in self.servers[1:4]:
             if self.client_cert_state == "mandatory":
-                status = x509main(server)._validate_mandatory_state_ssl_login()
+                status = self._wait_for_mandatory_ssl_login(server)
                 self.assertEqual(status, 200, "Not able to login via SSL code")
             else:
                 status = x509main(server)._validate_ssl_login(verify=self.verify_ssl)
@@ -472,7 +510,7 @@ class x509tests(BaseTestCase):
 
         for server in self.servers[:3]:
             if self.client_cert_state == "mandatory":
-                status = x509main(server)._validate_mandatory_state_ssl_login()
+                status = self._wait_for_mandatory_ssl_login(server)
                 self.assertEqual(status, 200, "Not able to login via SSL code")
             else:
                 status = x509main(server)._validate_ssl_login(verify=self.verify_ssl)
@@ -676,7 +714,7 @@ class x509tests(BaseTestCase):
     def test_basic_ssl_test_invalid_cert(self):
         x509main(self.master).setup_master()
         if self.client_cert_state == "mandatory":
-            status = x509main(self.master)._validate_mandatory_state_ssl_login()
+            status = self._wait_for_mandatory_ssl_login(self.master)
             self.assertEqual(status, 200, "Not able to login via SSL code")
         else:
             status = x509main(self.master)._validate_ssl_login(verify=self.verify_ssl)
