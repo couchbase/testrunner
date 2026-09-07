@@ -488,3 +488,81 @@ class EventingLifeCycle(EventingBaseTest):
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
         self.undeploy_and_delete_function(body)
         self.delete_function(body1)
+
+    def test_dup_mutations_pause_resume(self):
+        # MB-71335
+        # logger.js logs one "docId:" line per OnUpdate call
+        # if pause/resume causes eventing to reprocess already-checkpointed mutations
+        # that shows up as extra "docId:" lines
+        body = self.create_save_function_body(self.function_name, "handler_code/logger.js")
+        self.deploy_function(body)
+
+        # load the initial batch and wait for it to be fully processed
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+
+        # baseline /getAppLog fetch before pausing
+        applogs_before_pause = self.get_app_logs(self.function_name, aggregate=True)
+
+        self.pause_function(body)
+        self.resume_function(body)
+        # applog content must be unchanged while the function is paused-resumed
+        applogs_after_pause = self.get_app_logs(self.function_name, aggregate=True)
+        self.assertEqual(applogs_before_pause, applogs_after_pause,
+                         msg="App logs changed while the function was paused")
+
+        # load a small, exactly-countable batch after resume
+        small_batch_size = 5
+        self.load_data_to_collection(small_batch_size, "{0}._default._default".format(self.src_bucket_name))
+
+        expected_docid_count = self.docs_per_day * 2016 + small_batch_size
+        self.verify_eventing_results(self.function_name, expected_docid_count, skip_stats_validation=True)
+
+        if self.global_function_scope:
+            matched, actual_count = self.check_word_count_eventing_log(
+                self.function_name, "docId:", expected_docid_count, return_count_only=False,
+                global_function=True)
+        else:
+            matched, actual_count = self.check_word_count_eventing_log(
+                self.function_name, "docId:", expected_docid_count, return_count_only=False,
+                bucket_name=self.src_bucket_name, scope_name="_default")
+        self.assertTrue(matched,
+                        msg="Duplicate 'docId:' lines found in applog after resume: "
+                            "expected {0}, got {1}".format(expected_docid_count, actual_count))
+
+        self.undeploy_and_delete_function(body)
+
+    def test_meta_keyspace_for_bucket_level_function(self):
+        # MB-73048: Verify meta.keyspace is populated for a "bucket-level" function
+        body = self.create_save_function_body(self.function_name, "handler_code/log_meta.js")
+        self.deploy_function(body)
+
+        num_docs = 2
+        self.load_data_to_collection(num_docs, "{0}._default._default".format(self.src_bucket_name))
+        self.verify_eventing_results(self.function_name, num_docs, skip_stats_validation=True)
+
+        applogs = self.get_app_logs(self.function_name, aggregate=True)
+        if isinstance(applogs, bytes):
+            applogs = applogs.decode('utf-8', errors='replace')
+
+        meta_lines = [line for line in applogs.split('\n') if '"meta:"' in line]
+        self.assertTrue(len(meta_lines) >= num_docs,
+                        msg="Expected at least {0} 'meta:' log lines, found {1}".format(
+                            num_docs, len(meta_lines)))
+
+        for line in meta_lines:
+            match = re.search(r'\{.*\}', line)
+            self.assertTrue(match is not None, msg="No JSON meta blob found in line: {0}".format(line))
+            meta = json.loads(match.group(0).replace('\\"', '"'))
+            keyspace = meta.get('keyspace')
+            self.assertTrue(keyspace is not None,
+                            msg="meta.keyspace missing for bucket-level function: {0}".format(meta))
+            self.assertEqual(keyspace.get('bucket_name'), self.src_bucket_name,
+                             msg="Unexpected bucket_name in meta.keyspace: {0}".format(keyspace))
+            self.assertTrue(keyspace.get('scope_name'),
+                            msg="meta.keyspace.scope_name is empty: {0}".format(keyspace))
+            self.assertTrue(keyspace.get('collection_name'),
+                            msg="meta.keyspace.collection_name is empty: {0}".format(keyspace))
+
+        self.undeploy_and_delete_function(body)

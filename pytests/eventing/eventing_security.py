@@ -39,6 +39,7 @@ class EventingSecurity(EventingBaseTest):
     '''
     def test_eventing_with_n2n_encryption_enabled(self):
         ntonencryptionBase().disable_nton_cluster([self.master])
+        self.sleep(90, "Waiting after disabling n2n encryption")
         body = self.create_save_function_body(self.function_name, "handler_code/ABO/insert_rebalance.js")
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0")
         self.deploy_function(body)
@@ -48,6 +49,7 @@ class EventingSecurity(EventingBaseTest):
         else:
             self.undeploy_function(body)
         ntonencryptionBase().setup_nton_cluster(self.servers, clusterEncryptionLevel=self.ntonencrypt_level)
+        self.sleep(90, "Waiting after enabling n2n encryption")
         if self.pause_resume:
             self.resume_function(body)
         else:
@@ -59,6 +61,7 @@ class EventingSecurity(EventingBaseTest):
         else:
             self.undeploy_function(body)
         ntonencryptionBase().setup_nton_cluster(self.servers, clusterEncryptionLevel="all")
+        self.sleep(90, "Waiting after changing encryption level to all")
         if self.pause_resume:
             self.resume_function(body)
         else:
@@ -70,6 +73,7 @@ class EventingSecurity(EventingBaseTest):
         else:
             self.undeploy_function(body)
         ntonencryptionBase().disable_nton_cluster([self.master])
+        self.sleep(90, "Waiting after disabling n2n encryption")
         if self.pause_resume:
             self.resume_function(body)
         else:
