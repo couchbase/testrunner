@@ -2578,6 +2578,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                 self.fail("Rollback to zero fails")
 
     def test_partial_rollback_with_replicas(self):
+        self.index_rest.set_index_settings({"indexer.timekeeper.rollback.StreamBeginWaitTime": 30})
         index_name_prefix = "random_index_" + str(
             random.randint(100000, 999999))
         create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) USING GSI  WITH {{'num_replica': {0}}};".format(

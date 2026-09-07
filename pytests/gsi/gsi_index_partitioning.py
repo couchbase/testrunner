@@ -1852,6 +1852,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         self.assertEqual(total_item_count, 0, "Rollback to zero fails")
 
     def test_kv_partial_rollback_on_partitioned_indexes(self):
+        self.index_rest.set_index_settings({"indexer.timekeeper.rollback.StreamBeginWaitTime": 30})
         self.run_async_index_operations(operation_type="create_index")
 
         # Stop Persistence on Node A & Node B

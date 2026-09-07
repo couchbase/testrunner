@@ -1625,6 +1625,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         """
         MB-36444
         """
+        self.index_rest.set_index_settings({"indexer.timekeeper.rollback.StreamBeginWaitTime": 30})
         bucket_name = self.buckets[0].name
         index_name = list(self.get_index_map()[bucket_name])[0]
         data_nodes = self.get_kv_nodes()
