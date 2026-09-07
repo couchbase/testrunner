@@ -2844,10 +2844,18 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                     out.remove("plan.json")
                 else:
                     self.fail("Missing plan.json file in this dir")
-                out = [w.split("-", 1)[0] for w in out]
+            """ Couchbase 8.x names the per-bucket backup dir as the bare
+                32-char bucket UUID; pre-8.x used "<bucket-name>-<uuid>".
+                Match either form so this test works across versions. """
+            bucket_dirs = {}
             if backup_all_buckets:
                 for bucket in self.buckets:
-                    if bucket.name in out:
+                    bucket_dir = next((entry for entry in out
+                                        if entry == bucket.uuid
+                                        or entry.startswith(bucket.name + "-")),
+                                       None)
+                    if bucket_dir:
+                        bucket_dirs[bucket.name] = bucket_dir
                         self.log.info("Bucket %s was backuped "
                                                  % bucket.name)
                     else:
@@ -2863,9 +2871,14 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                                       "query.json", "query.metadata.json",
                                       "ranges"]
             for bucket in self.buckets:
-                out, err = self.shell.execute_command("ls %s%s/%s*/%s-*"
+                bucket_dir = bucket_dirs.get(bucket.name)
+                if not bucket_dir:
+                    self.fail("Missing backup dir or files in backup bucket %s"
+                                                                 % bucket.name)
+                    continue
+                out, err = self.shell.execute_command("ls %s%s/%s*/%s"
                                             % (self.backup_path, backup_repo,
-                                                dir_start_with, bucket.name))
+                                                dir_start_with, bucket_dir))
                 if out and len(out) > 1:
                     self.log.info("Check content of backup dir of bucket %s: %s"
                                                            % (bucket.name, out))
