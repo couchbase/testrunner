@@ -55,7 +55,9 @@ class QueryRankingFusionTests(QueryTests):
 
     def suite_setUp(self):
         super(QueryRankingFusionTests, self).suite_setUp()
-        self._create_fts_index()
+        fts_nodes = self.cbcluster.get_fts_nodes()
+        if fts_nodes:
+            self._create_fts_index()
         self._load_hybrid_documents(self.doc_count)
         IndexVector().create_index(
             self.database, bucket=self.bucket, vector_field=self.dense_field,
