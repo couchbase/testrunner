@@ -900,12 +900,13 @@ class EventingBaseTest(QueryHelperTests):
         if wait_for_resume:
             self.wait_for_handler_state(name, "deployed")
 
-    def check_word_count_eventing_log(self, function_name, word, expected_count, return_count_only=False, bucket_name=None, scope_name=None):
+    def check_word_count_eventing_log(self, function_name, word, expected_count, return_count_only=False, bucket_name=None, scope_name=None, global_function=False):
         eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
         array_of_counts = []
         path = ""
-        # Use provided bucket_name and scope_name, or fall back to defaults
-        if bucket_name is None:
+        if global_function:
+            path = ""
+        elif bucket_name is None:
             path += function_name
         elif scope_name is None:
             scope_name = "_default"

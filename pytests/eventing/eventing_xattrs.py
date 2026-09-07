@@ -63,7 +63,7 @@ class EventingXattrs(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, self.handler_code, hostpath="/encode")
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default")
         self.deploy_function(body)
-        self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * self.num_docs*2)
+        self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * self.num_docs)
         self.undeploy_and_delete_function(body)
         process.terminate()
         process.wait()

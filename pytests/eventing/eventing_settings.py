@@ -310,3 +310,43 @@ class EventingSettings(EventingBaseTest):
         except Exception as e:
             self.log.info(e)
             assert "ERR_INVALID_CONFIG" in str(e) and "processing_status is required" in str(e), True
+
+    def test_two_functions_with_cursor_aware_true(self):
+        # MB-72678
+        # two functions with cursor_aware=true
+        # source: diff collections of src_bucket
+        num_docs = self.docs_per_day * self.num_docs
+        self.rest.create_collection(self.src_bucket_name, "_default", "collection1")
+        self.rest.create_collection(self.src_bucket_name, "_default", "collection2")
+        self.rest.create_collection(self.dst_bucket_name, "_default", "collection1")
+        self.rest.create_collection(self.dst_bucket_name, "_default", "collection2")
+
+        src_namespace_1 = "{0}._default.collection1".format(self.src_bucket_name)
+        src_namespace_2 = "{0}._default.collection2".format(self.src_bucket_name)
+        dst_namespace_1 = "{0}._default.collection1".format(self.dst_bucket_name)
+        dst_namespace_2 = "{0}._default.collection2".format(self.dst_bucket_name)
+
+        body1 = self.create_function_with_collection(
+            self.function_name + "_1", self.handler_code, src_namespace=src_namespace_1,
+            collection_bindings=["dst_bucket.{0}._default.collection1.rw".format(self.dst_bucket_name)])
+        # explicitly turn on cursor_aware and push the updated settings before deploying
+        body1['settings']['cursor_aware'] = True
+        self.rest.update_function(body1['appname'], body1, self.function_scope)
+        self.deploy_function(body1)
+
+        body2 = self.create_function_with_collection(
+            self.function_name + "_2", self.handler_code, src_namespace=src_namespace_2,
+            collection_bindings=["dst_bucket.{0}._default.collection2.rw".format(self.dst_bucket_name)])
+        body2['settings']['cursor_aware'] = True
+        self.rest.update_function(body2['appname'], body2, self.function_scope)
+        # Both cursor_aware functions should deploy fine, sourcing different collections of the same bucket
+        self.deploy_function(body2)
+
+        self.load_data_to_collection(num_docs, src_namespace_1)
+        self.verify_doc_count_collections(dst_namespace_1, num_docs)
+
+        self.load_data_to_collection(num_docs, src_namespace_2)
+        self.verify_doc_count_collections(dst_namespace_2, num_docs)
+
+        self.undeploy_and_delete_function(body1)
+        self.undeploy_and_delete_function(body2)

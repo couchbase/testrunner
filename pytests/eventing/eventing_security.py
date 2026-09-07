@@ -228,7 +228,7 @@ class EventingSecurity(EventingBaseTest):
             self.resume_function(body, jwt_token=jwt_token)
         else:
             self.deploy_function(body, jwt_token=jwt_token)
-        self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0", is_delete=True)
+        self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0",is_delete=True)
         self.verify_doc_count_collections("default.scope0.collection1", 0)
         if self.pause_resume:
             self.pause_function(body, jwt_token=jwt_token)
@@ -264,7 +264,7 @@ class EventingSecurity(EventingBaseTest):
             self.resume_function(body, jwt_token=jwt_token)
         else:
             self.deploy_function(body, jwt_token=jwt_token)
-        self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0",is_delete=True)
+        self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0", is_delete=True)
         self.verify_doc_count_collections("default.scope0.collection1", 0)
         if getattr(self, 'is_encryption', False):
             eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)

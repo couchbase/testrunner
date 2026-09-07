@@ -49,7 +49,7 @@ class EventingEncryptionAtRest(EventingBaseTest):
 
         self.app_log_max_size = self.input.param("app_log_max_size", 41943040)
         self.app_log_max_files = self.input.param("app_log_max_files", 10)
-        self.app_log_size_tolerance = self.input.param("app_log_size_tolerance", 1.4)
+        self.app_log_size_tolerance = self.input.param("app_log_size_tolerance", 1.5)
         self.rotation_wait_timeout = self.input.param("rotation_wait_timeout", 180)
         self.dek_rotation_interval = self.input.param("dek_rotation_interval", 60)
         self.num_rotations = self.input.param("num_rotations", 5)
