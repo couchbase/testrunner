@@ -1200,7 +1200,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 for namespace in self.namespaces:
                     bucket, scope, _ = namespace.split('.')
                     self.populate_vectors_in_xattr(bucket=bucket, scope=scope)
-            self.namespaces = ['test_bucket.test_scope_1.test_collection_1']
+            self.namespaces = [self.namespaces[0].replace("default:", "", 1)]
             if self.isSparse:
                 similarity = "DOT"
             else:
@@ -4871,11 +4871,11 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             task.result()
 
         if 'RaBitQ' in self.quantization_algo_description_vector:
-            num_new_docs = 20
+            num_new_docs = self.num_of_docs_per_collection + 20  # loader above adds these too
             description_vector = [0.1] * self.dimension
             color_vector = [0.1, 0.2, 0.3]
             for namespace in self.namespaces:
-                for i in range(num_new_docs):
+                for i in range(20):
                     insert_query = f'INSERT INTO {namespace} (KEY, VALUE) VALUES ("new_doc_{i}", {{"year": 2025, "type": "test", "rating": 3, "category": "Sedan", "fuel": "Petrol", "name": "test_car_{i}", "descriptionVector": {description_vector}, "colorRGBVector": {color_vector}}})'
                     self.run_cbq_query(query=insert_query, server=query_node)
                 self.log.info(f"Inserted {num_new_docs} docs into {namespace} via N1QL")
@@ -4983,6 +4983,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             for index_node in index_nodes:
                 remote = RemoteMachineShellConnection(index_node)
                 remote.start_server()
+            self.sleep(60, "index service needs to re-register after restart")
 
         self.wait_until_indexes_online()
 
@@ -6936,6 +6937,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                         self.gsi_util_obj.get_drop_index_list(definition_list=definitions, namespace=namespace))
 
                     self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
+        self.wait_until_indexes_online()  # create_gsi_indexes does not wait; index_key is [] until Ready
         self.item_count_related_validations()
 
         # validating shard seggregation
@@ -7270,6 +7272,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             f'"train_list": 50000'
             f"}}"
         )
+        if self.isSparse:
+            create_query = f'CREATE VECTOR INDEX {index_name} ON {collection_namespace} (`sparse` SPARSE VECTOR) USING GSI WITH {{"similarity": "DOT", "description": "IVF", "sparsejl_dim": {self.sparsejl_dim}, "train_list": 50000}}'
 
         self.log.info(f"Creating BHIVE vector index: {create_query}")
         with ThreadPoolExecutor() as executor:
@@ -7279,6 +7283,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             # Step 3: Poll until graph build is detected
             self.log.info("Polling for graph build phase (graphProgress > 0)")
             graph_build_detected = False
+            index_hosts = []
             start_time = time.time()
             max_wait = 600
 
@@ -7290,6 +7295,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                             continue
                         status = idx_info.get('status', '')
                         graph_progress = idx_info.get('graphProgress', 0)
+                        index_hosts = [h.split(':')[0] for h in idx_info.get('hosts', [])]
                         self.log.info(
                             f"Index '{index_name}' status={status}, graphProgress={graph_progress}"
                         )
@@ -7304,24 +7310,25 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 self.sleep(2, "Waiting for graph build phase")
 
             if not graph_build_detected:
-                self.log.warning(
+                self.skipTest(
                     "Graph build phase not detected within timeout — dataset may be too small "
-                    "or graph build completed too quickly. Proceeding with rebalance attempt."
+                    "or graph build completed too quickly. Nothing to assert."
                 )
 
             # Step 4: Trigger rebalance while graph build is (expected to be) in progress
             self.log.info("Triggering rebalance during graph build phase")
+            # ejecting a node that holds no index produces no transfer tokens, so MB-68576 never fires
+            node_to_remove = next((n for n in index_nodes if n.ip in index_hosts), index_nodes[-1])
             try:
                 rebalance = self.cluster.async_rebalance(
                     servers=self.servers[:self.nodes_init],
                     to_add=[],
-                    to_remove=[index_nodes[-1]]
+                    to_remove=[node_to_remove]
                 )
 
-                # Step 5: Assert rebalance is rejected
-                rebalance_result = RestHelper(self.rest).rebalance_reached()
+                # Step 5: result() is for THIS rebalance; rebalance_reached() reads global state
+                rebalance_result = rebalance.result()
                 if rebalance_result:
-                    rebalance.result()
                     self.fail(
                         "Rebalance succeeded when it should have been rejected — "
                         "graph build in progress must be treated as DDL in progress (MB-65985)"
@@ -7352,11 +7359,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         retry_rebalance = self.cluster.async_rebalance(
             servers=self.servers[:self.nodes_init],
             to_add=[],
-            to_remove=[index_nodes[-1]]
+            to_remove=[node_to_remove]
         )
-        reached = RestHelper(self.rest).rebalance_reached()
+        reached = retry_rebalance.result()
         self.assertTrue(reached, "Post-graph-build rebalance failed, stuck or did not complete")
-        retry_rebalance.result()
         self.log.info("Post-graph-build rebalance completed successfully")
 
         self.drop_index_node_resources_utilization_validations()

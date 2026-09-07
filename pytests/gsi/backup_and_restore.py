@@ -2581,7 +2581,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                                                                stats_map_after_rebalance=stats_after_rebalance,
                                                                item_count_increase=False,
                                                                per_node=True, skip_array_index_item_count=False)
-                self.display_recall_and_accuracy_stats(select_queries=select_queries, message="recall and accuracy stats after adding back a node and post replica repair", similarity=self.similarity)
+                self.display_recall_and_accuracy_stats(select_queries=select_queries, message="recall and accuracy stats after adding back a node and post replica repair", similarity=self.similarity, expected_title=expected_title, use_brute_force=use_brute_force)
                 self.drop_index_node_resources_utilization_validations()
 
         finally:

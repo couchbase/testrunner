@@ -1406,7 +1406,7 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
                 bhive_index=self.bhive_index,
                 description_dimension=self.dimension
             )
-                create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace)
+                create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace, bhive_index=self.bhive_index)
                 select_queries = self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace, limit=self.scan_limit)
                 drop_queries = self.gsi_util_obj.get_drop_index_list(definition_list=definitions, namespace=namespace)
                 self.gsi_util_obj.async_create_indexes(create_queries=create_queries, database=namespace, query_node=query_node)
@@ -2046,8 +2046,21 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
 
         workload_stop_event.set()
         self._finish_mutations_workload(bucket_0_thread, bucket_1_thread)
+        # DROP of a vector index is deferred while it trains (indexer.go:4746) and retried by
+        # the janitor; max_parallel_training=1 and there is no training timeout, so poll for
+        # the shards to drain instead of sleeping a fixed guess.
+        self.drop_all_indexes()
+        self.trigger_metadata_compaction_on_all_nodes()
+        for _ in range(20):
+            try:
+                self.check_storage_directory_cleaned_up()
+                break
+            except Exception:
+                self.sleep(60, "waiting for deferred index drops and shard destroy")
+        else:
+            self.check_storage_directory_cleaned_up()
         # storage directory and memory cleanup validations
-        self.drop_index_node_resources_utilization_validations()
+        self.drop_index_node_resources_utilization_validations(skip_disk_cleared_check=True)
 
         self.log.info("Index lifecycle operations completed successfully")
 
