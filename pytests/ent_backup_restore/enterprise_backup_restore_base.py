@@ -506,7 +506,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 try:
                     self.objstore_provider.remove_bucket()
                 except Exception as e:
-                    self.log.info(f"Error in deleting bucket: {str(e)}")
+                    self.log.warning(f"Error in deleting bucket: {str(e)}")
                 # Foor Azure we're deleting the remote storage resoruce
                 if self.input.param("objstore_provider", None) == "azure":
                     self.objstore_provider.__del__()
