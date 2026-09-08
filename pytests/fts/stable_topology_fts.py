@@ -5128,6 +5128,16 @@ class StableTopFTS(FTSBaseTest):
     def test_partial_rollback_oso(self):
         from lib.memcached.helper.data_helper import MemcachedClientHelper
         #items = 50000, update = True, upd = 30, upd_del_fields = ['dept']
+        # The rollback is driven by stop_persistence, which magma does not
+        # implement -- and bucket_storage defaults to magma. Without this the
+        # test spends ~45min building OSO containers, then dies on an opaque
+        # MemcachedError #131.
+        if self.bucket_storage == "magma":
+            self.skipTest(
+                "Partial rollback is driven by stopping persistence, and "
+                "CMD_STOP_PERSISTENCE is not supported on magma (memcached "
+                "returns #131 'Not Supported'). Run this with "
+                "bucket_storage=couchstore to exercise the rollback path.")
         rest = RestConnection(self._cb_cluster.get_random_fts_node())
         rest.set_node_setting("useOSOBackfill", True)
 

@@ -975,6 +975,13 @@ class RemoteMachineShellConnection(KeepRefs):
                     live_url = True
                     break
             except Exception as e:
+                # A 404 means the file is not there -- retrying it just adds
+                # num_retries*timeout per node and reports "too busy" for what
+                # is really a wrong version or build number.
+                if getattr(e, "code", None) == 404:
+                    log.info("This url {0} does not exist (404); not retrying"
+                             .format(url))
+                    break
                 self.sleep(timeout, "Waiting for {0} seconds to try to reach url once again. "
                            "Build server might be too busy.  Error msg: {1}".format(timeout, str(e)))
                 num_retries = num_retries - 1

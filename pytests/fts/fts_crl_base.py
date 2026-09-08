@@ -683,6 +683,14 @@ class FTSCRLBase(FTSBaseTest):
 
         for issuer, info in by_issuer.items():
             cert, key = self.node_issuer_ca(info["node"])
+            # The server rejects a CRL whose issuer is not a trust anchor,
+            # and x509main uploads only root CAs -- so trust this
+            # intermediate first. Keyed on the issuer, not ca_filename()'s CN:
+            # every x509main intermediate shares CN=ClientAndServerSigningCA.
+            safe_issuer = re.sub(r"[^A-Za-z0-9_.-]", "_", issuer)
+            self.trust_ca_on_all_nodes(
+                cert, servers=servers,
+                filename="fts_crl_issuer_{0}.pem".format(safe_issuer))
             pem = self.crl_utils.build_crl(
                 cert, key, revoked_serials=info["serials"],
                 crl_number=crl_number)
@@ -884,19 +892,27 @@ class FTSCRLBase(FTSBaseTest):
         return status, self.crl_utils.parse_content(content)
 
     def set_allow_expired_crls(self, enabled=True):
-        """Toggle the server-side allowance for expired CRLs."""
+        """Toggle the server-side allowance for expired CRLs, on every node.
+
+        The key is per-node and nested under cb_crl_manager -- a bare
+        `allow_expired_crls` sets a key nothing reads, so the upload is still
+        refused with "CRL validation failed: ... CRL expired".
+        """
         value = "true" if enabled else "false"
-        status, content = self.rest.diag_eval(
-            "ns_config:set(allow_expired_crls, {0}).".format(value))
-        if not status or DIAG_EVAL_BLOCKED in str(content):
-            self.fail(
-                "Failed to set allow_expired_crls={0}: {1}. If the response is "
-                "{2!r}, /diag/eval is restricted to localhost on this cluster — "
-                "_prepare_nodes_for_crl_tests() tries to lift that at setUp, so "
-                "check its warnings.".format(
-                    value, content, DIAG_EVAL_BLOCKED))
+        code = ("ns_config:set({{node, node(), "
+                "{{cb_crl_manager, allow_expired_crls}}}}, {0}).".format(value))
+        for server in self._input.servers:
+            status, content = RestConnection(server).diag_eval(code)
+            if not status or DIAG_EVAL_BLOCKED in str(content):
+                self.fail(
+                    "Failed to set allow_expired_crls={0} on {1}: {2}. If the "
+                    "response is {3!r}, /diag/eval is restricted to localhost "
+                    "on this cluster — _prepare_nodes_for_crl_tests() tries to "
+                    "lift that at setUp, so check its warnings.".format(
+                        value, server.ip, content, DIAG_EVAL_BLOCKED))
         self._allow_expired_crls_set = enabled
-        self.log.info("allow_expired_crls set to {0}".format(value))
+        self.log.info("allow_expired_crls set to {0} on {1} node(s)".format(
+            value, len(self._input.servers)))
 
     def diagnostics_status(self, nodes=None, expect_success=True):
         status, content, _ = self.rest.get_diagnostics_status(nodes=nodes)
@@ -1415,9 +1431,18 @@ class FTSCRLBase(FTSBaseTest):
             {"policyPerScope": {"clientAuth": "Disabled", "nodeToNode": "Disabled"}})
 
     def _reset_allow_expired_crls(self):
-        if self._allow_expired_crls_set:
-            self.rest.diag_eval("ns_config:set(allow_expired_crls, false).")
-            self._allow_expired_crls_set = False
+        if not self._allow_expired_crls_set:
+            return
+        code = ("ns_config:set({node, node(), "
+                "{cb_crl_manager, allow_expired_crls}}, false).")
+        for server in self._input.servers:
+            try:
+                RestConnection(server).diag_eval(code, print_log=False)
+            except Exception as exc:
+                self.log.warning(
+                    "allow_expired_crls reset failed on {0}: {1}".format(
+                        server.ip, exc))
+        self._allow_expired_crls_set = False
 
     def _disable_client_cert_auth(self):
         self.rest.client_cert_auth(state="disable", prefixes=[])

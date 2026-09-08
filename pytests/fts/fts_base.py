@@ -2584,6 +2584,19 @@ class CouchbaseCluster:
                 not stopped,
                 RebalanceNotStopException("unable to stop rebalance"))
 
+    def stop_rebalance(self):
+        """Public wrapper -- `__stop_rebalance` name-mangles to this class, so
+        an external caller cannot reach it directly."""
+        self.__stop_rebalance()
+
+    def async_rebalance_nodes(self, servers=None, to_add=None, to_remove=None,
+                              services=None):
+        """Bare "rebalance the current nodes" task, for callers that need to
+        start a rebalance and then cancel it. Already async -- do not thread."""
+        return self.__clusterop.async_rebalance(
+            self.__nodes if servers is None else servers,
+            to_add or [], to_remove or [], services=services)
+
     def __ensure_couchbase_alive(self, nodes):
         """SSH to each node and make sure couchbase-server.service is active;
         restart and wait for startup if it isn't. Guards the next test from a
@@ -3583,6 +3596,17 @@ class CouchbaseCluster:
 
     def delete_all_fts_indexes(self):
         """ Delete all FTSIndexes from a given node """
+        # A test that rebalanced the fts node out reaches teardown with none
+        # left, and index.delete() resolves its endpoint via
+        # get_random_fts_node(). Nothing to delete through, so don't abort
+        # cleanup_cluster over it.
+        try:
+            self.get_random_fts_node()
+        except FTSException as error:
+            self.__log.warning(
+                "Skipping FTS index deletion during cleanup: {0}".format(
+                    error))
+            return
         for index in self.__indexes.copy():
             index.delete()
 
@@ -5235,6 +5259,9 @@ class FTSBaseTest(unittest.TestCase):
             self.use_capella_setup()
 
         self.master = self._input.servers[0]
+        # Must precede the first REST call: a leftover strict level from a
+        # test that died in setUp closes 8091 cluster-wide.
+        self._clear_leftover_node_encryption()
         first_node = copy.deepcopy(self.master)
         self.cli_client = CollectionsCLI(self.master)
         self.collection_rest = CollectionsRest(self.master)
@@ -5858,6 +5885,31 @@ class FTSBaseTest(unittest.TestCase):
                         master.ip))
         else:
             self.log.info("Running in compatibility mode, not enabled diag/eval for non-local hosts")
+
+    def _clear_leftover_node_encryption(self):
+        """Drop leftover node-to-node encryption. Probes the plaintext REST
+        port first, so a healthy cluster costs one socket connect."""
+        import socket
+        port = int(getattr(self.master, "port", 8091) or 8091)
+        probe = socket.socket()
+        probe.settimeout(5)
+        try:
+            probe.connect((self.master.ip, port))
+            return                      # plaintext REST is open, nothing to undo
+        except OSError:
+            pass
+        finally:
+            probe.close()
+
+        self.log.warning(
+            "%s:%s refused connection -- assuming a leftover "
+            "clusterEncryptionLevel=strict; dropping node encryption over ssh"
+            % (self.master.ip, port))
+        try:
+            ntonencryptionBase().disable_nton_cluster(self._input.servers)
+        except Exception as error:
+            self.log.warning(
+                "could not clear leftover node encryption: %s" % error)
 
     def setup_nton_encryption(self):
         self.log.info('Setting up node to node encyrption from ')

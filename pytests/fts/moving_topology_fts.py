@@ -2877,11 +2877,13 @@ class MovingTopFTS(FTSBaseTest):
 
             self._cb_cluster.add_back_specific_node(node=node_obj, master_node=node_obj2, rebalance=False)
 
-            thread = threading.Thread(target=self._cb_cluster.rebalance,
-                                      kwargs={'servers': self._cb_cluster.get_nodes(), 'to_add': [], 'to_remove': [],
-                                              'services': None})
-            thread.start()
-            self._cb_cluster.__stop_rebalance()
+            # Was self._cb_cluster.rebalance (no such method) inside a thread,
+            # then __stop_rebalance (mangled to this class). async_rebalance_nodes
+            # is already async, so no thread is needed.
+            self._cb_cluster.async_rebalance_nodes(
+                servers=self._cb_cluster.get_nodes(), to_add=[], to_remove=[],
+                services=None)
+            self._cb_cluster.stop_rebalance()
             self._cb_cluster.add_back_specific_node(node=node_obj, master_node=node_obj2, rebalance=True)
 
             err = self.validate_partition_distribution(rest)

@@ -24,6 +24,8 @@ from lib.Cb_constants.CBServer import CbServer
 from lib.membase.api.rest_client import RestConnection
 from lib.remote.remote_util import RemoteMachineShellConnection
 from pytests.security.crl_utils import CRLUtils
+from security.ntonencryptionBase import ntonencryptionBase
+from security.x509main import x509main
 
 from .fts_crl_base import FTSCRLBase, OUTCOME_REJECTED_TLS
 
@@ -46,8 +48,25 @@ class CRLEnforcementMixin(object):
         self.crl_node_to_node = self._input.param("crl_node_to_node", None)
         self._crl_number = 0
         self._crl_active = False
+        self._crl_issuer_trusted = False
         if self._input.param("crl_enabled", True):
-            self.enable_crl_enforcement()
+            try:
+                self.enable_crl_enforcement()
+            except Exception:
+                # super().setUp() left the cluster at strict, and unittest
+                # skips tearDown when setUp raises -- undo it here or every
+                # later test in the job dies on plaintext REST.
+                self.log.warning(
+                    "enable_crl_enforcement() failed in setUp -- dropping node "
+                    "encryption so the failure stays contained to this test")
+                try:
+                    ntonencryptionBase().disable_nton_cluster(self._input.servers)
+                    CbServer.use_https = False
+                except Exception as cleanup_error:
+                    self.log.warning(
+                        "could not drop node encryption after a failed "
+                        "setUp: {0}".format(cleanup_error))
+                raise
 
     def tearDown(self):
         try:
@@ -116,9 +135,43 @@ class CRLEnforcementMixin(object):
 
     # ── Policy control ───────────────────────────────────────────────────────
 
+    def _trust_crl_issuer(self, int_ca_name=DEFAULT_CLIENT_INT_CA):
+        """Trust the client cert's issuing intermediate, which signs the CRL
+        published below. The server rejects a CRL whose issuer is not a trust
+        anchor, and x509main uploads only root CAs. Once per test."""
+        if getattr(self, "_crl_issuer_trusted", False):
+            return
+        x509_util = self._x509()
+        _, int_dir = self.x509_client_paths(int_ca_name)
+        src_pem_path = os.path.join(int_dir, "int.pem")
+        dest_pem_path = (x509_util.install_path + x509main.CHAINFILEPATH
+                         + "/CA/" + int_ca_name + "_int_ca.pem")
+        for server in self._input.servers:
+            x509_util.create_inbox_folder_on_server(server=server)
+            x509_util.create_CA_folder_on_server(server=server)
+            if x509_util.slave_host.ip != "127.0.0.1":
+                x509_util.copy_file_from_host_to_server(
+                    server, src_pem_path, dest_pem_path)
+            else:
+                x509_util.copy_file_from_slave_to_server(
+                    server, src_pem_path, dest_pem_path)
+            status, content = RestConnection(server).load_trusted_CAs()
+            if not status:
+                self.fail(
+                    "loadTrustedCAs failed on {0} after adding the CRL "
+                    "issuer {1}: {2}".format(
+                        server.ip, int_ca_name,
+                        CRLUtils.parse_content(content)))
+        self._crl_issuer_trusted = True
+        self.log.info(
+            "Trusted the client cert's issuing intermediate ({0}) on {1} "
+            "node(s) so its CRL is accepted".format(
+                int_ca_name, len(self._input.servers)))
+
     def publish_x509_crl(self, revoked_serials=()):
         """Upload a CRL signed by the client cert's issuer, then reload all nodes."""
         cert, key = self.x509_client_ca()
+        self._trust_crl_issuer()
         self._crl_number += 1
         pem = CRLUtils.build_crl(cert, key, revoked_serials=list(revoked_serials),
                                  crl_number=self._crl_number)

@@ -444,15 +444,27 @@ class UpgradeTests(NewUpgradeBaseTest):
     def finish_events(self, thread_list):
         for t in thread_list:
             t.join()
+        # The upgrade itself runs in one of these threads, so without this a
+        # hung rebalance (or a failed vbucket check) is swallowed and the test
+        # reports ok while the cluster is left half-swapped.
+        errors = getattr(self, "_upgrade_errors", None)
+        if errors:
+            self._upgrade_errors = []
+            raise errors[0]
 
     def upgrade_event(self):
         self.log.info("upgrade_event")
         self.start_upgrade_server = True
         thread_list = []
+        self._upgrade_errors = []
         if self.upgrade_type == "online":
-            t = threading.Thread(target=self.online_upgrade, args=())
+            t = threading.Thread(target=self._run_capturing,
+                                 args=(self.online_upgrade,
+                                       self._upgrade_errors))
         elif self.upgrade_type == "offline":
-            t = threading.Thread(target=self.offline_upgrade, args=())
+            t = threading.Thread(target=self._run_capturing,
+                                 args=(self.offline_upgrade,
+                                       self._upgrade_errors))
         t.daemon = True
         t.start()
         thread_list.append(t)
@@ -1035,6 +1047,16 @@ class UpgradeTests(NewUpgradeBaseTest):
             self.log.info(ex)
             raise
     
+    def _run_capturing(self, target, errors, *args):
+        """Run `target` in a thread, recording any exception so the caller can
+        re-raise it. A thread exception never reaches the main thread, so
+        without this a failed rebalance is silently followed by vbucket
+        verification against a cluster that never swapped."""
+        try:
+            target(*args)
+        except BaseException as ex:
+            errors.append(ex)
+
     def trigger_rebalance(self,servers, servers_in,servers_out,servicesNodeOut):
         start_services_num = 0
         try:
@@ -1064,6 +1086,10 @@ class UpgradeTests(NewUpgradeBaseTest):
             self.isRebalanceComplete = True
         except BaseException as ex:
             self.fail(ex)
+        finally:
+            # load_items_during_rebalance loops until this flips, so a failed
+            # rebalance would otherwise leave it spinning (and join() blocked).
+            self.isRebalanceComplete = True
 
 
     def online_upgrade_swap_rebalance(self):
@@ -1138,10 +1164,15 @@ class UpgradeTests(NewUpgradeBaseTest):
             if not load_data_target_server:
                 load_data_target_server = next(iter(servers_in.values()))
 
+            self.isRebalanceComplete = False
+            rebalance_errors = []
             try:
                 thread1 = threading.Thread(target=self.load_items_during_rebalance, args=(load_data_target_server,))
-                thread2 = threading.Thread(target=self.trigger_rebalance, args=(servers, servers_in,servers_out,servicesNodeOut,))
-                
+                thread2 = threading.Thread(
+                    target=self._run_capturing,
+                    args=(self.trigger_rebalance, rebalance_errors,
+                          servers, servers_in, servers_out, servicesNodeOut))
+
                 thread1.start()
                 thread2.start()
 
@@ -1150,6 +1181,8 @@ class UpgradeTests(NewUpgradeBaseTest):
             except Exception as ex:
                 self.log.info("Could not push data while rebalancing")
                 self.log.info(ex)
+            if rebalance_errors:
+                raise rebalance_errors[0]
 
             self.out_servers_pool = servers_out
             self.in_servers_pool = new_servers
