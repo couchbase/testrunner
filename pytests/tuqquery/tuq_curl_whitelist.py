@@ -256,7 +256,7 @@ class QueryWhitelistTests(QueryTests):
         # Whitelist should not accept this setting and thus leave the above settting of all_access = False intact
         response, content = self.rest.create_whitelist(self.master, {"all_access": False, "allowed_urls": "blahblahblah"})
         result = json.loads(content)
-        self.assertEqual(result['errors']['allowed_urls'], "Must be an array of non-empty strings")
+        self.assertEqual(result['errors']['allowed_urls'], "Must be an array")
         n1ql_query = 'select * from ' + self.query_bucket + ' limit 5'
         # This is the query that the cbq-engine will execute
         query = "select curl(" + self.query_service_url + \
@@ -387,7 +387,7 @@ class QueryWhitelistTests(QueryTests):
                                                            "allowed_urls": "blahblahblah",
                                                            "disallowed_urls":["https://maps.googleapis.com"]})
         result = json.loads(content)
-        self.assertEqual(result['errors']['allowed_urls'], "Must be an array of non-empty strings")
+        self.assertEqual(result['errors']['allowed_urls'], "Must be an array")
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
         self.assertTrue(self.google_error_msg in actual_curl['errors'][0]['reason']['cause']['error'],
@@ -398,7 +398,7 @@ class QueryWhitelistTests(QueryTests):
         response, content = self.rest.create_whitelist(self.master, {"all_access": False,
                                                            "disallowed_urls":"blahblahblahblahblah"})
         result = json.loads(content)
-        self.assertEqual(result['errors']['disallowed_urls'], "Must be an array of non-empty strings")
+        self.assertEqual(result['errors']['disallowed_urls'], "Must be an array")
 
     '''Should not be able to curl localhost even if you are on the localhost unless whitelisted'''
     def test_localhost(self):
