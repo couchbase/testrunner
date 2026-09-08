@@ -5,6 +5,65 @@
 # recently was) actively using never gets reclaimed as "abandoned".
 touch "$WORKSPACE/.executor_lock" 2>/dev/null
 
+_docker_hub_login() {
+  local user="${DOCKERHUB_USER:-$DOCKER_USER}"
+  local pass="${DOCKERHUB_PASS:-$DOCKER_PASS}"
+  local cfg="${WORKSPACE:-/tmp}/.docker-testrunner"
+  local out rc
+
+  mkdir -p "$cfg"
+  chmod 700 "$cfg"
+  printf '{}' > "$cfg/config.json"
+  chmod 600 "$cfg/config.json"
+  export DOCKER_CONFIG="$cfg"
+
+  if [ -z "$user" ] || [ -z "$pass" ]; then
+    echo "WARNING: no Docker Hub credentials in this build's environment" \
+         "(DOCKERHUB_USER/DOCKERHUB_PASS unset) - pulls will be anonymous." \
+         "Bind the couchbaseqe-dockerhub credential in the job config."
+    return 1
+  fi
+
+  out=$(echo "$pass" | docker --config "$cfg" login \
+        --username "$user" --password-stdin 2>&1)
+  rc=$?
+  if [ $rc -ne 0 ] && echo "$out" | grep -q 'unknown flag'; then
+    out=$(docker --config "$cfg" login --username "$user" \
+          --password "$pass" 2>&1)
+  fi
+  [ -n "$out" ] && echo "$out"
+
+  if ! grep -q 'index.docker.io/v1/' "$cfg/config.json"; then
+    echo "WARNING: docker login as $user stored no usable auth entry in" \
+         "$cfg/config.json - pulls will be anonymous. If the error above" \
+         "asks for a Personal Access Token, the couchbaseqe-dockerhub" \
+         "credential holds an account password and has to be replaced with" \
+         "a Docker Hub PAT."
+    return 1
+  fi
+  echo "Docker Hub login refreshed as $user into $DOCKER_CONFIG"
+}
+
+docker_hub_login() {
+  local restore_trace=0 rc=0
+  case $- in *x*) restore_trace=1 ;; esac
+  set +x
+  _docker_hub_login || rc=$?
+  [ "$restore_trace" = 1 ] && set -x
+  return $rc
+}
+docker_pull() {
+  local image="$1" attempt
+  for attempt in 1 2 3; do
+    docker pull "$image" && return 0
+    echo "docker pull $image failed (attempt $attempt/3)"
+    sleep $((attempt * 10))
+  done
+  echo "WARNING: giving up on docker pull $image - suites that need it will" \
+       "fail, the rest of this run is unaffected"
+  return 1
+}
+
 support_ver="6.5"
 small_ver=${version_number:0:3}
 host_ip=$(hostname -I | awk '{print $1}')
@@ -85,21 +144,39 @@ echo ${servers}
 
 if [ -f /etc/redhat-release ]; then
   echo 'centos'
-  yum install -y docker
+  # Same guard as the ubuntu branch below. These slaves often already carry
+  # docker-ce, and `yum install -y docker` then dies on a package conflict
+  # ("docker-ce-26.1.4 conflicts docker", seen in test_suite_executor/77741),
+  # leaving the run to report it cannot start docker.
+  if ! command -v docker >/dev/null 2>&1; then
+    yum install -y docker
+  fi
   # CBQE-6231
   if [ -f /usr/bin/systemctl ]; then
     systemctl start docker
   else
     service docker start
   fi
-  docker pull docker.io/jamesdbloom/mockserver
 fi
 
 if [ -f /etc/lsb-release ]; then
   echo 'ubuntu'
-  apt-install docker
+  # `apt-install` is not a command: this line was a silent "command not
+  # found", so docker here only ever worked when the node already had it.
+  # Installing only when it is genuinely missing keeps nodes that already
+  # carry docker-ce from having docker.io fight with it.
+  if ! command -v docker >/dev/null 2>&1; then
+    apt-get install -y docker.io
+  fi
   service docker start
-  docker pull docker.io/jamesdbloom/mockserver
+fi
+
+# Authenticate before touching the registry, and after the daemon start above
+# - the CLI proxies login through the daemon. Both steps are advisory: see
+# docker_hub_login above for why a docker problem must not fail every suite.
+if command -v docker >/dev/null 2>&1; then
+  docker_hub_login || true
+  docker_pull docker.io/jamesdbloom/mockserver || true
 fi
 
 UPDATE_INI_VALUES=""
