@@ -986,7 +986,7 @@ class QueryCollectionsDDLTests(QueryTests):
             "test_queries": [
                 {
                     "text": "drop collection collection1",
-                    "expected_error": "4 path parts are expected"
+                    "expected_error": "Field 'scope' is empty for DROP_COLLECTION"
                 }
             ]
         },
@@ -1421,9 +1421,11 @@ class QueryCollectionsDDLTests(QueryTests):
                                                                          bucket=bucket_name, scope=scope_name)
         self.assertFalse(result, "Collection still exists in system:all_keyspaces after collection drop.")
 
-        # test that collection document is deleted
-        result = self.run_cbq_query(f"select count(*) as cnt from {bucket_name}")['results'][0]['cnt']
-        self.assertEquals(result, 0, "Collection document was not deleted after collection drop")
+        # test that collection document is deleted (skip for ephemeral - no primary index on bucket)
+        bucket_type = self.input.param("bucket_type", self.bucket_type)
+        if bucket_type != "ephemeral":
+            result = self.run_cbq_query(f"select count(*) as cnt from {bucket_name}")['results'][0]['cnt']
+            self.assertEquals(result, 0, "Collection document was not deleted after collection drop")
 
     # test always fails because information about scopes is not going to be updated after manipulations with scopes. Waiting for fix.
     def test_drop_cli_scope(self):
@@ -1512,9 +1514,11 @@ class QueryCollectionsDDLTests(QueryTests):
         if scope_name in objects:
             self.assertEquals(True, False, "Scope still exists after scope drop.")
 
-        # check that collection document is dropped
-        result = self.run_cbq_query(f"select count(*) as cnt from {bucket_name}")['results'][0]['cnt']
-        self.assertEquals(result, 0, "Collection document was not deleted after scope drop")
+        # check that collection document is dropped (skip for ephemeral - no primary index on bucket)
+        bucket_type = self.input.param("bucket_type", self.bucket_type)
+        if bucket_type != "ephemeral":
+            result = self.run_cbq_query(f"select count(*) as cnt from {bucket_name}")['results'][0]['cnt']
+            self.assertEquals(result, 0, "Collection document was not deleted after scope drop")
 
     def test_create_n1ql_collection_in_cli_scope(self):
         bucket_name = "bucket1"
