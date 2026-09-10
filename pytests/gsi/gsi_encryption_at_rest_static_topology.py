@@ -68,6 +68,11 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
         self.workload_percent_delete = int(self.input.param("workload_percent_delete", 0))
         self.key_op = self.input.param("key_op", "rotation")
         self.num_rotations = int(self.input.param("num_rotations", 3))
+        # Floor for wait_until_indexes_online: dense/sparse BHIVE vector indexes
+        # train one at a time per node (indexer.vector.max_parallel_training
+        # defaults to 1), so vector coverage needs more headroom than the
+        # scalar-only default of 1200s used elsewhere in this file.
+        self.index_online_timeout = self.input.param("index_online_timeout", 1200)
         self.log.info("==============  GSIEncryptionAtRestStaticTopology setup has completed ==============")
 
     def tearDown(self):
@@ -355,6 +360,122 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
         self.log.info(f"[_induce_partial_rollback] Done. Item count after rollback: {count}")
         return count
 
+    def _get_vector_query_definitions(self, prefix):
+        """
+        Build dense + sparse, BHIVE + composite, and scalar index definitions
+        for vector-capable datasets (e.g. MSMARCOSiftEmbeddingProduct).
+
+        get_index_definition_list() only returns one index "shape" per call
+        (dense XOR sparse, bhive XOR composite, scalar XOR vector), so full
+        coverage requires 5 separate calls merged together — mirrors the
+        pattern in gsi_encryption_at_rest_rebalance.py's _get_query_definitions
+        and bhive_e2e_tests.py's _get_query_definitions.
+
+        Sparse indexes only support DOT similarity and ignore quantization
+        (enforced by get_index_definition_list itself), so similarity/
+        quantization args are only meaningful for the dense calls.
+
+        Returns:
+            tuple: (dense_bhive_def, dense_composite_def, sparse_bhive_def,
+                sparse_composite_def, scalar_def) — kept separate (not
+                flattened) because QueryDefinition objects built by the
+                per-kind generator functions are NOT tagged with
+                bhive_index=True even when the function name says "bhive";
+                the caller must track which list an index came from rather
+                than introspect the object to know whether it's BHIVE.
+        """
+        dense_bhive_def = self.gsi_util_obj.get_index_definition_list(
+            dataset=self.json_template,
+            prefix=f"{prefix}_dbhive",
+            similarity=self.similarity,
+            scan_nprobes=self.scan_nprobes,
+            quantization_algo_description_vector=self.quantization_algo_description_vector,
+            description_dimension=self.dimension,
+            bhive_index=True,
+            skip_primary=True
+        )
+        dense_composite_def = self.gsi_util_obj.get_index_definition_list(
+            dataset=self.json_template,
+            prefix=f"{prefix}_dcomp",
+            similarity=self.similarity,
+            scan_nprobes=self.scan_nprobes,
+            quantization_algo_description_vector=self.quantization_algo_description_vector,
+            description_dimension=self.dimension,
+            bhive_index=False,
+            skip_primary=True
+        )
+        sparse_bhive_def = self.gsi_util_obj.get_index_definition_list(
+            dataset=self.json_template,
+            prefix=f"{prefix}_sbhive",
+            similarity="DOT",
+            scan_nprobes=self.scan_nprobes,
+            bhive_index=True,
+            is_sparse=True,
+            skip_primary=True
+        )
+        sparse_composite_def = self.gsi_util_obj.get_index_definition_list(
+            dataset=self.json_template,
+            prefix=f"{prefix}_scomp",
+            similarity="DOT",
+            scan_nprobes=self.scan_nprobes,
+            bhive_index=False,
+            is_sparse=True,
+            skip_primary=True
+        )
+        scalar_def = self.gsi_util_obj.get_index_definition_list(
+            dataset=self.json_template,
+            prefix=f"{prefix}_scalar",
+            scalar=True,
+            skip_primary=False
+        )
+        self.log.info(
+            f"Vector index definitions generated: "
+            f"dense_bhive={len(dense_bhive_def)}, dense_composite={len(dense_composite_def)}, "
+            f"sparse_bhive={len(sparse_bhive_def)}, sparse_composite={len(sparse_composite_def)}, "
+            f"scalar={len(scalar_def)}"
+        )
+        return dense_bhive_def, dense_composite_def, sparse_bhive_def, sparse_composite_def, scalar_def
+
+    def _get_vector_create_queries(self, dense_bhive_def, dense_composite_def,
+                                   sparse_bhive_def, sparse_composite_def, scalar_def,
+                                   namespace, deploy_nodes):
+        """
+        Build CREATE INDEX queries for each definition group returned by
+        _get_vector_query_definitions(), passing the correct bhive_index flag
+        explicitly per group (never inferred from the definition object).
+
+        Uses self.num_index_replica uniformly across scalar/dense/sparse/bhive —
+        unlike gsi_encryption_at_rest_rebalance.py, static topology never
+        rebalances a node out mid-test, so there's no "lone replica destroyed"
+        risk that would require capping vector replicas differently from
+        scalar ones.
+        """
+        create_queries = []
+        for definitions, bhive_index in (
+            (dense_bhive_def, True),
+            (dense_composite_def, False),
+            (sparse_bhive_def, True),
+            (sparse_composite_def, False),
+        ):
+            if definitions:
+                create_queries.extend(self.gsi_util_obj.get_create_index_list(
+                    definition_list=definitions,
+                    namespace=namespace,
+                    num_replica=self.num_index_replica,
+                    deploy_node_info=deploy_nodes,
+                    defer_build=self.defer_build,
+                    bhive_index=bhive_index
+                ))
+        if scalar_def:
+            create_queries.extend(self.gsi_util_obj.get_create_index_list(
+                definition_list=scalar_def,
+                namespace=namespace,
+                num_replica=self.num_index_replica,
+                deploy_node_info=deploy_nodes,
+                defer_build=self.defer_build
+            ))
+        return create_queries
+
     def test_gsi_encryption_at_rest_sanity(self):
         """
         Encryption at rest sanity test case - supports single or multiple buckets.
@@ -487,28 +608,44 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
                 try:
                     self.log.info(f"[STEP 6.{idx+1}.b] Creating indexes on '{bucket_name}'...")
                     prefix = 'ear_' + ''.join(random.choices(string.ascii_letters + string.digits, k=5))
-                    query_definitions = self.gsi_util_obj.get_index_definition_list(
-                        dataset=self.json_template,
-                        prefix=prefix,
-                        skip_primary=False
-                    )
+                    deploy_nodes = [f"{node.ip}:{self.node_port}" for node in index_nodes]
+
+                    if self.bhive_index:
+                        # Dense + sparse, BHIVE + composite, and dataset-native
+                        # scalar coverage in one pass (e.g. json_template=
+                        # MSMARCOSiftEmbeddingProduct). See
+                        # _get_vector_query_definitions for why this needs 5
+                        # separate generation calls instead of one.
+                        (dense_bhive_def, dense_composite_def, sparse_bhive_def,
+                         sparse_composite_def, scalar_def) = self._get_vector_query_definitions(prefix)
+                        query_definitions = (dense_bhive_def + dense_composite_def
+                                            + sparse_bhive_def + sparse_composite_def + scalar_def)
+                        queries = self._get_vector_create_queries(
+                            dense_bhive_def, dense_composite_def,
+                            sparse_bhive_def, sparse_composite_def, scalar_def,
+                            namespace, deploy_nodes
+                        )
+                    else:
+                        query_definitions = self.gsi_util_obj.get_index_definition_list(
+                            dataset=self.json_template,
+                            prefix=prefix,
+                            skip_primary=False
+                        )
+                        queries = self.gsi_util_obj.get_create_index_list(
+                            definition_list=query_definitions,
+                            namespace=namespace,
+                            num_replica=self.num_index_replica,
+                            deploy_node_info=deploy_nodes,
+                            defer_build=self.defer_build
+                        )
                     self.log.info(f"[STEP 5.{idx+1}.b] Generated {len(query_definitions)} index definitions with prefix '{prefix}'")
-                    
+
                     # Collect select queries for validation
                     select_queries.update(
                         self.gsi_util_obj.get_select_queries(
                             definition_list=query_definitions,
                             namespace=namespace
                         )
-                    )
-                    
-                    deploy_nodes = [f"{node.ip}:{self.node_port}" for node in index_nodes]
-                    queries = self.gsi_util_obj.get_create_index_list(
-                        definition_list=query_definitions,
-                        namespace=namespace,
-                        num_replica=self.num_index_replica,
-                        deploy_node_info=deploy_nodes,
-                        defer_build=self.defer_build
                     )
                     self.log.info(f"[STEP 6.{idx+1}.b] Generated {len(queries)} CREATE INDEX queries")
                     
@@ -531,12 +668,14 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
         # ========== STEP 7: Wait for indexes to be online ==========
         try:
             self.log.info("[STEP 7] Waiting for all indexes to reach 'Ready' state...")
-            self.wait_until_indexes_online(timeout=1200, defer_build=self.defer_build)
+            self.wait_until_indexes_online(
+                timeout=max(1200, self.index_online_timeout), defer_build=self.defer_build
+            )
             self.log.info("[STEP 7] PASSED - All indexes are in 'Ready' state")
         except Exception as e:
             self.log.error(f"[STEP 7] FAILED - Index online wait failed: {str(e)}")
             raise
-        
+
         # ========== STEP 8: Run SELECT queries and validate results ==========
         try:
             self.log.info(f"[STEP 8] Running {len(select_queries)} SELECT queries for all indexes after encryption...")

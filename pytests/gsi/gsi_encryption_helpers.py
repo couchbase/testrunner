@@ -48,6 +48,14 @@ class GSIEncryptionHelpers:
         "lss_blk_read_bs_crypt",
         "recovery_lss_blk_read_bs_crypt",
     )
+    # A freshly created BHive pindex LSS segment (lss.0/log.*.data) is
+    # preallocated to a single page before any real vector payload lands in
+    # it. Observed uniformly (same exact size, every instance, both nodes)
+    # across dense/sparse, vector-only/with-include BHive index shapes in a
+    # first real run of verify_gsi_bhive_pindex_lss_encrypted against actual
+    # BHive output — i.e. a placeholder page, not a payload missing its key
+    # ID. Treated like a zero-length segment: nothing to encrypt yet.
+    _BHIVE_LSS_PLACEHOLDER_PAGE_SIZE_BYTES = 4096
     _IDENT_RE = re.compile(r"`([^`]+)`|([A-Za-z_][A-Za-z0-9_]*)")
     _NAME_BLOCKLIST = {"", "default", "_default", "meta", "id", "self"}
     _BUCKET_KEY_TAG_RE = re.compile(
@@ -1483,10 +1491,11 @@ class GSIEncryptionHelpers:
                     )
                     continue
 
-                # grep found no key ID. Distinguish a genuinely empty segment
-                # (nothing to encrypt yet) from a non-empty file that is missing
-                # its key ID (a real encryption gap). Annotate the byte size so
-                # triage can spot suspiciously small / header-only segments.
+                # grep found no key ID. Distinguish a genuinely empty/not-yet-
+                # written segment (nothing to encrypt yet) from a non-empty
+                # file that is missing its key ID (a real encryption gap).
+                # Annotate the byte size so triage can spot suspiciously
+                # small / header-only segments.
                 size = self._remote_file_size(node, file_path)
                 if size == 0:
                     empty_files.append(
@@ -1495,6 +1504,16 @@ class GSIEncryptionHelpers:
                     self.log.info(
                         f"Node {node.ip}: {file_path} is zero-length; "
                         "no key id expected"
+                    )
+                elif size == self._BHIVE_LSS_PLACEHOLDER_PAGE_SIZE_BYTES:
+                    empty_files.append(
+                        (file_path,
+                         f"preallocated placeholder page "
+                         f"({size} bytes, no payload written yet)")
+                    )
+                    self.log.info(
+                        f"Node {node.ip}: {file_path} is a single preallocated "
+                        f"page ({size} bytes) with no payload yet; no key id expected"
                     )
                 else:
                     failed_files.append(
