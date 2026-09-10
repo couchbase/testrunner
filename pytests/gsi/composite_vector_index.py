@@ -5605,7 +5605,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                     mrr = self.calculate_mean_reciprocal_rank(select_queries, expected_title_for_mrr, namespace=namespace)
                     self.log.info(f"[MRR] Final Mean Reciprocal Rank: {mrr:.4f} ({mrr * 100:.2f}%)")
 
-            error_msg_and_doc_count = (f'"invalid_vec_type":{doc_count}')
+            error_stat_name = "invalid_sparse_vec" if self.isSparse else "invalid_vec_type"
+            error_msg_and_doc_count = (f'"{error_stat_name}":{doc_count}')
             self.log.info(f"error msg count {error_msg_and_doc_count}")
             self.assertTrue(self.validate_error_msg_and_doc_count_in_cbcollect(self.master, error_msg_and_doc_count))
             self.drop_index_node_resources_utilization_validations()
@@ -5639,7 +5640,9 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             # make vector field null for some of the docs and run scans
             collection_namespace = self.namespaces[0]
             if self.isSparse:
-                upsert_query = f"update {collection_namespace} SET `sparse` = 12345 WHERE size = 5 LIMIT 10000"
+                # AmazonSparse docs don't have a `size` field; use average_rating instead
+                sparse_predicate = "average_rating IS NOT NULL" if self.json_template == "AmazonSparse" else "size = 5"
+                upsert_query = f"update {collection_namespace} SET `sparse` = 12345 WHERE {sparse_predicate} LIMIT 10000"
             else:
                 upsert_query = f"update {collection_namespace} set descriptionVector = null where rating = 0"
             self.run_cbq_query(query=upsert_query)
@@ -5647,13 +5650,16 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             # Fetch no of docs which will be mutated to validate the stats count
             if self.isSparse:
                 select_query = f"select count(*) from {collection_namespace} where `sparse` = 12345"
+                result = self.run_cbq_query(query=select_query)
+                doc_count = min(int(result["results"][0]["$1"]), 10000)
             else:
                 select_query = f"select count(*) from {collection_namespace} where rating = 0"
-            result = self.run_cbq_query(query=select_query)
-            doc_count = int(result["results"][0]["$1"])
+                result = self.run_cbq_query(query=select_query)
+                doc_count = int(result["results"][0]["$1"])
 
             self.sleep(300)
-            error_msg_and_doc_count = (f'"invalid_vec_type":{doc_count}')
+            error_stat_name = "invalid_sparse_vec" if self.isSparse else "invalid_vec_type"
+            error_msg_and_doc_count = (f'"{error_stat_name}":{doc_count}')
             self.assertTrue(self.validate_error_msg_and_doc_count_in_cbcollect(self.master, error_msg_and_doc_count))
             self.drop_index_node_resources_utilization_validations()
 
@@ -5724,7 +5730,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
             self.item_count_related_validations()
 
-            error_msg_and_doc_count = (f'"invalid_vec_dim":10000')
+            error_stat_name = "data_out_of_bounds" if self.isSparse else "invalid_vec_dim"
+            error_msg_and_doc_count = (f'"{error_stat_name}":10000')
             self.assertTrue(self.validate_error_msg_and_doc_count_in_cbcollect(self.master, error_msg_and_doc_count))
 
             query_stats_map = {}
