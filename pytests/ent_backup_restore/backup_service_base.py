@@ -1271,6 +1271,57 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         api = base_url + f"api/v1/cluster/self/repository/active/{repo_name}/plan/{plan_name}"
         return rest.urllib_request(api, 'POST', params)
 
+    def _collect_backup_logs_on_failure(self):
+        """ On test failure, run `cbbackupmgr collect-logs` against the
+        backup archive and pull the resulting bundle into this test's log
+        folder, so it becomes a build artifact alongside cbcollect-info.
+
+        No-ops when the test passed, or when the archive directory doesn't
+        exist on self.master (e.g. an object-store-backed archive, or a
+        test that failed before ever creating a repository).
+        """
+        if not self.is_test_failed():
+            return
+
+        archive = self.backupset.directory
+        if not archive:
+            return
+
+        remote_client = RemoteMachineShellConnection(self.master)
+        try:
+            if not remote_client.file_exists(archive, ".backup"):
+                self.log.info(f"Skipping cbbackupmgr collect-logs: no archive at {archive} on {self.master.ip}")
+                return
+
+            output_dir = f"/tmp/cbbackupmgr-collectlogs-{self.master.ip}"
+            remote_client.execute_command(f"rm -rf {output_dir} && mkdir -p {output_dir}")
+            cmd = f"{self.cli_command_location}cbbackupmgr collect-logs --archive {archive} --output-dir {output_dir}"
+            output, error = remote_client.execute_command(cmd)
+            remote_client.log_command_output(output, error)
+            if error:
+                self.log.warning(f"cbbackupmgr collect-logs failed for archive {archive} on {self.master.ip}: {error}")
+                return
+
+            ls_output, _ = remote_client.execute_command(f"ls {output_dir}")
+            logs_folder = TestInputSingleton.input.param("logs_folder", "/tmp") or "."
+            collected_any = False
+            for filename in (line.strip() for line in ls_output):
+                if filename.endswith(".zip"):
+                    status = remote_client.get_file(output_dir, filename, f"{logs_folder}/{filename}")
+                    if status:
+                        collected_any = True
+                        self.log.info(f"Collected cbbackupmgr collect-logs bundle: {filename}")
+                    else:
+                        self.log.warning(f"Failed to download cbbackupmgr collect-logs bundle {filename}")
+            if not collected_any:
+                self.log.warning(f"cbbackupmgr collect-logs produced no zip in {output_dir} on {self.master.ip}")
+        except Exception as e:
+            # Never let a failure here mask the original test failure or
+            # block the rest of tearDown -- this is best-effort diagnostics.
+            self.log.warning(f"cbbackupmgr collect-logs on failure did not complete: {e}")
+        finally:
+            remote_client.disconnect()
+
     # Clean up cbbackupmgr
     def tearDown(self):
         """ Tears down.
@@ -1299,6 +1350,21 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
                 self.time.reset()
             except AttributeError:
                 pass
+
+        # Must run before backup_service_cleanup()/clean_up() below: those
+        # wipe the repository config and the local archive directory
+        # unconditionally (pass or fail), so this is the only point where a
+        # failed test's archive still exists for cbbackupmgr to inspect.
+        # basetestcase's own get_cbcollect_info-on-failure (in
+        # super().tearDown() at the end of this method) runs after the
+        # archive is already gone, which is why cbcollect-info alone never
+        # has the backup-side detail a dev needs (see MB-73786).
+        try:
+            self._collect_backup_logs_on_failure()
+        except AttributeError:
+            # self.master/self.backupset not set yet -- setUp failed before
+            # either was assigned, so there is nothing to collect.
+            pass
 
         self.preamble()
         self.backup_service_cleanup()
