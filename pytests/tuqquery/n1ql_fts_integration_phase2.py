@@ -824,10 +824,17 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
             "positional_prepared_option_index_name": {
                 "prepared": "select meta().id from {0} where search({0}, 'state:California',"
                             " $1)".format(self.query_bucket),
-                "params": "args=[\"{'index': 'idx_beer_sample_fts'}\"]",
+                # The search() options argument has to be a JSON object, so $1 is sent as
+                # args=[{"index":...}] and not as a quoted string containing object-like
+                # text. Single quotes cannot be used here either: run_cbq_query_curl wraps
+                # the whole statement in single quotes for a remote shell, which strips any
+                # inner ones, so args=["{'index': 'x'}"] reaches the server as
+                # args=["{index: x}"] - a plain string, which matches nothing and returned 0
+                # rows against the 127 the equivalent non-prepared query returns.
+                "params": "args=[{\"index\":\"idx_beer_sample_fts\"}]",
                 "n1ql": "select meta().id from {0} where search({0}, 'state:California', {{'index': "
                         "'idx_beer_sample_fts'}})".format(self.query_bucket),
-                "expected_result": "cannot_execute"
+                "expected_result": "success"
             },
             "positional_prepared_option_settings": {
                 "prepared": "select meta().id from {0} where search({0}, {{\"query\":{{\"field\": \"state\", "
@@ -1133,6 +1140,15 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
             threads.remove(th)
 
     def test_joins(self):
+        # "positive" means the FTS index is expected in the plan for the keyspace search()
+        # is applied to, "negative" means it is not. The rule is whether the optimizer can
+        # scan that keyspace independently: an inner join commutes, so the search()-bearing
+        # side can be made the hash-join build side and driven by the FTS index. Outer joins
+        # cannot reorder (the null-extended side can never drive) and on-keys/on-key-for and
+        # USE KEYS joins pin the driving side, so those stay negative.
+        # inner_r, use_nl_r and any_satisfies_r were negative here but the plan has used
+        # IndexFtsSearch on r since at least 8.0.4 (verified on 8.0.4-6157 and 8.5.0-1074,
+        # whose plans are identical); the expectations predate cost-based hash joins.
         tests = {
             "inner_l": {
                 "query": "select * from {0} l join {0} r on l.city=r.city where search(l,"
@@ -1142,7 +1158,7 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
             "inner_r": {
                 "query": "select * from {0} l join {0} r on l.city=r.city where search(r,"
                          " \"city:San Francisco\")".format(self.query_bucket),
-                "expected_result": "negative"
+                "expected_result": "positive"
             },
             "left_l": {
                 "query": "select * from {0} l left join {0} r on l.city=r.city  where search(l,"
@@ -1209,10 +1225,12 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
                          " \"city:San Francisco\")".format(self.query_bucket),
                 "expected_result": "positive"
             },
+            # USE NL is not honoured for this query on 8.0.4 or 8.5.0 - the plan is a
+            # HashJoin with r on the build side - so the FTS index is used for r.
             "use_nl_r": {
                 "query": "select * from {0} l join {0} r use nl on l.city=r.city  where search(r,"
                          " \"city:San Francisco\")".format(self.query_bucket),
-                "expected_result": "negative"
+                "expected_result": "positive"
             },
             "use_hash_keys_build_l": {
                 "query": "select * from {0} l join {0} r use hash(build) keys [\"512_brewing_company\"] on"
@@ -1272,7 +1290,7 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
             "any_satisfies_r": {
                 "query": "select * from {0} l join {0} r on l.address=r.address and any v in r.address satisfies"
                          " (v='563 Second Street') end where search(r, \"city:Austin\")".format(self.query_bucket),
-                "expected_result": "negative"
+                "expected_result": "positive"
             },
 
         }

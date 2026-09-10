@@ -107,17 +107,36 @@ class QueryBackupUDFTests(QueryTests):
         self.log.info("==============  QueryBackupUDFTests suite_tearDown has completed ==============")
         super(QueryBackupUDFTests, self).suite_tearDown()
 
-    def backup_config(self, archive="/backup-1", repo="my_backup", disable=None, include=None):
+    def supports_external_catalogs(self):
+        # --disable-external-catalogs only exists from 8.5.0. Older cbbackupmgr rejects it
+        # with "Unknown flag: --disable-external-catalogs" and exits 64, so it has to be
+        # gated on the server version instead of passed unconditionally.
+        version = self.rest.get_nodes_version().split('-')[0]
+        parts = [int(part) for part in version.split('.')[:3]]
+        while len(parts) < 3:
+            parts.append(0)
+        return tuple(parts) >= (8, 5, 0)
+
+    def backup_config(self, archive="/backup-1", repo="my_backup", disable=None, include=None,
+                      disable_external_catalogs=False):
+        # External-catalog backup reads /pools/default/externalCatalogs, which needs the
+        # cluster-level cluster.admin.catalogs!read privilege. A bucket-scoped role such as
+        # data_backup does not have it, so from 8.5.0 such a user must disable external
+        # catalogs as well as cluster query metadata or `cbbackupmgr backup` exits 1 with
+        # "permission error executing 'GET' request to '/pools/default/externalCatalogs'".
+        catalogs = ""
+        if disable_external_catalogs and self.supports_external_catalogs():
+            catalogs = " --disable-external-catalogs"
         shell = RemoteMachineShellConnection(self.master)
         output = shell.execute_command(f"{self.path}/cbbackupmgr remove -a {archive} -r {repo}")
         if disable and include:
-            output = shell.execute_command(f"{self.path}/cbbackupmgr config --include-data {include} --disable-{disable}-query -a {archive} -r {repo}")
+            output = shell.execute_command(f"{self.path}/cbbackupmgr config --include-data {include} --disable-{disable}-query{catalogs} -a {archive} -r {repo}")
         elif disable:
-            output = shell.execute_command(f"{self.path}/cbbackupmgr config --disable-{disable}-query -a {archive} -r {repo}")
+            output = shell.execute_command(f"{self.path}/cbbackupmgr config --disable-{disable}-query{catalogs} -a {archive} -r {repo}")
         elif include:
-            output = shell.execute_command(f"{self.path}/cbbackupmgr config --include-data {include} -a {archive} -r {repo}")
+            output = shell.execute_command(f"{self.path}/cbbackupmgr config --include-data {include}{catalogs} -a {archive} -r {repo}")
         else:
-            output = shell.execute_command(f"{self.path}/cbbackupmgr config -a {archive} -r {repo}")
+            output = shell.execute_command(f"{self.path}/cbbackupmgr config{catalogs} -a {archive} -r {repo}")
         return output
 
     def backup_info(self, archive="/backup-1", repo="my_backup"):
@@ -210,7 +229,7 @@ class QueryBackupUDFTests(QueryTests):
         self.create_udf()
         if self.role == "data_backup":
             self.run_cbq_query(query=f"GRANT {self.role} on bucket1,bucket2,default to {self.backup_user}")
-            self.backup_config(disable="cluster")
+            self.backup_config(disable="cluster", disable_external_catalogs=True)
         elif self.role == "backup_admin":
             self.run_cbq_query(query=f"GRANT {self.role} to {self.backup_user}")
             self.backup_config()
@@ -238,7 +257,7 @@ class QueryBackupUDFTests(QueryTests):
         self.create_udf()
         if self.role == "data_backup":
             self.run_cbq_query(query=f"GRANT {self.role} on {self.include} to {self.backup_user}")
-            self.backup_config(include=self.include,disable="cluster")
+            self.backup_config(include=self.include,disable="cluster", disable_external_catalogs=True)
         else:
             self.backup_config()
         self.backup()

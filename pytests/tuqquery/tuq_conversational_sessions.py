@@ -1,4 +1,5 @@
 import json
+import re
 import time
 from .tuq import QueryTests
 from membase.api.exception import CBQError
@@ -85,23 +86,36 @@ class ConversationalSessionTests(QueryTests):
 
     # ------------------------------------------------------------------ helpers
 
+    TRANSIENT_AI_ERROR_CODES = (19212,)
+    USING_AI_ATTEMPTS = 3
+
+    def _error_codes(self, result):
+        return [e.get('code') for e in (result or {}).get('errors', []) if isinstance(e, dict)]
+
+    def _is_transient_ai_error(self, result):
+        codes = self._error_codes(result)
+        return bool(codes) and all(c in self.TRANSIENT_AI_ERROR_CODES for c in codes)
+
     def _cbq_exec(self, cmds):
         """Run all cmds together via execute_commands_inside and return parsed JSON."""
         output = self.execute_commands_inside(self.cbqpath, '', cmds, '', '', '', '')
         self.log.info("cbq output: %r" % (output[:500] if output else output,))
-        # cbq appends \x04 (EOF) after the JSON — strip before parsing
         if isinstance(output, bytes):
             output = output.decode("utf-8", errors="replace")
-        output = output.strip("\x04 \n\r\t") if output else output
+        if not output:
+            return {}
+        output = re.sub(r'\x1b\[[0-9;]*m', '', output).split('\x04')[0].strip()
         try:
             return json.loads(output)
         except (json.JSONDecodeError, ValueError):
-            idx = output.find('{') if output else -1
+            # Fall back to the first complete JSON object in the stream.
+            idx = output.find('{')
             if idx >= 0:
                 try:
-                    return json.loads(output[idx:].strip('\x04 \n\r\t'))
+                    return json.JSONDecoder().raw_decode(output[idx:])[0]
                 except (json.JSONDecodeError, ValueError):
                     pass
+        self.log.warning("cbq output could not be parsed as JSON: %r" % (output[:300],))
         return {}
 
     def _require_ai_creds(self):
@@ -161,7 +175,19 @@ class ConversationalSessionTests(QueryTests):
         stmt = 'USING AI WITH {"chatId": "%s"} "%s";' % (chat_id,
                                                          natural_language.replace('"', '\\"'),)
         cmds.append(stmt)
-        result = self._cbq_exec(cmds)
+        # USING AI calls a remote LLM, so a single request can fail for reasons that have
+        # nothing to do with the behaviour under test - 19212 "LLM processing failed" is the
+        # common one. Retry those rather than failing a P0 test on one bad round trip.
+        # Anything else (bad credentials, syntax, chat errors) fails immediately.
+        result = {}
+        for attempt in range(1, self.USING_AI_ATTEMPTS + 1):
+            result = self._cbq_exec(cmds)
+            if result.get('status') == 'success' or not self._is_transient_ai_error(result):
+                break
+            self.log.warning("USING AI [%s] attempt %d/%d hit a transient LLM error: %s" % (
+                natural_language, attempt, self.USING_AI_ATTEMPTS, self._error_codes(result)))
+            if attempt < self.USING_AI_ATTEMPTS:
+                self.sleep(5, "retrying USING AI after a transient LLM error")
         self.assertEqual(result.get('status'), 'success',
                          "USING AI query failed for [%s]: %s" % (natural_language, result))
         self.log.info("USING AI [%s] -> generated: %s" % (
@@ -440,8 +466,7 @@ class ConversationalSessionTests(QueryTests):
                              "TC-03-02 FAIL: Expected 95 rows (SF+breakfast), got %d. "
                              "679 = city filter dropped (context lost)." % count)
 
-            # TC-03-03: SF + free_breakfast + free_parking — expect 28
-            result = self._using_ai("Do any of those also have free parking?", chat_id)
+            result = self._using_ai("Which of those also have free parking?", chat_id)
             count = result['metrics']['resultCount']
             self.assertEqual(count, 28,
                              "TC-03-03 FAIL: Expected 28 rows (SF+breakfast+parking), got %d. "
@@ -637,7 +662,7 @@ class ConversationalSessionTests(QueryTests):
             cmds.append('\\set -txid %s;' % txid)
             cmds.append('USING AI WITH {"chatId": "%s"} "Show me the alias field for any 5 hotels in the United States";' % chat_id)
             ai_result = self._cbq_exec(cmds)
-            self.assertEqual(ai_result['status'], 'success',
+            self.assertEqual(ai_result.get('status'), 'success',
                              "TC-08-03 FAIL: USING AI within transaction failed: %s" % ai_result)
             rows = [self._unwrap_row(r) for r in ai_result.get('results', [])]
             self.assertEqual(len(rows), 5,

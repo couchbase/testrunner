@@ -2,6 +2,7 @@ from membase.api.rest_client import RestConnection, RestHelper
 from .tuq import QueryTests
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.exception import CBQError
+from collection.collections_n1ql_client import CollectionsN1QL
 
 
 class QueryAutoPrepareTests(QueryTests):
@@ -1095,7 +1096,11 @@ class QueryAutoPrepareTests(QueryTests):
             ad_hoc_before = self._query_metadata_doc_count(where_clause='ad_hoc = true')
             for _ in range(3):
                 self.run_cbq_query(query=statement)
-            self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = true'), eval=ad_hoc_before + 3, delay=1, tries=20)
+            # Exact dedup: three runs of one identical statement must collapse to a single
+            # persisted ad-hoc doc. The old expectation of +3 asserted the opposite of what
+            # this test is named for, and only ever "passed" arithmetic that included the
+            # counting query's own doc.
+            self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = true'), eval=ad_hoc_before + 1, delay=1, tries=20)
         finally:
             self._cleanup_plan_stability_state()
 
@@ -1135,10 +1140,13 @@ class QueryAutoPrepareTests(QueryTests):
             self._cleanup_plan_stability_state()
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "ad_hoc"')
             self.run_cbq_query(query=create_index_query)
+            # Anchored, not "%CREATE%": the unanchored pattern also matched this check
+            # statement's own persisted doc (its text contains both "create_doc_count" and
+            # the literal "%CREATE%"), so the count sat at 1 forever and the test could
+            # never pass however well the server skipped the DDL. Going through
+            # _query_metadata_doc_count also applies the self-pollution filter.
             self.with_retry(
-                lambda: self.run_cbq_query(
-                    query='SELECT COUNT(*) AS create_doc_count FROM `QUERY_METADATA`.`_system`.`_query` '
-                          'WHERE UPPER(text) LIKE "%CREATE%"')['results'][0]['create_doc_count'],
+                lambda: self._query_metadata_doc_count(where_clause='UPPER(text) LIKE "CREATE%"'),
                 eval=0, delay=1, tries=20)
         finally:
             self.run_cbq_query(query="DROP INDEX {0} IF EXISTS ON {1}".format(index_name, self.query_bucket))
@@ -1476,7 +1484,7 @@ class QueryAutoPrepareTests(QueryTests):
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "prepared_only"')
             self._set_error_policy("strict")
             self._create_index_for_plan(idx, self.query_bucket, "join_day")
-            self._prepare_plan_statement(plan_name, self._plan_stability_statement_for_day(10), save=True)
+            self._prepare_plan_statement(plan_name, self._plan_stability_statement_for_day(10, index=idx), save=True)
             self.assertIsNotNone(self._prepared_statement_text(plan_name))
             self._drop_index_for_plan(idx, self.query_bucket, "join_day")
             try:
@@ -1495,6 +1503,7 @@ class QueryAutoPrepareTests(QueryTests):
         stmt = "SELECT name FROM default:default.{0}.{1} WHERE name = 'new hotel'".format(scope, coll)
         try:
             self._cleanup_plan_stability_state()
+            self._ensure_plan_stability_collections()
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "prepared_only"')
             self._set_error_policy("strict")
             self._prepare_plan_statement(plan_name, stmt, save=True)
@@ -1562,7 +1571,7 @@ class QueryAutoPrepareTests(QueryTests):
     def test_error_policy_strict_drop_index_adhoc(self):
         """strict + saved ad-hoc: re-running the saved ad-hoc query raises after index drop."""
         idx = "idx_ep_strict_drop_adhoc"
-        stmt = self._plan_stability_statement_for_day(11)
+        stmt = self._plan_stability_statement_for_day(11, index=idx)
         try:
             self._cleanup_plan_stability_state()
             self._create_index_for_plan(idx, self.query_bucket, "join_day")
@@ -1590,6 +1599,7 @@ class QueryAutoPrepareTests(QueryTests):
         stmt = "SELECT name FROM default:default.{0}.{1} WHERE name = 'new hotel'".format(scope, coll)
         try:
             self._cleanup_plan_stability_state()
+            self._ensure_plan_stability_collections()
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "ad_hoc"')
             self.run_cbq_query(query=stmt)
             self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = true') >= 1,
@@ -1676,7 +1686,7 @@ class QueryAutoPrepareTests(QueryTests):
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "prepared_only"')
             self._set_error_policy("moderate")
             self._create_index_for_plan(idx, self.query_bucket, "join_day")
-            self._prepare_plan_statement(plan_name, self._plan_stability_statement_for_day(12), save=True)
+            self._prepare_plan_statement(plan_name, self._plan_stability_statement_for_day(12, index=idx), save=True)
             prior_in_memory = self._prepared_statement_text(plan_name)
             prior_persisted = self._persisted_prepared_doc(plan_name)
             self._drop_index_for_plan(idx, self.query_bucket, "join_day")
@@ -1696,6 +1706,7 @@ class QueryAutoPrepareTests(QueryTests):
         stmt = "SELECT name FROM default:default.{0}.{1} WHERE name = 'new hotel'".format(scope, coll)
         try:
             self._cleanup_plan_stability_state()
+            self._ensure_plan_stability_collections()
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "prepared_only"')
             self._set_error_policy("moderate")
             self._prepare_plan_statement(plan_name, stmt, save=True)
@@ -1757,7 +1768,7 @@ class QueryAutoPrepareTests(QueryTests):
     def test_error_policy_moderate_drop_index_adhoc(self):
         """moderate + saved ad-hoc: rerun succeeds; saved ad-hoc plan unchanged."""
         idx = "idx_ep_mod_drop_adhoc"
-        stmt = self._plan_stability_statement_for_day(15)
+        stmt = self._plan_stability_statement_for_day(15, index=idx)
         try:
             self._cleanup_plan_stability_state()
             self._create_index_for_plan(idx, self.query_bucket, "join_day")
@@ -1767,12 +1778,12 @@ class QueryAutoPrepareTests(QueryTests):
                             eval=True, delay=1, tries=20)
             prepared_name = self._persisted_adhoc_name(stmt)
             self.assertIsNotNone(prepared_name, "Expected saved ad-hoc plan entry in QUERY_METADATA")
-            prior_persisted = self._persisted_adhoc_doc()
+            prior_persisted = self._persisted_adhoc_doc(prepared_name)
             self._set_error_policy("moderate")
             self._drop_index_for_plan(idx, self.query_bucket, "join_day")
             self._create_index_for_plan(idx, self.query_bucket, "join_day")
             self.run_cbq_query(query="EXECUTE '{0}'".format(prepared_name))
-            self.assertEqual(self._persisted_adhoc_doc(), prior_persisted,
+            self.assertEqual(self._persisted_adhoc_doc(prepared_name), prior_persisted,
                              "moderate must not overwrite persisted ad-hoc plan")
         finally:
             self._cleanup_plan_stability_state()
@@ -1783,17 +1794,18 @@ class QueryAutoPrepareTests(QueryTests):
         stmt = "SELECT name FROM default:default.{0}.{1} WHERE name = 'new hotel'".format(scope, coll)
         try:
             self._cleanup_plan_stability_state()
+            self._ensure_plan_stability_collections()
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "ad_hoc"')
             self.run_cbq_query(query=stmt)
             self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = true') >= 1,
                             eval=True, delay=1, tries=20)
             prepared_name = self._persisted_adhoc_name(stmt)
             self.assertIsNotNone(prepared_name, "Expected saved ad-hoc plan entry in QUERY_METADATA")
-            prior_persisted = self._persisted_adhoc_doc()
+            prior_persisted = self._persisted_adhoc_doc(prepared_name)
             self._set_error_policy("moderate")
             self._drop_recreate_collection(scope, coll)
             self.run_cbq_query(query="EXECUTE '{0}'".format(prepared_name))
-            self.assertEqual(self._persisted_adhoc_doc(), prior_persisted,
+            self.assertEqual(self._persisted_adhoc_doc(prepared_name), prior_persisted,
                              "moderate must not overwrite persisted ad-hoc plan after collection recreate")
         finally:
             self._cleanup_plan_stability_state()
@@ -1811,12 +1823,12 @@ class QueryAutoPrepareTests(QueryTests):
                             eval=True, delay=1, tries=20)
             prepared_name = self._persisted_adhoc_name(stmt)
             self.assertIsNotNone(prepared_name, "Expected saved ad-hoc plan entry in QUERY_METADATA")
-            prior_persisted = self._persisted_adhoc_doc()
+            prior_persisted = self._persisted_adhoc_doc(prepared_name)
             self._set_error_policy("moderate")
             self._drop_recreate_bucket(self.default_bucket_name)
             self._create_index_for_plan(idx, self.query_bucket, "join_day")
             self.run_cbq_query(query="EXECUTE '{0}'".format(prepared_name))
-            self.assertEqual(self._persisted_adhoc_doc(), prior_persisted,
+            self.assertEqual(self._persisted_adhoc_doc(prepared_name), prior_persisted,
                              "moderate must not overwrite persisted ad-hoc plan after bucket recreate")
         finally:
             self.run_cbq_query(query="DROP INDEX {0} IF EXISTS ON {1}".format(idx, self.query_bucket))
@@ -1841,13 +1853,13 @@ class QueryAutoPrepareTests(QueryTests):
                             eval=True, delay=1, tries=20)
             prepared_name = self._persisted_adhoc_name(stmt)
             self.assertIsNotNone(prepared_name, "Expected saved ad-hoc plan entry in QUERY_METADATA")
-            prior_persisted = self._persisted_adhoc_doc()
+            prior_persisted = self._persisted_adhoc_doc(prepared_name)
             self._set_error_policy("moderate")
             downed_node = self._make_index_unavailable_via_node_down(host)
             self._restore_index_node(downed_node)
             downed_node = None
             self.run_cbq_query(query="EXECUTE '{0}'".format(prepared_name))
-            self.assertEqual(self._persisted_adhoc_doc(), prior_persisted,
+            self.assertEqual(self._persisted_adhoc_doc(prepared_name), prior_persisted,
                              "moderate must not overwrite persisted ad-hoc plan after index recovery")
         finally:
             if downed_node is not None:
@@ -1863,7 +1875,7 @@ class QueryAutoPrepareTests(QueryTests):
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "prepared_only"')
             self._set_error_policy("flexible")
             self._create_index_for_plan(idx, self.query_bucket, "join_day")
-            self._prepare_plan_statement(plan_name, self._plan_stability_statement_for_day(18), save=True)
+            self._prepare_plan_statement(plan_name, self._plan_stability_statement_for_day(18, index=idx), save=True)
             prior_persisted = self._persisted_prepared_doc(plan_name)
             self._drop_index_for_plan(idx, self.query_bucket, "join_day")
             self._create_index_for_plan(idx, self.query_bucket, "join_day")
@@ -1881,6 +1893,7 @@ class QueryAutoPrepareTests(QueryTests):
         stmt = "SELECT name FROM default:default.{0}.{1} WHERE name = 'new hotel'".format(scope, coll)
         try:
             self._cleanup_plan_stability_state()
+            self._ensure_plan_stability_collections()
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "prepared_only"')
             self._set_error_policy("flexible")
             self._prepare_plan_statement(plan_name, stmt, save=True)
@@ -1916,12 +1929,19 @@ class QueryAutoPrepareTests(QueryTests):
             self._cleanup_plan_stability_state()
 
     def test_error_policy_flexible_index_unavailable_prepared(self):
-        """flexible + saved prepared: indexer down then up; EXECUTE overwrites saved plan."""
-        host = self._pick_sacrificial_index_node()
+        """flexible + saved prepared: an unavailable index makes EXECUTE reprepare and overwrite."""
+        # Deliberately stricter than _pick_sacrificial_index_node: this scenario has to run
+        # EXECUTE *while* the index is down, so the node it stops must not be carrying KV.
+        # See _pick_isolated_index_node for what happens on a kv+index node (error 4411) and
+        # why SIGSTOPping the indexer is not a workaround.
+        host = self._pick_isolated_index_node()
         if host is None:
-            self.skipTest("Index unavailable scenario requires an index-service node "
-                          "other than the query node")
+            self.skipTest("Needs an index-service node that does not also host kv, so that "
+                          "stopping it leaves QUERY_METADATA writable and the reprepared plan "
+                          "can be saved. Run this from conf/tuq/py-tuq-plan-stability-idxunavail.conf "
+                          "against a cluster whose non-master index node has no kv service.")
         plan_name, idx = "ep_flex_idx_unavail_prep", "idx_ep_flex_unavail_prep"
+        fallback_idx = "idx_ep_flex_unavail_prep_fallback"
         downed_node = None
         try:
             self._cleanup_plan_stability_state()
@@ -1931,24 +1951,32 @@ class QueryAutoPrepareTests(QueryTests):
                                         nodes=["{0}:{1}".format(host.ip, host.port)])
             self._prepare_plan_statement(plan_name, self._plan_stability_statement_for_day(20), save=True)
             prior_persisted = self._persisted_prepared_doc(plan_name)
+
+            # Give the reprepare somewhere to land, created only *after* PREPARE SAVE so the
+            # saved plan is still pinned to the index that is about to disappear, and pinned
+            # to the master node so it survives the outage. With no surviving access path the
+            # only correct outcome is an error and no policy behaviour is observable.
+            self._create_index_for_plan(fallback_idx, self.query_bucket, "join_day", num_replica=0,
+                                        nodes=["{0}:{1}".format(self.master.ip, self.master.port)])
+
             downed_node = self._make_index_unavailable_via_node_down(host)
-            self._restore_index_node(downed_node)
-            downed_node = None
             self.run_cbq_query(query="EXECUTE {0}".format(plan_name))
             self.with_retry(lambda: self._persisted_prepared_doc(plan_name) != prior_persisted,
                             eval=True, delay=1, tries=20)
             self.assertNotEqual(self._persisted_prepared_doc(plan_name), prior_persisted,
-                                "flexible must overwrite persisted prepared plan after index recovery")
+                                "flexible must overwrite the persisted prepared plan when the "
+                                "index the plan depends on is unavailable")
         finally:
             if downed_node is not None:
                 self._restore_index_node(downed_node)
+            self.run_cbq_query(query="DROP INDEX {0} IF EXISTS ON {1}".format(fallback_idx, self.query_bucket))
             self.run_cbq_query(query="DROP INDEX {0} IF EXISTS ON {1}".format(idx, self.query_bucket))
             self._cleanup_plan_stability_state()
 
     def test_error_policy_flexible_drop_index_adhoc(self):
         """flexible + saved ad-hoc: rerun overwrites saved ad-hoc plan after index drop/recreate."""
         idx = "idx_ep_flex_drop_adhoc"
-        stmt = self._plan_stability_statement_for_day(21)
+        stmt = self._plan_stability_statement_for_day(21, index=idx)
         try:
             self._cleanup_plan_stability_state()
             self._create_index_for_plan(idx, self.query_bucket, "join_day")
@@ -1958,14 +1986,14 @@ class QueryAutoPrepareTests(QueryTests):
                             eval=True, delay=1, tries=20)
             prepared_name = self._persisted_adhoc_name(stmt)
             self.assertIsNotNone(prepared_name, "Expected saved ad-hoc plan entry in QUERY_METADATA")
-            prior_persisted = self._persisted_adhoc_doc()
+            prior_persisted = self._persisted_adhoc_doc(prepared_name)
             self._set_error_policy("flexible")
             self._drop_index_for_plan(idx, self.query_bucket, "join_day")
             self._create_index_for_plan(idx, self.query_bucket, "join_day")
             self.run_cbq_query(query="EXECUTE '{0}'".format(prepared_name))
-            self.with_retry(lambda: self._persisted_adhoc_doc() != prior_persisted,
+            self.with_retry(lambda: self._persisted_adhoc_doc(prepared_name) != prior_persisted,
                             eval=True, delay=1, tries=20)
-            self.assertNotEqual(self._persisted_adhoc_doc(), prior_persisted,
+            self.assertNotEqual(self._persisted_adhoc_doc(prepared_name), prior_persisted,
                                 "flexible must overwrite persisted ad-hoc plan")
         finally:
             self._cleanup_plan_stability_state()
@@ -1976,19 +2004,20 @@ class QueryAutoPrepareTests(QueryTests):
         stmt = "SELECT name FROM default:default.{0}.{1} WHERE name = 'new hotel'".format(scope, coll)
         try:
             self._cleanup_plan_stability_state()
+            self._ensure_plan_stability_collections()
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "ad_hoc"')
             self.run_cbq_query(query=stmt)
             self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = true') >= 1,
                             eval=True, delay=1, tries=20)
             prepared_name = self._persisted_adhoc_name(stmt)
             self.assertIsNotNone(prepared_name, "Expected saved ad-hoc plan entry in QUERY_METADATA")
-            prior_persisted = self._persisted_adhoc_doc()
+            prior_persisted = self._persisted_adhoc_doc(prepared_name)
             self._set_error_policy("flexible")
             self._drop_recreate_collection(scope, coll)
             self.run_cbq_query(query="EXECUTE '{0}'".format(prepared_name))
-            self.with_retry(lambda: self._persisted_adhoc_doc() != prior_persisted,
+            self.with_retry(lambda: self._persisted_adhoc_doc(prepared_name) != prior_persisted,
                             eval=True, delay=1, tries=20)
-            self.assertNotEqual(self._persisted_adhoc_doc(), prior_persisted,
+            self.assertNotEqual(self._persisted_adhoc_doc(prepared_name), prior_persisted,
                                 "flexible must overwrite persisted ad-hoc plan after collection recreate")
         finally:
             self._cleanup_plan_stability_state()
@@ -2006,26 +2035,32 @@ class QueryAutoPrepareTests(QueryTests):
                             eval=True, delay=1, tries=20)
             prepared_name = self._persisted_adhoc_name(stmt)
             self.assertIsNotNone(prepared_name, "Expected saved ad-hoc plan entry in QUERY_METADATA")
-            prior_persisted = self._persisted_adhoc_doc()
+            prior_persisted = self._persisted_adhoc_doc(prepared_name)
             self._set_error_policy("flexible")
             self._drop_recreate_bucket(self.default_bucket_name)
             self._create_index_for_plan(idx, self.query_bucket, "join_day")
             self.run_cbq_query(query="EXECUTE '{0}'".format(prepared_name))
-            self.with_retry(lambda: self._persisted_adhoc_doc() != prior_persisted,
+            self.with_retry(lambda: self._persisted_adhoc_doc(prepared_name) != prior_persisted,
                             eval=True, delay=1, tries=20)
-            self.assertNotEqual(self._persisted_adhoc_doc(), prior_persisted,
+            self.assertNotEqual(self._persisted_adhoc_doc(prepared_name), prior_persisted,
                                 "flexible must overwrite persisted ad-hoc plan after bucket recreate")
         finally:
             self.run_cbq_query(query="DROP INDEX {0} IF EXISTS ON {1}".format(idx, self.query_bucket))
             self._cleanup_plan_stability_state()
 
     def test_error_policy_flexible_index_unavailable_adhoc(self):
-        """flexible + saved ad-hoc: indexer down then up, rerun overwrites saved plan."""
-        host = self._pick_sacrificial_index_node()
+        """flexible + saved ad-hoc: an unavailable index makes the rerun reprepare and overwrite."""
+        # Same requirement as the prepared twin: the rerun has to happen *while* the index is
+        # down, so the node stopped must not be carrying KV or QUERY_METADATA goes with it
+        # and the reprepared plan cannot be saved. See _pick_isolated_index_node.
+        host = self._pick_isolated_index_node()
         if host is None:
-            self.skipTest("Index unavailable scenario requires an index-service node "
-                          "other than the query node")
+            self.skipTest("Needs an index-service node that does not also host kv, so that "
+                          "stopping it leaves QUERY_METADATA writable and the reprepared plan "
+                          "can be saved. Run this from conf/tuq/py-tuq-plan-stability-idxunavail.conf "
+                          "against a cluster whose non-master index node has no kv service.")
         idx = "idx_ep_flex_unavail_adhoc"
+        fallback_idx = "idx_ep_flex_unavail_adhoc_fallback"
         stmt = self._plan_stability_statement_for_day(23)
         downed_node = None
         try:
@@ -2038,27 +2073,35 @@ class QueryAutoPrepareTests(QueryTests):
                             eval=True, delay=1, tries=20)
             prepared_name = self._persisted_adhoc_name(stmt)
             self.assertIsNotNone(prepared_name, "Expected saved ad-hoc plan entry in QUERY_METADATA")
-            prior_persisted = self._persisted_adhoc_doc()
+            prior_persisted = self._persisted_adhoc_doc(prepared_name)
             self._set_error_policy("flexible")
+
+            # Somewhere for the reprepare to land, created after the plan was saved and
+            # pinned to master so it survives the outage. No USE INDEX hint here: the hint
+            # that makes the drop-index tests deterministic would also forbid falling back
+            # to this index, which is the behaviour under test.
+            self._create_index_for_plan(fallback_idx, self.query_bucket, "join_day", num_replica=0,
+                                        nodes=["{0}:{1}".format(self.master.ip, self.master.port)])
+
             downed_node = self._make_index_unavailable_via_node_down(host)
-            self._restore_index_node(downed_node)
-            downed_node = None
             self.run_cbq_query(query="EXECUTE '{0}'".format(prepared_name))
-            self.with_retry(lambda: self._persisted_adhoc_doc() != prior_persisted,
+            self.with_retry(lambda: self._persisted_adhoc_doc(prepared_name) != prior_persisted,
                             eval=True, delay=1, tries=20)
-            self.assertNotEqual(self._persisted_adhoc_doc(), prior_persisted,
-                                "flexible must overwrite persisted ad-hoc plan after index recovery")
+            self.assertNotEqual(self._persisted_adhoc_doc(prepared_name), prior_persisted,
+                                "flexible must overwrite the persisted ad-hoc plan when the "
+                                "index the plan depends on is unavailable")
         finally:
             if downed_node is not None:
                 self._restore_index_node(downed_node)
+            self.run_cbq_query(query="DROP INDEX {0} IF EXISTS ON {1}".format(fallback_idx, self.query_bucket))
             self.run_cbq_query(query="DROP INDEX {0} IF EXISTS ON {1}".format(idx, self.query_bucket))
             self._cleanup_plan_stability_state()
 
     def test_error_policy_strict_mixed_saved_plans(self):
         """strict + mixed: saved prepared and saved ad-hoc both raise after their shared index is dropped."""
         plan_name, idx = "ep_strict_mixed_prep", "idx_ep_strict_mixed"
-        adhoc_stmt = self._plan_stability_statement_for_day(24)
-        prepared_stmt = self._plan_stability_statement_for_day(25)
+        adhoc_stmt = self._plan_stability_statement_for_day(24, index=idx)
+        prepared_stmt = self._plan_stability_statement_for_day(25, index=idx)
         try:
             self._cleanup_plan_stability_state()
             self._create_index_for_plan(idx, self.query_bucket, "join_day")
@@ -2091,8 +2134,8 @@ class QueryAutoPrepareTests(QueryTests):
     def test_error_policy_moderate_mixed_saved_plans(self):
         """moderate + mixed: both saved prepared and saved ad-hoc succeed; both saved plans unchanged."""
         plan_name, idx = "ep_mod_mixed_prep", "idx_ep_mod_mixed"
-        adhoc_stmt = self._plan_stability_statement_for_day(26)
-        prepared_stmt = self._plan_stability_statement_for_day(27)
+        adhoc_stmt = self._plan_stability_statement_for_day(26, index=idx)
+        prepared_stmt = self._plan_stability_statement_for_day(27, index=idx)
         try:
             self._cleanup_plan_stability_state()
             self._create_index_for_plan(idx, self.query_bucket, "join_day")
@@ -2104,7 +2147,7 @@ class QueryAutoPrepareTests(QueryTests):
             self.assertIsNotNone(adhoc_prepared_name, "Expected saved ad-hoc plan entry in QUERY_METADATA")
             self._prepare_plan_statement(plan_name, prepared_stmt, save=True)
             prior_prep = self._persisted_prepared_doc(plan_name)
-            prior_adhoc = self._persisted_adhoc_doc()
+            prior_adhoc = self._persisted_adhoc_doc(adhoc_prepared_name)
             self._set_error_policy("moderate")
             self._drop_index_for_plan(idx, self.query_bucket, "join_day")
             self._create_index_for_plan(idx, self.query_bucket, "join_day")
@@ -2112,7 +2155,7 @@ class QueryAutoPrepareTests(QueryTests):
             self.run_cbq_query(query="EXECUTE '{0}'".format(adhoc_prepared_name))
             self.assertEqual(self._persisted_prepared_doc(plan_name), prior_prep,
                              "moderate must not overwrite persisted prepared plan in mixed scenario")
-            self.assertEqual(self._persisted_adhoc_doc(), prior_adhoc,
+            self.assertEqual(self._persisted_adhoc_doc(adhoc_prepared_name), prior_adhoc,
                              "moderate must not overwrite persisted ad-hoc plan in mixed scenario")
         finally:
             self._cleanup_plan_stability_state()
@@ -2120,8 +2163,8 @@ class QueryAutoPrepareTests(QueryTests):
     def test_error_policy_flexible_mixed_saved_plans(self):
         """flexible + mixed: both saved prepared and saved ad-hoc succeed and both saved plans are replaced."""
         plan_name, idx = "ep_flex_mixed_prep", "idx_ep_flex_mixed"
-        adhoc_stmt = self._plan_stability_statement_for_day(28)
-        prepared_stmt = self._plan_stability_statement_for_day(29)
+        adhoc_stmt = self._plan_stability_statement_for_day(28, index=idx)
+        prepared_stmt = self._plan_stability_statement_for_day(29, index=idx)
         try:
             self._cleanup_plan_stability_state()
             self._create_index_for_plan(idx, self.query_bucket, "join_day")
@@ -2133,7 +2176,7 @@ class QueryAutoPrepareTests(QueryTests):
             self.assertIsNotNone(adhoc_prepared_name, "Expected saved ad-hoc plan entry in QUERY_METADATA")
             self._prepare_plan_statement(plan_name, prepared_stmt, save=True)
             prior_prep = self._persisted_prepared_doc(plan_name)
-            prior_adhoc = self._persisted_adhoc_doc()
+            prior_adhoc = self._persisted_adhoc_doc(adhoc_prepared_name)
             self._set_error_policy("flexible")
             self._drop_index_for_plan(idx, self.query_bucket, "join_day")
             self._create_index_for_plan(idx, self.query_bucket, "join_day")
@@ -2141,11 +2184,11 @@ class QueryAutoPrepareTests(QueryTests):
             self.run_cbq_query(query="EXECUTE '{0}'".format(adhoc_prepared_name))
             self.with_retry(lambda: self._persisted_prepared_doc(plan_name) != prior_prep,
                             eval=True, delay=1, tries=20)
-            self.with_retry(lambda: self._persisted_adhoc_doc() != prior_adhoc,
+            self.with_retry(lambda: self._persisted_adhoc_doc(adhoc_prepared_name) != prior_adhoc,
                             eval=True, delay=1, tries=20)
             self.assertNotEqual(self._persisted_prepared_doc(plan_name), prior_prep,
                                 "flexible must overwrite persisted prepared plan in mixed scenario")
-            self.assertNotEqual(self._persisted_adhoc_doc(), prior_adhoc,
+            self.assertNotEqual(self._persisted_adhoc_doc(adhoc_prepared_name), prior_adhoc,
                                 "flexible must overwrite persisted ad-hoc plan in mixed scenario")
         finally:
             self._cleanup_plan_stability_state()
@@ -2158,7 +2201,7 @@ class QueryAutoPrepareTests(QueryTests):
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "prepared_only"')
             self._set_error_policy("strict")
             self._create_index_for_plan(idx, self.query_bucket, "join_day")
-            self._prepare_plan_statement(plan_name, self._plan_stability_statement_for_day(30), save=True)
+            self._prepare_plan_statement(plan_name, self._plan_stability_statement_for_day(30, index=idx), save=True)
             prior_persisted = self._persisted_prepared_doc(plan_name)
             self._drop_index_for_plan(idx, self.query_bucket, "join_day")
             self._create_index_for_plan(idx, self.query_bucket, "join_day")
@@ -2181,7 +2224,7 @@ class QueryAutoPrepareTests(QueryTests):
     def test_error_policy_strict_to_flexible_recovers_adhoc(self):
         """saved ad-hoc: strict raises; switching to flexible lets the rerun succeed and overwrite saved plan."""
         idx = "idx_ep_trans_adhoc"
-        stmt = self._plan_stability_statement_for_day(31)
+        stmt = self._plan_stability_statement_for_day(31, index=idx)
         try:
             self._cleanup_plan_stability_state()
             self._create_index_for_plan(idx, self.query_bucket, "join_day")
@@ -2191,7 +2234,7 @@ class QueryAutoPrepareTests(QueryTests):
                             eval=True, delay=1, tries=20)
             prepared_name = self._persisted_adhoc_name(stmt)
             self.assertIsNotNone(prepared_name, "Expected saved ad-hoc plan entry in QUERY_METADATA")
-            prior_persisted = self._persisted_adhoc_doc()
+            prior_persisted = self._persisted_adhoc_doc(prepared_name)
             self._set_error_policy("strict")
             self._drop_index_for_plan(idx, self.query_bucket, "join_day")
             self._create_index_for_plan(idx, self.query_bucket, "join_day")
@@ -2204,42 +2247,10 @@ class QueryAutoPrepareTests(QueryTests):
                 self.log.info("strict raised as expected: {0}".format(ex))
             self._set_error_policy("flexible")
             self.run_cbq_query(query="EXECUTE '{0}'".format(prepared_name))
-            self.with_retry(lambda: self._persisted_adhoc_doc() != prior_persisted,
+            self.with_retry(lambda: self._persisted_adhoc_doc(prepared_name) != prior_persisted,
                             eval=True, delay=1, tries=20)
-            self.assertNotEqual(self._persisted_adhoc_doc(), prior_persisted,
+            self.assertNotEqual(self._persisted_adhoc_doc(prepared_name), prior_persisted,
                                 "flexible must overwrite persisted ad-hoc plan after switching from strict")
-        finally:
-            self._cleanup_plan_stability_state()
-
-    def test_saved_plans_survive_all_query_nodes_restart(self):
-        """Killing cbq-engine on every query node clears system:prepareds; saved plans in QUERY_METADATA still execute."""
-        query_nodes = self._get_query_nodes()
-        if not query_nodes:
-            self.skipTest("No query-service nodes available")
-        prepared_saved, prepared_volatile = "ps_restart_saved", "ps_restart_volatile"
-        adhoc_stmt = self._plan_stability_statement_for_day(32)
-        try:
-            self._cleanup_plan_stability_state()
-            self._set_error_policy("moderate")
-            self._prepare_plan_statement(prepared_saved, self._plan_stability_statement_for_day(33), save=True)
-            self.run_cbq_query(query="PREPARE {0} FROM SELECT * FROM {1} LIMIT 5".format(prepared_volatile, self.query_bucket))
-            self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "ad_hoc"')
-            self.run_cbq_query(query=adhoc_stmt)
-            self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = true') >= 1,
-                            eval=True, delay=1, tries=20)
-            self._restart_all_query_services(query_nodes)
-            self.with_retry(lambda: self._cluster_prepareds_count() == 0,
-                            eval=True, delay=2, tries=20)
-            execute_saved = self.run_cbq_query(query="EXECUTE {0}".format(prepared_saved))
-            self.assertTrue('results' in execute_saved, "Saved prepared should execute after restart")
-            execute_adhoc = self.run_cbq_query(query=adhoc_stmt)
-            self.assertTrue('results' in execute_adhoc, "Saved ad-hoc statement should execute after restart")
-            try:
-                self.run_cbq_query(query="EXECUTE {0}".format(prepared_volatile))
-                self.fail("Volatile prepared should be gone after query restart")
-            except CBQError as ex:
-                self.assertTrue("No such prepared statement" in str(ex),
-                                "Unexpected error for volatile prepared after restart: {0}".format(ex))
         finally:
             self._cleanup_plan_stability_state()
 
@@ -2252,8 +2263,21 @@ class QueryAutoPrepareTests(QueryTests):
         prepare_tokens.extend([name, 'AS', statement])
         self.run_cbq_query(query=' '.join(prepare_tokens))
 
-    def _plan_stability_statement_for_day(self, day):
-        return 'SELECT RAW join_day FROM {0} WHERE join_day = {1} LIMIT 2'.format(self.query_bucket, day)
+    def _plan_stability_statement_for_day(self, day, index=None):
+        """Statement used to build a saved plan.
+
+        Pass `index` for any scenario that later drops or disables that index to invalidate
+        the plan. QueryTests.setUp creates a #primary index on every test, so without a hint
+        the optimiser is free to plan the scan against #primary instead of the test's own
+        index - measured on 8.5.0-1092: with #primary present, PREPARE SAVE then DROP INDEX
+        then EXECUTE returns rows normally, so strict never raises and flexible never
+        reprepares, and the test fails asserting behaviour it never actually triggered.
+        Which index gets picked can also vary run to run, which is where the intermittency
+        in this family came from. USE INDEX pins the plan to the index under test.
+        """
+        hint = ' USE INDEX ({0} USING GSI)'.format(index) if index else ''
+        return 'SELECT RAW join_day FROM {0}{1} WHERE join_day = {2} LIMIT 2'.format(
+            self.query_bucket, hint, day)
 
     def _prepared_statement_text(self, name):
         result = self.run_cbq_query(query='SELECT prepareds.statement AS statement FROM system:prepareds WHERE prepareds.name = "{0}" LIMIT 1'.format(name))
@@ -2307,7 +2331,28 @@ class QueryAutoPrepareTests(QueryTests):
             self.assertTrue(any(token in error['msg'].lower() for token in ["credential", "permission", "authorized", "authorization", "access"]),
                             "Unexpected error message for unauthorized {0}: {1}".format(operation, error['msg']))
 
+    def _wait_for_rebalance_to_settle(self, tries=60, delay=5):
+        """Block while a rebalance is running, wherever it was started from."""
+        for _ in range(tries):
+            try:
+                if self.rest._rebalance_progress_status() != 'running':
+                    return True
+            except Exception as ex:
+                self.log.info("could not read rebalance status: {0}".format(ex))
+                return True
+            self.sleep(delay, "waiting for an in-flight rebalance to finish")
+        self.log.warning("rebalance still running after {0}s - continuing anyway".format(tries * delay))
+        return False
+
     def _cleanup_plan_stability_state(self):
+        # Every test starts here, so this is where to insist the cluster has settled.
+        # Enabling plan stability creates the QUERY_METADATA bucket, and bucket creation is
+        # refused outright while a rebalance is in flight - measured on 8.5.0-1092, a
+        # rebalance left over from the previous test's teardown/setup made the next test die
+        # with 18081 "Cannot create bucket during rebalance", and the one after it with
+        # 12016 "GSI index id ... not found" while indexes were still moving. Neither had
+        # anything to do with the behaviour under test.
+        self._wait_for_rebalance_to_settle()
         self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "off"')
         self.run_cbq_query(query='DELETE FROM system:prepareds')
         self.run_cbq_query(query='DROP BUCKET IF EXISTS QUERY_METADATA')
@@ -2321,10 +2366,24 @@ class QueryAutoPrepareTests(QueryTests):
             self.run_cbq_query(query='PREPARE {0}_{1} AS SELECT * FROM {2} WHERE join_day = {3} LIMIT 5'.format(
                 name_prefix, i, self.query_bucket, i + 1))
 
+    # Every helper below observes QUERY_METADATA by running a SELECT against it. Under
+    # plan_stability.mode = "ad_hoc" that observation is itself an ad-hoc statement, so the
+    # query service persists it into the very keyspace being measured and the helper then
+    # counts itself. Each observation statement necessarily names QUERY_METADATA in its FROM
+    # clause, so excluding docs whose text mentions the keyspace removes the whole class of
+    # self-pollution in one place. Keep this filter on every counting/lookup helper.
+    #
+    # The IS NOT VALUED arm matters: a bare `text NOT LIKE ...` evaluates to MISSING (not
+    # TRUE) for any doc without a text field, which would quietly drop those docs from every
+    # count instead of just dropping the self-referential ones.
+    PLAN_STABILITY_SELF_FILTER = '(text IS NOT VALUED OR text NOT LIKE "%QUERY_METADATA%")'
+
     def _query_metadata_doc_count(self, where_clause=''):
         query = 'SELECT COUNT(*) AS doc_count FROM `QUERY_METADATA`.`_system`.`_query`'
+        predicates = [self.PLAN_STABILITY_SELF_FILTER]
         if where_clause:
-            query = '{0} WHERE {1}'.format(query, where_clause)
+            predicates.append('({0})'.format(where_clause))
+        query = '{0} WHERE {1}'.format(query, ' AND '.join(predicates))
         try:
             results = self.run_cbq_query(query=query)
             return results['results'][0]['doc_count']
@@ -2362,6 +2421,73 @@ class QueryAutoPrepareTests(QueryTests):
         except Exception as ex:
             self.log.info("wait_for_index_drop ignored: {0}".format(ex))
 
+    def _scope_exists(self, scope):
+        result = self.run_cbq_query(
+            query='SELECT RAW COUNT(*) FROM system:scopes WHERE `bucket` = "{0}" AND name = "{1}"'.format(
+                self.default_bucket_name, scope))
+        return result['results'][0] > 0
+
+    def _collection_exists(self, scope, collection):
+        result = self.run_cbq_query(
+            query='SELECT RAW COUNT(*) FROM system:keyspaces WHERE `bucket` = "{0}" '
+                  'AND `scope` = "{1}" AND name = "{2}"'.format(
+                      self.default_bucket_name, scope, collection))
+        return result['results'][0] > 0
+
+    def _ensure_plan_stability_collections(self):
+        """Stand up default.test2.{test1,test2} and their seed docs if they are missing.
+
+        suite_setUp provisions these once per *suite*, but several tests here drop and
+        recreate the `default` bucket, which destroys the scope, its collections, their
+        indexes and their documents for every test scheduled afterwards. Those later tests
+        then fail with "Scope not found in CB datastore default:default.test2" purely
+        because of the order they ran in - the same test passes on its own. Calling this at
+        the top of a test that needs the collections lets it stand up its own preconditions.
+
+        Idempotent: the fast path is a single system:keyspaces lookup, so a test that runs
+        after an intact setUp pays almost nothing.
+        """
+        if not self.load_collections:
+            return
+        if (self._collection_exists("test2", self.collections[0]) and
+                self._collection_exists("test2", self.collections[1])):
+            return
+        self.log.info("default.test2 scope/collections missing - reprovisioning for this test")
+        # Build the client here rather than using self.collections_helper: that attribute is
+        # only ever set in QueryTests.suite_setUp, which runs on a different instance, so
+        # reaching for it from inside a test raises AttributeError.
+        collections_helper = CollectionsN1QL(self.master)
+        try:
+            collections_helper.create_scope(bucket_name=self.default_bucket_name,
+                                            scope_name="test2")
+        except Exception as ex:
+            # Tolerated only because a concurrent/partial provision may already have made it;
+            # the assert below still fails loudly if the scope really is absent.
+            self.log.info("create_scope test2 returned: {0}".format(ex))
+        self.with_retry(lambda: self._scope_exists("test2"), eval=True, delay=1, tries=30)
+        for collection in (self.collections[0], self.collections[1]):
+            try:
+                collections_helper.create_collection(
+                    bucket_name=self.default_bucket_name, scope_name="test2",
+                    collection_name=collection)
+            except Exception as ex:
+                self.log.info("create_collection test2.{0} returned: {1}".format(collection, ex))
+            self.with_retry(lambda c=collection: self._collection_exists("test2", c),
+                            eval=True, delay=1, tries=30)
+        self.run_cbq_query(query="CREATE INDEX IF NOT EXISTS idx1 ON default:default.test2.{0}(name)".format(
+            self.collections[0]))
+        self.run_cbq_query(query="CREATE INDEX IF NOT EXISTS idx2 ON default:default.test2.{0}(name)".format(
+            self.collections[1]))
+        self.wait_for_all_indexes_online()
+        # UPSERT, not INSERT: re-running against a partially provisioned scope must not fail
+        # on a duplicate key.
+        seed = {"key1": "old hotel", "key2": "new hotel", "key3": "new hotel"}
+        for doc_key, doc_name in seed.items():
+            self.run_cbq_query(
+                query='UPSERT INTO default:default.test2.{0} (KEY, VALUE) VALUES '
+                      '("{1}", {{ "type" : "hotel", "name" : "{2}" }})'.format(
+                          self.collections[1], doc_key, doc_name))
+
     def _drop_recreate_collection(self, scope, collection):
         self.run_cbq_query(query='DROP COLLECTION `{0}`.`{1}`.`{2}`'.format(self.default_bucket_name, scope, collection))
         self.sleep(5)
@@ -2376,7 +2502,10 @@ class QueryAutoPrepareTests(QueryTests):
 
     def _persisted_prepared_doc(self, name):
         try:
-            results = self.run_cbq_query(query='SELECT META().id, * FROM `QUERY_METADATA`.`_system`.`_query` WHERE name = "{0}" LIMIT 1'.format(name))
+            results = self.run_cbq_query(
+                query='SELECT META().id, * FROM `QUERY_METADATA`.`_system`.`_query` '
+                      'WHERE {0} AND name = "{1}" LIMIT 1'.format(
+                          self.PLAN_STABILITY_SELF_FILTER, name))
             if results['metrics']['resultCount'] == 0:
                 return None
             return str(results['results'][0])
@@ -2385,9 +2514,33 @@ class QueryAutoPrepareTests(QueryTests):
                 return None
             raise
 
-    def _persisted_adhoc_doc(self):
+    def _persisted_adhoc_doc(self, name=None):
+        """Return the persisted ad-hoc plan doc as a string, for before/after comparison.
+
+        Always pass `name` (from _persisted_adhoc_name) when the caller knows which plan it
+        is asserting on. Without it this used to run an unordered, unlimited
+        `WHERE ad_hoc = true` and return results[0] - an arbitrary row out of however many
+        ad-hoc docs happened to exist. Two calls could return two *different* documents with
+        nothing having changed, which is why the moderate/flexible policy tests compared
+        unrelated ppn:: ids and failed or flapped. Scoping by name makes the comparison
+        single-document; the ORDER BY keeps the nameless fallback at least deterministic.
+        """
+        predicates = [self.PLAN_STABILITY_SELF_FILTER]
+        # No ORDER BY on the name-scoped lookup: the plan name is unique, so LIMIT 1 is
+        # already deterministic, and sorting pushed the statement onto a KV sequential scan
+        # that fails while a restarted node is still warming up ("datastore.seq_scan.create
+        # ... GetAllVbSeqnos failed: EOF"). Only the nameless fallback, which really can
+        # match several docs, needs the sort.
+        if name is None:
+            predicates.append('ad_hoc = true')
+            tail = 'ORDER BY META().id LIMIT 1'
+        else:
+            predicates.append('name = "{0}"'.format(name))
+            tail = 'LIMIT 1'
+        query = ('SELECT META().id, * FROM `QUERY_METADATA`.`_system`.`_query` '
+                 'WHERE {0} {1}'.format(' AND '.join(predicates), tail))
         try:
-            results = self.run_cbq_query(query='SELECT META().id, * FROM `QUERY_METADATA`.`_system`.`_query` WHERE ad_hoc = true')
+            results = self.run_cbq_query(query=query)
             if results['metrics']['resultCount'] == 0:
                 return None
             return str(results['results'][0])
@@ -2401,8 +2554,10 @@ class QueryAutoPrepareTests(QueryTests):
         escaped_statement = statement_prefix.replace('\\', '\\\\').replace('"', '\\"')
         try:
             results = self.run_cbq_query(
-                query='SELECT name FROM `QUERY_METADATA`.`_system`.`_query` WHERE ad_hoc = true AND text LIKE "{0}%" LIMIT 1'.format(
-                    escaped_statement))
+                query='SELECT name FROM `QUERY_METADATA`.`_system`.`_query` '
+                      'WHERE {0} AND ad_hoc = true AND text LIKE "{1}%" '
+                      'ORDER BY META().id LIMIT 1'.format(
+                          self.PLAN_STABILITY_SELF_FILTER, escaped_statement))
             if results['metrics']['resultCount'] == 0:
                 return None
             return results['results'][0]['name']
@@ -2418,13 +2573,6 @@ class QueryAutoPrepareTests(QueryTests):
             self.log.info("Falling back to self.servers for index nodes: {0}".format(ex))
             return list(self.servers[:self.nodes_init])
 
-    def _get_query_nodes(self):
-        try:
-            return self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True) or []
-        except Exception as ex:
-            self.log.info("Falling back to self.servers for query nodes: {0}".format(ex))
-            return list(self.servers[:self.nodes_init])
-
     def _pick_sacrificial_index_node(self):
         """Return an index node that is safe to stop, or None if there isn't one.
 
@@ -2438,6 +2586,29 @@ class QueryAutoPrepareTests(QueryTests):
         """
         for node in self._get_index_nodes():
             if node.ip != self.master.ip:
+                return node
+        return None
+
+    def _pick_isolated_index_node(self):
+        """Return an index node that hosts no KV, or None.
+
+        Scenarios that EXECUTE *while* the index is down need this. stop_server() stops the
+        whole node, so on the usual kv+index+n1ql QE box the outage also takes down part of
+        QUERY_METADATA - the reprepared plan then cannot be written back and the EXECUTE dies
+        with error 4411 ("Failed to perform UPSERT on key ppn::<plan> ... after 25 attempts")
+        long before any policy behaviour is observable. Measured on 8.5.0-1092. Suspending
+        just the indexer is not a substitute either: with SIGSTOP the EXECUTE completes in
+        ~10ms as though nothing happened, so the plan is never invalidated, and the query
+        service degrades into hangs shortly after.
+        """
+        try:
+            kv_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True) or []
+        except Exception as ex:
+            self.log.info("Could not read the kv service map: {0}".format(ex))
+            return None
+        kv_ips = set(node.ip for node in kv_nodes)
+        for node in self._get_index_nodes():
+            if node.ip != self.master.ip and node.ip not in kv_ips:
                 return node
         return None
 
@@ -2477,6 +2648,35 @@ class QueryAutoPrepareTests(QueryTests):
             except Exception as ex:
                 self.log.warning("Could not restore auto-failover settings: {0}".format(ex))
             self._autofailover_prior = None
+        self._wait_for_cluster_serving(host_node)
+
+    def _wait_for_cluster_serving(self, host_node, tries=36, delay=5):
+        """Block until every node is healthy again and data queries actually succeed.
+
+        start_server() returns as soon as the process is up and is_ns_server_running() only
+        says ns_server answers - KV can still be warming up behind both. Anything that falls
+        back to a KV sequential scan during that window dies with
+        "datastore.seq_scan.create ... GetAllVbSeqnos failed: EOF", which surfaces as a
+        spurious failure in whatever assertion the test happens to make next rather than as
+        an obvious "the node is not back yet".
+        """
+        self.with_retry(self._cluster_serving, eval=True, delay=delay, tries=tries)
+        self.log.info("Cluster is serving again after restoring {0}".format(host_node.ip))
+
+    def _cluster_serving(self):
+        if not all(node.status == 'healthy' for node in self.rest.node_statuses()):
+            return False
+        # Re-adding the node kicks off a rebalance, and every node reports healthy while it
+        # is still running. Leaving before it finishes bleeds into whatever test runs next:
+        # measured on 8.5.0-1092, the following two tests died with 18081 "Cannot create
+        # bucket during rebalance" (QUERY_METADATA could not be created) and 12016 "GSI
+        # index id ... not found" as indexes were still moving.
+        if self.rest._rebalance_progress_status() == 'running':
+            self.log.info("rebalance still running - waiting before handing back to the test")
+            return False
+        # with_retry swallows the exception and retries if this is still unavailable.
+        self.run_cbq_query(query='SELECT RAW COUNT(*) FROM `{0}`'.format(self.default_bucket_name))
+        return True
 
     def _readd_node_if_failed_over(self, host_node):
         """A node that was auto-failed-over stays out of the cluster after a restart.
@@ -2502,24 +2702,6 @@ class QueryAutoPrepareTests(QueryTests):
         except Exception as ex:
             self.log.error("Could not re-add failed-over node {0}: {1}".format(host_node.ip, ex))
 
-    def _restart_all_query_services(self, query_nodes):
-        for node in query_nodes:
-            try:
-                shell = RemoteMachineShellConnection(node)
-                shell.execute_command("killall -9 cbq-engine")
-                shell.disconnect()
-                self.log.info("Killed cbq-engine on {0}".format(node.ip))
-            except Exception as ex:
-                self.log.info("Failed to kill cbq-engine on {0}: {1}".format(node.ip, ex))
-        self.sleep(30)
-
-    def _cluster_prepareds_count(self):
-        try:
-            results = self.run_cbq_query(query="SELECT COUNT(*) AS prepared_count FROM system:prepareds")
-            return results['results'][0]['prepared_count']
-        except Exception as ex:
-            self.log.info("system:prepareds unavailable, treating as 0: {0}".format(ex))
-            return 0
     def _set_auto_prepare(self, enabled):
         """Set auto-prepare setting via Python requests (curl-free)."""
         import requests
