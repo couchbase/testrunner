@@ -15,6 +15,7 @@ outcomes asserted together.
 """
 
 import datetime
+import ssl
 import time
 
 import requests
@@ -307,6 +308,72 @@ class FTSCRL(FTSCRLBase):
         self.log.info(
             "{0} valid and {1} revoked identities behaved correctly "
             "concurrently".format(len(valid_set), len(revoked_set)))
+
+    def test_crl_tls12_session_resumption_rejected(self):
+        """MB-73084 — a TLS 1.2 session cached before revocation must not be
+        resumable afterwards.
+
+        Distinct from test_crl_existing_connection_survives_revocation: an
+        already-open connection legitimately stays alive, because revocation is
+        only evaluated during a handshake. Resumption is a NEW connection, so it
+        must be re-checked and refused. Pinned to TLS 1.2 -- TLS 1.3 resumes via
+        tickets on a different code path.
+        """
+        identity = self.create_client_identity("tls12resume")
+        self.enable_client_cert_auth()
+        self.publish_crl([], crl_number=1)
+        self.set_crl_policy(client_auth="Require")
+
+        session, reused, first_line = self.tls12_handshake(identity)
+        self.assertFalse(
+            reused,
+            "the first TLS 1.2 handshake reported session_reused=True; a full "
+            "handshake is needed to seed the session cache")
+        self.assertIsNotNone(
+            session,
+            "no TLS 1.2 session was cached, so resumption cannot be exercised "
+            "against this node")
+        self.log.info("TLS 1.2 baseline handshake OK: {0}".format(first_line))
+
+        self.revoke(identity, crl_number=2)
+
+        # A FULL handshake must be refused first. Without this, a resumption
+        # that succeeds below would only mean the CRL had not landed yet.
+        deadline = time.time() + self.crl_enforcement_timeout
+        fresh_rejected = False
+        while True:
+            try:
+                self.tls12_handshake(identity)
+            except ssl.SSLError as exc:
+                fresh_rejected = True
+                self.log.info(
+                    "full TLS 1.2 handshake now refused: {0}".format(exc))
+                break
+            if time.time() >= deadline:
+                break
+            time.sleep(3)
+        self.assertTrue(
+            fresh_rejected,
+            "a full TLS 1.2 handshake still succeeded after revoking {0}, so "
+            "the revocation never took and the resumption check below would "
+            "prove nothing".format(identity.cn))
+
+        try:
+            _, reused_again, line = self.tls12_handshake(
+                identity, session=session)
+        except ssl.SSLError as exc:
+            self.assertIn(
+                "revoked", str(exc).lower(),
+                "TLS 1.2 resumption was refused, but not with a "
+                "certificate-revoked alert: {0}".format(exc))
+            self.log.info(
+                "TLS 1.2 resumption correctly refused: {0}".format(exc))
+            return
+        self.fail(
+            "MB-73084: resuming a TLS 1.2 session established BEFORE "
+            "revocation succeeded (session_reused={0}, response={1!r}). A "
+            "cached session must not let a revoked certificate bypass "
+            "re-checking.".format(reused_again, line))
 
     def test_crl_existing_connection_survives_revocation(self):
         """Plan FTS-CLI-05 — documented v1 behaviour for live sessions."""
@@ -1304,7 +1371,18 @@ class FTSCRL(FTSCRLBase):
         # Revoke the FTS node's own certificate.
         self.revoke_node_cert(fts_node, crl_number=2)
 
-        after = self._run_n1ql_expecting_failure(search_query)
+        # Two reasons SEARCH() keeps working right after the upload, neither of
+        # them the defect this test looks for: the CRL cache has not replicated
+        # yet, and revocation is only evaluated during a TLS handshake, so the
+        # connection the baseline query opened legitimately stays usable.
+        # Wait for the revocation to be visible, then force a fresh handshake.
+        self.wait_for_node_cert_revoked(fts_node)
+        self.restart_cbft(fts_node)
+        # cbft must be serving again before asserting, or a failure below is
+        # just "cbft is down" rather than a rejected handshake.
+        self.wait_for_indexing_complete()
+
+        after = self._wait_for_n1ql_failure(search_query)
         if after is not None:
             self.fail(
                 "SEARCH() still returned {0} hits after the FTS node's "
@@ -1369,6 +1447,14 @@ class FTSCRL(FTSCRLBase):
 
         self.revoke_node_cert(victim, crl_number=2)
 
+        # Same two traps as the query-consumer test: wait for the CRL cache to
+        # carry the revocation, then force the SURVIVOR to re-handshake to the
+        # victim. Restarting the victim instead would make it unreachable for
+        # reasons other than revocation and fake a truncation.
+        self.wait_for_node_cert_revoked(victim)
+        self.restart_cbft(survivor)
+        self.wait_for_indexing_complete()
+
         result = self.fts_query(identity, index, query, node=survivor)
         hits = result.total_hits()
         self.log.info(
@@ -1405,6 +1491,18 @@ class FTSCRL(FTSCRLBase):
             return None
         return rows[0].get("hits")
 
+    def _wait_for_n1ql_failure(self, query, timeout=180, interval=10):
+        """Poll until `query` stops returning hits. Returns the last hit count
+        if it never failed, so the caller can report what it saw."""
+        deadline = time.time() + timeout
+        while True:
+            hits = self._run_n1ql_expecting_failure(query)
+            if hits is None:
+                return None
+            if time.time() >= deadline:
+                return hits
+            time.sleep(interval)
+
     def _run_n1ql_expecting_failure(self, query):
         """Run a N1QL query that should fail; return hits if it wrongly succeeded."""
         try:
@@ -1437,6 +1535,13 @@ class FTSCRL(FTSCRLBase):
         self.assert_never_allowed_until(
             revoked, valid, index, query=query,
             context="cbft restart recovery window on {0}".format(node.ip))
+
+        # cbft can still close the connection without a TLS alert for a moment
+        # after the restart; settle on a definite verdict before asserting, or
+        # that transient disconnect fails the test as an "infrastructure fault".
+        self.wait_until_revoked(
+            self.query_op(index, query), revoked,
+            context="revoked identity settles after cbft restart")
 
         self.assert_dual_client(
             "query after cbft restart",

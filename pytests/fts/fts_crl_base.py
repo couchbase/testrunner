@@ -7,6 +7,8 @@ import datetime
 import json
 import os
 import re
+import socket
+import ssl
 import tempfile
 import threading
 import time
@@ -710,6 +712,83 @@ class FTSCRLBase(FTSBaseTest):
         self.log.info("Revoked node cert for {0} (serial {1})".format(
             node.ip, hex(serial)))
         return serial
+
+    def tls12_handshake(self, identity, node=None, port=None, session=None,
+                        timeout=15):
+        """One TLS 1.2 handshake presenting `identity`'s client certificate.
+
+        Returns (session, session_reused, first_response_line); raises
+        ssl.SSLError when the server rejects the certificate. Pinned to TLS 1.2
+        so this exercises session RESUMPTION -- TLS 1.3 uses tickets and takes
+        a different code path (MB-73084).
+        """
+        node = node or self.fts_nodes[0]
+        port = int(port or CbServer.ssl_fts_port)
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+        context.load_cert_chain(identity.cert_path, identity.key_path)
+        context.minimum_version = ssl.TLSVersion.TLSv1_2
+        context.maximum_version = ssl.TLSVersion.TLSv1_2
+
+        raw = socket.create_connection((node.ip, port), timeout=timeout)
+        secure = context.wrap_socket(raw, server_hostname=node.ip,
+                                     session=session)
+        try:
+            secure.sendall(b"GET /api/cfg HTTP/1.1\r\nHost: x\r\n"
+                           b"Connection: close\r\n\r\n")
+            payload = b""
+            try:
+                while True:
+                    chunk = secure.recv(4096)
+                    if not chunk:
+                        break
+                    payload += chunk
+            except (ssl.SSLError, OSError):
+                pass
+            first = (payload.split(b"\r\n")[0].decode(errors="replace")
+                     if payload else None)
+            return secure.session, secure.session_reused, first
+        finally:
+            secure.close()
+
+    def node_cert_pem(self, node):
+        """PEM of `node`'s own TLS certificate."""
+        entry = self.node_cert_entry(node)
+        leaf = os.path.join(entry["path"].rstrip("/"),
+                            "{0}.pem".format(node.ip))
+        pem = self._read_x509_file(leaf)
+        return pem.decode() if isinstance(pem, bytes) else pem
+
+    def wait_for_node_cert_revoked(self, node, timeout=None, interval=3):
+        """Poll diagnostics until `node`'s own cert reads revoked.
+
+        The CRL cache replicates asynchronously, so an assertion fired right
+        after the upload can be served from a stale cache and say nothing
+        about enforcement.
+        """
+        timeout = timeout or self.crl_enforcement_timeout
+        pem = self.node_cert_pem(node)
+        deadline = time.time() + timeout
+        statuses = None
+        while True:
+            _, parsed = self.diagnostics_validate(
+                certs=[pem], policy="Require", expect_success=False)
+            results = parsed.get("results", []) if isinstance(parsed, dict) else []
+            statuses = [entry.get("status") for entry in results
+                        if isinstance(entry, dict)]
+            if "revoked" in statuses:
+                self.log.info("{0}'s own certificate now reads revoked".format(
+                    node.ip))
+                return True
+            if time.time() >= deadline:
+                break
+            time.sleep(interval)
+        self.fail(
+            "{0}'s own certificate never read 'revoked' from CRL diagnostics "
+            "within {1}s (last: {2}). The revocation did not take, so anything "
+            "asserted after this would be about the fixture, not the "
+            "product.".format(node.ip, timeout, statuses))
 
     def restore_node_certs(self, crl_number=3, servers=None):
         """Re-publish node CRLs revoking nothing."""

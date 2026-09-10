@@ -263,11 +263,17 @@ class QueryCRLTests(QueryTests, CRLBase):
         self.fail(f"CRL did not load within {timeout}s")
 
     def _set_allow_expired_crls(self, enabled=True):
+        """Per node, and nested under cb_crl_manager -- a bare
+        `allow_expired_crls` sets a key nothing reads, so an expired CRL is
+        still refused at upload."""
         value = "true" if enabled else "false"
-        status, content = self.rest.diag_eval(
-            "ns_config:set(allow_expired_crls, {0}).".format(value))
-        if not status:
-            self.fail("Failed to set allow_expired_crls={0}: {1}".format(value, content))
+        code = ("ns_config:set({{node, node(), "
+                "{{cb_crl_manager, allow_expired_crls}}}}, {0}).".format(value))
+        for server in self.servers:
+            status, content = RestConnection(server).diag_eval(code)
+            if not status:
+                self.fail("Failed to set allow_expired_crls={0} on {1}: "
+                          "{2}".format(value, server.ip, content))
 
     def _set_policy(self, client_auth=None, node_to_node=None):
         payload = {"policyPerScope": {}}
