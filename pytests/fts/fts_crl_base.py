@@ -771,6 +771,7 @@ class FTSCRLBase(FTSBaseTest):
         pem = self.node_cert_pem(node)
         deadline = time.time() + timeout
         statuses = None
+        last_body = None
         while True:
             _, parsed = self.diagnostics_validate(
                 certs=[pem], policy="Require", expect_success=False)
@@ -781,14 +782,21 @@ class FTSCRLBase(FTSBaseTest):
                 self.log.info("{0}'s own certificate now reads revoked".format(
                     node.ip))
                 return True
+            last_body = parsed
             if time.time() >= deadline:
                 break
             time.sleep(interval)
+        try:
+            files = self.crl_utils.parse_content(self.rest.get_crl_files()[1])
+        except Exception as exc:
+            files = "could not list: {0}".format(exc)
         self.fail(
             "{0}'s own certificate never read 'revoked' from CRL diagnostics "
-            "within {1}s (last: {2}). The revocation did not take, so anything "
-            "asserted after this would be about the fixture, not the "
-            "product.".format(node.ip, timeout, statuses))
+            "within {1}s (statuses: {2}). Either the revocation did not take, "
+            "or diagnostics cannot express revocation for a node cert signed "
+            "by an x509main intermediate. Diagnostics body: {3!r}. Uploaded "
+            "CRL files: {4!r}.".format(
+                node.ip, timeout, statuses, last_body, files))
 
     def restore_node_certs(self, crl_number=3, servers=None):
         """Re-publish node CRLs revoking nothing."""

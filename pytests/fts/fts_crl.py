@@ -18,13 +18,16 @@ import datetime
 import ssl
 import time
 
+from lib.couchbase_helper.documentgenerator import SDKDataLoader
+
 import requests
 from cryptography import x509
 from cryptography.hazmat.primitives import serialization
 
 from lib.Cb_constants.CBServer import CbServer
 from pytests.security.crl_utils import (
-    CACHE_STATUS_VALUES, DIAGNOSTIC_STATUS_VALUES, KEY_ALGORITHMS,
+    CACHE_STATUS_VALUES, DIAGNOSTIC_OK_STATUSES,
+    DIAGNOSTIC_STATUS_VALUES, KEY_ALGORITHMS,
     RELOAD_RESULT_VALUES,
 )
 
@@ -1056,9 +1059,10 @@ class FTSCRL(FTSCRLBase):
         _, root_body = self.diagnostics_validate(certs=[root_pem])
         self.log.info("Self-signed root diagnostics: {0}".format(root_body))
         root_statuses = self.diag_statuses(root_body)
-        if root_statuses and set(root_statuses) != {"valid"}:
-            self.fail("Self-signed root should be 'valid' (not CRL-checked), "
-                      "got {0}".format(root_statuses))
+        if root_statuses and not set(root_statuses) <= DIAGNOSTIC_OK_STATUSES:
+            self.fail("Self-signed root should read not-revoked (one of {0}, "
+                      "not CRL-checked), got {1}".format(
+                          sorted(DIAGNOSTIC_OK_STATUSES), root_statuses))
         details = " ".join(self.diag_details(root_body)).lower()
         if "self-signed" not in details:
             self.log.warning(
@@ -1331,21 +1335,26 @@ class FTSCRL(FTSCRLBase):
 
 
     # ──────────────────────────────────────────────────────────────────
-    # Node-certificate revocation — FTS as the revoked provider (MB-73610)
+    # Node-certificate revocation — FTS as the revoked provider
     # ──────────────────────────────────────────────────────────────────
 
     def test_crl_query_to_fts_blocked_when_fts_node_cert_revoked(self):
-        """MB-73610 analogue — a consumer must not reach an FTS node whose cert is revoked.
+        """Query as a consumer must not reach an FTS node whose cert is revoked.
 
-        MB-73610 revoked a dedicated FTS node's certificate under
-        nodeToNode=Require and found Eventing's couchbase.searchQuery() kept
-        succeeding. This is the same shape with Query as the consumer: N1QL
-        SEARCH() reaches FTS over an internal, nodeToNode-scoped connection, so
-        once the FTS node's own certificate is revoked that hop must fail.
+        N1QL SEARCH() reaches FTS over an internal, nodeToNode-scoped
+        connection, so once the FTS node's own certificate is revoked that hop
+        should fail.
 
-        Deliberately drives the consumer, not the FTS REST port. A direct
-        client-cert query would exercise clientAuth; the property here is that
-        a *peer service* stops trusting a revoked node.
+        Drives the consumer, not the FTS REST port: a direct client-cert query
+        would exercise clientAuth, whereas the property here is that a *peer
+        service* stops trusting a revoked node.
+
+        NOTE: this expectation is modelled on MB-73610, which is an EVENTING
+        defect (couchbase.searchQuery() kept succeeding against a revoked FTS
+        node). Whether the same guarantee is specified for the Query -> FTS hop
+        has not been confirmed with the Query/CRL teams. A failure here is
+        evidence about Query, never about MB-73610 -- do not triage it onto
+        Eventing.
         """
         if not self._cb_cluster.get_random_n1ql_node():
             self.skipTest("Needs a node running the n1ql service")
@@ -1387,9 +1396,11 @@ class FTSCRL(FTSCRLBase):
             self.fail(
                 "SEARCH() still returned {0} hits after the FTS node's "
                 "certificate ({1}) was revoked under nodeToNode=Require. A "
-                "peer service must not reach a node whose certificate is "
-                "revoked — this is the MB-73610 failure mode.".format(
-                    after, fts_node.ip))
+                "peer service should not reach a node whose certificate is "
+                "revoked. This is the Query -> FTS analogue of MB-73610 (an "
+                "Eventing defect), not MB-73610 itself, and the guarantee is "
+                "not yet confirmed for Query -- check with the Query/CRL teams "
+                "before filing.".format(after, fts_node.ip))
         self.log.info("SEARCH() failed after the FTS node cert was revoked, "
                       "as required")
 
@@ -1403,6 +1414,91 @@ class FTSCRL(FTSCRLBase):
             "SEARCH() did not recover after un-revoking the FTS node cert: "
             "expected {0} hits, got {1}".format(baseline_hits, restored_hits))
         self.log.info("SEARCH() recovered after un-revocation")
+
+    def test_crl_kv_node_cert_revoked_during_ingestion(self):
+        """Records what KV -> FTS ingestion does when a KV node's cert is revoked.
+
+        KV feeds FTS over DCP, which under nodeToNode=Require is the same kind
+        of mTLS intra-cluster hop as the Query -> FTS and FTS -> FTS paths the
+        two tests above cover. Revocation is only evaluated at handshake (see
+        test_crl_existing_connection_survives_revocation), so a long-lived DCP
+        stream is expected to keep feeding until something forces a reconnect.
+
+        DELIBERATELY RECORDS RATHER THAN ASSERTS. No specification says when
+        ingestion must stop, and asserting an inferred expectation is how the
+        Query -> FTS analogue came to be reported as a product defect when the
+        revocation had simply not taken. This logs FINDING lines for triage and
+        only fails if the fixture itself is unsound.
+        """
+        kv_nodes = self._cb_cluster.get_kv_nodes()
+        fts_only = [n for n in self.fts_nodes
+                    if n.ip not in {k.ip for k in kv_nodes}]
+        victim = next((k for k in kv_nodes
+                       if k.ip not in {f.ip for f in self.fts_nodes}), None)
+        if victim is None or len(kv_nodes) < 2 or not fts_only:
+            self.skipTest(
+                "Needs a KV node that runs no fts service, a second KV node to "
+                "keep serving, and an fts node that runs no kv: have kv={0} "
+                "fts={1}".format([k.ip for k in kv_nodes],
+                                 [f.ip for f in self.fts_nodes]))
+        fts_node = fts_only[0]
+
+        index = self.create_and_load_test_index(index_name="fts_crl_kv")
+        baseline = self.assert_index_complete(
+            index, context="ingestion baseline before revocation")
+
+        self.publish_node_crls(crl_number=1)
+        self.set_crl_policy(client_auth="Disabled", node_to_node="Require")
+        self.revoke_node_cert(victim, crl_number=2)
+        self.wait_for_node_cert_revoked(victim)
+
+        # Phase A: does an established DCP stream keep feeding?
+        after_write = self._ingest_probe(
+            index, baseline, "kvrevoked-a-",
+            "A (revoked, no reconnect forced)")
+
+        # Phase B: force cbft to re-establish its DCP streams.
+        self.restart_cbft(fts_node)
+        after_restart = self._ingest_probe(
+            index, after_write, "kvrevoked-b-",
+            "B (after cbft restart forced a DCP reconnect)")
+
+        self.log.info(
+            "FINDING -- KV node {0} cert revoked under nodeToNode=Require. "
+            "Indexed docs: baseline={1}, after writes={2}, after cbft "
+            "restart + writes={3}. Ingestion continuing in A and stopping in "
+            "B would mean revocation is enforced only on reconnect, which is "
+            "consistent with handshake-time evaluation.".format(
+                victim.ip, baseline, after_write, after_restart))
+
+        # The only hard requirement: the cluster is still diagnosable, so a
+        # later test is not handed a wedged fixture.
+        status, body = self.diagnostics_status()
+        self.assertTrue(
+            status and body,
+            "CRL diagnostics stopped responding after revoking the KV node's "
+            "certificate; the fixture is wedged: {0}".format(body))
+
+    def _ingest_probe(self, index, previous, key_prefix, phase,
+                      num_items=1000, timeout=180, interval=10):
+        """Write a distinct batch and record whether the index absorbs it."""
+        gen = SDKDataLoader(num_ops=num_items, percent_create=100,
+                            key_prefix=key_prefix, json_template="Person")
+        self.load_data(generator=gen, num_items=num_items)
+        deadline = time.time() + timeout
+        count = previous
+        while time.time() < deadline:
+            count = index.get_indexed_doc_count()
+            if count > previous:
+                break
+            time.sleep(interval)
+        self.log.info(
+            "FINDING -- phase {0}: wrote {1} docs under key prefix {2!r}; "
+            "indexed count {3} -> {4} within {5}s ({6})".format(
+                phase, num_items, key_prefix, previous, count, timeout,
+                "INGESTION CONTINUED" if count > previous
+                else "NO NEW DOCS INDEXED"))
+        return count
 
     def test_crl_scatter_gather_with_revoked_fts_node(self):
         """Plan FTS-N2N-03 — a refused participant must never silently truncate results.

@@ -177,6 +177,10 @@ class VectorDataset:
         """
         print("Setting necessary paths for the dataset")
         self.dataset_path = self.download_dataset()
+        if not self.dataset_path:
+            print("Dataset %r could not be downloaded; download_dataset() "
+                  "returned nothing" % self.dataset_name)
+            return False
         if not os.path.exists(self.dataset_path):
             print("Dataset Dir {self.dataset_path} does not exist")
             return False

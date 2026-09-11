@@ -22,7 +22,11 @@ RELOAD_RESULT_VALUES = {
     "loaded", "failed", "notAttempted", "uploaded", "notDownloaded",
     "checksumMismatch", "readError",
 }
-DIAGNOSTIC_STATUS_VALUES = {"valid", "revoked", "undetermined", "failed"}
+# MB-73679 renames the not-revoked status ("valid" -> "good"/"not_revoked"),
+# so accept every spelling rather than pinning one build's wording.
+DIAGNOSTIC_OK_STATUSES = frozenset({"valid", "good", "not_revoked"})
+DIAGNOSTIC_STATUS_VALUES = (DIAGNOSTIC_OK_STATUSES
+                            | {"revoked", "undetermined", "failed"})
 
 
 class CRLUtils:
