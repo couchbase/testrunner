@@ -8,6 +8,7 @@ from lib.couchbase_helper.encryption_at_rest_helper import EncryptionAtRestHelpe
 from lib.membase.helper.encryption_at_rest_helper import EncryptionUtil
 from lib.remote.remote_util import RemoteMachineShellConnection
 from pytests.eventing.eventing_base import EventingBaseTest
+from pytests.eventing.eventing_crl_callable import EventingCRLCallable
 
 log = logging.getLogger()
 
@@ -60,6 +61,14 @@ class EventingEncryptionAtRest(EventingBaseTest):
         self.ear_helper = EncryptionAtRestHelper(self.log)
         self.encryption_util.bypass_encryption_restrictions(server=self.master)
 
+        # clientAuth CRL Configuration
+        self.clientauth_crl = self.input.param('clientauth_crl', False)
+        if self.clientauth_crl:
+            eventing_ssl_port = self.input.param('eventing_ssl_port', 18096)
+            self.clientauth_crl_mode = self.input.param('clientauth_crl_mode', 'Require')
+            self.crl = EventingCRLCallable(self.master, self.servers, log=self.log,
+                                           eventing_ssl_port=eventing_ssl_port)
+
     def tearDown(self):
         try:
             if self.log_encryption_enabled:
@@ -71,7 +80,71 @@ class EventingEncryptionAtRest(EventingBaseTest):
                 self.rest.delete_secret(secret_id)
             except Exception as e:
                 self.log.warning("Failed to delete secret {}: {}".format(secret_id, e))
+        if getattr(self, 'clientauth_crl', False):
+            try:
+                self.crl.cleanup()
+            except Exception as e:
+                self.log.warning("clientAuth CRL cleanup failed: %s" % str(e))
         super(EventingEncryptionAtRest, self).tearDown()
+
+    # ---- clientAuth CRL helpers ----
+
+    def _setup_clientauth_crl_on_node(self, eventing_node):
+        """
+        Deploy a CA-signed node cert + enable clientCertAuth + revoke client 'a' on
+        `eventing_node`, the fixed target all clientAuth CRL probes in this test will
+        keep hitting regardless of whatever log-encryption state change happens to
+        it. Call once, before that state change starts.
+        """
+        self.crl.trust_ca_on_cluster(self.crl.ca_cert, server=eventing_node)
+        self.crl.deploy_node_cert(eventing_node)
+        self._crl_clients, self._crl_ca_path = self.crl.setup_clientauth_crl(mode=self.clientauth_crl_mode)
+        # baseline diagnostics snapshot (filename, checksum, lastReload) -- compared
+        # against a post-state-change snapshot later to confirm the CRL config
+        # itself wasn't silently reloaded/reset, not just that it still happens to
+        # behave correctly
+        self._crl_baseline_status = self.crl.wait_for_crl_poll_interval(self.crl.crl_filename)
+
+    def _diagnostics_entry_for_node(self, diagnostics, node):
+        for key, entry in diagnostics.items():
+            if key.split(":")[0] == node.ip:
+                return entry
+        return None
+
+    def _assert_clientauth_crl_state_persisted(self, eventing_node):
+        """
+        Compares the CRL file's diagnostics entry (checksum) on `eventing_node`
+        before vs. after the log-encryption state change -- catches a silent
+        reload/reset of the CRL config that _assert_clientauth_crl_gating's
+        behavior-only probe could miss.
+        """
+        current_status = self.crl.wait_for_crl_poll_interval(self.crl.crl_filename)
+        baseline_entry = self._diagnostics_entry_for_node(self._crl_baseline_status, eventing_node)
+        current_entry = self._diagnostics_entry_for_node(current_status, eventing_node)
+        self.assertIsNotNone(baseline_entry, "No pre-state-change CRL baseline captured for {0}".format(eventing_node.ip))
+        self.assertIsNotNone(current_entry, "CRL file {0} no longer reported on {1} after the state change".format(
+            self.crl.crl_filename, eventing_node.ip))
+        self.assertEqual(baseline_entry.get("checksum"), current_entry.get("checksum"),
+                         "CRL checksum for {0} changed on {1}: {2} -> {3}".format(
+                             self.crl.crl_filename, eventing_node.ip,
+                             baseline_entry.get("checksum"), current_entry.get("checksum")))
+        self.log.info("clientAuth CRL state confirmed persisted on {0} (checksum unchanged)".format(eventing_node.ip))
+
+    def _assert_clientauth_crl_gating(self, eventing_node):
+        """
+        Revoked client ('a') must be TLS-rejected; the control client ('b') must
+        still be accepted -- proves clientAuth CRL enforcement survived whatever
+        log-encryption state change happened on this fixed eventing node.
+        """
+        revoked, valid = self._crl_clients['a'], self._crl_clients['b']
+        self.assertFalse(
+            self.crl.probe_eventing_ssl(eventing_node, revoked['cert_path'], revoked['key_path'], self._crl_ca_path),
+            "Revoked clientAuth cert was NOT rejected on {0}".format(eventing_node.ip))
+        self.assertTrue(
+            self.crl.probe_eventing_ssl(eventing_node, valid['cert_path'], valid['key_path'], self._crl_ca_path),
+            "Valid clientAuth cert was unexpectedly rejected on {0}".format(eventing_node.ip))
+        self.log.info("clientAuth CRL gating confirmed on {0}: revoked cert rejected, valid cert accepted".format(
+            eventing_node.ip))
 
 
     # -------------------------- Helper Functions --------------------------
@@ -615,6 +688,10 @@ class EventingEncryptionAtRest(EventingBaseTest):
         log_dir = self._get_log_dir()
         eventing_node = self.get_nodes_from_services_map(
             service_type="eventing", get_all_nodes=False)
+        # clientAuth CRL: revoked cert rejected, valid cert accepted
+        if getattr(self, 'clientauth_crl', False):
+            self._setup_clientauth_crl_on_node(eventing_node)
+            self._assert_clientauth_crl_gating(eventing_node)
         self.sleep(15, "Wait for app-log writes to settle before snapshot")
 
         files_before = self._list_log_files(eventing_node, log_dir)
@@ -638,6 +715,11 @@ class EventingEncryptionAtRest(EventingBaseTest):
             self._file_is_encrypted(eventing_node, latest_after),
             "Latest log {} is not encrypted after enabling log encryption".format(
                 latest_after))
+
+        # clientAuth CRL: checksum unchanged, still enforced after the state change
+        if getattr(self, 'clientauth_crl', False):
+            self._assert_clientauth_crl_state_persisted(eventing_node)
+            self._assert_clientauth_crl_gating(eventing_node)
 
         rotation_pair = self._find_state_change_pair(
             eventing_node, files_after,
@@ -926,6 +1008,10 @@ class EventingEncryptionAtRest(EventingBaseTest):
         log_dir = self._get_log_dir()
         eventing_node = self.get_nodes_from_services_map(
             service_type="eventing", get_all_nodes=False)
+        # clientAuth CRL: revoked cert rejected, valid cert accepted
+        if getattr(self, 'clientauth_crl', False):
+            self._setup_clientauth_crl_on_node(eventing_node)
+            self._assert_clientauth_crl_gating(eventing_node)
         self.sleep(15, "Wait for initial app-log writes to settle")
 
         files_before = self._list_log_files(eventing_node, log_dir)
@@ -954,6 +1040,11 @@ class EventingEncryptionAtRest(EventingBaseTest):
         self.assertTrue(
             self._file_is_encrypted(eventing_node, latest_after),
             "Latest log {} is not encrypted after DEK rotation".format(latest_after))
+
+        # clientAuth CRL: checksum unchanged, still enforced after DEK rotation
+        if getattr(self, 'clientauth_crl', False):
+            self._assert_clientauth_crl_state_persisted(eventing_node)
+            self._assert_clientauth_crl_gating(eventing_node)
 
         pre_rotation_files = [f for f in files_after if _re.search(r'\.\d+$', f)]
         for path in pre_rotation_files:

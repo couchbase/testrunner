@@ -13,6 +13,7 @@ from lib.collection.collections_rest_client import CollectionsRest
 from membase.api.exception import RebalanceFailedException
 from pytests.security.ntonencryptionBase import ntonencryptionBase
 from pytests.security.jwt_utils import JWTUtils
+from pytests.eventing.eventing_crl_callable import EventingCRLCallable
 from pytests.fts.fts_callable import FTSCallable
 from lib.Cb_constants.CBServer import CbServer
 from TestInput import TestInputSingleton
@@ -31,7 +32,7 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
         TestInputSingleton.input.test_params.setdefault('dst_bucket_name', 'eventing_dst')
         TestInputSingleton.input.test_params.setdefault('dst_bucket_name1', 'eventing_dst_timers')
         TestInputSingleton.input.test_params.setdefault('metadata_bucket_name', 'metadata')
-        TestInputSingleton.input.test_params.setdefault('host', 'local')
+        TestInputSingleton.input.test_params.setdefault('host', 'https://postman-echo.com/')
         super(EventingUpgrade, self).setUp()
         try:
             requests.get(self.hostname, timeout=10)
@@ -78,6 +79,10 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
         self.fts_callable = FTSCallable(nodes=self.servers, es_validate=False)
         # Handler tracking — populated during deploy, used by pause/resume helpers
         self.all_handler_names = []
+        self.clientauth_crl = self.input.param('clientauth_crl', False)
+        if self.clientauth_crl:
+            self.clientauth_crl_eventing_ssl_port = self.input.param('eventing_ssl_port', 18096)
+            self.clientauth_crl_mode = self.input.param('clientauth_crl_mode', 'Require')
         log.info("==============  EventingUpgrade setup has completed ==============")
 
     def _verify_doc_count(self, namespace, expected_count, *args, **kwargs):
@@ -112,6 +117,11 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
                 self.rest.delete_secret(secret_id)
             except Exception as e:
                 log.warning("Failed to delete encryption secret {}: {}".format(secret_id, e))
+        if getattr(self, 'crl', None) is not None:
+            try:
+                self.crl.cleanup()
+            except Exception as e:
+                log.warning("clientAuth CRL cleanup failed: %s" % str(e))
         super(EventingUpgrade, self).tearDown()
         log.info("==============  EventingUpgrade tearDown has completed ==============")
 
@@ -205,6 +215,8 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
         self._kill_eventing_producer_if_configured()
         # Post-upgrade infra
         self._enable_tls_if_configured()
+        # clientAuth CRL: revoked cert rejected, valid cert accepted, on the upgraded cluster
+        self._verify_clientauth_crl_post_upgrade()
         self._verify_pre_upgrade_handlers_survived()
         # Re-assert memory quotas after upgrade — swapped nodes may have different auto-detected values
         self._set_memory_quotas()
@@ -249,6 +261,8 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
         self._kill_eventing_producer_if_configured()
         # Post-upgrade infra
         self._enable_tls_if_configured()
+        # clientAuth CRL: revoked cert rejected, valid cert accepted, on the upgraded cluster
+        self._verify_clientauth_crl_post_upgrade()
         self._verify_pre_upgrade_handlers_survived()
         self._set_memory_quotas()
         # Post-upgrade features: collections, travel-sample, FTS, analytics, new handlers
@@ -775,7 +789,7 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
             src_namespace=sbm_ns, meta_namespace=meta_ns,
             collection_bindings=["src_bucket.{0}.rw".format(sbm_ns)])
         self.create_function_with_collection(
-            "curl", "handler_code/ABO/curl_get.js",
+            "curl", "handler_code/ABO/curl_get_postman.js",
             src_namespace=src_ns, meta_namespace=meta_ns,
             collection_bindings=["dst_bucket.{0}.rw".format(
                 self._ns(self.dst_bucket_name, self.curl_collection_name))],
@@ -881,6 +895,38 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
         self._set_log_encryption_method("encryptionKey", key_id=key_id)
         eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
         self._verify_log_encrypted_on_node(eventing_node)
+
+    ###########################################################################
+    # clientAuth CRL
+    ###########################################################################
+
+    def _setup_clientauth_crl_on_node(self, eventing_node):
+        """clientAuth CRL: deploy a CA-signed node cert, enable clientCertAuth, revoke client 'a'."""
+        self.crl.trust_ca_on_cluster(self.crl.ca_cert, server=eventing_node)
+        self.crl.deploy_node_cert(eventing_node)
+        self._crl_clients, self._crl_ca_path = self.crl.setup_clientauth_crl(mode=self.clientauth_crl_mode)
+
+    def _assert_clientauth_crl_gating(self, eventing_node):
+        """clientAuth CRL: revoked cert rejected, valid cert accepted."""
+        revoked, valid = self._crl_clients['a'], self._crl_clients['b']
+        self.assertFalse(
+            self.crl.probe_eventing_ssl(eventing_node, revoked['cert_path'], revoked['key_path'], self._crl_ca_path),
+            "Revoked clientAuth cert was NOT rejected on {0}".format(eventing_node.ip))
+        self.assertTrue(
+            self.crl.probe_eventing_ssl(eventing_node, valid['cert_path'], valid['key_path'], self._crl_ca_path),
+            "Valid clientAuth cert was unexpectedly rejected on {0}".format(eventing_node.ip))
+
+    def _verify_clientauth_crl_post_upgrade(self):
+        """clientAuth CRL: set up and gate on the current eventing node, once the
+        cluster is fully on upgrade_version. self.crl is constructed here, not in
+        setUp(), against the post-upgrade self.master """
+        if not getattr(self, 'clientauth_crl', False):
+            return
+        self.crl = EventingCRLCallable(self.master, self.servers, log=log,
+                                       eventing_ssl_port=self.clientauth_crl_eventing_ssl_port)
+        eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
+        self._setup_clientauth_crl_on_node(eventing_node)
+        self._assert_clientauth_crl_gating(eventing_node)
 
     def _run_full_mutation_cycle(self, include_fts_analytics=True):
         """Load data, verify all handlers processed, delete data, verify cleanup."""
@@ -1398,4 +1444,3 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
 # TO-DO: pending patches to track for this suite
 #   - Import/Export Handlers
 #   - Base64/XATTRS
-#   - OnDeploy
