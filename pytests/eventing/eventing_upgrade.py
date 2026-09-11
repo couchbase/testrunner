@@ -26,7 +26,7 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
         TestInputSingleton.input.test_params.setdefault('dst_bucket_name', 'eventing_dst')
         TestInputSingleton.input.test_params.setdefault('dst_bucket_name1', 'eventing_dst_timers')
         TestInputSingleton.input.test_params.setdefault('metadata_bucket_name', 'metadata')
-        TestInputSingleton.input.test_params.setdefault('host', 'local')
+        TestInputSingleton.input.test_params.setdefault('host', 'https://postman-echo.com/')
         super(EventingUpgrade, self).setUp()
         try:
             requests.get(self.hostname, timeout=10)
@@ -642,10 +642,7 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
                 self.pause_handler_by_name("timers")
                 self.resume_handler_by_name("timers")
             except Exception:
-                # Debugging aid: hold the cluster in its failed state for manual
-                # inspection before the test fails and tearDown tears it down.
-                log.exception("Bouncing 'timers' handler for TLS failed; sleeping 1hr before failing")
-                self.sleep(3600, "Sleeping 1hr for manual debugging after TLS handler-bounce failure")
+                log.exception("Bouncing 'timers' handler for TLS failed")
                 raise
 
     def _verify_pre_upgrade_handlers_survived(self):
@@ -725,7 +722,7 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
             src_namespace=sbm_ns, meta_namespace=meta_ns,
             collection_bindings=["src_bucket.{0}.rw".format(sbm_ns)])
         self.create_function_with_collection(
-            "curl", "handler_code/ABO/curl_get.js",
+            "curl", "handler_code/ABO/curl_get_postman.js",
             src_namespace=src_ns, meta_namespace=meta_ns,
             collection_bindings=["dst_bucket.{0}.rw".format(
                 self._ns(self.dst_bucket_name, self.curl_collection_name))],
