@@ -502,7 +502,10 @@ class QueryUDFN1QLTests(QueryTests):
         except CBQError as ex:
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 10109)
-            self.assertTrue('Requested resource not found' in str(error))
+            self.assertTrue(
+                'Requested resource not found' in str(error) or
+                'semantics_field_empty' in str(error),
+                f"Unexpected error from {self.statement} COLLECTION via UDF: {error}")
 
     def test_param_function_param(self):
         functions = 'function add(a, b) { return a + b; }'

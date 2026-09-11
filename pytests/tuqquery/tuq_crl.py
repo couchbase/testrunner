@@ -2789,8 +2789,8 @@ class QueryCRLTests(QueryTests, CRLBase):
         time.sleep(10)
         self.log.info(f"Spare node {spare.ip} prepped with TestCA1 cert — rebalancing in")
 
-        # Rebalance in the spare node
-        self.cluster.rebalance(self.servers[:2], to_add=[spare], to_remove=[])
+        # Rebalance in the spare node with index service so port 19102 is available
+        self.cluster.rebalance(self.servers[:2], to_add=[spare], to_remove=[], services=['index,kv'])
         self.log.info(f"Rebalance-in of {spare.ip} completed")
 
         # Verify CRL enforcement on the NEW node specifically — proves auto-inheritance

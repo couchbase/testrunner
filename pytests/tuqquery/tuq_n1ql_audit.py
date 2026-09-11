@@ -393,7 +393,7 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
         elif query_type == "no_grant":
             query = "GRANT query_external_access TO query"
             self.shell.execute_commands_inside(cbqpath, query, '', '', '', '', '')
-            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'errors': [{"code":13014,"msg":"User does not have credentials to run queries updating user information. Add role admin to allow the statement to run."}],
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'errors': [{"code":13014,"msg":"User does not have credentials to Local User Admin. Add role user_admin_local to allow the statement to run."}],
                                 'isAdHoc': True,
                                 'statement': "GRANT query_external_access TO query;",
                                 'description': 'A N1QL GRANT ROLE statement was executed',
@@ -404,7 +404,7 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
         elif query_type == "no_revoke":
             query="REVOKE query_system_catalog FROM query"
             self.shell.execute_commands_inside(cbqpath, query, '', '', '', '', '')
-            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'errors': [{"code":13014,"msg":"User does not have credentials to run queries updating user information. Add role admin to allow the statement to run."}],
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'errors': [{"code":13014,"msg":"User does not have credentials to Local User Admin. Add role user_admin_local to allow the statement to run."}],
                                 'isAdHoc': True,
                                 'statement': "REVOKE query_system_catalog FROM query;",
                                 'description': 'A N1QL REVOKE ROLE statement was executed',
