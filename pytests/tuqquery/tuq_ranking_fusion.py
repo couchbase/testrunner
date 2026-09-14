@@ -848,6 +848,9 @@ class QueryRankingFusionTests(QueryTests):
         with self.assertRaises(CBQError):
             self._run_fusion(opt, a, b)
 
+    # A pathId naming a field none of the arm rows carry is an evaluation
+    # error, not an empty result set: reciprocal_fusion() cannot key the rows
+    # it was handed, so ExpressionScan fails with 5010.
     def test_pathid_points_at_missing_field(self):
         opt = """
             {"fusion":"unionall","scorer":"rsf","score":true,"limit":4,
@@ -858,5 +861,25 @@ class QueryRankingFusionTests(QueryTests):
         """
         a = '(SELECT RAW r1 FROM [{"id":"k01","score":10}] AS r1)'
         b = '(SELECT RAW r1 FROM [{"id":"k11","score":60}] AS r1)'
-        results = self._run_fusion(opt, a, b)
-        self.assertEqual(results, [])
+        try:
+            results = self._run_fusion(opt, a, b)
+            self.fail(f"Query should have failed with error 5010 but returned: {results}")
+        except CBQError as ex:
+            error = self.process_CBQE(ex)
+            self.log.info(f"[ranking_fusion] got expected error:\n{error}")
+            self.assertEqual(error['code'], 5010, f"Error code is wrong, please check the error: {error}")
+            self.assertEqual(error['msg'], 'Error evaluating ExpressionScan',
+                             f"Error message is wrong, please check the error: {error}")
+            reason = error['reason']
+            self.assertEqual(reason['_level'], 'exception', f"Error reason is wrong, please check the error: {error}")
+            self.assertEqual(reason['code'], 5010, f"Error reason is wrong, please check the error: {error}")
+            self.assertEqual(reason['key'], 'execution.evaluation_error',
+                             f"Error reason is wrong, please check the error: {error}")
+            self.assertEqual(reason['message'], 'Error evaluating reciprocal_fusion',
+                             f"Error reason is wrong, please check the error: {error}")
+            self.assertEqual(reason['cause'], {'cause': "'2' results Objects must have 'nonexistent'"},
+                             f"Error cause is wrong, please check the error: {error}")
+            # Only the source file is stable here - the line number in
+            # "func_fusion:336" moves whenever query source shifts.
+            self.assertTrue(reason['caller'].startswith('func_fusion:'),
+                            f"Error caller is wrong, please check the error: {error}")
