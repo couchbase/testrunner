@@ -142,6 +142,10 @@ class HANDLER_CODE_FTS_QUERY_SUPPORT:
     FTS_QUERY_SUPPORT_MATCH_QUERY_ANALYTICS = 'handler_code/fts_query_support/match_query_analytics_query.js'
     FTS_QUERY_SUPPORT_MATCH_QUERY_XATTRS = 'handler_code/fts_query_support/match_query_xattrs.js'
 
+class HANDLER_CODE_VECTOR_SEARCH:
+    VECTOR_SEARCH_KNN_QUERY = 'handler_code/vector_search/knn_query.js'
+    VECTOR_SEARCH_KNN_QUERY_INTERNAL = 'handler_code/vector_search/knn_query_internal.js'
+
 class HANDLER_CODE_ERROR:
     N1QL_SYNTAX='handler_code/handler_code_error/n1ql_syntax.js'
     GLOBAL_VARIABLE='handler_code/handler_code_error/global_variable.js'
