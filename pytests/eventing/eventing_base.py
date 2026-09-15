@@ -4,6 +4,7 @@ import os
 import logging
 import random
 import socket
+import time
 
 from collection.collections_rest_client import CollectionsRest
 from couchbase_helper.tuq_helper import N1QLHelper
@@ -1137,15 +1138,20 @@ class EventingBaseTest(QueryHelperTests):
         eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
         keyspace = namespace.split(".")
         count=0
+        compacted=False
+        end_time = time.time() + timeout
         actual_count = self.stat.get_collection_item_count_cumulative(keyspace[0], keyspace[1],
                                                                       keyspace[2], self.get_kv_nodes())
-        while actual_count != expected_count and count < 20:
+        while actual_count != expected_count and count < 20 and time.time() < end_time:
             message = ("Waiting for mutation processing to complete, Current count : {0} Expected count : {1}".
                        format(actual_count, expected_count))
             self.sleep(timeout//20, message=message)
             curr_items=actual_count
-            ### compact buckets when mutation count not progressing. Helpful for expiry events
-            if count==10:
+            ### compact buckets when mutation count not progressing. Helpful for expiry events.
+            ### also compact once we are halfway through the timeout, since a count that keeps
+            ### drifting (magma/DGM eviction, compaction) never trips the stagnation counter below
+            if not compacted and (count==10 or time.time() >= end_time - timeout//2):
+                compacted=True
                 self.rest = RestConnection(self.master)
                 self.bucket_compaction()
             actual_count = self.stat.get_collection_item_count_cumulative(keyspace[0], keyspace[1],
@@ -1156,6 +1162,10 @@ class EventingBaseTest(QueryHelperTests):
                 count=0
             if expected_duplicate and actual_count > expected_count:
                 break
+        if actual_count != expected_count and time.time() >= end_time:
+            log.info("Timed out after {0}s waiting for mutation processing to complete on {1}. "
+                     "Current count : {2} Expected count : {3}".format(timeout, namespace, actual_count,
+                                                                       expected_count))
         if actual_count != expected_count:
             self.print_eventing_stats_from_all_eventing_nodes()
             total_dcp_backlog = 0
