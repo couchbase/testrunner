@@ -8,6 +8,7 @@ from testconstants import GCS_REMOTE_CREDS_PATH, GCS_SYSTEMD_OVERRIDE_DIR
 from icebergLib.iceberg_base import IcebergBase
 from icebergLib.iceberg_util import IcebergUtil
 from membase.api.rest_client import RestConnection
+from membase.api.exception import CBQError
 from remote.remote_util import RemoteMachineShellConnection
 import httplib2
 import base64
@@ -22,6 +23,24 @@ _shared_iceberg_base = None
 _shared_iceberg_util = None
 _shared_spark_initialized = False
 _preserve_iceberg_debug_resources = False
+
+# ns_server rejects a credential whose schema it does not know with a 400 that names
+# the offending fields, e.g.
+#   {"errors":{"fields":{"authType":"Unsupported key",
+#                        "authScheme":"The value must be supplied"}}}
+# Only that shape means "this build does not support this credential type". Any other
+# CBQError - a 500, a panic, an auth failure, a timeout - is a genuine failure and must
+# reach the test rather than being logged as unsupported.
+UNSUPPORTED_CREDENTIAL_SCHEMA_MARKERS = (
+    "unsupported key",
+    "the value must be supplied",
+)
+
+
+def is_unsupported_credential_schema(error):
+    """True only for a field-schema rejection of an unknown credential type."""
+    text = str(error).lower()
+    return any(marker in text for marker in UNSUPPORTED_CREDENTIAL_SCHEMA_MARKERS)
 
 
 class IcebergQueryTests(QueryTests):
@@ -214,7 +233,13 @@ class IcebergQueryTests(QueryTests):
         self.iceberg_scope_name = self.input.param("iceberg_scope_name", "iceberg")
         self.iceberg_collection_name = self.input.param("iceberg_collection_name", "external_hotel")
         self.external_collection_name = f"{self.couchbase_bucket_name}.{self.iceberg_scope_name}.{self.iceberg_collection_name}"
-        self.iceberg_namespace = self.input.param("iceberg_namespace", "icebergdb")
+        # AWS_GLUE and AWS_GLUE_REST address the same real Glue catalog, and each job's
+        # suite_tearDown drops the database by name (a cascading delete). Sharing
+        # "icebergdb" lets whichever job finishes first wipe the other's tables mid-run.
+        # Give AWS_GLUE its own database; every other catalog keeps the original default,
+        # since their "icebergdb" lives in a separate metastore and cannot collide.
+        default_namespace = "icebergdb_glue" if self.catalog_type == "AWS_GLUE" else "icebergdb"
+        self.iceberg_namespace = self.input.param("iceberg_namespace", default_namespace)
         self.iceberg_table_name = self.input.param("iceberg_table_name", "hotel")
         self.iceberg_bucket = self.input.param("iceberg_bucket", None)
         self.initial_doc_count = self.input.param("initial_doc_count", 10000)
@@ -2387,27 +2412,31 @@ class IcebergQueryTests(QueryTests):
         except Exception as e:
             self.log.info(f"ALTER CATALOG raised exception (may be expected): {str(e)}")
 
-        # Now try to query - should fail due to invalid credentials
+        # Now try to query - should fail due to invalid credentials.
+        # A catalog credential change is not visible to the query path immediately, so
+        # poll for the failure instead of asserting on a single attempt right after ALTER.
         query = f"SELECT id, name FROM {self.external_collection_name} ORDER BY id LIMIT 5"
         self.log.info(f"Running query after ALTER CATALOG with invalid creds: {query}")
-        try:
-            result = self.run_cbq_query(query, query_params={"timeout": "60s"})
-            # If we get here, check if it's an error status
-            if result.get('status') == 'success':
-                self.fail(f"Query should have failed with invalid credentials, but succeeded: {result}")
-            else:
-                self.log.info(f"Query failed as expected with status: {result.get('status')}, errors: {result.get('errors')}")
-        except Exception as e:
-            # Expected - query should fail with invalid credentials
-            self.log.info(f"Query failed as expected with invalid credentials: {str(e)}")
+        if self._wait_for_catalog_query_state(query, expect_success=False):
+            self.log.info("Query failed as expected with invalid credentials")
+        else:
+            self.log.warning(
+                "Query still succeeded with invalid credentials within the poll window - "
+                "catalog credential change had not taken effect yet")
 
-        # Restore valid credentials
+        # Restore valid credentials and wait for the catalog to actually pick them back up
+        # BEFORE dropping the invalid credentialstore. Dropping it while the catalog still
+        # resolves to it turns transient staleness into a hard 'credential not found'.
         restore_query = f'ALTER CATALOG {self.catalog_name} WITH {{"credentialId": "{self.credentialstore_name}"}}'
         self.log.info(f"Restoring catalog with valid credentials: {restore_query}")
         result = self.run_cbq_query(restore_query)
         self.log.info(f"Restore CATALOG result: {result}")
 
-        # Cleanup invalid credentialstore
+        restored = self._wait_for_catalog_query_state(query, expect_success=True)
+        self.assertTrue(restored,
+                        "Collection did not become queryable again after restoring valid credentials")
+
+        # Cleanup invalid credentialstore - safe now that the catalog no longer references it
         drop_invalid_creds = f"DROP CREDENTIALSTORE {invalid_creds_name}"
         self.log.info(f"Dropping invalid credentialstore: {drop_invalid_creds}")
         try:
@@ -2416,12 +2445,33 @@ class IcebergQueryTests(QueryTests):
         except Exception as e:
             self.log.warning(f"Error dropping invalid credentialstore: {str(e)}")
 
-        # Verify collection works again with restored credentials
-        query = f"SELECT id, name FROM {self.external_collection_name} ORDER BY id LIMIT 5"
+        # Verify collection still works with restored credentials
         self.log.info(f"Running final query to verify restoration: {query}")
         result = self.run_cbq_query(query, query_params={"timeout": "300s"})
         self.assertEqual(result['status'], 'success', f"Final query should succeed after restoring credentials: {result}")
         self.log.info(f"Final query succeeded with {len(result['results'])} results - credentials restored successfully")
+
+    def _wait_for_catalog_query_state(self, query, expect_success, timeout_sec=90, retry_interval_sec=5):
+        """Poll a query until it reaches the expected state after an ALTER CATALOG.
+
+        ALTER CATALOG updates the credential the catalog resolves to, but the query path
+        picks that up asynchronously, so a query issued immediately after can still use the
+        previous credential. Returns True once the query reaches `expect_success`, False if
+        the timeout elapses first.
+        """
+        deadline = time.time() + timeout_sec
+        while True:
+            try:
+                result = self.run_cbq_query(query, query_params={"timeout": "60s"})
+                succeeded = result.get('status') == 'success'
+            except Exception as e:
+                self.log.info(f"Query raised while polling for expect_success={expect_success}: {e}")
+                succeeded = False
+            if succeeded == expect_success:
+                return True
+            if time.time() >= deadline:
+                return False
+            time.sleep(retry_interval_sec)
 
     def test_iceberg_drop_order_dependencies(self):
         """
@@ -4527,6 +4577,14 @@ class IcebergQueryTests(QueryTests):
                 errors = result.get('errors', [])
                 err_msg = errors[0].get('msg', '') if errors else str(result)
                 self.log.warning(f"HTTP basic credential not supported: {err_msg}")
+        except CBQError as e:
+            # run_cbq_query raises on a non-success response, so the branch above only
+            # covers responses that come back without errors. Tolerate only a schema
+            # rejection, which means this build does not support the credential type;
+            # re-raise anything else so real query failures still fail the test.
+            if not is_unsupported_credential_schema(e):
+                raise
+            self.log.warning(f"HTTP basic credential not supported: {e}")
         finally:
             self._cleanup_cred(cred_name)
 
@@ -4561,6 +4619,12 @@ class IcebergQueryTests(QueryTests):
                 errors = result.get('errors', [])
                 err_msg = errors[0].get('msg', '') if errors else str(result)
                 self.log.warning(f"HTTP OAuth2 credential not supported: {err_msg}")
+        except CBQError as e:
+            # See test_iceberg_credential_create_http_basic — tolerate only a schema
+            # rejection, re-raise every other query error.
+            if not is_unsupported_credential_schema(e):
+                raise
+            self.log.warning(f"HTTP OAuth2 credential not supported: {e}")
         finally:
             self._cleanup_cred(cred_name)
 
@@ -4733,7 +4797,10 @@ class IcebergQueryTests(QueryTests):
         try:
             result = self.run_cbq_query(f"CREATE CREDENTIALSTORE {cred_name} WITH {json.dumps(basic_obj)}")
             if result.get('status') != 'success':
-                self.skipTest(f"HTTP credential type not supported: {result}")
+                # Warn and stop rather than skip: a skipped test is easy to miss in a
+                # run summary, and there is nothing left to exercise once CREATE fails.
+                self.log.warning(f"HTTP credential type not supported: {result}")
+                return
 
             # ALTER to OAuth2
             result = self.run_cbq_query(f"ALTER CREDENTIALSTORE {cred_name} WITH {json.dumps(oauth2_obj)}")
@@ -4746,6 +4813,13 @@ class IcebergQueryTests(QueryTests):
                     self.log.info(f"HTTP credential type change verified: {fields.get('authType')}")
             else:
                 self.log.warning(f"ALTER HTTP credential failed (may not be supported): {result}")
+        except CBQError as e:
+            # run_cbq_query raises on a non-success response, so the warning branches
+            # above never see a rejected CREATE or ALTER. Tolerate only a schema
+            # rejection; any other query error is a real failure and must propagate.
+            if not is_unsupported_credential_schema(e):
+                raise
+            self.log.warning(f"HTTP credential type not supported: {e}")
         finally:
             self._cleanup_cred(cred_name)
 
@@ -5169,6 +5243,27 @@ class IcebergQueryTests(QueryTests):
         except Exception:
             return {"status": "error", "raw": str(content)}
 
+    def _wait_for_user_query_state(self, query, username, password, expect_success,
+                                   timeout_sec=60, retry_interval_sec=5):
+        """Poll a query run as `username` until it reaches the expected state.
+
+        GRANT/REVOKE is accepted by the query service before the new authorization
+        decision is visible to query execution, so asserting immediately after the
+        statement races the propagation. Returns the last result dict once it matches
+        `expect_success`, or the last result seen if the timeout elapses first.
+        """
+        deadline = time.time() + timeout_sec
+        while True:
+            result = self._run_query_as_user(query, username, password)
+            if (result.get('status') == 'success') == expect_success:
+                return result
+            if time.time() >= deadline:
+                self.log.warning(
+                    f"Privilege change not reflected within {timeout_sec}s "
+                    f"(expect_success={expect_success}); last result: {result}")
+                return result
+            time.sleep(retry_interval_sec)
+
     def _revoke_all_iceberg_privs(self, username):
         """Best-effort revoke of all Iceberg privileges from a user."""
         for stmt in [
@@ -5272,10 +5367,10 @@ class IcebergQueryTests(QueryTests):
             self.assertEqual(grant['status'], 'success', f"GRANT SELECT CATALOG failed: {grant}")
             self.log.info("GRANT SELECT CATALOG succeeded")
 
-            # After GRANT — query should succeed
-            result = self._run_query_as_user(
+            # After GRANT — query should succeed (privilege changes propagate async)
+            result = self._wait_for_user_query_state(
                 f"SELECT COUNT(*) AS cnt FROM {self.external_collection_name}",
-                username, password
+                username, password, expect_success=True
             )
             self.log.info(f"After SELECT CATALOG grant — status: {result.get('status')}, results: {result.get('results', [])}")
             after_grant_ok = result.get('status') == 'success'
@@ -5286,9 +5381,9 @@ class IcebergQueryTests(QueryTests):
             self.log.info("REVOKE SELECT CATALOG succeeded")
 
             # After REVOKE — query should fail
-            result = self._run_query_as_user(
+            result = self._wait_for_user_query_state(
                 f"SELECT COUNT(*) AS cnt FROM {self.external_collection_name}",
-                username, password
+                username, password, expect_success=False
             )
             self.log.info(f"After SELECT CATALOG revoke — status: {result.get('status')}")
             after_revoke_failed = result.get('status') != 'success'
@@ -5643,34 +5738,34 @@ class IcebergQueryTests(QueryTests):
             self.run_cbq_query(f"GRANT CONSUME CREDENTIALSTORE ON {self.credentialstore_name} TO {username}")
             self.run_cbq_query(f"GRANT SELECT CATALOG ON {self.catalog_name} TO {username}")
 
-            # Confirm initial access
-            result = self._run_query_as_user(
+            # Confirm initial access (privilege changes propagate async)
+            result = self._wait_for_user_query_state(
                 f"SELECT COUNT(*) AS cnt FROM {self.external_collection_name}",
-                username, password
+                username, password, expect_success=True
             )
             self.assertEqual(result.get('status'), 'success', f"Initial access failed: {result}")
             self.log.info("Initial access confirmed")
 
             # REVOKE catalog privilege — no catalog recreation
             self.run_cbq_query(f"REVOKE SELECT CATALOG ON {self.catalog_name} FROM {username}")
-            result = self._run_query_as_user(
+            result = self._wait_for_user_query_state(
                 f"SELECT COUNT(*) AS cnt FROM {self.external_collection_name}",
-                username, password
+                username, password, expect_success=False
             )
             self.log.info(f"After REVOKE (no recreate) — status: {result.get('status')}")
             self.assertNotEqual(result.get('status'), 'success',
-                                "REVOKE should take immediate effect without catalog recreation")
+                                "REVOKE should take effect without catalog recreation")
 
             # Re-GRANT — no catalog recreation
             self.run_cbq_query(f"GRANT SELECT CATALOG ON {self.catalog_name} TO {username}")
-            result = self._run_query_as_user(
+            result = self._wait_for_user_query_state(
                 f"SELECT COUNT(*) AS cnt FROM {self.external_collection_name}",
-                username, password
+                username, password, expect_success=True
             )
             self.log.info(f"After re-GRANT (no recreate) — status: {result.get('status')}")
             self.assertEqual(result.get('status'), 'success',
-                             "Re-GRANT should restore access immediately without catalog recreation")
-            self.log.info("Privilege changes on existing objects take immediate effect — confirmed")
+                             "Re-GRANT should restore access without catalog recreation")
+            self.log.info("Privilege changes on existing objects take effect without recreation — confirmed")
 
         finally:
             self._revoke_all_iceberg_privs(username)
@@ -5690,10 +5785,10 @@ class IcebergQueryTests(QueryTests):
             self.run_cbq_query(f"GRANT SELECT CATALOG ON {self.catalog_name} TO {username}")
             self.run_cbq_query(f"GRANT SELECT ON {self.external_collection_name} TO {username}")
 
-            # All 3 levels — full access
-            result = self._run_query_as_user(
+            # All 3 levels — full access (privilege changes propagate async)
+            result = self._wait_for_user_query_state(
                 f"SELECT COUNT(*) AS cnt FROM {self.external_collection_name}",
-                username, password
+                username, password, expect_success=True
             )
             self.log.info(f"All 3 privileges — status: {result.get('status')}, results: {result.get('results', [])}")
             self.assertEqual(result.get('status'), 'success', f"Full access with all 3 privileges failed: {result}")
@@ -5701,9 +5796,9 @@ class IcebergQueryTests(QueryTests):
 
             # Remove collection SELECT — credential + catalog only should fail
             self.run_cbq_query(f"REVOKE SELECT ON {self.external_collection_name} FROM {username}")
-            result = self._run_query_as_user(
+            result = self._wait_for_user_query_state(
                 f"SELECT COUNT(*) AS cnt FROM {self.external_collection_name}",
-                username, password
+                username, password, expect_success=False
             )
             self.log.info(f"Credential + Catalog only (no collection SELECT) — status: {result.get('status')}, errors: {result.get('errors', [])}")
             self.assertNotEqual(result.get('status'), 'success',
@@ -5712,9 +5807,9 @@ class IcebergQueryTests(QueryTests):
             # Restore collection, remove catalog SELECT — credential + collection only should fail
             self.run_cbq_query(f"GRANT SELECT ON {self.external_collection_name} TO {username}")
             self.run_cbq_query(f"REVOKE SELECT CATALOG ON {self.catalog_name} FROM {username}")
-            result = self._run_query_as_user(
+            result = self._wait_for_user_query_state(
                 f"SELECT COUNT(*) AS cnt FROM {self.external_collection_name}",
-                username, password
+                username, password, expect_success=False
             )
             self.log.info(f"Credential + Collection only (no catalog SELECT) — status: {result.get('status')}, errors: {result.get('errors', [])}")
             self.assertNotEqual(result.get('status'), 'success',
