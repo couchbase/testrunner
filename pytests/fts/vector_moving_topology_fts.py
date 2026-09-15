@@ -2279,7 +2279,8 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
             "removing node(s) {0} from cluster".format(ejected_nodes))
 
         # Start data loading before the rebalance loop so it runs throughout
-        load_tasks = self.async_load_data()
+        # CBQE-8243
+        workload = self.fts_workload_during_change(label="test_stop_restart_rebalance_in_loop").start()
 
         while count < 5:
             rest.rebalance(otpNodes=[node.id for node in nodes],
@@ -2295,8 +2296,9 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         self.assertTrue(rest.monitorRebalance(), msg="rebalance operation "
                                                      "failed after restarting")
 
-        for task in load_tasks:
-            task.result()
+        workload_errors = workload.stop()
+        self.assertEqual(workload_errors, [],
+                         f"workload errors during the change: {workload_errors}")
 
         self.wait_for_indexing_complete()
         self.validate_index_count(equal_bucket_doc_count=True)
@@ -2323,6 +2325,11 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
 
         if query_failure:
             self.fail(f"queries failed -> {query_failure}")
+
+        # CBQE-8243
+        post_change_errors = self.validate_post_topology_change(label="test_stop_restart_rebalance_in_loop")
+        self.assertEqual(post_change_errors, [],
+                         f"post-change validation failed: {post_change_errors}")
 
     def test_rebalance_cancel_new_rebalance(self):
         """
@@ -2361,7 +2368,8 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                     break
 
         # Start data loading so it runs concurrently with both rebalance phases
-        load_tasks = self.async_load_data()
+        # CBQE-8243
+        workload = self.fts_workload_during_change(label="test_rebalance_cancel_new_rebalance").start()
 
         rest.rebalance(otpNodes=[node.id for node in nodes],
                        ejectedNodes=ejected_nodes)
@@ -2383,8 +2391,9 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                        ejectedNodes=ejected_nodes)
         rest.monitorRebalance()
 
-        for task in load_tasks:
-            task.result()
+        workload_errors = workload.stop()
+        self.assertEqual(workload_errors, [],
+                         f"workload errors during the change: {workload_errors}")
 
         self.log.info("Cluster nodes: {}".format(self._cb_cluster.get_nodes()))
         for remove_node in eject_nodes:
@@ -2413,6 +2422,11 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                           % (index.name, index.get_indexed_doc_count()))
         self.wait_for_indexing_complete()
         self.validate_index_count(equal_bucket_doc_count=True)
+
+        # CBQE-8243
+        post_change_errors = self.validate_post_topology_change(label="test_rebalance_cancel_new_rebalance")
+        self.assertEqual(post_change_errors, [],
+                         f"post-change validation failed: {post_change_errors}")
 
     def rebalance_in_parallel_partitions_move_add_node(self):
         rest = RestConnection(self._cb_cluster.get_fts_nodes()[0])

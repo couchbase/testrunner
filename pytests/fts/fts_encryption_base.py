@@ -629,3 +629,252 @@ class FTSEncryptionBaseTest(FTSBaseTest):
             self.sleep(5, f"{label}querying during concurrent operation")
         self.log.info(f"{label}ran {attempts} queries during operation; errors={errors}")
         self.assertEqual(errors, [], f"{label}queries errored during concurrent operation: {errors}")
+
+
+class EARUpgradeHelper:
+    """Encryption-at-rest toolkit usable from the FTS upgrade suite."""
+
+    def __init__(self, test, sensitive_terms=None):
+        self._test = test
+        self.log = test.log
+        self.encryption_util = EncryptionUtil(task_manager=None)
+        self.encryption_helper = EncryptionAtRestHelper(test.log)
+        self.sensitive_terms = list(
+            sensitive_terms or FTSEncryptionBaseTest.DEFAULT_SENSITIVE_TERMS)
+        self.encryption_at_rest_id = None
+        self.created_secret_ids = []
+        self._getinusekeys_ok = None
+
+    def _cluster(self):
+        return getattr(self._test, '_cb_cluster', None) or getattr(self._test, 'cb_cluster', None)
+
+    def _master(self):
+        return self._test.master
+
+    def fts_nodes(self):
+        """FTS nodes, re-read every call: rolling upgrades move them around."""
+        return self._cluster().get_fts_nodes()
+
+    def create_kek(self, secret_rotation_interval=None):
+        """Create a bucket-encryption KEK and return its secret id."""
+        random.seed()
+        try:
+            result = self._create_kek(secret_rotation_interval)
+        except Exception as err:
+            # A pre-8.1 master answers 404 on the secrets endpoint. That is a
+            # legitimate outcome for the mixed-version stage, which asserts the
+            # feature is unreachable, so report it as "no KEK" rather than
+            # aborting the test.
+            self.log.info(f"could not create the bucket-encryption KEK: {err}")
+            return None
+        self.encryption_at_rest_id = result.get('encryption_at_rest_id')
+        if self.encryption_at_rest_id is not None:
+            self.created_secret_ids.append(self.encryption_at_rest_id)
+        self.log.info(f"EAR upgrade helper created KEK id={self.encryption_at_rest_id}")
+        return self.encryption_at_rest_id
+
+    def _create_kek(self, secret_rotation_interval=None):
+        return self.encryption_util.setup_encryption_at_rest(
+            cluster_master=self._master(),
+            bypass_encryption_func=lambda: self.encryption_util.bypass_encryption_restrictions(
+                self._master()),
+            enable_encryption_at_rest=True,
+            secret_rotation_interval=secret_rotation_interval,
+        )
+
+    def cleanup_secrets(self):
+        for secret_id in self.created_secret_ids:
+            try:
+                RestConnection(self._master()).delete_secret(secret_id)
+                self.log.info(f"Deleted encryption secret {secret_id}")
+            except Exception as err:
+                self.log.warning(f"Failed to delete secret {secret_id}: {err}")
+        self.created_secret_ids = []
+
+    def try_enable_bucket_encryption(self, bucket_name, secret_id=None):
+        """Attempt to turn on bucket encryption. Returns (status, response)."""
+        secret_id = secret_id if secret_id is not None else self.encryption_at_rest_id
+        try:
+            return RestConnection(self._master()).enable_bucket_encryption(bucket_name, secret_id)
+        except Exception as err:
+            self.log.info(f"enable_bucket_encryption on '{bucket_name}' raised: {err}")
+            return False, str(err)
+
+    def bucket_encryption_key_id(self, bucket_name="default"):
+        """encryptionAtRestKeyId currently set on the bucket, or None."""
+        try:
+            return RestConnection(self._master()).get_bucket_json(
+                bucket_name).get("encryptionAtRestKeyId")
+        except Exception as err:
+            self.log.warning(f"could not read encryptionAtRestKeyId on '{bucket_name}': {err}")
+            return None
+
+    def try_disable_bucket_encryption(self, bucket_name):
+        try:
+            return RestConnection(self._master()).disable_bucket_encryption(bucket_name)
+        except Exception as err:
+            self.log.info(f"disable_bucket_encryption on '{bucket_name}' raised: {err}")
+            return False, str(err)
+
+    def segments_encrypted_errors_settled(self, label="segments", timeout=600, poll=30):
+        """As segments_encrypted_errors, but allow obsolete segments to be cleaned up.
+
+        A merge writes new encrypted segments; the superseded plaintext ones stay
+        on disk until FTS removes them, so an immediate scan can still find
+        plaintext in files that are no longer in use.
+        """
+        deadline = time.time() + timeout
+        errors = self.segments_encrypted_errors(label=label)
+        while errors and time.time() < deadline:
+            self.log.info(f"[{label}] plaintext still on disk, waiting for obsolete "
+                          f"segments to be cleaned up ({int(deadline - time.time())}s left)")
+            time.sleep(poll)
+            errors = self.segments_encrypted_errors(label=label)
+        return errors
+
+    def segments_encrypted_errors(self, label="segments", fts_nodes=None):
+        """Errors if any FTS segment still holds sensitive data in plaintext."""
+        nodes = fts_nodes or self.fts_nodes()
+        results = self.encryption_helper.verify_fts_segment_files_encrypted(
+            nodes, sensitive_terms=self.sensitive_terms)
+        return self._collect_failures(results, label)
+
+    def segments_plaintext_errors(self, label="segments-plaintext", fts_nodes=None):
+        """Errors if segments are NOT plaintext -- the pre-encryption baseline."""
+        nodes = fts_nodes or self.fts_nodes()
+        results = self.encryption_helper.verify_fts_segment_files_not_encrypted(
+            nodes, sensitive_terms=self.sensitive_terms)
+        return self._collect_failures(results, label)
+
+    def _collect_failures(self, results, label, require_pass=True):
+        """Turn a per-node validation dict into a list of errors."""
+        errors = []
+        passed_nodes = 0
+        for node_ip, result in (results or {}).items():
+            status = result.get("status", "unknown")
+            if status == "passed":
+                passed_nodes += 1
+                self.log.info(f"[{label}] {node_ip}: PASSED ({result})")
+            elif status == "skipped":
+                self.log.warning(f"[{label}] {node_ip}: SKIPPED - {result.get('reason')}")
+            else:
+                self.log.error(f"[{label}] {node_ip}: FAILED - {result}")
+                errors.append(f"{label}: node {node_ip} -> {result}")
+        if require_pass and passed_nodes == 0:
+            errors.append(
+                f"{label}: no node passed validation (all skipped/empty) - "
+                f"check the @fts data path and that segment files exist: {results}")
+        return errors
+
+    def getinusekeys_available(self):
+        """True when :8094/api/encryption/GetInUseKeys exists on this build."""
+        try:
+            node = self.fts_nodes()[0]
+            status, response = RestConnection(node).get_fts_in_use_encryption_keys()
+            return bool(status) and isinstance(response, dict)
+        except Exception as err:
+            self.log.info(f"GetInUseKeys probe failed: {err}")
+            return False
+
+    def bucket_uuid(self, bucket_name="default"):
+        return RestConnection(self._master()).get_bucket_json(bucket_name).get("uuid")
+
+    def in_use_deks(self, bucket_name="default"):
+        """Return (merged_in_use_map, dek_ids_for_bucket) from FTS GetInUseKeys."""
+        merged = self.encryption_helper.get_fts_in_use_keys(self.fts_nodes())
+        deks = self.encryption_helper.fts_dek_ids_for_bucket(merged, self.bucket_uuid(bucket_name))
+        self.log.info(f"FTS in-use DEKs for '{bucket_name}': {deks} | full map: {merged}")
+        return merged, deks
+
+    def bucket_datatype(self, bucket_name="default"):
+        """GetInUseKeys datatype string for a bucket, e.g. "service_bucket <uuid>"."""
+        return f"{self.encryption_helper.SERVICE_BUCKET_PREFIX}{self.bucket_uuid(bucket_name)}"
+
+    def has_unencrypted_marker(self, datatype=None):
+        """True while FTS still reports unencrypted data (an "" entry) in use."""
+        merged = self.encryption_helper.get_fts_in_use_keys(self.fts_nodes())
+        return self.encryption_helper.fts_has_unencrypted_marker(merged, datatype)
+
+    def trigger_data_reencryption(self, bucket_name="default"):
+        """Ask ns_server to drop the bucket DEKs, which drives re-encryption.
+
+        There is no retroactive re-encryption in FTS. cbauth polls FTS for the
+        keys it has in use; FTS answers with an empty key when it still holds
+        unencrypted data, and cbauth then drives the re-encryption. This POST
+        (controller/dropEncryptionAtRestDeks) is how a test kicks that cycle off
+        instead of waiting for the next natural poll.
+        """
+        try:
+            status, resp = RestConnection(self._master()).trigger_data_reencryption(bucket_name)
+            self.log.info(f"Triggered data re-encryption on '{bucket_name}': "
+                          f"status={status}, resp={resp}")
+            return status
+        except Exception as err:
+            self.log.warning(f"could not trigger re-encryption on '{bucket_name}': {err}")
+            return False
+
+    def force_merge_and_wait(self, index_name, timeout=600):
+        """Trigger an FTS segment merge and wait for it to finish.
+
+        FTS only rewrites segments on a merge or flush, so an index that was
+        already built before encryption was enabled keeps its existing segments
+        in plaintext until one happens. Mirrors
+        FTSEncryptionBaseTest._force_merge_and_wait.
+        """
+        nodes = self.fts_nodes()
+        if not nodes:
+            self.log.warning("no FTS node available to trigger a merge on")
+            return False
+        rest = RestConnection(nodes[0])
+        try:
+            status, resp = rest.start_fts_index_compaction(index_name)
+            self.log.info(f"Triggered merge on '{index_name}': status={status}, resp={resp}")
+        except Exception as err:
+            self.log.warning(f"could not trigger a merge on '{index_name}': {err}")
+            return False
+        # The compaction task list is empty for a moment after the request is
+        # accepted, so polling straight away reports "complete" in milliseconds
+        # without a merge ever having run. Give it time to appear, and require
+        # the task list to have been seen non-empty before trusting an empty one.
+        time.sleep(30)
+        started = time.time()
+        deadline = started + timeout
+        seen_running = False
+        while time.time() < deadline:
+            try:
+                _, tasks = rest.get_fts_index_compactions(index_name)
+                running = bool(isinstance(tasks, dict) and tasks.get("tasks"))
+                if running:
+                    seen_running = True
+                elif seen_running:
+                    self.log.info(f"Merge complete on '{index_name}'")
+                    return True
+                elif time.time() - started > 60:
+                    # The merge can finish between the settle and the first poll,
+                    # so never seeing a running task is not an error -- stop
+                    # waiting rather than burning the whole timeout.
+                    self.log.info(f"no compaction task ever became visible for "
+                                  f"'{index_name}'; treating the merge as done")
+                    return True
+            except Exception as err:
+                self.log.info(f"waiting for merge on '{index_name}': {err}")
+            time.sleep(15)
+        self.log.warning(f"merge on '{index_name}' did not report completion within {timeout}s")
+        return False
+
+    def wait_for_encryption_complete(self, bucket_name="default", timeout=900, poll=30):
+        """Poll until FTS stops reporting unencrypted data for the bucket."""
+        deadline = time.time() + timeout
+        deks = []
+        while time.time() < deadline:
+            try:
+                _, deks = self.in_use_deks(bucket_name)
+                if deks and not self.has_unencrypted_marker(self.bucket_datatype(bucket_name)):
+                    self.log.info(f"Re-encryption complete for '{bucket_name}': deks={deks}")
+                    return True, deks
+            except Exception as err:
+                self.log.info(f"waiting for re-encryption: {err}")
+            time.sleep(poll)
+        self.log.warning(
+            f"Re-encryption did not complete for '{bucket_name}' within {timeout}s (deks={deks})")
+        return False, deks

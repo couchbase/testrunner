@@ -5,6 +5,7 @@ import ast
 import copy
 import datetime
 import hashlib
+import inspect
 import json
 import logging
 import math
@@ -4897,6 +4898,275 @@ class _ScanPlusHashMap:
             return len(self._map)
 
 
+class FTSConcurrentWorkload:
+    """Runs CRUD and queries concurrently for the duration of one topology change (CBQE-8242, CBQE-8243)."""
+
+    def __init__(self, test, index=None, driver=None, label="", query=None,
+                 query_interval=5, run_queries=True, run_updates=True,
+                 load_fn=None, query_fn=None, workload_items=None):
+        """`load_fn` and `query_fn` let a suite whose data or queries do not fit the"""
+        self._test = test
+        self._driver = driver if driver is not None else test
+        self._index = index
+        self._label = label or "workload"
+        self._query = query if query is not None else {"match_all": {}}
+        self._query_interval = query_interval
+        self._load_fn = load_fn
+        self._query_fn = query_fn
+        # The driver's _num_items is the test's full dataset (which can be
+        # 500k). Reloading all of it around every rebalance is what the
+        # workload must NOT do -- it needs concurrent mutations, not a bulk
+        # reload -- so cap it here.
+        self._workload_items = workload_items or int(
+            TestInputSingleton.input.param("workload_items", 10000)
+            if TestInputSingleton.input is not None else 10000)
+        self._run_queries = run_queries and (index is not None or query_fn is not None)
+        self._run_updates = run_updates
+        self.log = test.log
+
+        self._tasks = []
+        self._stop = threading.Event()
+        self._query_thread = None
+        self.errors = []
+        self.query_count = 0
+        self.query_failures = 0
+        self._last_query_error = None
+        self._vbucket_wait = int(
+            TestInputSingleton.input.param("vbucket_map_wait", 180)
+            if TestInputSingleton.input is not None else 180)
+
+    def _start_kv_workload(self):
+        tasks = []
+        # Right after a rebalance-in ns_server reports "vbucket map is not ready"
+        # for a short window; retry rather than reporting it as a workload failure.
+        # FIX 2: bound the vbucket-map wait by WALL CLOCK. Each attempt does slow
+        # work of its own before throwing, so an attempt count is not a time
+        # budget -- 18 attempts once took 16 minutes.
+        last_err = None
+        original_items = getattr(self._driver, '_num_items', None)
+        deadline = time.time() + self._vbucket_wait
+        while True:
+            try:
+                if self._load_fn is None and original_items is not None:
+                    self._driver._num_items = self._workload_items
+                tasks += (self._load_fn() if self._load_fn is not None
+                          else self._driver.async_load_data()) or []
+                last_err = None
+                break
+            except Exception as err:
+                last_err = err
+                if 'vbucket map is not ready' not in str(err) or time.time() >= deadline:
+                    break
+                self.log.info(f"[{self._label}] vbucket map not ready, retrying "
+                              f"({int(deadline - time.time())}s of budget left)")
+                time.sleep(10)
+            finally:
+                if self._load_fn is None and original_items is not None:
+                    self._driver._num_items = original_items
+        if last_err is not None:
+            if 'vbucket map is not ready' in str(last_err):
+                self.log.warning(
+                    f"[{self._label}] vbucket map still not ready after "
+                    f"{self._vbucket_wait}s; skipping the KV workload for this change")
+            else:
+                self.errors.append(
+                    f"[{self._label}] could not start the create workload: {last_err}")
+
+        if self._run_updates and self._load_fn is None:
+            fn = getattr(self._driver, 'async_perform_update_delete', None)
+            if fn is not None:
+                kwargs = {}
+                try:
+                    if 'async_run' in inspect.signature(fn).parameters:
+                        kwargs['async_run'] = True
+                except (TypeError, ValueError):
+                    pass
+                try:
+                    tasks += fn(**kwargs) or []
+                except Exception as err:
+                    self.errors.append(
+                        f"[{self._label}] could not start the update/delete workload: {err}")
+        return tasks
+
+    def _query_loop(self):
+        while not self._stop.is_set():
+            try:
+                if self._query_fn is not None:
+                    self.query_count += 1
+                    if not self._query_fn():
+                        self.query_failures += 1
+                    self._stop.wait(self._query_interval)
+                    continue
+
+                hits, _, _, status = self._index.execute_query(
+                    query=self._query, zero_results_ok=True)
+                self.query_count += 1
+                if hits == -1 or status == 'fail':
+                    self.query_failures += 1
+            except Exception as err:
+                self.query_count += 1
+                self.query_failures += 1
+                self._last_query_error = str(err)
+            self._stop.wait(self._query_interval)
+
+    def start(self):
+        self.log.info(f"---- starting concurrent workload: {self._label}")
+        self._tasks = self._start_kv_workload()
+        if self._run_queries:
+            self._query_thread = threading.Thread(
+                target=self._query_loop, name=f"fts_workload_query_{self._label}", daemon=True)
+            self._query_thread.start()
+        return self
+
+    def stop(self):
+        """Drain the workload and return the findings collected during it."""
+        if self._query_thread is not None:
+            self._stop.set()
+            self._query_thread.join(timeout=60)
+            self._query_thread = None
+
+        for task in self._tasks:
+            try:
+                task.result()
+            except Exception as err:
+                self.errors.append(f"[{self._label}] KV workload task failed: {err}")
+        self._tasks = []
+
+        # A rolling upgrade takes FTS nodes out and back in, so queries failing
+        # for part of the window is expected. What must not happen is FTS never
+        # serving a query at all -- that means it did not come back.
+        if self.query_count and self.query_failures == self.query_count:
+            detail = f", last error: {self._last_query_error}" if self._last_query_error else ""
+            self.errors.append(
+                f"[{self._label}] every one of the {self.query_count} queries run during "
+                f"the change failed - FTS never served a query{detail}")
+        elif self.query_failures:
+            self.log.warning(
+                f"[{self._label}] {self.query_failures}/{self.query_count} queries failed "
+                f"during the change (expected while nodes are out); FTS recovered")
+
+        self.log.info(
+            f"---- finished concurrent workload: {self._label} "
+            f"(queries={self.query_count}, query_failures={self.query_failures}, "
+            f"errors={len(self.errors)})")
+        return self.errors
+
+    def __enter__(self):
+        return self.start()
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.stop()
+        return False
+
+
+class FTSPostChangeValidator:
+    """Post-rebalance / post-upgrade validation required by CBQE-8242 and CBQE-8243."""
+
+    def __init__(self, test, driver=None, label="", load_fn=None):
+        """`load_fn` overrides how the post-change CRUD is generated, for suites"""
+        self._test = test
+        self._driver = driver if driver is not None else test
+        self._label = label or "post-change"
+        self._load_fn = load_fn
+        self.log = test.log
+
+    def _cluster(self):
+        return (getattr(self._driver, 'cb_cluster', None)
+                or getattr(self._test, '_cb_cluster', None)
+                or getattr(self._test, 'cb_cluster', None))
+
+    def crud_all_buckets(self):
+        """Run creates + updates/deletes across every bucket and confirm they land."""
+        errors = []
+        cluster = self._cluster()
+        buckets = cluster.get_buckets() if cluster else []
+        if not buckets and cluster:
+            # The cached list goes stale when the master moves during an upgrade;
+            # re-read it from whichever node is master now.
+            try:
+                buckets = RestConnection(cluster.get_master_node()).get_buckets()
+                self.log.info(f"[{self._label}] re-read {len(buckets)} bucket(s) from the cluster")
+            except Exception as err:
+                self.log.warning(f"[{self._label}] could not re-read buckets: {err}")
+        if not buckets:
+            return [f"[{self._label}] no buckets found to run post-change CRUD against"]
+
+        before = {}
+        for bucket in buckets:
+            try:
+                before[bucket.name] = RestConnection(cluster.get_master_node()).get_bucket(
+                    bucket.name).stats.itemCount
+            except Exception as err:
+                self.log.warning(f"[{self._label}] could not read item count for "
+                                 f"'{bucket.name}' before CRUD: {err}")
+
+        self.log.info(f"[{self._label}] running CRUD across {len(buckets)} bucket(s): "
+                      f"{[b.name for b in buckets]}")
+        workload = FTSConcurrentWorkload(
+            self._test, driver=self._driver, label=f"{self._label} post-change CRUD",
+            run_queries=False, load_fn=self._load_fn)
+        with workload:
+            pass
+        errors.extend(workload.errors)
+
+        for bucket in buckets:
+            try:
+                after = RestConnection(cluster.get_master_node()).get_bucket(
+                    bucket.name).stats.itemCount
+                self.log.info(f"[{self._label}] bucket '{bucket.name}' itemCount "
+                              f"{before.get(bucket.name)} -> {after}")
+            except Exception as err:
+                errors.append(f"[{self._label}] could not read item count for "
+                              f"'{bucket.name}' after CRUD: {err}")
+        return errors
+
+    def validate_index_end_to_end(self, index, expected_count=None, query=None,
+                                  timeout=600, poll=10):
+        """Confirm a newly created index both indexes data and serves a query."""
+        errors = []
+        name = getattr(index, 'name', str(index))
+
+        deadline = time.time() + timeout
+        indexed = 0
+        source = None
+        while time.time() < deadline:
+            try:
+                indexed = index.get_indexed_doc_count()
+                source = (index.get_src_collections_doc_count()
+                          if getattr(index, 'collections', None)
+                          else index.get_src_bucket_doc_count())
+                if indexed and (expected_count is None or indexed >= expected_count) \
+                        and indexed == source:
+                    break
+            except Exception as err:
+                self.log.info(f"[{self._label}] waiting on '{name}' to index: {err}")
+            time.sleep(poll)
+
+        self.log.info(f"[{self._label}] index '{name}': indexed={indexed}, source={source}")
+        if not indexed:
+            errors.append(f"[{self._label}] new index '{name}' indexed 0 docs")
+        elif source is not None and indexed != source:
+            errors.append(f"[{self._label}] new index '{name}' indexed {indexed} docs "
+                          f"but the source holds {source}")
+
+        try:
+            hits, _, _, status = index.execute_query(
+                query=query if query is not None else {"match_all": {}},
+                zero_results_ok=True)
+            if hits == -1 or status == 'fail':
+                errors.append(f"[{self._label}] new index '{name}' could not be queried "
+                              f"(hits={hits}, status={status})")
+            elif hits == 0 and indexed:
+                errors.append(f"[{self._label}] new index '{name}' indexed {indexed} docs "
+                              f"but a match_all query returned 0 hits")
+            else:
+                self.log.info(f"[{self._label}] new index '{name}' queried successfully: {hits} hits")
+        except Exception as err:
+            errors.append(f"[{self._label}] querying new index '{name}' raised: {err}")
+
+        return errors
+
+
 class UDFHelper:
     """Helper for UDF (custom-script query) FTS tests — MB-65018."""
 
@@ -8320,6 +8590,36 @@ class FTSBaseTest(unittest.TestCase):
             import traceback
             self.log.error(traceback.format_exc())
             raise
+
+    def fts_workload_during_change(self, label="", index=None, run_updates=True):
+        """Concurrent CRUD + query workload for one topology change (CBQE-8243)."""
+        if index is None:
+            indexes = [i for i in (self._cb_cluster.get_indexes() or [])
+                       if getattr(i, 'index_type', None) not in ('alias', 'fulltext-alias')]
+            index = indexes[0] if indexes else None
+        return FTSConcurrentWorkload(self, index=index, label=label, run_updates=run_updates)
+
+    def validate_post_topology_change(self, label="post-change", index_name="post_change_idx"):
+        """CBQE-8243 items 3 and 4, run after a rebalance/failover completes."""
+        errors = []
+        validator = FTSPostChangeValidator(self, label=label)
+        errors.extend(validator.crud_all_buckets())
+
+        index = None
+        try:
+            bucket = self._cb_cluster.get_buckets()[0]
+            index = self.create_index(bucket=bucket, index_name=index_name)
+            self.wait_for_indexing_complete()
+            errors.extend(validator.validate_index_end_to_end(index))
+        except Exception as err:
+            errors.append(f"[{label}] creating/validating the new index failed: {err}")
+        finally:
+            if index is not None:
+                try:
+                    self._cb_cluster.delete_fts_index(index_name)
+                except Exception as err:
+                    self.log.warning(f"[{label}] could not clean up '{index_name}': {err}")
+        return errors
 
     def async_load_data(self, generator=None, data_loader_output=False, filename=None, dataset=None):
         """

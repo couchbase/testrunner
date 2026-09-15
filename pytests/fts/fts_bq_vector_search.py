@@ -17,6 +17,7 @@ from lib.membase.api.rest_client import RestConnection
 from lib.remote.remote_util import RemoteMachineShellConnection
 from lib.couchbase_helper.documentgenerator import SDKDataLoader
 from .fts_base import NodeHelper
+from .fts_base import FTSConcurrentWorkload, FTSPostChangeValidator
 from .fts_backup_restore import FTSIndexBackupClient
 from .fts_vector_search import VectorSearch
 
@@ -1389,20 +1390,37 @@ class BQVectorSearch(VectorSearch):
         self.log.info("test_bq_community_edition_negative passed")
 
     def _async_load_during_topology_change(self):
-        """Start a background data-load that runs concurrently with rebalance/failover.
-
-        Uses SDKDataLoader with a distinct key prefix so it never overwrites the
-        restored vector documents. Returns the list of async task objects; callers
-        must call task.result() on each one after the topology change finishes.
-        """
+        """Start a background CRUD load that runs concurrently with rebalance/failover (CBQE-8243)."""
         mutation_gen = SDKDataLoader(
-            num_ops=100000,
-            percent_create=100,
-            percent_update=0,
-            percent_delete=0,
+            num_ops=self.input.param("topo_load_ops", 100000),
+            percent_create=self.input.param("topo_percent_create", 60),
+            percent_update=self.input.param("topo_percent_update", 30),
+            percent_delete=self.input.param("topo_percent_delete", 10),
             key_prefix="topo_load_"
         )
         return self._cb_cluster.async_load_all_buckets_from_generator(mutation_gen)
+
+    def _bq_workload_during_topology_change(self, index_obj, query_vectors, label=""):
+        """CRUD + concurrent kNN queries for one topology change (CBQE-8243)."""
+        qvecs = list(query_vectors[:3]) if query_vectors is not None else []
+
+        def _knn_probe():
+            if not qvecs:
+                return True
+            for qvec in qvecs:
+                hits, _, _, status = self._run_bq_fts_knn_query(index_obj, qvec)
+                if hits <= 0:
+                    self.log.error(f"[{label}] kNN query returned {hits} hits mid-change")
+                    return False
+                if isinstance(status, dict) and status.get('failed', 0) > 0:
+                    self.log.error(f"[{label}] kNN query reported failures mid-change: {status}")
+                    return False
+            return True
+
+        return FTSConcurrentWorkload(
+            self, label=label or "bq topology change",
+            load_fn=self._async_load_during_topology_change,
+            query_fn=_knn_probe)
 
     def _setup_bq_index_for_topology_test(self):
         all_vectors, query_vectors = self._setup_bq_test_data(num_queries=10)
@@ -1425,6 +1443,26 @@ class BQVectorSearch(VectorSearch):
         self.log.info(f"Recall after topology change: {avg_recall:.1f}%")
         return avg_recall
 
+    def _bq_validate_post_topology_change(self, label=""):
+        """CBQE-8243 items 3 and 4 for the BQ suite."""
+        errors = []
+        validator = FTSPostChangeValidator(
+            self, label=label, load_fn=self._async_load_during_topology_change)
+        errors.extend(validator.crud_all_buckets())
+
+        index_name = "bq_post_change"
+        try:
+            index_obj = self._create_bq_fts_index_on_bucket(index_name)
+            errors.extend(validator.validate_index_end_to_end(index_obj))
+        except Exception as err:
+            errors.append(f"[{label}] creating/validating the new BQ index failed: {err}")
+        finally:
+            try:
+                self._cb_cluster.delete_fts_index(index_name)
+            except Exception as err:
+                self.log.warning(f"[{label}] could not clean up '{index_name}': {err}")
+        return errors
+
     def _find_failover_node(self):
         for node in self._cb_cluster.get_nodes():
             if node.ip == self._cb_cluster.get_master_node().ip:
@@ -1444,16 +1482,24 @@ class BQVectorSearch(VectorSearch):
         index_obj = self._create_bq_fts_index_on_bucket("bq_topo")
 
         self.log.info("BQ index building has begun, starting data load and rebalance-in...")
-        load_tasks = self._async_load_during_topology_change()
+        # CBQE-8243
+        workload = self._bq_workload_during_topology_change(
+            index_obj, query_vectors, label="test_bq_rebalance_in_during_indexing").start()
         self._cb_cluster.rebalance_in(num_nodes=1, services=["fts"])
-        for task in load_tasks:
-            task.result()
+        workload_errors = workload.stop()
+        self.assertEqual(workload_errors, [],
+                         f"workload errors during the change: {workload_errors}")
 
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
 
         self._verify_bq_index_after_topology_change(index_obj, query_vectors)
         self.log.info("test_bq_rebalance_in_during_indexing passed")
+
+        # CBQE-8243
+        post_change_errors = self._bq_validate_post_topology_change(label="test_bq_rebalance_in_during_indexing")
+        self.assertEqual(post_change_errors, [],
+                         f"post-change validation failed: {post_change_errors}")
 
     def test_bq_rebalance_out_during_indexing(self):
         self._restore_couchbase_bucket()
@@ -1465,16 +1511,24 @@ class BQVectorSearch(VectorSearch):
         index_obj = self._create_bq_fts_index_on_bucket("bq_topo")
 
         self.log.info("BQ index created, starting data load and rebalance-out...")
-        load_tasks = self._async_load_during_topology_change()
+        # CBQE-8243
+        workload = self._bq_workload_during_topology_change(
+            index_obj, query_vectors, label="test_bq_rebalance_out_during_indexing").start()
         self._cb_cluster.rebalance_out()
-        for task in load_tasks:
-            task.result()
+        workload_errors = workload.stop()
+        self.assertEqual(workload_errors, [],
+                         f"workload errors during the change: {workload_errors}")
 
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
 
         self._verify_bq_index_after_topology_change(index_obj, query_vectors)
         self.log.info("test_bq_rebalance_out_during_indexing passed")
+
+        # CBQE-8243
+        post_change_errors = self._bq_validate_post_topology_change(label="test_bq_rebalance_out_during_indexing")
+        self.assertEqual(post_change_errors, [],
+                         f"post-change validation failed: {post_change_errors}")
 
     def test_bq_swap_rebalance_during_indexing(self):
         self._restore_couchbase_bucket()
@@ -1491,16 +1545,24 @@ class BQVectorSearch(VectorSearch):
             services = ["fts"]
         else:
             services = ["fts,kv,index,n1ql"]
-        load_tasks = self._async_load_during_topology_change()
+        # CBQE-8243
+        workload = self._bq_workload_during_topology_change(
+            index_obj, query_vectors, label="test_bq_swap_rebalance_during_indexing").start()
         self._cb_cluster.swap_rebalance(services=services)
-        for task in load_tasks:
-            task.result()
+        workload_errors = workload.stop()
+        self.assertEqual(workload_errors, [],
+                         f"workload errors during the change: {workload_errors}")
 
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
 
         self._verify_bq_index_after_topology_change(index_obj, query_vectors)
         self.log.info("test_bq_swap_rebalance_during_indexing passed")
+
+        # CBQE-8243
+        post_change_errors = self._bq_validate_post_topology_change(label="test_bq_swap_rebalance_during_indexing")
+        self.assertEqual(post_change_errors, [],
+                         f"post-change validation failed: {post_change_errors}")
 
     def test_bq_graceful_failover_and_recovery(self):
         index_obj, all_vectors, query_vectors = self._setup_bq_index_for_topology_test()
@@ -1509,7 +1571,9 @@ class BQVectorSearch(VectorSearch):
         self.log.info(f"Graceful failover of node {failover_node.ip}...")
 
         # Start data loading before failover so it runs during failover and add-back
-        load_tasks = self._async_load_during_topology_change()
+        # CBQE-8243
+        workload = self._bq_workload_during_topology_change(
+            index_obj, query_vectors, label="test_bq_graceful_failover_and_recovery").start()
 
         task = self._cb_cluster.async_failover(graceful=True, node=failover_node)
         task.result()
@@ -1517,14 +1581,20 @@ class BQVectorSearch(VectorSearch):
 
         self._cb_cluster.add_back_node(recovery_type='delta', services=["kv,fts"])
 
-        for task in load_tasks:
-            task.result()
+        workload_errors = workload.stop()
+        self.assertEqual(workload_errors, [],
+                         f"workload errors during the change: {workload_errors}")
 
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
 
         self._verify_bq_index_after_topology_change(index_obj, query_vectors)
         self.log.info("test_bq_graceful_failover_and_recovery passed")
+
+        # CBQE-8243
+        post_change_errors = self._bq_validate_post_topology_change(label="test_bq_graceful_failover_and_recovery")
+        self.assertEqual(post_change_errors, [],
+                         f"post-change validation failed: {post_change_errors}")
 
     def test_bq_hard_failover_and_recovery(self):
         index_obj, all_vectors, query_vectors = self._setup_bq_index_for_topology_test()
@@ -1533,21 +1603,29 @@ class BQVectorSearch(VectorSearch):
         self.log.info(f"Hard failover of node {failover_node.ip}...")
 
         # Start data loading before failover so it runs during failover and add-back
-        load_tasks = self._async_load_during_topology_change()
+        # CBQE-8243
+        workload = self._bq_workload_during_topology_change(
+            index_obj, query_vectors, label="test_bq_hard_failover_and_recovery").start()
 
         task = self._cb_cluster.async_failover(node=failover_node)
         task.result()
 
         self._cb_cluster.add_back_node(recovery_type='full', services=["kv,fts"])
 
-        for task in load_tasks:
-            task.result()
+        workload_errors = workload.stop()
+        self.assertEqual(workload_errors, [],
+                         f"workload errors during the change: {workload_errors}")
 
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
 
         self._verify_bq_index_after_topology_change(index_obj, query_vectors)
         self.log.info("test_bq_hard_failover_and_recovery passed")
+
+        # CBQE-8243
+        post_change_errors = self._bq_validate_post_topology_change(label="test_bq_hard_failover_and_recovery")
+        self.assertEqual(post_change_errors, [],
+                         f"post-change validation failed: {post_change_errors}")
 
     def test_bq_failover_during_knn_queries(self):
         index_obj, all_vectors, query_vectors = self._setup_bq_index_for_topology_test()
@@ -1568,7 +1646,9 @@ class BQVectorSearch(VectorSearch):
         query_thread.start()
 
         # Start data loading alongside queries so both run during failover
-        load_tasks = self._async_load_during_topology_change()
+        # CBQE-8243
+        workload = self._bq_workload_during_topology_change(
+            index_obj, query_vectors, label="test_bq_failover_during_knn_queries").start()
 
         time.sleep(3)
         failover_node = self._find_failover_node()
@@ -1577,8 +1657,9 @@ class BQVectorSearch(VectorSearch):
         task.result()
 
         query_thread.join(timeout=120)
-        for task in load_tasks:
-            task.result()
+        workload_errors = workload.stop()
+        self.assertEqual(workload_errors, [],
+                         f"workload errors during the change: {workload_errors}")
 
         self._cb_cluster.add_back_node(recovery_type='full', services=["kv,fts"])
         self.wait_for_indexing_complete()
@@ -1593,20 +1674,33 @@ class BQVectorSearch(VectorSearch):
 
         self.log.info("test_bq_failover_during_knn_queries passed")
 
+        # CBQE-8243
+        post_change_errors = self._bq_validate_post_topology_change(label="test_bq_failover_during_knn_queries")
+        self.assertEqual(post_change_errors, [],
+                         f"post-change validation failed: {post_change_errors}")
+
     def test_bq_rebalance_between_indexing_and_query(self):
         index_obj, all_vectors, query_vectors = self._setup_bq_index_for_topology_test()
 
         self.log.info("Index is built, starting data load and rebalancing before queries...")
-        load_tasks = self._async_load_during_topology_change()
+        # CBQE-8243
+        workload = self._bq_workload_during_topology_change(
+            index_obj, query_vectors, label="test_bq_rebalance_between_indexing_and_query").start()
         self._cb_cluster.rebalance_in(num_nodes=1, services=["fts"])
-        for task in load_tasks:
-            task.result()
+        workload_errors = workload.stop()
+        self.assertEqual(workload_errors, [],
+                         f"workload errors during the change: {workload_errors}")
 
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
 
         self._verify_bq_index_after_topology_change(index_obj, query_vectors)
         self.log.info("test_bq_rebalance_between_indexing_and_query passed")
+
+        # CBQE-8243
+        post_change_errors = self._bq_validate_post_topology_change(label="test_bq_rebalance_between_indexing_and_query")
+        self.assertEqual(post_change_errors, [],
+                         f"post-change validation failed: {post_change_errors}")
 
     def test_bq_fts_node_crash_during_indexing(self):
         self._restore_couchbase_bucket()

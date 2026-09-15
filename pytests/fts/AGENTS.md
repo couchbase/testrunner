@@ -183,6 +183,101 @@ Utility (not a TestCase):
   - Index availability post-upgrade
   - Query results consistency before and after upgrade
   - Vector index compatibility across versions
+- **Totoro (8.1) feature upgrades.** These follow a staged pattern: assert the
+  feature is *rejected* before the cluster supports it, still rejected while the
+  cluster is mixed-version, and works once every node is upgraded.
+
+  All of it lives in **one conf** — `conf/fts/py-fts-totoro-upgrade.conf` — so a
+  failure names the Totoro feature that broke instead of surfacing inside an
+  unrelated functional run. Every entry is tagged `TOTORO;<PHASE>;<FEATURE>`.
+
+  | Test | Feature | GROUP tag |
+  |------|---------|-----------|
+  | `test_ear_online_upgrade` / `..._offline_upgrade` | Encryption at Rest | `TOTORO;<ONLINE\|OFFLINE>;EAR` |
+  | `test_vector_features_online_upgrade` / `..._offline_upgrade` | Binary Quantisation | `TOTORO;<ONLINE\|OFFLINE>;BQ` |
+  | (same test) | FastMerge | `TOTORO;<ONLINE\|OFFLINE>;FM` |
+  | (same test) | GPU-built vector indexes | `TOTORO;<ONLINE\|OFFLINE>;GPU` |
+  | `test_scan_plus_online_upgrade` | request_plus / `scan_plus` | `TOTORO;ONLINE;SCANPLUS` |
+  | `test_udf_online_upgrade` | Script-based (`custom_filter`) queries | `TOTORO;ONLINE;UDF` |
+  | `test_search_history_online_upgrade` | Per-node search history | `TOTORO;ONLINE;SEARCHHISTORY` |
+  | `test_deep_pagination_online_upgrade` | Deep pagination over numeric/datetime/geo sorts | `TOTORO;ONLINE;DEEPPAGE` |
+  | `test_hierarchical_online_upgrade` | Hierarchical (nested) search | `TOTORO;ONLINE;HIER` |
+  | `test_collections_scale_online_upgrade` | ~10k collections, varying scope shapes | `TOTORO;ONLINE;COLLECTIONS` |
+  | `test_chained_upgrade` | Multi-hop chained upgrade (CBQE-8244) | `TOTORO;<ONLINE\|OFFLINE>;CHAINED` |
+
+  Rank Fusion is the only Totoro feature still unautomated; the conf carries a
+  commented placeholder entry so it stays the single Totoro index.
+
+  `conf/fts/py-fts-hierarchical-search.conf` was retired when hierarchical
+  upgrade coverage landed here. Its 58 functional entries (3 stable-topology,
+  55 moving-topology) went with it; `py-fts-hierarchical-vector-search.conf`
+  is untouched. `load_hierarchical_docs()` in `fts_base.py` is the shared
+  nested-dataset loader, extracted so both `FTSBaseTest` and the upgrade
+  suite use one code path.
+
+  Selecting work: the GROUP filter matches when the **runtime** groups are a
+  *subset* of the entry's ([testrunner.py:663](../../testrunner.py#L663)), so
+  naming more groups narrows the selection — `GROUP=TOTORO` runs everything,
+  `GROUP=TOTORO;BQ` runs only Binary Quantisation, `GROUP=ONLINE` only the
+  rolling-upgrade entries.
+
+  **Never put an upgrade entry in a feature's functional conf.** An upgrade needs
+  two builds and its own topology, so such an entry executes in any job that
+  passes no GROUP filter, with no `upgrade_to` and a contradictory node layout.
+  Because of the subset rule above, an entry tagged `GROUP=P0;upgrade` also fires
+  in a plain `GROUP=P0` functional run — which is exactly what
+  `test_udf_online_upgrade` used to do from `py-fts-udf.conf`.
+
+- **Vector feature knobs.** BQ, FastMerge and GPU are orthogonal switches on the
+  same vector index definition, so one harness covers every permutation and the
+  conf entry selects which are on:
+  `bq_index_type=<bivf-sq8|bivf-flat|"""ivf,rabitq""">`, `fastmerge=True`,
+  `gpu_index=True`. They are injected by
+  `FTSCallable._build_vector_index_body()`; the shared template
+  `b/resources/fts/vector_index_def.json` carries none of them by default.
+- **Chained (multi-hop) upgrades** — `test_chained_upgrade` walks the
+  `;`-separated chain in `upgrade_version` one hop at a time, carrying one index
+  the whole way. `NewUpgradeBaseTest` already parsed that chain into
+  `self.upgrade_versions`; `UpgradeFTS` previously used only its own
+  single-valued `upgrade_to`. Per hop it asserts the carried index still
+  *ingests* new docs (MB-63246), still answers queries, gained no new `fts.log`
+  panic (MB-62427), and records its `segmentVersion`. A single-hop
+  `upgrade_version` skips it. Reproducing MB-62427 needs a 6.x-origin chain,
+  since that bug is specifically about 6.x segments carried forward as a
+  v11/v16 mix.
+
+- **Versions are never in the conf.** `initial_version` comes from the testDB
+  doc (one doc per source version) and `upgrade_version` from the dispatcher,
+  the same way every other upgrade suite is driven. `UpgradeFTS.setUp` falls
+  back to the last hop of `upgrade_version` when `upgrade_to` is unset, so one
+  job parameter drives both this class and the event-based `UpgradeTests`
+  entries.
+
+- **Concurrent workload during topology changes** (CBQE-8242 / CBQE-8243).
+  `FTSConcurrentWorkload` (`fts_base.py`) runs CRUD *and* queries through one
+  rebalance/failover/node-upgrade, so each change carries its own workload rather
+  than one blanket load spanning the whole test. Use it as a context manager, or
+  via `.start()`/`.stop()` where wrapping would mean re-indenting an existing
+  body. `FTSBaseTest.fts_workload_during_change()` is the suite-level entry
+  point; `load_fn`/`query_fn` override the data and query paths for suites that
+  need it (the BQ vector suite uses both). Query failures are recorded as
+  findings, never raised into the rebalance — an exception from the wrapped
+  operation itself always propagates.
+
+- **Post-change validation** — `FTSPostChangeValidator` covers the other half of
+  those tickets: CRUD across *every* bucket, and a newly created index that must
+  both index and be **queried**. The pre-existing post-upgrade checks compared
+  doc counts and never issued a query, so an index that built but could not serve
+  traffic would have passed.
+
+- **Encryption at rest across upgrades** uses `EARUpgradeHelper`
+  (`fts_encryption_base.py`), which wraps the same `EncryptionUtil` /
+  `EncryptionAtRestHelper` primitives as `FTSEncryptionBaseTest` for the upgrade
+  hierarchy — the two class trees cannot be combined. It returns findings rather
+  than asserting, so a stage failure does not abandon a half-upgraded cluster.
+  These two tests cover the scenarios `FTSEncryptionAtRest` documents but skips:
+  `test_fts_ear_mixed_mode_encryption_blocked` and
+  `test_fts_ear_enable_encryption_post_upgrade`.
 
 ### `fts_pause_resume.py`
 - **Purpose:** Pause and resume FTS indexing operations.
@@ -323,7 +418,7 @@ make test-fts
 | Failover | FTS node failover and recovery |
 | Pause / Resume | Indexing control via REST API |
 | Server Groups | Rack-zone aware partition placement |
-| Upgrade | Offline upgrade with index compatibility checks |
+| Upgrade | Offline and online rolling upgrade with index compatibility checks; staged Totoro feature gating (BQ / FastMerge / GPU / encryption at rest / scan_plus / script queries) |
 | Serverless Limits | Free-tier quota, tenant isolation, throttling |
 | Compaction | Disk space reclamation via compaction API |
 | System Events | FTS service event log validation |

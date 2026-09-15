@@ -2414,7 +2414,8 @@ class MovingTopFTS(FTSBaseTest):
                 break
 
         # Start data loading so it runs concurrently with the rebalance
-        load_tasks = self.async_load_data()
+        # CBQE-8243
+        workload = self.fts_workload_during_change(label="test_cancel_node_removal_rebalance").start()
 
         self.log.info(
                 "removing node {0} from cluster".format(ejected_nodes))
@@ -2432,13 +2433,19 @@ class MovingTopFTS(FTSBaseTest):
             self.assertTrue(rest.monitorRebalance(), msg="rebalance operation "
                                                      "failed after restarting")
 
-        for task in load_tasks:
-            task.result()
+        workload_errors = workload.stop()
+        self.assertEqual(workload_errors, [],
+                         f"workload errors during the change: {workload_errors}")
 
         frest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
         err = self.validate_partition_distribution(frest)
         if len(err) > 0:
             self.fail(err)
+
+        # CBQE-8243
+        post_change_errors = self.validate_post_topology_change(label="test_cancel_node_removal_rebalance")
+        self.assertEqual(post_change_errors, [],
+                         f"post-change validation failed: {post_change_errors}")
 
     def test_stop_restart_rebalance_in_loop(self):
         """
@@ -2464,7 +2471,8 @@ class MovingTopFTS(FTSBaseTest):
             "removing node(s) {0} from cluster".format(ejected_nodes))
 
         # Start data loading before the rebalance loop so it runs throughout
-        load_tasks = self.async_load_data()
+        # CBQE-8243
+        workload = self.fts_workload_during_change(label="test_stop_restart_rebalance_in_loop").start()
 
         while count<5:
             rest.rebalance(otpNodes=[node.id for node in nodes],
@@ -2480,8 +2488,9 @@ class MovingTopFTS(FTSBaseTest):
         self.assertTrue(rest.monitorRebalance(), msg="rebalance operation "
                                                      "failed after restarting")
 
-        for task in load_tasks:
-            task.result()
+        workload_errors = workload.stop()
+        self.assertEqual(workload_errors, [],
+                         f"workload errors during the change: {workload_errors}")
 
         self.wait_for_indexing_complete()
         self.validate_index_count(equal_bucket_doc_count=True)
@@ -2504,6 +2513,11 @@ class MovingTopFTS(FTSBaseTest):
                 self.log.info("no file based transfer found during rebalance")
             if not file_transfer_success:
                 self.fail(f'Found file transfer failed for these partitions: {failed_file_transfer}')
+
+        # CBQE-8243
+        post_change_errors = self.validate_post_topology_change(label="test_stop_restart_rebalance_in_loop")
+        self.assertEqual(post_change_errors, [],
+                         f"post-change validation failed: {post_change_errors}")
 
     def test_rebalance_cancel_new_rebalance(self):
         """
@@ -2533,7 +2547,8 @@ class MovingTopFTS(FTSBaseTest):
                     break
 
         # Start data loading so it runs concurrently with both rebalance phases
-        load_tasks = self.async_load_data()
+        # CBQE-8243
+        workload = self.fts_workload_during_change(label="test_rebalance_cancel_new_rebalance").start()
 
         rest.rebalance(otpNodes=[node.id for node in nodes],
                        ejectedNodes=ejected_nodes)
@@ -2555,8 +2570,9 @@ class MovingTopFTS(FTSBaseTest):
                        ejectedNodes=ejected_nodes)
         rest.monitorRebalance()
 
-        for task in load_tasks:
-            task.result()
+        workload_errors = workload.stop()
+        self.assertEqual(workload_errors, [],
+                         f"workload errors during the change: {workload_errors}")
 
         self.create_fts_indexes_all_buckets()
         self.sleep(10)
@@ -2570,6 +2586,11 @@ class MovingTopFTS(FTSBaseTest):
         err = self.validate_partition_distribution(frest)
         if len(err) > 0:
             self.fail(err)
+
+        # CBQE-8243
+        post_change_errors = self.validate_post_topology_change(label="test_rebalance_cancel_new_rebalance")
+        self.assertEqual(post_change_errors, [],
+                         f"post-change validation failed: {post_change_errors}")
 
     def test_kv_and_fts_rebalance_with_high_ops(self):
         from lib.membase.api.rest_client import RestConnection
@@ -2702,14 +2723,16 @@ class MovingTopFTS(FTSBaseTest):
                 node_obj = node
 
         # Start data loading before failover so it runs during failover and rebalance
-        load_tasks = self.async_load_data()
+        # CBQE-8243
+        workload = self.fts_workload_during_change(label="test_cleanup_after_failover_rebalance_addback").start()
 
         self._cb_cluster.failover(node=node_obj)
         time.sleep(30)
         self._cb_cluster.rebalance_failover_nodes()
 
-        for task in load_tasks:
-            task.result()
+        workload_errors = workload.stop()
+        self.assertEqual(workload_errors, [],
+                         f"workload errors during the change: {workload_errors}")
 
         frest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
         err = self.validate_partition_distribution(frest)
@@ -2727,6 +2750,11 @@ class MovingTopFTS(FTSBaseTest):
             self.fail("Index partitions still reside on the node - node not cleaned up properly")
         except Exception as e:
             self.log.info(f"Success - : {str(e)}")
+
+        # CBQE-8243
+        post_change_errors = self.validate_post_topology_change(label="test_cleanup_after_failover_rebalance_addback")
+        self.assertEqual(post_change_errors, [],
+                         f"post-change validation failed: {post_change_errors}")
 
     def partition_validation_sanity(self):
         partitions = [18, 3, 3]

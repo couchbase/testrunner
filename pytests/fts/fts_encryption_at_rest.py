@@ -1187,8 +1187,9 @@ class FTSEncryptionAtRest(FTSEncryptionBaseTest):
         bucket encryption / create FTS index with encryption, assert it is rejected.
         Requires the upgrade framework + two builds.
         """
-        self.skipTest("mixed-mode negative requires the upgrade framework (NewUpgradeBaseTest) "
-                      "+ two builds; scaffold pending dedicated upgrade test class")
+        self.skipTest("Covered by fts.upgrade_fts.UpgradeFTS.test_ear_online_upgrade "
+                      "(Stage 2), which owns the upgrade framework and the two builds "
+                      "this scenario needs. Run it from conf/fts/fts_encryption_at_rest.conf.")
 
     def test_fts_ear_enable_encryption_post_upgrade(self):
         """After upgrading 8.0->8.1, enabling encryption re-indexes segments encrypted (v17).
@@ -1197,8 +1198,10 @@ class FTSEncryptionAtRest(FTSEncryptionBaseTest):
         to 8.1, enable encryption, verify MergeObsoleteSegments re-encrypts and no data
         loss. Requires the upgrade framework + initial_version/upgrade_version builds.
         """
-        self.skipTest("post-upgrade enable-encryption requires the upgrade framework + two "
-                      "builds; scaffold pending dedicated upgrade test class")
+        self.skipTest("Covered by fts.upgrade_fts.UpgradeFTS.test_ear_online_upgrade and "
+                      "test_ear_offline_upgrade (post-upgrade stage), which own the upgrade "
+                      "framework and the two builds this scenario needs. "
+                      "Run them from conf/fts/fts_encryption_at_rest.conf.")
 
     # ==================================================================
     # Backup / restore (test plan section 4) -- FTS index-definition backup via REST.
