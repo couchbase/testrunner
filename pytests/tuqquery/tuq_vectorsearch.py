@@ -696,8 +696,6 @@ class VectorSearchTests(QueryTests):
         vector_type = self.vector_type.upper()
         expected_index1 = f"CREATE INDEX adv_brand_size_vec{vector_type}VECTOR_id ON `default`(`brand`,`size`,`vec` {vector_type} VECTOR,`id`) WITH {{ 'dimension': 128, 'similarity': '{similarity}', 'description': 'IVF,SQ8' }}"
         expected_index2 = f"CREATE INDEX adv_size_brand_vec{vector_type}VECTOR_id ON `default`(`size`,`brand`,`vec` {vector_type} VECTOR,`id`) WITH {{ 'dimension': 128, 'similarity': '{similarity}', 'description': 'IVF,SQ8' }}"
-        expected_bhive_index1 = f"CREATE VECTOR INDEX adv_VECTOR_vec{vector_type}VECTOR_INCLUDE_brand_size_id ON `default`(`vec` {vector_type} VECTOR) INCLUDE (`brand`,`size`,`id`) WITH {{ 'dimension': 128, 'similarity': '{similarity}', 'description': 'IVF,SQ8' }}"
-        expected_bhive_index2 = f"CREATE VECTOR INDEX adv_VECTOR_vec{vector_type}VECTOR_INCLUDE_size_brand_id ON `default`(`vec` {vector_type} VECTOR) INCLUDE (`size`,`brand`,`id`) WITH {{ 'dimension': 128, 'similarity': '{similarity}', 'description': 'IVF,SQ8' }}"
         if self.vector_type == 'sparse':
             advise_ann_query = f'ADVISE SELECT id, size, brand FROM default WHERE size = 6 AND brand = "Puma" ORDER BY SPARSE_VECTOR_DISTANCE(vec, {self._format_vec(self.xq[1])}, {self.nprobes})'
         else:
@@ -705,19 +703,19 @@ class VectorSearchTests(QueryTests):
         advise = self.run_cbq_query(advise_ann_query)
         self.log.info(advise['results'])
         adviseinfo = advise['results'][0]['advice']['adviseinfo']
-        covering_indexes = adviseinfo['recommended_indexes']['covering_indexes']
-        index_statement = covering_indexes[0]['index_statement']
-        bhive_index_statement = covering_indexes[1]['index_statement']
+        # MB-73773: a BHive index can only serve this query through ANN pushdown, which now
+        # needs a LIMIT, so without one the advisor no longer recommends it. The advice is a
+        # single composite index under 'indexes' — there is no 'covering_indexes' pair here.
+        # test_advise_ann covers the LIMIT case, where both are still recommended.
+        recommended_indexes = adviseinfo['recommended_indexes']['indexes']
+        index_statement = recommended_indexes[0]['index_statement']
         self.assertTrue(index_statement == expected_index1 or index_statement == expected_index2, f"We expected {expected_index1} or {expected_index2} but got {index_statement}")
-        self.assertTrue(bhive_index_statement == expected_bhive_index1 or bhive_index_statement == expected_bhive_index2, f"We expected {expected_bhive_index1} or {expected_bhive_index2} but got {bhive_index_statement}")
+        self.assertTrue('CREATE VECTOR INDEX' not in str(adviseinfo), f"MB-73773: the advisor must not recommend a BHive vector index without a LIMIT, please check advice {adviseinfo}")
         try:
             self.run_cbq_query(index_statement)
-            self.run_cbq_query(bhive_index_statement)
         finally:
             self.run_cbq_query(f'DROP INDEX adv_brand_size_vec{vector_type}VECTOR_id IF EXISTS on default')
             self.run_cbq_query(f'DROP INDEX adv_size_brand_vec{vector_type}VECTOR_id IF EXISTS on default')
-            self.run_cbq_query(f'DROP INDEX adv_VECTOR_vec{vector_type}VECTOR_INCLUDE_brand_size_id IF EXISTS on default')
-            self.run_cbq_query(f'DROP INDEX adv_VECTOR_vec{vector_type}VECTOR_INCLUDE_size_brand_id IF EXISTS on default')
 
     def test_advise_knn(self):
         expected_index1 = f"CREATE INDEX adv_brand_size ON `default`(`brand`,`size`)"
