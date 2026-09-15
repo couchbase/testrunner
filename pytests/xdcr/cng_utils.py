@@ -45,21 +45,38 @@ class CNGHelper:
     MIN_PROTOC_VERSION = "3"
 
     def __init__(self, server, cert_path, key_path, cb_host="127.0.0.1",
-                 port=CNG_DEFAULT_PORT):
+                 port=CNG_DEFAULT_PORT, client_ca_cert_path=None):
         """
         @param server: TestInputServer object for the VM to run CNG on.
         @param cert_path: Absolute path to the TLS certificate on the VM.
         @param key_path: Absolute path to the TLS private key on the VM.
         @param cb_host: Couchbase Server host CNG should proxy to.
         @param port: Port CNG listens on (for readiness checks).
+        @param client_ca_cert_path: Absolute path on the VM to the CA bundle
+            that client certificates must chain to. When set, the gateway is
+            launched with --client-ca-cert and will accept mTLS clients
+            (tls.VerifyClientCertIfGiven); when None the gateway requests no
+            client certificate and only username/password auth is possible.
         """
         self.server = server
         self.cert_path = cert_path
         self.key_path = key_path
         self.cb_host = cb_host
         self.port = port
+        self.client_ca_cert_path = client_ca_cert_path
         self._pid = None
         self._limited_unit = None
+
+    def _client_ca_args(self, quote=""):
+        """Render the --client-ca-cert fragment, or '' when not in mTLS mode.
+
+        @param quote: quote character to wrap the path in; the systemd-run
+            command line quotes each argument, the nohup one does not.
+        """
+        if not self.client_ca_cert_path:
+            return ""
+        return " --client-ca-cert {q}{path}{q}".format(
+            q=quote, path=self.client_ca_cert_path)
 
     def __enter__(self):
         return self
@@ -578,13 +595,14 @@ class CNGHelper:
             # and lock onto the wrong PID. echo CNG_PID=$! is the only way
             # to know which PID this nohup actually spawned.
             cmd = ("nohup {binary} --cert {cert} --key {key} "
-                   "--cb-host {cb_host} "
+                   "--cb-host {cb_host}{client_ca} "
                    "> /opt/cng/stellar-gateway.log 2>&1 & "
                    "echo CNG_PID=$!").format(
                 binary=STELLAR_GATEWAY_BINARY,
                 cert=self.cert_path,
                 key=self.key_path,
-                cb_host=self.cb_host)
+                cb_host=self.cb_host,
+                client_ca=self._client_ca_args())
             output, _ = shell.execute_command(cmd)
             pid = None
             for line in output or []:
@@ -760,11 +778,12 @@ class CNGHelper:
                    "-p CPUQuota='{cpu}' -p MemoryMax='{mem}' "
                    "-p MemorySwapMax=0 "
                    "'{binary}' --cert '{cert}' --key '{key}' "
-                   "--cb-host '{cb_host}'").format(
+                   "--cb-host '{cb_host}'{client_ca}").format(
                 unit=unit_name, cpu=cpu_quota, mem=memory_max,
                 binary=STELLAR_GATEWAY_BINARY,
                 cert=self.cert_path, key=self.key_path,
-                cb_host=self.cb_host)
+                cb_host=self.cb_host,
+                client_ca=self._client_ca_args(quote="'"))
             output, error = shell.execute_command(cmd)
             if error and any("Failed" in e or "not found" in e.lower()
                              for e in error):

@@ -19,6 +19,7 @@ XDCR (Cross Data Center Replication) test suite validates Couchbase replication 
 | **Priority** | `prioritizationXDCR.py` | DCP stream prioritization (High, Medium, Low) |
 | **Network Bandwidth** | `nwusageXDCR.py` | Network usage throttling and bandwidth limits |
 | **Security/TLS** | `secureXDCR.py` | TLS encryption, n2n encryption, multiple CA support |
+| **CNG (cloud-native gateway)** | `cngXDCR.py`, `cng/`, `cng_utils.py`, `haproxy_utils.py` | XDCR through stellar-gateway over `couchbase2://`, behind HAProxy: basic replication, resiliency, topologies, rebalance/failover, and **mutual TLS** — references authenticated by `clientCertificate`/`clientKey` instead of a username. mTLS drives a different goxdcr branch (`base/grpcConn.go` `NewGrpcCredentials` -> `IsMTLS=true`, no per-RPC credentials; the gateway derives identity from the TLS session), so it needs the gateway launched with `--client-ca-cert` AND client-cert auth enabled on the target, or cbauth refuses every cert. Negative cases assert the refusal is *surfaced*: `parts/cng/pool.go` `isRetryableError` treats `PermissionDenied`/`Unauthenticated` as retryable inside an unbounded `WithConn` loop, so an auth failure can otherwise be retried forever below the nozzle while the ref still reports `RC_OK` |
 | **Staged Credentials** | `stagedCredentialsXDCR.py` | Credential rotation without replication interruption |
 | **Checkpoints** | `checkpointXDCR.py` | Checkpoint intervals, persistence, recovery |
 | **P2P (Peer-to-Peer)** | `p2pXDCR.py`, `xdcrP2PCheckpointTests.py` | P2P discovery, VB master checks |
@@ -70,6 +71,7 @@ INI files in `b/resources/` define cluster topology with dynamic IP placeholders
 - `lww.py` - Last Writer Wins conflict resolution
 - `upgradeXDCR.py` - XDCR upgrade path validation
 - `secureXDCR.py` - TLS/SSL encryption tests
+- `cngXDCR.py` - XDCR through the cloud-native gateway, including mutual-TLS references; per-concern managers live in `cng/` (`certs.py`, `infra.py`, `refs.py`, `replication.py`, `topology.py`, `registry.py`, `diagnostics.py`)
 - `stagedCredentialsXDCR.py` - Staged credential management
 - `variableVbucketXDCR.py` - Dynamic vbucket configuration
 - `filterXDCR.py`, `testXdcrFilterSkipRestream.py`, `xdcrFilterChangeTests.py` - Replication filtering

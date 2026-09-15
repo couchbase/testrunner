@@ -25,6 +25,7 @@ Organisation:
 import gc
 import json
 import time
+import urllib.parse
 
 from couchbase_helper.documentgenerator import BlobGenerator
 from membase.api.rest_client import RestConnection
@@ -2783,4 +2784,610 @@ class XDCRCNGRebalanceFailoverTests(CNGXDCRBaseTest):
                              self._value_size, end=items // 2)
         src.load_all_buckets_from_generator(gen2)
         self._wait_for_replication_to_catchup(timeout=600)
+        self.verify_results()
+
+
+class XDCRCNGMutualTLSTests(CNGXDCRBaseTest):
+    """XDCR through CNG authenticated by client certificate (mTLS).
+
+    Every other CNG group authenticates its remote references with a
+    username and password, which drives goxdcr's basic-auth branch
+    (base/grpcConn.go NewGrpcCredentials -> IsMTLS=False, auth header on
+    every RPC). When a reference instead carries clientCertificate /
+    clientKey, goxdcr takes a different branch entirely: it attaches no
+    per-RPC credentials at all and lets the gateway derive identity from
+    the TLS session. These tests are the only coverage of that branch.
+
+    Requirements beyond the standard CNG topology:
+      - the gateway must be launched with --client-ca-cert, else it never
+        asks for a client certificate (tls.VerifyClientCertIfGiven);
+      - the target cluster must have client-cert auth enabled, else the
+        gateway's cbauth CheckCertificate refuses every presented cert
+        regardless of how well it verifies;
+      - the user the cert maps to (CertManager.CLIENT_CERT_MAPPED_USER)
+        must exist on the target with rights to write the target bucket.
+    """
+
+    # The client certs x509main generates, by the intermediate CA that
+    # signed each. All carry the same subject/SAN and so map to the same
+    # Couchbase user; they differ only in trust chain, which is exactly
+    # what the rotation test needs.
+    _PRIMARY_CLIENT_INT_CA = "iclient1_clientroot"
+    _ROTATED_CLIENT_INT_CA = "iclient1_r1"
+
+    def _setup_mtls_cng_pair(self, enable_cert_auth=True):
+        """Stand up C1 -> CNG(C2) with the gateway accepting client certs.
+
+        @param enable_cert_auth: when False the target cluster is left with
+            client-cert auth off, which is the condition
+            test_cng_mtls_target_cert_auth_disabled exercises. The gateway
+            still gets its --client-ca-cert either way, so the certificate
+            still verifies at the TLS layer and the refusal comes from
+            cbauth rather than the handshake.
+        @return: (src, dst, infra, rest_src)
+        """
+        src = self.get_cb_cluster_by_name("C1")
+        dst = self.get_cb_cluster_by_name("C2")
+        self._infra.bootstrap_targets(
+            self._all_clusters(), [dst], client_mtls=True)
+        infra = self._registry.get(dst.get_name())
+
+        # The cert maps to this user on the TARGET, which is where the
+        # replication's writes land; without it every mutation is denied
+        # even though authentication itself succeeded.
+        self.add_built_in_server_user(node=dst.get_master_node())
+
+        if enable_cert_auth:
+            self._certs.enable_client_cert_auth(dst)
+        else:
+            # Set it explicitly rather than trusting the cluster default: an
+            # earlier test in the same suite run may have left cert auth
+            # enabled, and this scenario is only meaningful with it off.
+            state = self._certs.disable_client_cert_auth(dst)
+            self.assertEqual(
+                state, "disable",
+                "Could not put the target cluster into client-cert-auth "
+                "'disable'; it reads back {0!r}, so the scenario under test "
+                "would not be exercised".format(state))
+        return src, dst, infra, RestConnection(src.get_master_node())
+
+    def _client_cert_pair(self, int_ca_name):
+        return self._certs.get_client_cert_pems(int_ca_name=int_ca_name)
+
+    def _assert_ref_is_cert_authed(self, rest_src, rc_name):
+        """Assert the stored reference really is certificate-authenticated.
+
+        A reference that quietly fell back to username/password would still
+        replicate and still report RC_OK, so the happy-path test would pass
+        without ever exercising the mTLS branch. Checking the stored shape
+        is what stops this whole group from passing vacuously.
+        """
+        refs = [r for r in self._refs.active_refs(rest_src)
+                if r.get("name") == rc_name]
+        self.assertEqual(
+            len(refs), 1,
+            "Expected exactly one ref named '{0}'; found {1}".format(
+                rc_name, len(refs)))
+        ref = refs[0]
+        self.assertTrue(
+            ref.get("clientCertificate"),
+            "Ref '{0}' has no clientCertificate -- it is not "
+            "certificate-authenticated: {1}".format(rc_name, ref))
+        self.assertFalse(
+            ref.get("username"),
+            "Ref '{0}' still carries username {1!r}; goxdcr should have "
+            "stored a cert-only reference".format(
+                rc_name, ref.get("username")))
+        log.info("Ref '{0}' confirmed certificate-authenticated".format(rc_name))
+
+    def _assert_cng_path_healthy(self, src, dst, infra, rest_src):
+        """Positive control: prove the CNG path works with ordinary credentials.
+
+        Without this, both negative tests below pass for the wrong reason
+        whenever the gateway or the load balancer is simply down: reference
+        creation fails with a connection error, "the failure surfaced" is
+        satisfied, and nothing about certificates was ever exercised. Running
+        a username/password reference through the same LB first makes the
+        subsequent mTLS failure attributable to the certificate.
+
+        The control ref is removed again so it cannot collide with the
+        cert-authenticated one the test is about to create (goxdcr refuses a
+        second reference to a target it already has one for).
+        """
+        probe = "cng_mtls_control"
+        self._refs.add_cng_ref(src, dst, infra.lb_ip, probe)
+        try:
+            self._expect_connectivity(
+                rest_src, probe, CONNECTIVITY_STATUS.RC_OK, timeout=180)
+            log.info("Positive control passed: the CNG path is healthy with "
+                     "username/password auth, so any mTLS failure that "
+                     "follows is attributable to the certificate")
+        finally:
+            try:
+                rest_src.remove_remote_cluster(probe)
+            except Exception as error:
+                log.warning("Could not remove control ref '{0}': {1}".format(
+                    probe, error))
+        self.sleep(15, "Letting the control reference teardown settle")
+
+    def _assert_auth_failure_surfaces(self, src, dst, infra, rest_src,
+                                      rc_name, client_cert, client_key,
+                                      scenario, timeout=300):
+        """Require an unusable mTLS reference to FAIL VISIBLY.
+
+        The defect class this guards is specific and already proven to
+        exist elsewhere in the CNG path: parts/cng/pool.go isRetryableError
+        treats PermissionDenied and Unauthenticated as retryable, and
+        WithConn's retry loop is unbounded. An authentication failure can
+        therefore be retried forever underneath the nozzle, emitting no
+        DataSentFailed event and no eaccess stat, while the reference
+        continues to report RC_OK and the pipeline moves nothing.
+
+        Any of these outcomes is acceptable, because each makes the problem
+        visible to an operator:
+          - reference creation is rejected outright;
+          - the reference reaches an error connectivity status.
+
+        Two outcomes fail:
+          - data actually replicates, meaning the scenario did not deny
+            anything and the test proved nothing;
+          - the reference sits at RC_OK, moving no data, until the timeout.
+        """
+        lb_ip = infra.lb_ip
+        try:
+            self._refs.add_cng_mtls_ref(
+                src, dst, lb_ip, rc_name, client_cert, client_key)
+        except Exception as error:
+            log.info(
+                "{0}: reference creation was rejected, which is a visible "
+                "failure: {1}".format(scenario, error))
+            return "rejected-at-creation"
+
+        log.info(
+            "{0}: reference was created; requiring the failure to surface "
+            "within {1}s".format(scenario, timeout))
+        try:
+            self._replication.start_for_buckets(src, dst, rc_name)
+        except Exception as error:
+            # Refusing to create the replication is also a visible failure,
+            # so the requirement is met. Reported separately from
+            # rejected-at-creation because the two say different things
+            # about where the product noticed.
+            log.info(
+                "{0}: the reference was accepted but creating a replication "
+                "on it was rejected, which is a visible failure: {1}".format(
+                    scenario, error))
+            return "rejected-at-replication-creation"
+
+        src_bucket = src.get_buckets()[0]
+        dest_bucket = self.find_matching_bucket(src_bucket, dst.get_buckets())
+        before = self.bucket_item_count(dst, dest_bucket.name)
+
+        gen = BlobGenerator("mtls-deny-", "mtls-deny-", self._value_size,
+                            end=self._input.param("items", 500))
+        src.load_all_buckets_from_generator(gen)
+
+        error_states = (CONNECTIVITY_STATUS.RC_AUTH_ERR,
+                        CONNECTIVITY_STATUS.RC_ERROR,
+                        CONNECTIVITY_STATUS.RC_DEGRADED)
+        end_time = time.time() + timeout
+        last_status = None
+        while time.time() < end_time:
+            statuses = self.get_connectivity_status(rest_src)
+            last_status = statuses.get(rc_name)
+            if last_status in error_states:
+                log.info("{0}: surfaced as connectivity status {1}".format(
+                    scenario, last_status))
+                return "connectivity-{0}".format(last_status)
+            if self.bucket_item_count(dst, dest_bucket.name) > before:
+                self.fail(
+                    "{0}: documents replicated to the target, so the "
+                    "certificate was ACCEPTED. This scenario was supposed to "
+                    "deny it, so the test proves nothing -- check the "
+                    "fixture, not the product.".format(scenario))
+            time.sleep(10)
+
+        self._diag.scan_goxdcr_log(src, "mtls-silent-wedge:{0}".format(rc_name),
+                                   rc_name=rc_name)
+        self.fail(
+            "{0}: after {1}s the reference still reports {2!r} and no "
+            "document reached the target. An unusable mTLS reference is "
+            "presenting as healthy while the pipeline moves nothing -- this "
+            "is the unbounded PermissionDenied/Unauthenticated retry in "
+            "parts/cng/pool.go swallowing the failure below the nozzle "
+            "(no DataSentFailed event, no eaccess stat, no UI alert).".format(
+                scenario, timeout, last_status))
+
+    def test_cng_mtls_ref_happy_path(self):
+        """A CNG remote ref authenticated only by client cert replicates.
+
+        FAILS on 8.5.0-1077 -- MB-73988: goxdcr utils/cng.go
+        GetBucketInfoFromCNG() drops the reference's clientCertificate/clientKey,
+        so createReplication on a cert-authenticated CNG ref returns HTTP 400
+        "either username or client certificate must be present". The reference
+        itself is created and reaches RC_OK, so everything up to the replication
+        passes.
+        """
+        items = self._input.param("items", 1000)
+        rc_name = "cng_mtls_C1_to_C2"
+        src, dst, infra, rest_src = self._setup_mtls_cng_pair()
+
+        client_cert, client_key = self._client_cert_pair(
+            self._PRIMARY_CLIENT_INT_CA)
+        self._refs.add_cng_mtls_ref(
+            src, dst, infra.lb_ip, rc_name, client_cert, client_key)
+
+        self._expect_connectivity(
+            rest_src, rc_name, CONNECTIVITY_STATUS.RC_OK, timeout=180)
+        self._assert_ref_is_cert_authed(rest_src, rc_name)
+
+        self._replication.start_for_buckets(src, dst, rc_name)
+        self._register_replications_for_verification(src, dst, rc_name)
+
+        gen = BlobGenerator("mtls-", "mtls-", self._value_size, end=items)
+        src.load_all_buckets_from_generator(gen)
+        self._wait_for_replication_to_catchup(timeout=600)
+        self.verify_results()
+
+    def test_cng_mtls_target_cert_auth_disabled(self):
+        """Client cert presented to a target that has cert auth switched off.
+
+        The gateway trusts the CA, so the TLS handshake succeeds and the
+        certificate reaches cbauth, which refuses it (ErrCertAuthDisabled).
+        goxdcr must surface that, not retry it forever.
+        """
+        rc_name = "cng_mtls_authoff"
+        src, dst, infra, rest_src = self._setup_mtls_cng_pair(
+            enable_cert_auth=False)
+        self._assert_cng_path_healthy(src, dst, infra, rest_src)
+        client_cert, client_key = self._client_cert_pair(
+            self._PRIMARY_CLIENT_INT_CA)
+
+        outcome = self._assert_auth_failure_surfaces(
+            src, dst, infra, rest_src, rc_name, client_cert, client_key,
+            scenario="target cluster has client cert auth disabled",
+            timeout=self._input.param("recovery_timeout", 300))
+        log.info("Cert-auth-disabled scenario surfaced via: {0}".format(outcome))
+
+    def test_cng_mtls_untrusted_client_cert(self):
+        """A well-formed client cert from an unrelated CA must be refused.
+
+        The pair parses, so goxdcr's own X509KeyPair validation accepts it
+        and the reference can be created; it fails only at the gateway's
+        TLS handshake, which is the layer under test. A malformed pair
+        would be rejected by goxdcr up front and never reach the gateway.
+        """
+        rc_name = "cng_mtls_untrusted"
+        src, dst, infra, rest_src = self._setup_mtls_cng_pair()
+        self._assert_cng_path_healthy(src, dst, infra, rest_src)
+        client_cert, client_key, _ = self._certs.generate_foreign_client_cert()
+
+        outcome = self._assert_auth_failure_surfaces(
+            src, dst, infra, rest_src, rc_name, client_cert, client_key,
+            scenario="client cert signed by an untrusted CA",
+            timeout=self._input.param("recovery_timeout", 300))
+        log.info("Untrusted-cert scenario surfaced via: {0}".format(outcome))
+
+    def test_cng_mtls_cert_rotation(self):
+        """Rotating the client cert on a live mTLS ref keeps it replicating.
+
+        Both certs are real x509main client certs with the same subject and
+        SAN -- so both map to the same Couchbase user -- but they are signed
+        by different CAs, so this is a genuine trust-chain rotation rather
+        than a rewrite of the same bytes.
+
+        FAILS on 8.5.0-1077 -- MB-73988, same cause as
+        test_cng_mtls_ref_happy_path: it cannot get past creating the first
+        replication, so the rotation itself is never reached.
+        """
+        items = self._input.param("items", 1000)
+        rc_name = "cng_mtls_rotate"
+        src, dst, infra, rest_src = self._setup_mtls_cng_pair()
+
+        first_cert, first_key = self._client_cert_pair(
+            self._PRIMARY_CLIENT_INT_CA)
+        self._refs.add_cng_mtls_ref(
+            src, dst, infra.lb_ip, rc_name, first_cert, first_key)
+        self._expect_connectivity(
+            rest_src, rc_name, CONNECTIVITY_STATUS.RC_OK, timeout=180)
+
+        self._replication.start_for_buckets(src, dst, rc_name)
+        self._register_replications_for_verification(src, dst, rc_name)
+        gen = BlobGenerator("mtls-pre-", "mtls-pre-", self._value_size,
+                            end=items // 2)
+        src.load_all_buckets_from_generator(gen)
+        self._wait_for_replication_to_catchup(timeout=600)
+
+        second_cert, second_key = self._client_cert_pair(
+            self._ROTATED_CLIENT_INT_CA)
+        self.assertNotEqual(
+            first_cert, second_cert,
+            "Rotation fixture is broken: both client certs are identical, so "
+            "nothing would actually be rotated")
+        self._refs.modify_cng_mtls_ref(
+            src, dst, infra.lb_ip, rc_name, second_cert, second_key)
+
+        self._expect_connectivity(
+            rest_src, rc_name, CONNECTIVITY_STATUS.RC_OK, timeout=180)
+        self._assert_ref_is_cert_authed(rest_src, rc_name)
+
+        gen2 = BlobGenerator("mtls-post-", "mtls-post-", self._value_size,
+                             end=items // 2)
+        src.load_all_buckets_from_generator(gen2)
+        self._wait_for_replication_to_catchup(timeout=600)
+        self.verify_results()
+
+    def _post_remote_cluster_raw(self, rest, params, name=None):
+        """Raw POST to /pools/default/remoteClusters[/<name>].
+
+        Deliberately bypasses RestConnection.add_remote_cluster, which
+        retries five times and then raises -- swallowing the very response
+        body these validation assertions need to read. Mirrors the direct
+        REST style crlXDCR.py uses for the same reason.
+
+        @return: (status, content) with content decoded to str.
+        """
+        api = rest.baseUrl + "pools/default/remoteClusters"
+        if name:
+            api += "/" + urllib.parse.quote(name, safe="")
+        status, content, _ = rest._http_request(
+            api, "POST", urllib.parse.urlencode(params))
+        if isinstance(content, bytes):
+            content = content.decode(errors="replace")
+        return status, content
+
+    def _assert_rejected_with(self, status, content, expected_fragment, case):
+        """Assert a REST call was refused AND refused for the stated reason.
+
+        Checking only that it failed would let an unrelated failure (a down
+        gateway, a typo in the hostname) satisfy a validation test.
+        """
+        self.assertFalse(
+            status,
+            "{0}: expected the request to be REFUSED, but it succeeded. "
+            "Response: {1}".format(case, content))
+        self.assertIn(
+            expected_fragment, content,
+            "{0}: refused, but not for the expected reason. Expected to find "
+            "{1!r} in the response; got: {2}".format(
+                case, expected_fragment, content))
+        log.info("{0}: correctly refused -- {1}".format(case, content.strip()))
+
+    def test_cng_mtls_ref_param_validation(self):
+        """goxdcr's auth-parameter rules for a cert-authenticated CNG ref.
+
+        Pure REST validation -- no replication, and for the malformed cases
+        no gateway dial either -- so this is fast, deterministic, and
+        unaffected by MB-73988. It pins the branches of
+        validateRemoteClusterAuthParameters that the CNG path relies on:
+        a secureType=full reference may carry a username OR a client
+        certificate but never both, and a client certificate is only
+        meaningful together with a parseable key.
+        """
+        src, dst, infra, rest_src = self._setup_mtls_cng_pair()
+        client_cert, client_key = self._client_cert_pair(
+            self._PRIMARY_CLIENT_INT_CA)
+        dest_master = dst.get_master_node()
+        certificate = self.get_cluster_certificates(dst)
+        hostname = "couchbase2://{0}:{1}".format(
+            infra.lb_ip, HAPROXY_FRONTEND_PORT)
+
+        def base_params(name):
+            return {"name": name, "hostname": hostname,
+                    "demandEncryption": "on", "secureType": "full",
+                    "certificate": certificate}
+
+        # 1. username and client certificate are mutually exclusive
+        params = base_params("cng_mtls_both_auth")
+        params.update({"username": dest_master.rest_username,
+                       "password": dest_master.rest_password,
+                       "clientCertificate": client_cert,
+                       "clientKey": client_key})
+        status, content = self._post_remote_cluster_raw(rest_src, params)
+        self._assert_rejected_with(
+            status, content,
+            "username and client certificate cannot both be given",
+            "username + client certificate on a CNG ref")
+
+        # 2. a client certificate without its key
+        params = base_params("cng_mtls_no_key")
+        params["clientCertificate"] = client_cert
+        status, content = self._post_remote_cluster_raw(rest_src, params)
+        self._assert_rejected_with(
+            status, content, "client key",
+            "client certificate with no client key")
+
+        # 3. a syntactically valid PEM pair that does not match each other
+        other_cert, _ = self._client_cert_pair(self._ROTATED_CLIENT_INT_CA)
+        params = base_params("cng_mtls_mismatched")
+        params.update({"clientCertificate": other_cert,
+                       "clientKey": client_key})
+        status, content = self._post_remote_cluster_raw(rest_src, params)
+        self._assert_rejected_with(
+            status, content, "client certificate",
+            "mismatched client certificate/key pair")
+
+        # None of the rejected attempts may leave a reference behind.
+        self.assertEqual(
+            self._refs.active_refs(rest_src), [],
+            "A refused mTLS reference was still created on the source")
+
+    def test_cng_mtls_expired_client_cert(self):
+        """An expired client cert must be refused, even though it is trusted.
+
+        The cert is signed by the cluster's own intermediate CA and carries
+        the subject/SAN the cluster maps to a user, so the chain and the
+        identity are both fine and the ONLY defect is the validity window.
+        That separates this from test_cng_mtls_untrusted_client_cert, which
+        fails chain verification instead.
+        """
+        rc_name = "cng_mtls_expired"
+        src, dst, infra, rest_src = self._setup_mtls_cng_pair()
+        self._assert_cng_path_healthy(src, dst, infra, rest_src)
+        client_cert, client_key = self._certs.generate_expired_client_cert(
+            dst.get_master_node().ip)
+
+        outcome = self._assert_auth_failure_surfaces(
+            src, dst, infra, rest_src, rc_name, client_cert, client_key,
+            scenario="client cert is trusted but expired",
+            timeout=self._input.param("recovery_timeout", 300))
+        log.info("Expired-cert scenario surfaced via: {0}".format(outcome))
+
+    def test_cng_mtls_staged_client_cert(self):
+        """Staging a client certificate on a CNG remote reference.
+
+        Staged credentials are a wholly separate product path from the
+        reference's active credentials (POST .../remoteClusters/<name> with
+        stage=true, validated by its own call to
+        validateRemoteClusterAuthParameters), and nothing in the repo
+        exercised it with certificates -- stagedCredentialsXDCR's own
+        _stage_certificates() helper has no callers.
+
+        The live reference deliberately keeps username/password auth: that
+        is the realistic "prepare to migrate this reference to certificate
+        auth" direction, and it keeps this test off the MB-73988 path so it
+        gives signal today.
+        """
+        rc_name = "cng_mtls_stage"
+        src, dst, infra, rest_src = self._setup_mtls_cng_pair()
+        client_cert, client_key = self._client_cert_pair(
+            self._PRIMARY_CLIENT_INT_CA)
+
+        self._refs.add_cng_ref(src, dst, infra.lb_ip, rc_name)
+        self._expect_connectivity(
+            rest_src, rc_name, CONNECTIVITY_STATUS.RC_OK, timeout=180)
+
+        # Positive: stage a client cert/key onto the live reference.
+        rest_src.stage_remote_cluster_certificates(
+            rc_name, client_cert, client_key)
+        staged = self._staged_entry(rest_src, rc_name)
+        self.assertTrue(
+            staged.get("clientCertificate"),
+            "Ref '{0}' reports no staged clientCertificate after staging "
+            "one; stage payload was {1}".format(rc_name, staged))
+        self.assertFalse(
+            staged.get("username"),
+            "Ref '{0}' staged a username alongside the certificate: "
+            "{1}".format(rc_name, staged))
+        log.info("Client certificate staged on '{0}'".format(rc_name))
+
+        # The active credentials must be untouched by staging, and the
+        # reference must stay healthy on them.
+        self._expect_connectivity(
+            rest_src, rc_name, CONNECTIVITY_STATUS.RC_OK, timeout=120)
+
+        # Negative: credentials and certificates are mutually exclusive on
+        # the staging path too.
+        status, content = self._post_remote_cluster_raw(
+            rest_src,
+            {"stage": "true", "username": "someuser", "password": "somepass",
+             "clientCertificate": client_cert, "clientKey": client_key},
+            name=rc_name)
+        self._assert_rejected_with(
+            status, content,
+            "username and client certificate cannot both be given",
+            "staging username and client certificate together")
+
+        # Negative: a staged certificate with no key.
+        status, content = self._post_remote_cluster_raw(
+            rest_src, {"stage": "true", "clientCertificate": client_cert},
+            name=rc_name)
+        self._assert_rejected_with(
+            status, content, "client key",
+            "staging a client certificate with no client key")
+
+    def _staged_entry(self, rest, rc_name):
+        """The 'stage' payload of one remote reference, as a dict.
+
+        goxdcr serialises staged credentials through Credentials.ToMap(),
+        which omits whichever of username/clientCertificate is unset, so an
+        absent key means "not staged" rather than "empty".
+        """
+        for ref in rest.get_remote_clusters_with_stage():
+            if ref.get("name") != rc_name:
+                continue
+            stage = ref.get("stage")
+            if isinstance(stage, dict):
+                return stage
+            return {} if stage in (None, False) else {"_raw": stage}
+        self.fail("Remote reference '{0}' not found when reading staged "
+                  "credentials".format(rc_name))
+
+    def _setup_mtls_cng_bidirectional(self):
+        """Stand up CNG in front of BOTH clusters, each accepting client certs.
+
+        Every other CNG test puts a gateway in front of the target only. A
+        bidirectional mTLS pair needs one gateway (and one LB) per cluster,
+        so the ini must supply two floating servers.
+
+        Both clusters get the cert->user mapping enabled and the user the
+        certificate maps to, because in this topology each cluster is a
+        replication target for the other.
+
+        @return: (c1, c2, infra1, infra2, rest_c1, rest_c2)
+        """
+        c1 = self.get_cb_cluster_by_name("C1")
+        c2 = self.get_cb_cluster_by_name("C2")
+        self._infra.bootstrap_targets(
+            self._all_clusters(), [c1, c2], client_mtls=True)
+        for cluster in (c1, c2):
+            self.add_built_in_server_user(node=cluster.get_master_node())
+            self._certs.enable_client_cert_auth(cluster)
+        return (c1, c2,
+                self._registry.get(c1.get_name()),
+                self._registry.get(c2.get_name()),
+                RestConnection(c1.get_master_node()),
+                RestConnection(c2.get_master_node()))
+
+    def test_cng_mtls_bidirectional(self):
+        """Both legs of a bidirectional pair are couchbase2:// refs
+        authenticated by client certificate, each through its own gateway.
+
+        Distinct from test_bidirectional_cng_with_lb, which fronts C2 only
+        and uses a STANDARD (non-CNG) reference for the reverse leg -- so
+        nothing today exercises couchbase2:// in both directions, let alone
+        with certificate auth on both. Here each cluster sits behind its own
+        CNG + HAProxy and each reference presents a client certificate, so
+        both clusters act as mTLS server and mTLS client simultaneously.
+
+        FAILS on 8.5.0-1077 -- MB-73988: goxdcr utils/cng.go
+        GetBucketInfoFromCNG() drops the reference's clientCertificate/
+        clientKey, so creating a replication on a cert-authenticated CNG
+        reference returns HTTP 400 "either username or client certificate
+        must be present". Everything up to that point -- both gateways, both
+        references, both reaching RC_OK, and both being genuinely
+        certificate-authenticated -- passes and is asserted before the
+        replications are created, so this test still proves the
+        bidirectional mTLS path works right up to the known defect.
+        """
+        rc_fwd = "cng_mtls_C1_to_C2"
+        rc_rev = "cng_mtls_C2_to_C1"
+        c1, c2, infra1, infra2, rest_c1, rest_c2 = \
+            self._setup_mtls_cng_bidirectional()
+
+        cert, key = self._client_cert_pair(self._PRIMARY_CLIENT_INT_CA)
+
+        # C1 -> CNG(C2) and C2 -> CNG(C1), both certificate-authenticated.
+        self._refs.add_cng_mtls_ref(c1, c2, infra2.lb_ip, rc_fwd, cert, key)
+        self._refs.add_cng_mtls_ref(c2, c1, infra1.lb_ip, rc_rev, cert, key)
+
+        for rest, rc_name, label in ((rest_c1, rc_fwd, "C1->C2"),
+                                     (rest_c2, rc_rev, "C2->C1")):
+            self._expect_connectivity(
+                rest, rc_name, CONNECTIVITY_STATUS.RC_OK, timeout=180)
+            self._assert_ref_is_cert_authed(rest, rc_name)
+            log.info("{0} leg is up and certificate-authenticated".format(
+                label))
+
+        src_buckets = c1.get_buckets()
+        dest_buckets = c2.get_buckets()
+        for src_bucket in src_buckets:
+            dest_bucket = self.find_matching_bucket(src_bucket, dest_buckets)
+            self._replication.create_single(c1, rc_fwd, src_bucket, dest_bucket)
+            self._replication.create_single(c2, rc_rev, dest_bucket, src_bucket)
+        self._register_replications_for_verification(c1, c2, rc_fwd)
+        self._register_replications_for_verification(c2, c1, rc_rev)
+
+        self.load_data_topology()
+        self.perform_update_delete()
         self.verify_results()

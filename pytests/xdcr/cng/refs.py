@@ -42,6 +42,60 @@ class RemoteRefManager:
             name, demandEncryption=1,
             certificate=certificate, encryptionType="full")
 
+    def add_cng_mtls_ref(self, src_cluster, dest_cluster, lb_ip, name,
+                         client_cert, client_key):
+        """Create a CNG remote ref authenticated by client certificate.
+
+        No username/password is sent: goxdcr rejects a secureType=full
+        reference carrying both ("username and client certificate cannot
+        both be given when secure type is full"). RestConnection pops the
+        credentials itself once clientCertificate is set, so the dest
+        master's are passed through only to satisfy the signature.
+
+        `certificate` remains the TARGET's CA -- that is what validates the
+        gateway's server identity, and is independent of the client cert
+        being presented.
+        """
+        rest = RestConnection(src_cluster.get_master_node())
+        dest_master = dest_cluster.get_master_node()
+        certificate = self._get_certs(dest_cluster)
+        rest.add_remote_cluster(
+            "couchbase2://{0}".format(lb_ip), str(HAPROXY_FRONTEND_PORT),
+            dest_master.rest_username, dest_master.rest_password,
+            name, demandEncryption=1,
+            certificate=certificate,
+            clientCertificate=client_cert, clientKey=client_key,
+            encryptionType="full")
+        log.info("Created mTLS CNG remote ref '{0}' -> couchbase2://{1}:{2}"
+                 .format(name, lb_ip, HAPROXY_FRONTEND_PORT))
+
+    def modify_cng_mtls_ref(self, src_cluster, dest_cluster, lb_ip, name,
+                            client_cert, client_key):
+        """Swap the client cert/key on an existing mTLS CNG ref in place.
+
+        Logs XDCR state around the edit so a rotation that silently wedges
+        the pipeline can be reconstructed from the test log alone -- the
+        same reason modify_to_cng brackets its own call.
+        """
+        rest = RestConnection(src_cluster.get_master_node())
+        dest_master = dest_cluster.get_master_node()
+        certificate = self._get_certs(dest_cluster)
+        self._diag.log_xdcr_state(rest, src_cluster,
+                                  "pre-rotate-mtls:{0}".format(name))
+        rest.modify_remote_cluster(
+            "couchbase2://{0}".format(lb_ip), str(HAPROXY_FRONTEND_PORT),
+            dest_master.rest_username, dest_master.rest_password,
+            name, demandEncryption=1,
+            certificate=certificate,
+            clientCertificate=client_cert, clientKey=client_key,
+            encryptionType="full")
+        log.info("Rotated client cert on mTLS CNG ref '{0}'".format(name))
+        self._diag.log_xdcr_state(rest, src_cluster,
+                                  "post-rotate-mtls:{0}".format(name))
+        self._diag.scan_goxdcr_log(src_cluster,
+                                   "post-rotate-mtls:{0}".format(name),
+                                   rc_name=name)
+
     def add_standard_ref(self, src_cluster, dest_cluster, name):
         """Create a standard (non-CNG) remote cluster ref with full encryption."""
         rest = RestConnection(src_cluster.get_master_node())

@@ -26,8 +26,14 @@ class InfraManager:
         self._registry = registry
         self._certs = cert_manager
 
-    def install_cng_on_node(self, node, key_local, chain_local):
-        """Copy cert/key to a node and start a CNGHelper bound to 127.0.0.1."""
+    def install_cng_on_node(self, node, key_local, chain_local,
+                            client_mtls=False):
+        """Copy cert/key to a node and start a CNGHelper bound to 127.0.0.1.
+
+        @param client_mtls: when True, also install the cluster CA bundle on
+            the node and launch the gateway with --client-ca-cert, so it
+            accepts client certificates chaining to that bundle.
+        """
         shell = RemoteMachineShellConnection(node)
         try:
             shell.execute_command("mkdir -p {0}".format(CNG_CERT_DIR))
@@ -35,17 +41,23 @@ class InfraManager:
             shell.copy_file_local_to_remote(key_local, CNG_KEY_PATH)
         finally:
             shell.disconnect()
+        client_ca_path = None
+        if client_mtls:
+            client_ca_path = self._certs.install_client_ca_on_node(node)
         helper = CNGHelper(server=node, cert_path=CNG_CERT_PATH,
-                           key_path=CNG_KEY_PATH, cb_host="127.0.0.1")
+                           key_path=CNG_KEY_PATH, cb_host="127.0.0.1",
+                           client_ca_cert_path=client_ca_path)
         helper.install_and_build()
         helper.start()
         return helper
 
-    def setup_for_cluster(self, cluster, multi_backend=False):
+    def setup_for_cluster(self, cluster, multi_backend=False,
+                          client_mtls=False):
         """Stand up CNG in front of one cluster.
 
         multi_backend=True runs CNG on every node and configures HAProxy
         with all nodes as backends; False runs CNG on the master only.
+        client_mtls=True additionally makes every gateway accept mTLS.
         """
         if cluster.get_name() in self._registry:
             return self._registry.get(cluster.get_name())
@@ -58,7 +70,8 @@ class InfraManager:
         key_local, chain_local = self._certs.generate_shared_cng_cert(
             nodes, lb_server.ip)
 
-        cng_helpers = [self.install_cng_on_node(n, key_local, chain_local)
+        cng_helpers = [self.install_cng_on_node(n, key_local, chain_local,
+                                                client_mtls=client_mtls)
                        for n in nodes]
 
         haproxy_helper = HAProxyHelper(server=lb_server)
@@ -74,12 +87,13 @@ class InfraManager:
         return infra
 
     def bootstrap_targets(self, all_clusters, target_clusters,
-                          multi_backend=False):
+                          multi_backend=False, client_mtls=False):
         """Generate certs across all_clusters and stand up CNG for every
         named target cluster."""
         self._certs.setup_for_clusters(all_clusters)
         for cluster in target_clusters:
-            self.setup_for_cluster(cluster, multi_backend=multi_backend)
+            self.setup_for_cluster(cluster, multi_backend=multi_backend,
+                                   client_mtls=client_mtls)
 
     def cleanup_all(self):
         errors = []
