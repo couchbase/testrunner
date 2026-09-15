@@ -32,7 +32,7 @@ import logger
 from couchbase_helper.documentgenerator import BlobGenerator
 from cryptography import x509
 from membase.api.rest_client import RestConnection
-from security.crl_utils import CRLUtils
+from security.crl_utils import CRLUtils, DIAGNOSTIC_OK_STATUSES
 from security.rbac_base import RbacBase
 from TestInput import TestInputSingleton
 from xdcr.crl_xdcr_utils import (delete_inbox_contents, goxdcr_log_count,
@@ -1485,15 +1485,23 @@ class XDCRCRLLocalTests(XDCRCRLBase):
             isinstance(content, dict),
             "CRL diagnostics response was not JSON: {0!r}".format(content))
         statuses = [r.get("status") for r in content.get("results", [])]
-        # Positive form (CRITICAL 2): assert some certificate reports
-        # "valid" (the un-revoked state), not merely that "revoked" is
-        # absent -- assertNotIn("revoked", statuses) passes vacuously when
-        # statuses is [] (an empty or missing "results"), which is exactly
-        # the shape a broken/empty diagnostics response would have.
-        self.assertIn(
-            "valid", statuses,
-            "no certificate reports 'valid' after un-revoking -- the CRL "
-            "update may not have taken: {0}".format(content))
+        # Positive form (CRITICAL 2): assert some certificate reports the
+        # un-revoked status, not merely that "revoked" is absent --
+        # assertNotIn("revoked", statuses) passes vacuously when statuses
+        # is [] (an empty or missing "results"), which is exactly the shape
+        # a broken/empty diagnostics response would have.
+        #
+        # Match against DIAGNOSTIC_OK_STATUSES, never a hardcoded spelling:
+        # MB-73679 renamed the not-revoked status from "valid" to
+        # "good"/"not_revoked", so pinning one word fails on 8.5.0-1142
+        # ("'valid' not found in ['good', 'good', 'good', 'good']") against
+        # a product that un-revoked correctly -- allAllowed was true and
+        # disallowed was empty in that very payload.
+        self.assertTrue(
+            DIAGNOSTIC_OK_STATUSES.intersection(statuses),
+            "no certificate reports an un-revoked status (any of {0}) after "
+            "un-revoking -- the CRL update may not have taken: {1}".format(
+                sorted(DIAGNOSTIC_OK_STATUSES), content))
         self.assertNotIn(
             "revoked", statuses,
             "a certificate is still reported revoked after un-revoking: "
