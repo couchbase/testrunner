@@ -2,6 +2,7 @@
 
 Kept separate from crlXDCR.py so the test module carries test logic only.
 """
+import datetime
 import os
 import re
 import shlex
@@ -18,13 +19,80 @@ CLIENT_KEY_FILE = "client_pkey.key"
 CA_SUBDIR = "CA"
 CA_FILE = "ca.pem"
 
-# goxdcr's own leading log timestamp, e.g. '2026-09-01T21:27:00.727Z...'.
-# A multi-line log entry's CONTINUATION fragment (starting 'map[...]',
-# 'sendPeerToPeerReq(...)', etc.) has no such prefix, and sorts
-# lexicographically ABOVE any real timestamp ('m'/'s' > any digit) -- so
-# comparing that fragment's own leading token against `since` would count
-# it regardless of when the entry it belongs to was actually logged (M8).
+# goxdcr's own leading log timestamp. A multi-line log entry's
+# CONTINUATION fragment (starting 'map[...]', 'sendPeerToPeerReq(...)',
+# etc.) has no such prefix, and must be skipped rather than have its own
+# leading token read as a time (M8).
 _TIMESTAMP_PREFIX = re.compile(r"^\d{4}-\d\d-\d\dT")
+
+
+def _parse_iso_timestamp(token):
+    """Parse an ISO-8601 timestamp into a timezone-AWARE datetime.
+
+    Accepts both spellings this suite has to reconcile:
+    `2026-09-14T06:00:14.123Z` (UTC, what `_read_node_started_utc` produces)
+    and `2026-09-13T23:09:54.969-07:00` (local time plus offset, what goxdcr
+    actually writes). A token with no zone at all is read as UTC.
+
+    Python 3.10's `datetime.fromisoformat` does not accept a trailing 'Z'
+    (that arrived in 3.11), so the 'Z' is rewritten to '+00:00' first --
+    do not "simplify" that away, the suite runs on 3.10.13.
+
+    Returns None when `token` is not a timestamp at all; callers decide
+    whether that is benign (a continuation fragment) or a hard error.
+    """
+    token = token.strip()
+    if token.endswith("Z") or token.endswith("z"):
+        token = token[:-1] + "+00:00"
+    try:
+        parsed = datetime.datetime.fromisoformat(token)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=datetime.timezone.utc)
+    return parsed
+
+
+def _line_is_at_or_after(line, since):
+    """True when `line`'s own leading timestamp is at or after `since`.
+
+    Compares ABSOLUTE INSTANTS, never strings. The obvious shortcut -- a
+    lexicographic `line.split()[0] >= since` -- is wrong and silently
+    returns 0 matches forever on any node whose clock is not set to UTC,
+    which is what made every "the phrase must appear" assertion in this
+    suite fail on the QE fleet while the product was behaving correctly:
+    goxdcr timestamps a line in the NODE's own zone (`/etc/timezone` is
+    `US/Pacific` there, so `2026-09-13T23:09:54.969-07:00`) while `since`
+    is UTC (`2026-09-14T06:00:14.123Z`). Those two name the SAME instant,
+    but '2026-09-13...' sorts below '2026-09-14...', so the line -- and
+    every other line in the window -- was discarded.
+
+    A continuation fragment (no leading timestamp) is not a log line and
+    returns False, as before (M8). A line that DOES start with something
+    timestamp-shaped but cannot be parsed raises: silently dropping such a
+    line is precisely the failure mode above, and a count that quietly
+    goes to zero reads as a product bug rather than a fixture bug.
+
+    `since` may be an ISO-8601 string or an already-parsed aware datetime
+    (`goxdcr_log_count` parses it once, up front, so a malformed value
+    fails even on a run where no line matches the pattern at all).
+    """
+    if not _TIMESTAMP_PREFIX.match(line):
+        return False
+    token = line.split(" ", 1)[0]
+    stamp = _parse_iso_timestamp(token)
+    if stamp is None:
+        raise ValueError(
+            "could not parse the leading timestamp {0!r} of goxdcr log line "
+            "{1!r} -- refusing to silently drop it from the `since` "
+            "window".format(token, line[:200]))
+    since_stamp = since if isinstance(
+        since, datetime.datetime) else _parse_iso_timestamp(since)
+    if since_stamp is None:
+        raise ValueError(
+            "could not parse `since` value {0!r} as an ISO-8601 "
+            "timestamp".format(since))
+    return stamp >= since_stamp
 
 
 def _inbox_path(shell):
@@ -205,12 +273,13 @@ def goxdcr_log_count(server, pattern, since=None):
     stays unchanged.
 
     Args:
-        since: optional ISO-8601 UTC string, e.g. '2026-09-01T21:27:00Z'.
-            When given, only lines whose OWN leading timestamp sorts
-            lexicographically >= `since` are counted. goxdcr's log lines
-            start with a fixed-width ISO-8601 UTC timestamp
-            (`2026-09-01T21:27:00.727Z`), so plain string comparison sorts
-            the same as chronological order -- no date parsing needed.
+        since: optional ISO-8601 timestamp string, e.g.
+            '2026-09-01T21:27:00.727Z'. When given, only lines whose OWN
+            leading timestamp is at or after `since` AS AN INSTANT are
+            counted -- see `_line_is_at_or_after`, and do not revert that
+            to a string comparison: goxdcr timestamps its lines in the
+            NODE's own timezone, not UTC, so the two spellings of one
+            instant do not sort alike.
     """
     shell = RemoteMachineShellConnection(server)
     try:
@@ -237,6 +306,17 @@ def goxdcr_log_count(server, pattern, since=None):
         # compressed rotated log always comes back as real lines instead of
         # collapsing to a single 'Binary file ... matches' placeholder with
         # no timestamp to compare.
+        # Parse `since` BEFORE reading the log, not per line: a malformed
+        # value must fail the test outright, including on a run where the
+        # pattern matches nothing at all. Deferring it into the loop would
+        # let a "must be 0" assertion pass vacuously on a bad `since` --
+        # the same shape of silent-zero bug this window filter already had.
+        since_stamp = _parse_iso_timestamp(since)
+        if since_stamp is None:
+            raise ValueError(
+                "could not parse `since` value {0!r} as an ISO-8601 "
+                "timestamp".format(since))
+
         cmd = "zgrep -h --text -- {0} {1}/goxdcr.log* 2>/dev/null".format(
             shlex.quote(pattern), log_dir)
         output, _ = shell.execute_command(cmd)
@@ -244,14 +324,9 @@ def goxdcr_log_count(server, pattern, since=None):
             return 0
         count = 0
         for line in output:
-            line = str(line)
-            # M8: skip any line whose own leading token is not a goxdcr
-            # timestamp -- see `_TIMESTAMP_PREFIX` for why a continuation
-            # fragment must never be compared against `since` at all.
-            if not _TIMESTAMP_PREFIX.match(line):
-                continue
-            timestamp = line.split(" ", 1)[0]
-            if timestamp >= since:
+            # M8 (continuation fragments) and the timezone comparison both
+            # live in `_line_is_at_or_after` -- see there.
+            if _line_is_at_or_after(str(line), since_stamp):
                 count += 1
         return count
     finally:
