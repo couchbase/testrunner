@@ -7232,6 +7232,202 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             # Drop indexes
             self.drop_index_node_resources_utilization_validations()
 
+    def test_sparse_vector_dim_out_of_bounds(self):
+        """
+        MB-73464: Indexer must reject sparse vectors whose dimension
+        index exceeds the uint16 storage cap (65535) instead of panicking and
+        looping through restarts. Rejected documents must be handled like other
+        malformed sparse vectors: dropped (row removed) when `sparse` is the
+        leading index key, indexed as NULL otherwise. The rejection is tracked
+        by the projector stat `sparse_dim_out_of_bounds`.
+
+        Note: BHIVE ("CREATE VECTOR INDEX") only supports a single index key,
+        so it cannot be used for the leading/trailing composite scenarios --
+        those must be regular (non-BHIVE) composite GSI indexes. The
+        dimension-cap rejection itself is enforced in the projector
+        (validateSparseVector), shared by both storage engines, so the
+        drop/NULL behavior is exercised correctly there. The single-key
+        BHIVE index is what actually reproduces the original crash's code
+        path (bhiveSlice.insertVectorIndex).
+
+        Steps:
+            1. Load AmazonSparse data and create: a single-key BHIVE vector
+               index on `sparse` (reproduces the original crash's storage
+               path), plus two regular composite indexes -- one with `sparse`
+               as the leading key, one with `sparse` trailing another scalar
+               key (exercises the drop-vs-NULL behavior).
+            2. Mutate a batch of docs to a sparse vector at the exact boundary
+               (dim = 65535) -- must be accepted and indexed normally.
+            3. Mutate two further batches of docs to sparse vectors with an
+               out-of-bounds dim (65536, and 86353 -- the exact value from the
+               original panic report) -- must be rejected.
+            4. Verify: no panic in cbcollect logs, `sparse_dim_out_of_bounds`
+               stat count matches the number of rejected docs, rejected docs
+               are dropped from the leading-key index and NULLed in the
+               trailing-key index, and all indexes remain Ready throughout
+               (no restart loop).
+
+        Note: "dropped" vs "NULLed" is verified via items_count from the
+        indexer's own stats (get_index_stats), not via a N1QL WHERE predicate
+        on `sparse` -- a predicate like `sparse IS NOT NULL` is evaluated
+        against the raw document (which genuinely has a non-null array we
+        just wrote), not the indexer's internal representation, so it cannot
+        tell whether an entry was actually dropped from a given index.
+        """
+        max_dim = 65535
+        oob_dim_near_boundary = max_dim + 1
+        oob_dim_from_panic_report = 86353
+        batch_size = self.input.param("oob_batch_size", 20)
+
+        self._setup_data_for_indexing(skip_default_scope=self.skip_default)
+
+        for namespace in self.namespaces:
+            definitions = self.gsi_util_obj.generate_amazon_sparse_vector_index_definitions_composite(
+                index_name_prefix="sparse_oob_" + ''.join(random.choices(string.ascii_lowercase, k=5)),
+                skip_primary=True,
+                scan_nprobes=self.scan_nprobes,
+                limit=self.scan_limit,
+            )
+
+            is_sparse_field = lambda field: 'sparse vector' in str(field).lower()
+
+            single_key_def = next(d for d in definitions if d.index_fields and len(d.index_fields) == 1
+                                  and is_sparse_field(d.index_fields[0]))
+            leading_def = next(d for d in definitions if d.index_fields and len(d.index_fields) > 1
+                               and is_sparse_field(d.index_fields[0]))
+            trailing_def = next(d for d in definitions if d.index_fields and len(d.index_fields) > 1
+                                and not is_sparse_field(d.index_fields[0])
+                                and any(is_sparse_field(f) for f in d.index_fields))
+
+            bhive_create_queries = self.gsi_util_obj.get_create_index_list(
+                definition_list=[single_key_def],
+                namespace=namespace,
+                bhive_index=True
+            )
+            composite_create_queries = self.gsi_util_obj.get_create_index_list(
+                definition_list=[leading_def, trailing_def],
+                namespace=namespace,
+                bhive_index=False
+            )
+            for query in bhive_create_queries + composite_create_queries:
+                self.run_cbq_query(query=query)
+            self.wait_until_indexes_online()
+
+            bhive_idx_name = single_key_def.index_name
+            leading_idx_name = leading_def.index_name
+            trailing_idx_name = trailing_def.index_name
+
+            # get_item_counts_from_index_stats() aggregates across all index
+            # nodes -- with 2 index nodes in this conf, a single
+            # index_rest.get_index_stats() call could miss an index that
+            # doesn't reside on that particular node.
+            get_items_count = lambda index_name: next(
+                (e['count'] for e in self.get_item_counts_from_index_stats()
+                 if e['name'].endswith(f".{index_name}")), None)
+
+            primary_idx_name = f"primary_sparse_oob_{''.join(random.choices(string.ascii_lowercase, k=5))}"
+            self.run_cbq_query(query=f"CREATE PRIMARY INDEX `{primary_idx_name}` ON {namespace}")
+            self.wait_until_indexes_online()
+
+            baseline_bhive_count = get_items_count(bhive_idx_name)
+            baseline_leading_count = get_items_count(leading_idx_name)
+            baseline_trailing_count = get_items_count(trailing_idx_name)
+
+            try:
+                keys_result = self.run_cbq_query(
+                    query=f"SELECT RAW meta().id FROM {namespace} LIMIT {batch_size * 3}")
+                all_keys = keys_result.get('results', [])
+                self.assertTrue(len(all_keys) >= batch_size * 3,
+                                "Not enough docs in dataset to run out-of-bounds dimension scenario")
+
+                boundary_ids = all_keys[0:batch_size]
+                near_boundary_oob_ids = all_keys[batch_size:batch_size * 2]
+                panic_value_oob_ids = all_keys[batch_size * 2:batch_size * 3]
+
+                def mutate_sparse(doc_ids, dim):
+                    ids_literal = json.dumps(doc_ids)
+                    update_query = (
+                        f"UPDATE {namespace} USE KEYS {ids_literal} "
+                        f"SET `sparse` = [[{dim}], [0.5]]"
+                    )
+                    self.run_cbq_query(query=update_query)
+
+                mutate_sparse(boundary_ids, max_dim)
+                self.sleep(300, "waiting for indexer to process boundary mutation")
+
+                self.assertEqual(get_items_count(bhive_idx_name), baseline_bhive_count,
+                                 "BHIVE index item count changed after a valid "
+                                 "boundary-dimension (65535) mutation")
+                self.assertEqual(get_items_count(leading_idx_name), baseline_leading_count,
+                                 "Leading-key index item count changed after a valid "
+                                 "boundary-dimension (65535) mutation")
+                self.assertEqual(get_items_count(trailing_idx_name), baseline_trailing_count,
+                                 "Trailing-key index item count changed after a valid "
+                                 "boundary-dimension (65535) mutation")
+
+                self.assertFalse(
+                    self.validate_error_msg_and_doc_count_in_cbcollect(self.master, '"sparse_dim_out_of_bounds"'),
+                    "sparse_dim_out_of_bounds stat should not appear before any out-of-bounds "
+                    "document has been loaded"
+                )
+
+                mutate_sparse(near_boundary_oob_ids, oob_dim_near_boundary)
+                mutate_sparse(panic_value_oob_ids, oob_dim_from_panic_report)
+                self.sleep(300, "waiting for indexer to process out-of-bounds mutations")
+
+                oob_ids = near_boundary_oob_ids + panic_value_oob_ids
+                total_oob_docs = len(oob_ids)
+
+                self.assertFalse(
+                    self.validate_error_msg_and_doc_count_in_cbcollect(self.master, "panic"),
+                    "Indexer panic found in logs after loading out-of-bounds sparse vector "
+                    "dimensions -- MB-73464 regression"
+                )
+
+                error_msg_and_doc_count = f'"sparse_dim_out_of_bounds":{total_oob_docs}'
+                self.assertTrue(
+                    self.validate_error_msg_and_doc_count_in_cbcollect(self.master, error_msg_and_doc_count),
+                    f"Expected stat {error_msg_and_doc_count} not found in cbcollect logs"
+                )
+
+                self.assertEqual(
+                    get_items_count(bhive_idx_name), baseline_bhive_count - total_oob_docs,
+                    "Docs with out-of-bounds sparse vector dims were not dropped "
+                    "from the single-key BHIVE index (item count mismatch)"
+                )
+
+                self.assertEqual(
+                    get_items_count(leading_idx_name), baseline_leading_count - total_oob_docs,
+                    "Docs with out-of-bounds sparse vector dims were not dropped from "
+                    "the index when `sparse` is the leading key (item count mismatch)"
+                )
+
+                self.assertEqual(
+                    get_items_count(trailing_idx_name), baseline_trailing_count,
+                    "Docs with out-of-bounds sparse vector dims should remain indexed "
+                    "(item count unchanged) when `sparse` is not the leading key"
+                )
+
+                index_metadata = self.index_rest.get_indexer_metadata().get('status', [])
+                for idx_info in index_metadata:
+                    if idx_info.get('name') in (bhive_idx_name, leading_idx_name, trailing_idx_name):
+                        self.assertEqual(idx_info.get('status'), 'Ready',
+                                         f"Index {idx_info.get('name')} not Ready after loading "
+                                         f"out-of-bounds sparse vector documents -- possible "
+                                         f"indexer restart/crash")
+
+                # Note: item_count_related_validations()/
+                # compare_item_counts_between_kv_and_gsi() is deliberately not
+                # called here -- it asserts exact KV<->GSI item-count parity,
+                # which this scenario intentionally violates on the BHIVE and
+                # leading-key indexes (rejected docs are dropped from them by
+                # design). The per-index item-count assertions above already
+                # verify the expected counts precisely.
+            finally:
+                self.run_cbq_query(query=f"DROP INDEX `{primary_idx_name}` ON {namespace}")
+
+            self.drop_index_node_resources_utilization_validations()
+
     def test_rebalance_rejected_during_bhive_graph_build(self):
         """
         MB-65985: Reject rebalance if BHIVE graph building is in progress.
