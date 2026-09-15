@@ -45,6 +45,7 @@ NodeHelper.raise_fd_soft_limit()
 
 
 FORWARD_LOCAL_ONLY = "forwardLocalOnly"
+DISABLE_HLV_SHORT_CIRCUIT = "disableHlvBasedShortCircuit"
 SKIPPED_METRIC = "xdcr_non_local_mutations_skipped_total"
 
 
@@ -135,11 +136,11 @@ class ForwardLocalOnlyXDCRBase(XDCRNewBaseTest):
         if last_err is not None:
             raise last_err
         self._sdk_client_cache = {}
-        # Clusters where a test flipped the GLOBAL
-        # disableHlvBasedShortCircuit setting. Global
-        # /settings/replications params survive bucket recreation, so
-        # tearDown must reset them or the residue silently changes the
-        # preconditions of whatever runs next on the same cluster.
+        # Clusters where a test flipped disableHlvBasedShortCircuit.
+        # The default /settings/replications params survive bucket
+        # recreation, so tearDown must reset them or the residue
+        # silently changes the preconditions of whatever runs next on
+        # the same cluster.
         self._shortcircuit_dirty = {}
         self.src_cluster = self.get_cb_cluster_by_name("C1")
         self.src_master = self.src_cluster.get_master_node()
@@ -187,47 +188,56 @@ class ForwardLocalOnlyXDCRBase(XDCRNewBaseTest):
                     if not settings_uri:
                         continue
                     api = rest.baseUrl[:-1] + settings_uri
+                    # Both are per-replication settings, so both are
+                    # reset here. Writing the product default back is
+                    # idempotent on replications a test never touched.
+                    resets = {FORWARD_LOCAL_ONLY: "false",
+                              DISABLE_HLV_SHORT_CIRCUIT: "false"}
                     try:
                         status, content, _ = rest._http_request(
-                            api, "POST", urllib.parse.urlencode(
-                                {FORWARD_LOCAL_ONLY: "false"}))
+                            api, "POST",
+                            urllib.parse.urlencode(resets))
                         if not status:
                             raise XDCRException(
                                 "non-OK response: {0}".format(content))
                         self.log.info(
-                            "{0} tearDown: reset {1}=false on {2} "
+                            "{0} tearDown: reset {1} on {2} "
                             "repl {3}".format(
-                                self._tag(), FORWARD_LOCAL_ONLY,
+                                self._tag(), resets,
                                 cluster.get_name(), repl_id))
                     except Exception as e:
                         self.log.warning(
-                            "{0} tearDown: could not reset FLO on "
-                            "{1} repl {2}: {3}".format(
-                                self._tag(), cluster.get_name(),
-                                repl_id, e))
+                            "{0} tearDown: could not reset {1} on "
+                            "{2} repl {3}: {4}".format(
+                                self._tag(), list(resets),
+                                cluster.get_name(), repl_id, e))
         except Exception as e:
             self.log.warning(
                 "{0} tearDown FLO reset raised (non-fatal): {1}".format(
                     self._tag(), e))
 
-        # Reset the cluster-global disableHlvBasedShortCircuit on any
-        # cluster this test touched. Unlike per-replication settings
-        # (recreated with the buckets), the global default persists
-        # across tests and would leak into the next test's premises.
+        # Reset the DEFAULT disableHlvBasedShortCircuit on any cluster
+        # this test touched. The replications were reset above; this
+        # is the other half, and the half that matters most across
+        # tests -- default replication settings survive bucket
+        # recreation, so residue here silently changes the premises of
+        # whatever replication the next test creates.
         for cname, cluster in list(
                 (getattr(self, "_shortcircuit_dirty", {}) or {}).items()):
             try:
                 self._set_and_verify_global_xdcr_param(
-                    cluster, "disableHlvBasedShortCircuit", "false",
+                    cluster, DISABLE_HLV_SHORT_CIRCUIT, "false",
                     settle=0, assert_match=False)
                 self.log.info(
-                    "{0} tearDown: reset disableHlvBasedShortCircuit="
-                    "false on {1}".format(self._tag(), cname))
+                    "{0} tearDown: reset default {1}=false on "
+                    "{2}".format(
+                        self._tag(), DISABLE_HLV_SHORT_CIRCUIT, cname))
             except Exception as e:
                 self.log.warning(
-                    "{0} tearDown: could not reset "
-                    "disableHlvBasedShortCircuit on {1}: {2}".format(
-                        self._tag(), cname, e))
+                    "{0} tearDown: could not reset default {1} on "
+                    "{2}: {3}".format(
+                        self._tag(), DISABLE_HLV_SHORT_CIRCUIT,
+                        cname, e))
         if hasattr(self, "_shortcircuit_dirty"):
             self._shortcircuit_dirty.clear()
 
@@ -340,14 +350,16 @@ class ForwardLocalOnlyXDCRBase(XDCRNewBaseTest):
                     self.log.info(
                         "{0}   {1}/{2}: bucket_json failed: {3}".format(
                             tag, cname, bucket.name, e))
+            # Per-replication, not the default setting: the default
+            # reads back whatever was last written to it even when no
+            # pipeline picked the value up.
             try:
-                d = self._get_global_xdcr_param(
-                    cluster, "disableHlvBasedShortCircuit")
+                d = self._get_disable_hlv_short_circuit(cluster)
             except Exception:
                 d = "<read-failed>"
             self.log.info(
-                "{0}   {1}: disableHlvBasedShortCircuit={2}".format(
-                    tag, cname, d))
+                "{0}   {1}: {2} per-replication={3}".format(
+                    tag, cname, DISABLE_HLV_SHORT_CIRCUIT, d))
             try:
                 replications = rest.get_replications()
             except Exception as e:
@@ -442,10 +454,19 @@ class ForwardLocalOnlyXDCRBase(XDCRNewBaseTest):
             "Waiting {0}s for ECCV to settle on all clusters".format(
                 self.eccv_settle_timeout))
         time.sleep(self.eccv_settle_timeout)
-    def _set_forward_local_only_on_replication(self, cluster, repl,
-                                                value, settle=5):
-        """Set forwardLocalOnly on ONE replication, addressed by its
+    def _set_xdcr_param_on_replication(self, cluster, repl, param,
+                                       value, settle=5):
+        """Set one xdcr param on ONE replication, addressed by its
         `settingsURI`, then read the same URI back and assert.
+
+        Per-replication is the only addressing that reaches a RUNNING
+        replication. `POST /settings/replications` (what
+        `set_global_xdcr_param` uses) writes goxdcr's DEFAULT
+        replication settings: those seed replications created after
+        the write and never reach an existing spec. Worse, reading
+        that same endpoint back returns the new value, so a caller
+        that writes and verifies there sees success while every
+        pipeline keeps running on the old value.
 
         The bucket-name helpers (`rest.set_xdcr_param` /
         `set_xdcr_param_verified`) resolve the replication by source/
@@ -465,15 +486,15 @@ class ForwardLocalOnlyXDCRBase(XDCRNewBaseTest):
         self.log.info(
             "{0} SET xdcr_param: cluster={1} repl={2} {3}={4}".format(
                 self._tag(), cluster.get_name(), repl_id,
-                FORWARD_LOCAL_ONLY, coerced))
+                param, coerced))
         status, content, _ = rest._http_request(
             api, "POST",
-            urllib.parse.urlencode({FORWARD_LOCAL_ONLY: coerced}))
+            urllib.parse.urlencode({param: coerced}))
         if not status:
             raise XDCRException(
                 "Unable to set {0}={1} on replication {2} on cluster "
                 "{3}: {4}".format(
-                    FORWARD_LOCAL_ONLY, coerced, repl_id,
+                    param, coerced, repl_id,
                     cluster.get_name(), content))
         if settle:
             time.sleep(settle)
@@ -482,16 +503,21 @@ class ForwardLocalOnlyXDCRBase(XDCRNewBaseTest):
             self.fail(
                 "{0} VERIFY FAILED: could not read back {1} on "
                 "replication {2}: {3}".format(
-                    self._tag(), FORWARD_LOCAL_ONLY, repl_id, content))
-        actual = json.loads(content).get(FORWARD_LOCAL_ONLY)
+                    self._tag(), param, repl_id, content))
+        actual = json.loads(content).get(param)
         self.log.info(
             "{0} VERIFY xdcr_param: repl={1} {2}={3} (expected {4})"
-            .format(self._tag(), repl_id, FORWARD_LOCAL_ONLY,
+            .format(self._tag(), repl_id, param,
                     actual, coerced))
         self.assertEqual(
             str(actual).lower(), coerced,
             "{0} {1} did not persist on replication {2}; got {3!r}"
-            .format(self._tag(), FORWARD_LOCAL_ONLY, repl_id, actual))
+            .format(self._tag(), param, repl_id, actual))
+
+    def _set_forward_local_only_on_replication(self, cluster, repl,
+                                                value, settle=5):
+        self._set_xdcr_param_on_replication(
+            cluster, repl, FORWARD_LOCAL_ONLY, value, settle=settle)
 
     def _set_forward_local_only_on_cluster(self, cluster, value,
                                             peer_cluster=None):
@@ -1276,20 +1302,106 @@ class ForwardLocalOnlyXDCRBase(XDCRNewBaseTest):
             "Doc counts did not converge within {0}s. Last seen: {1}".format(
                 timeout, last_counts))
     def _set_disable_hlv_short_circuit(self, cluster, value):
-        """Set the global xdcr setting disableHlvBasedShortCircuit on a
-        cluster. Verifies persistence via readback. Propagates any
-        REST error; caller is expected to fail or skip explicitly.
+        """Set disableHlvBasedShortCircuit on every replication
+        originating at `cluster`, and on the cluster's DEFAULT
+        replication settings. Propagates any REST error; caller is
+        expected to fail or skip explicitly.
 
-        The cluster is recorded as dirty so tearDown resets the
-        global back to false -- it is not per-bucket state and would
-        otherwise leak into subsequent tests."""
+        Both writes are needed and they do different jobs. The
+        default-settings write only seeds replications created after
+        it, so on its own it leaves the replications already under
+        test running on the old value -- while a readback of that
+        same endpoint returns the new one. That combination is
+        silent: the setting looks applied and the pipelines never see
+        it, so an echo the test expects to observe stays blocked by
+        the short-circuit and the failure reads as a product bug. The
+        per-replication writes are what actually reach the running
+        pipelines; each is verified through its own settingsURI.
+
+        Direction matters at the CALL SITE: the short-circuit is a
+        SENDING-side decision (the source skips a doc whose HLV
+        already names the target as a version source), so it belongs
+        on the cluster whose outbound echo the test wants to observe,
+        not on the cluster receiving it.
+
+        Per-replication settle is 0; the trailing `flo_settle_timeout`
+        gives goxdcr one window to digest all of them, keeping the
+        N-replication cost O(N) REST calls + 1 sleep rather than O(N)
+        of each.
+
+        The cluster is recorded as dirty so tearDown resets both the
+        default setting and every replication -- the default survives
+        bucket recreation and would otherwise leak into the next
+        test."""
         if not hasattr(self, "_shortcircuit_dirty"):
             self._shortcircuit_dirty = {}
         self._shortcircuit_dirty[cluster.get_name()] = cluster
         self._set_and_verify_global_xdcr_param(
-            cluster, "disableHlvBasedShortCircuit",
+            cluster, DISABLE_HLV_SHORT_CIRCUIT,
             str(value).lower(),
-            settle=5, assert_match=True)
+            settle=0, assert_match=True)
+        rest = RestConnection(cluster.get_master_node())
+        replications = rest.get_replications()
+        if not replications:
+            self.fail(
+                "{0} No replications found on cluster {1} when "
+                "setting {2}; the default-settings write alone does "
+                "not affect any pipeline".format(
+                    self._tag(), cluster.get_name(),
+                    DISABLE_HLV_SHORT_CIRCUIT))
+        for repl in replications:
+            self._set_xdcr_param_on_replication(
+                cluster, repl, DISABLE_HLV_SHORT_CIRCUIT, value,
+                settle=0)
+        time.sleep(self.flo_settle_timeout)
+
+    def _get_disable_hlv_short_circuit(self, cluster):
+        """Per-replication readback of disableHlvBasedShortCircuit as
+        {replication_id: value}.
+
+        Deliberately not `_get_global_xdcr_param`: that reads the
+        default replication settings, which a default-settings write
+        updates whether or not any running replication picked the
+        value up -- so an assertion against it cannot fail and proves
+        nothing about the pipelines under test."""
+        rest = RestConnection(cluster.get_master_node())
+        values = {}
+        for repl in rest.get_replications():
+            api = rest.baseUrl[:-1] + repl["settingsURI"]
+            repl_id = repl.get("id", repl["settingsURI"])
+            status, content, _ = rest._http_request(api)
+            if not status:
+                self.fail(
+                    "{0} could not read back {1} on replication {2}: "
+                    "{3}".format(
+                        self._tag(), DISABLE_HLV_SHORT_CIRCUIT,
+                        repl_id, content))
+            values[repl_id] = json.loads(content).get(
+                DISABLE_HLV_SHORT_CIRCUIT)
+        return values
+
+    def _verify_disable_hlv_short_circuit(self, cluster, expected):
+        """Assert disableHlvBasedShortCircuit on every replication
+        originating at `cluster`."""
+        coerced = str(expected).lower()
+        values = self._get_disable_hlv_short_circuit(cluster)
+        self.assertTrue(
+            values,
+            "{0} no replications on {1} to verify {2} against".format(
+                self._tag(), cluster.get_name(),
+                DISABLE_HLV_SHORT_CIRCUIT))
+        for repl_id, actual in values.items():
+            self.log.info(
+                "{0} VERIFY xdcr_param: repl={1} {2}={3} (expected "
+                "{4})".format(
+                    self._tag(), repl_id, DISABLE_HLV_SHORT_CIRCUIT,
+                    actual, coerced))
+            self.assertEqual(
+                str(actual).lower(), coerced,
+                "{0} {1} is {2!r} on replication {3} of {4}; expected "
+                "{5}".format(
+                    self._tag(), DISABLE_HLV_SHORT_CIRCUIT, actual,
+                    repl_id, cluster.get_name(), coerced))
     def _set_filter_expression(self, cluster, src_bucket, dest_bucket,
                                 filter_expression, skip_restream=True):
         """Live-update filterExpression on a replication. Skip-restream
@@ -2469,13 +2581,7 @@ class ForwardLocalOnlyXDCRTests(ForwardLocalOnlyXDCRBase):
         self._standard_flo_setup(
             disable_shortcircuit_on=self.dest_cluster, enable_flo=False)
 
-        readback = self._get_global_xdcr_param(
-            self.dest_cluster, "disableHlvBasedShortCircuit")
-        self.assertEqual(
-            str(readback).lower(), "true",
-            "{0} TEST/PRODUCT BUG: disableHlvBasedShortCircuit did "
-            "not apply on B; readback={1!r}".format(
-                self._tag(), readback))
+        self._verify_disable_hlv_short_circuit(self.dest_cluster, True)
 
         sdk_count = self._input.param("sdk_count", 200)
         sample_bucket = self.src_cluster.get_buckets()[0]
@@ -2934,12 +3040,7 @@ class ForwardLocalOnlyXDCRTests(ForwardLocalOnlyXDCRBase):
             self.dest_cluster, True)
         self._verify_forward_local_only_setting(
             self.src_cluster, False)
-        shortcircuit_b = self._get_global_xdcr_param(
-            self.dest_cluster, "disableHlvBasedShortCircuit")
-        self.assertEqual(
-            str(shortcircuit_b).lower(), "true",
-            "{0} SETUP: disableHlvBasedShortCircuit did not apply "
-            "on B; got {1!r}".format(self._tag(), shortcircuit_b))
+        self._verify_disable_hlv_short_circuit(self.dest_cluster, True)
 
         self.log.info(
             "{0} CHECKPOINT: pre-baseline drain to quiesce "
@@ -4446,8 +4547,13 @@ class ForwardLocalOnlyXDCRTests(ForwardLocalOnlyXDCRBase):
         self._post_setup_settle()
 
         self._enable_eccv_on_all_clusters()
-        self._set_disable_hlv_short_circuit(self.src_cluster, True)
-        self._log_state("post-ECCV + shortcircuit disabled on A")
+        # B sends the echo this test measures, so B is the side whose
+        # HLV short-circuit has to be off. Disabling it on A (the
+        # receiver) leaves B skipping every echo as
+        # `target_docs_skipped`, and the FLO=false bucket then shows
+        # docs_written=0 exactly like the FLO=true one.
+        self._set_disable_hlv_short_circuit(self.dest_cluster, True)
+        self._log_state("post-ECCV + shortcircuit disabled on B")
 
         sorted_buckets = sorted(src_buckets, key=lambda b: b.name)
         flo_true_bucket_name = sorted_buckets[0].name
