@@ -821,6 +821,16 @@ class RebalanceTask(Task):
         self.use_hostnames = use_hostnames
         self.previous_progress = 0
         self.old_vbuckets = {}
+        # Wall-clock stall detection, independent of the poll-count budget
+        # below: a rebalance that keeps improving gets the full budget, one
+        # that stops moving is called early. Reset on IMPROVEMENT only, so a
+        # percentage that oscillates or goes backwards still counts as stalled.
+        self.rebalance_stall_timeout = 1800
+        if TestInputSingleton.input is not None:
+            self.rebalance_stall_timeout = TestInputSingleton.input.param(
+                "rebalance_stall_timeout", 1800)
+        self.best_progress = -1
+        self.last_progress_time = None
 
     def execute(self, task_manager):
         try:
@@ -945,6 +955,28 @@ class RebalanceTask(Task):
                 self.retry_get_progress = 0
             else:
                 self.retry_get_progress += 1
+            now = time.time()
+            if self.last_progress_time is None:
+                self.last_progress_time = now
+            if progress is None or progress < 0:
+                pass                      # sentinel: the retry budget owns it
+            elif progress > self.best_progress:
+                self.best_progress = progress
+                self.last_progress_time = now
+            elif (self.rebalance_stall_timeout
+                    and now - self.last_progress_time >
+                    self.rebalance_stall_timeout):
+                stalled_for = int(now - self.last_progress_time)
+                self.state = FINISHED
+                self.rest.print_UI_logs()
+                self.set_exception(RebalanceFailedException(
+                    "rebalance stalled at {0:.2f}% for {1}s with no further "
+                    "progress (limit {2}s). Raise rebalance_stall_timeout if a "
+                    "rebalance here is legitimately this slow, otherwise it is "
+                    "not going to finish.".format(
+                        self.best_progress, stalled_for,
+                        self.rebalance_stall_timeout)))
+                return
         except RebalanceFailedException as ex:
             self.state = FINISHED
             self.set_exception(ex)
