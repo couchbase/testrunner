@@ -1425,9 +1425,7 @@ class VectorSearchTests(QueryTests):
             # Index is on (vec VECTOR)
             IndexVector().create_index(self.database,similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,custom_index_fields="vec VECTOR",use_partition=self.use_partition,nprobes=self.nprobes, vector_type=self.vector_type)
             explain_plan = self.run_cbq_query(explain_query)
-            # We don't expect pushdown to occur without limit
-            expected_cover = "cover (sparse_vector_distance(" if self.vector_type == 'sparse' else "cover (approx_vector_distance("
-            self.assertTrue(expected_cover in str(explain_plan), f'We expect the indexer to provide an approximate distance, please check plan {explain_plan}')
+            self._assert_no_ann_pushdown(explain_plan)
             self.assertTrue('Order' in str(explain_plan), f'We only expect an Order operator with rerank, please check plan {explain_plan}')
             self.check_results_against_knn(expected_results, ann_query)
         finally:
@@ -1449,16 +1447,9 @@ class VectorSearchTests(QueryTests):
             # Index is on (size, brand, vec VECTOR)
             IndexVector().create_index(self.database,index_order='tail',similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,use_partition=self.use_partition,nprobes=self.nprobes, vector_type=self.vector_type)
             explain_plan = self.run_cbq_query(explain_query)
-            # We don't expect pushdown to occur without limit
+            self._assert_no_ann_pushdown(explain_plan)
             self.assertTrue('Order' in str(explain_plan), f'We only expect an Order operator with rerank, please check plan {explain_plan}')
-            # check the spans
-            for fields in explain_plan['results'][0]['plan']['~children'][0]['~children'][0]['spans'][0]['range']:
-                # Vector field will not have a high or a low value
-                if fields['index_key'] == '`vec`':
-                    continue
-                else:
-                    #check that spans have the same high and low values
-                    self.assertTrue(fields['high'] == fields['low'], f"We expect the high and low of each span to be the same, please check the spans in the plan {explain_plan}")
+            self._check_spans(explain_plan)
             self.check_results_against_knn(expected_results, ann_query)
         finally:
             IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
@@ -1479,16 +1470,9 @@ class VectorSearchTests(QueryTests):
             # Index is on (size, brand, vec VECTOR)
             IndexVector().create_index(self.database,index_order='tail',similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,use_partition=self.use_partition,nprobes=self.nprobes, vector_type=self.vector_type)
             explain_plan = self.run_cbq_query(explain_query)
-            # We don't expect pushdown to occur without limit
+            self._assert_no_ann_pushdown(explain_plan)
             self.assertTrue('Order' in str(explain_plan), f'We only expect an Order operator with rerank, please check plan {explain_plan}')
-            # check the spans
-            for fields in explain_plan['results'][0]['plan']['~children'][0]['~children'][0]['spans'][0]['range']:
-                # Vector field will not have a high or a low value
-                if fields['index_key'] == '`vec`':
-                    continue
-                else:
-                    #check that spans have the same high and low values
-                    self.assertTrue(fields['high'] == fields['low'], f"We expect the high and low of each span to be the same, please check the spans in the plan {explain_plan}")
+            self._check_spans(explain_plan)
             self.check_results_against_knn(expected_results, ann_query)
         finally:
             IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
@@ -1509,16 +1493,9 @@ class VectorSearchTests(QueryTests):
             # Index is on (size, brand, vec VECTOR)
             IndexVector().create_index(self.database,index_order='tail',similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,use_partition=self.use_partition,nprobes=self.nprobes, vector_type=self.vector_type)
             explain_plan = self.run_cbq_query(explain_query)
-            # We don't expect pushdown to occur without limit
+            self._assert_no_ann_pushdown(explain_plan)
             self.assertTrue('Order' in str(explain_plan), f'We only expect an Order operator with rerank, please check plan {explain_plan}')
-            # check the spans
-            for fields in explain_plan['results'][0]['plan']['~children'][0]['~children'][0]['spans'][0]['range']:
-                # Vector field will not have a high or a low value
-                if fields['index_key'] == '`vec`':
-                    continue
-                else:
-                    #check that spans have the same high and low values
-                    self.assertTrue(fields['high'] == fields['low'], f"We expect the high and low of each span to be the same, please check the spans in the plan {explain_plan}")
+            self._check_spans(explain_plan)
             self.check_results_against_knn(expected_results, ann_query)
         finally:
             IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
@@ -1539,17 +1516,9 @@ class VectorSearchTests(QueryTests):
             # Index is on (size, brand, vec VECTOR)
             IndexVector().create_index(self.database,index_order='tail',similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,use_partition=self.use_partition,nprobes=self.nprobes, vector_type=self.vector_type)
             explain_plan = self.run_cbq_query(explain_query)
+            self._assert_no_ann_pushdown(explain_plan)
             self.assertTrue('Order' in str(explain_plan), f'We expect order operator, please check plan {explain_plan}')
-            # check the spans
-            for fields in explain_plan['results'][0]['plan']['~children'][0]['~children'][0]['spans'][0]['range']:
-                # Vector field will not have a high or a low value
-                if fields['index_key'] == '`vec`':
-                    continue
-                elif fields['index_key'] == '`size`':
-                    self.assertTrue(fields['low'] == '8', f"We expect the low value to be 8, please check {explain_plan}")
-                else:
-                    #check that the brand field have the same high and low values
-                    self.assertTrue(fields['high'] == fields['low'], f"We expect the high and low of each span to be the same, please check the spans in the plan {explain_plan}")
+            self._check_spans(explain_plan, size_is_range=True)
             self.check_results_against_knn(expected_results, ann_query)
         finally:
             IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
@@ -1570,17 +1539,9 @@ class VectorSearchTests(QueryTests):
             # Index is on (size, brand, vec VECTOR)
             IndexVector().create_index(self.database,index_order='tail',similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,use_partition=self.use_partition,nprobes=self.nprobes, vector_type=self.vector_type)
             explain_plan = self.run_cbq_query(explain_query)
+            self._assert_no_ann_pushdown(explain_plan)
             self.assertTrue('Order' in str(explain_plan), f'We expect order operator, please check plan {explain_plan}')
-            # check the spans
-            for fields in explain_plan['results'][0]['plan']['~children'][0]['~children'][0]['spans'][0]['range']:
-                # Vector field will not have a high or a low value
-                if fields['index_key'] == '`vec`':
-                    continue
-                elif fields['index_key'] == '`size`':
-                    self.assertTrue(fields['low'] == '8', f"We expect the low value to be 8, please check {explain_plan}")
-                else:
-                    #check that the brand field have the same high and low values
-                    self.assertTrue(fields['high'] == fields['low'], f"We expect the high and low of each span to be the same, please check the spans in the plan {explain_plan}")
+            self._check_spans(explain_plan, size_is_range=True)
             self.check_results_against_knn(expected_results, ann_query)
         finally:
             IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
@@ -1601,17 +1562,9 @@ class VectorSearchTests(QueryTests):
             # Index is on (size, brand, vec VECTOR)
             IndexVector().create_index(self.database,index_order='tail',similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,use_partition=self.use_partition,nprobes=self.nprobes, vector_type=self.vector_type)
             explain_plan = self.run_cbq_query(explain_query)
+            self._assert_no_ann_pushdown(explain_plan)
             self.assertTrue('Order' in str(explain_plan), f'We expect order operator, please check plan {explain_plan}')
-            # check the spans
-            for fields in explain_plan['results'][0]['plan']['~children'][0]['~children'][0]['spans'][0]['range']:
-                # Vector field will not have a high or a low value
-                if fields['index_key'] == '`vec`':
-                    continue
-                elif fields['index_key'] == '`size`':
-                    self.assertTrue(fields['low'] == '8', f"We expect the low value to be 8, please check {explain_plan}")
-                else:
-                    #check that the brand field have the same high and low values
-                    self.assertTrue(fields['high'] == fields['low'], f"We expect the high and low of each span to be the same, please check the spans in the plan {explain_plan}")
+            self._check_spans(explain_plan, size_is_range=True)
             self.check_results_against_knn(expected_results, ann_query)
         finally:
             IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
@@ -1632,15 +1585,9 @@ class VectorSearchTests(QueryTests):
             # Index is on (size, brand, vec VECTOR,price)
             IndexVector().create_index(self.database,similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,custom_index_fields="size,brand,vec VECTOR,price",use_partition=self.use_partition,nprobes=self.nprobes, vector_type=self.vector_type)
             explain_plan = self.run_cbq_query(explain_query)
+            self._assert_no_ann_pushdown(explain_plan)
             self.assertTrue('Order' in str(explain_plan), f'We only expect an Order operator with rerank, please check plan {explain_plan}')
-            # check the spans
-            for fields in explain_plan['results'][0]['plan']['~children'][0]['~children'][0]['spans'][0]['range']:
-                # Vector field will not have a high or a low value
-                if fields['index_key'] == '`vec`':
-                    continue
-                else:
-                    #check that spans have the same high and low values
-                    self.assertTrue(fields['high'] == fields['low'], f"We expect the high and low of each span to be the same, please check the spans in the plan {explain_plan}")
+            self._check_spans(explain_plan)
             self.check_results_against_knn(expected_results, ann_query)
         finally:
             IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive,custom_fields=True)
@@ -1661,19 +1608,64 @@ class VectorSearchTests(QueryTests):
             # Index is on (vec VECTOR, size, brand)
             IndexVector().create_index(self.database,index_order='lead',similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,use_partition=self.use_partition,nprobes=self.nprobes, vector_type=self.vector_type)
             explain_plan = self.run_cbq_query(explain_query)
+            self._assert_no_ann_pushdown(explain_plan)
             self.assertTrue('Order' in str(explain_plan), f'We expect an Order operator, please check plan {explain_plan}')
             self.assertTrue('index_order' not in str(explain_plan), f'We expect order not to be pushed to the indexer, please check plan {explain_plan}')
-            # check the spans
-            for fields in explain_plan['results'][0]['plan']['~children'][0]['~children'][0]['spans'][0]['range']:
-                # Vector field will not have a high or a low value
-                if fields['index_key'] == '`vec`':
-                    continue
-                else:
-                    #check that spans have the same high and low values
-                    self.assertTrue(fields['high'] == fields['low'], f"We expect the high and low of each span to be the same, please check the spans in the plan {explain_plan}")
+            self._check_spans(explain_plan)
             self.check_results_against_knn(expected_results, ann_query)
         finally:
             IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
+
+    def _find_span_range(self, node):
+        """Return the span range of the first scan operator that has spans, or None.
+
+        Walks the plan instead of indexing a fixed path: since MB-73773 a vector index
+        is only sargable for the ANN order when a LIMIT is present, so a query without
+        one can fall back to a sequential scan that carries no spans at all."""
+        if isinstance(node, dict):
+            if 'spans' in node:
+                return node['spans'][0]['range']
+            for value in node.values():
+                found = self._find_span_range(value)
+                if found is not None:
+                    return found
+        elif isinstance(node, list):
+            for item in node:
+                found = self._find_span_range(item)
+                if found is not None:
+                    return found
+        return None
+
+    def _assert_no_ann_pushdown(self, explain_plan):
+        """MB-73773: without a LIMIT the vector index must not serve the ANN order.
+        Pushing down there scans only nprobes centroids and silently drops the rest of
+        the matching documents, which gave ~10-30% recall before the fix."""
+        cover = "cover (sparse_vector_distance(" if self.vector_type == 'sparse' \
+            else "cover (approx_vector_distance("
+        self.assertTrue(cover not in str(explain_plan),
+                        f'MB-73773: the vector index must not supply the approximate distance '
+                        f'without a LIMIT, please check plan {explain_plan}')
+
+    def _check_spans(self, explain_plan, size_is_range=False):
+        """Validate the index spans when the plan uses an index scan.
+
+        Without a LIMIT the vector index may not be picked at all (MB-73773) — a bhive
+        index cannot serve the query on its INCLUDE fields alone — so there are no spans
+        to validate in that case."""
+        span_range = self._find_span_range(explain_plan)
+        if span_range is None:
+            self.log.info(f'No index scan in plan, so no spans to check — without a LIMIT the '
+                          f'vector index is not sargable for the ANN order (MB-73773): {explain_plan}')
+            return
+        for fields in span_range:
+            # Vector field will not have a high or a low value
+            if fields['index_key'] == '`vec`':
+                continue
+            elif size_is_range and fields['index_key'] == '`size`':
+                self.assertTrue(fields['low'] == '8', f"We expect the low value to be 8, please check {explain_plan}")
+            else:
+                #check that spans have the same high and low values
+                self.assertTrue(fields['high'] == fields['low'], f"We expect the high and low of each span to be the same, please check the spans in the plan {explain_plan}")
 
     def check_results_against_knn(self, expected_results, ann_query):
         threshold = self.recall_sparse_ann if self.vector_type == 'sparse' else self.recall_ann
