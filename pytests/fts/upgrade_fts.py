@@ -1,3 +1,4 @@
+import contextlib
 import logging
 import json
 import time
@@ -7,10 +8,14 @@ from remote.remote_util import RemoteMachineShellConnection
 from newupgradebasetest import NewUpgradeBaseTest
 from .fts_callable import FTSCallable
 from scripts.java_sdk_setup import JavaSdkSetup
-from .fts_base import CouchbaseCluster, FTSIndex, FTSBaseTest, _ScanPlusHashMap, UDFHelper
+from .fts_base import (CouchbaseCluster, FTSIndex, FTSBaseTest, _ScanPlusHashMap, UDFHelper,
+                       FTSConcurrentWorkload, FTSPostChangeValidator)
+from lib.membase.helper.bucket_helper import BucketOperationHelper
+from couchbase_helper.documentgenerator import SDKDataLoader
 from membase.api.rest_client import RestConnection
 from lib.collection.collections_cli_client import CollectionsCLI
 from .fts_backup_restore import FTSIndexBackupClient
+from .fts_encryption_base import EARUpgradeHelper
 from security.rbac_base import RbacBase
 
 
@@ -19,12 +24,39 @@ log = logging.getLogger(__name__)
 
 class UpgradeFTS(NewUpgradeBaseTest):
 
+    LEGACY_VECTOR_INDEX = "vec_legacy_idx"
+    FEATURE_VECTOR_INDEX = "vec_feature_idx"
+
+    EAR_INDEX = "fts_ear_upgrade_idx"
+
+    # CBQE-8244
+    CHAINED_INDEX = "chained_upgrade_idx"
+
+    SEARCH_HISTORY_INDEX = "search_history_upgrade_idx"
+    DEEP_PAGINATION_INDEX = "deep_pagination_upgrade_idx"
+    COLLECTIONS_INDEX = "collections_scale_upgrade_idx"
+    HIERARCHICAL_INDEX = "hierarchical_upgrade_idx"
+    EAR_QUERY = {"query": "dept:Engineering"}
+
     def setUp(self):
         super(UpgradeFTS, self).setUp()
 
         self.initial_version = self.input.param('initial_version', '6.6.1-9213')
         self.upgrade_to = self.input.param("upgrade_to")
+        if not self.upgrade_to and self.upgrade_versions:
+            self.upgrade_to = self.upgrade_versions[-1]
+            self.log.info(f"upgrade_to not set; using the last hop of "
+                          f"upgrade_version: {self.upgrade_to}")
         self.cb_cluster = CouchbaseCluster("C1", self.servers, self.log)
+        self._cb_cluster = self.cb_cluster
+
+        self.vector_dimension = self.input.param("dimension", 128)
+        self.vector_recall_tolerance = self.input.param("vector_recall_tolerance", 5)
+        self.vector_index_build_wait = self.input.param("vector_index_build_wait", 150)
+
+        self.ear_reencryption_timeout = self.input.param("ear_reencryption_timeout", 900)
+
+        self.upgrade_workload_errors = []
 
         self.java_sdk_client = self.input.param("java_sdk_client", False)
         self.fts_port = 8094
@@ -181,14 +213,62 @@ class UpgradeFTS(NewUpgradeBaseTest):
         if len(errors) > 0:
             post_upgrade_errors["_test_new_metrics(endpoint='_prometheusMetricsHigh')"] = errors
 
+        # CBQE-8242
+        errors = self._post_upgrade_crud_all_buckets(label="post-offline-upgrade")
+        if errors:
+            post_upgrade_errors['post_upgrade_crud_all_buckets'] = errors
+
+        # CBQE-8242
+        errors = self._post_upgrade_new_index_check(label="post-offline-upgrade")
+        if errors:
+            post_upgrade_errors['post_upgrade_new_index'] = errors
+
         self.assertEquals(len(post_upgrade_errors.keys()), 0,
                           f"The following post upgrade tests are failed: {post_upgrade_errors}")
 
+
+    # =========================================================================
+    # CBQE-8242, CBQE-8243
+    # =========================================================================
+
+    def _post_upgrade_crud_all_buckets(self, label="post-upgrade"):
+        """Item 3: run CRUD against every bucket in the cluster after the change."""
+        log.info("=" * 20 + f" {label}: CRUD on all buckets")
+        fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False,
+                                   servers=self.servers)
+        validator = FTSPostChangeValidator(self, driver=fts_callable, label=label)
+        return validator.crud_all_buckets()
+
+    def _post_upgrade_new_index_check(self, label="post-upgrade", index_name="post_change_idx"):
+        """Item 4: a NEW index created after the change must index and be queryable."""
+        log.info("=" * 20 + f" {label}: new index end-to-end check")
+        errors = []
+        fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False,
+                                   servers=self.servers)
+        try:
+            fts_callable.load_data(self.num_items)
+            index = fts_callable.create_fts_index(
+                index_name, source_type='couchbase', source_name="default",
+                index_type='fulltext-index', index_params=None, plan_params=None,
+                source_params=None, source_uuid=None, collection_index=False,
+                _type=None, analyzer="standard", no_check=False, cluster=self.cb_cluster)
+            validator = FTSPostChangeValidator(self, driver=fts_callable, label=label)
+            errors = validator.validate_index_end_to_end(index, expected_count=self.num_items)
+        except Exception as err:
+            errors.append(f"[{label}] creating/validating the new index failed: {err}")
+        finally:
+            try:
+                fts_callable.delete_fts_index(index_name)
+            except Exception as err:
+                log.warning(f"[{label}] could not clean up '{index_name}': {err}")
+        return errors
 
     def test_online_upgrade(self):
         partial_upgrade_errors = {}
         full_fts_upgrade_errors = {}
         post_upgrade_errors = {}
+        # CBQE-8242
+        workload_errors = []
 
         fts_nodes = self.get_nodes_from_services_map(service_type="fts", get_all_nodes=True)
         kv_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
@@ -213,11 +293,11 @@ class UpgradeFTS(NewUpgradeBaseTest):
         # Phase 1: Rebalance out first FTS node, upgrade, rebalance back in
         nodes_out = []
         nodes_out.append(fts_nodes[0])
-        load_tasks = fts_callable.async_load_data()
-        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], nodes_out)
-        rebalance.result()
-        for task in load_tasks:
-            task.result()
+        with FTSConcurrentWorkload(self, index=pre_upgrade_idx, driver=fts_callable,
+                                   label="phase 1 FTS node rebalance-out") as workload:
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], nodes_out)
+            rebalance.result()
+        workload_errors.extend(workload.errors)
         upgrade_th = self._async_update(self.upgrade_to, nodes_out)
         for th in upgrade_th:
             th.join()
@@ -230,13 +310,13 @@ class UpgradeFTS(NewUpgradeBaseTest):
                 node = "{0}:{1}".format(node.ip, node.port)
                 if node in self.services_map[service]:
                     services_in.append(service)
-        load_tasks = fts_callable.async_load_data()
-        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+        with FTSConcurrentWorkload(self, index=pre_upgrade_idx, driver=fts_callable,
+                                   label="phase 1 FTS node rebalance-in") as workload:
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                                  nodes_out, [],
                                                  services=services_in)
-        rebalance.result()
-        for task in load_tasks:
-            task.result()
+            rebalance.result()
+        workload_errors.extend(workload.errors)
 
         log.info("="*20 + " Starting partial fts upgrade tests")
         partial_upgrade_hits, partial_upgrade_matches, _, partial_upgrade_status = pre_upgrade_idx.execute_query(query=fts_query)
@@ -251,11 +331,11 @@ class UpgradeFTS(NewUpgradeBaseTest):
         # Phase 2: Rebalance out all FTS nodes, upgrade, rebalance back in
         nodes_out.clear()
         nodes_out = fts_nodes[0:]
-        load_tasks = fts_callable.async_load_data()
-        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], nodes_out)
-        rebalance.result()
-        for task in load_tasks:
-            task.result()
+        with FTSConcurrentWorkload(self, index=pre_upgrade_idx, driver=fts_callable,
+                                   label="phase 2 all FTS nodes rebalance-out") as workload:
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], nodes_out)
+            rebalance.result()
+        workload_errors.extend(workload.errors)
         upgrade_th = self._async_update(self.upgrade_to, nodes_out)
         for th in upgrade_th:
             th.join()
@@ -267,13 +347,13 @@ class UpgradeFTS(NewUpgradeBaseTest):
                 node = "{0}:{1}".format(node.ip, node.port)
                 if node in self.services_map[service]:
                     services_in.append(service)
-        load_tasks = fts_callable.async_load_data()
-        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+        with FTSConcurrentWorkload(self, index=pre_upgrade_idx, driver=fts_callable,
+                                   label="phase 2 all FTS nodes rebalance-in") as workload:
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                                  nodes_out, [],
                                                  services=services_in)
-        rebalance.result()
-        for task in load_tasks:
-            task.result()
+            rebalance.result()
+        workload_errors.extend(workload.errors)
 
         log.info("="*20 + " Starting partial upgrade tests")
 
@@ -288,11 +368,11 @@ class UpgradeFTS(NewUpgradeBaseTest):
         # Phase 3: Rebalance out KV node 1, upgrade, rebalance back in
         nodes_out.clear()
         nodes_out.append(kv_nodes[1])
-        load_tasks = fts_callable.async_load_data()
-        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], nodes_out)
-        rebalance.result()
-        for task in load_tasks:
-            task.result()
+        with FTSConcurrentWorkload(self, index=pre_upgrade_idx, driver=fts_callable,
+                                   label="phase 3 KV node 1 rebalance-out") as workload:
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], nodes_out)
+            rebalance.result()
+        workload_errors.extend(workload.errors)
         upgrade_th = self._async_update(self.upgrade_to, nodes_out)
         for th in upgrade_th:
             th.join()
@@ -305,22 +385,22 @@ class UpgradeFTS(NewUpgradeBaseTest):
                 if node in self.services_map[service]:
                     services_in.append(service)
 
-        load_tasks = fts_callable.async_load_data()
-        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+        with FTSConcurrentWorkload(self, index=pre_upgrade_idx, driver=fts_callable,
+                                   label="phase 3 KV node 1 rebalance-in") as workload:
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                                  nodes_out, [],
                                                  services=['kv,index,n1ql'])
-        rebalance.result()
-        for task in load_tasks:
-            task.result()
+            rebalance.result()
+        workload_errors.extend(workload.errors)
 
         # Phase 4: Rebalance out KV node 0 (master), upgrade, rebalance back in
         nodes_out.clear()
         nodes_out.append(kv_nodes[0])
-        load_tasks = fts_callable.async_load_data()
-        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], nodes_out)
-        rebalance.result()
-        for task in load_tasks:
-            task.result()
+        with FTSConcurrentWorkload(self, index=pre_upgrade_idx, driver=fts_callable,
+                                   label="phase 4 KV master rebalance-out") as workload:
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], nodes_out)
+            rebalance.result()
+        workload_errors.extend(workload.errors)
 
         del self.servers[0]
         self.master = self.servers[1]
@@ -331,13 +411,13 @@ class UpgradeFTS(NewUpgradeBaseTest):
         log.info("==== Upgrade Complete ====")
         self.sleep(120)
 
-        load_tasks = fts_callable.async_load_data()
-        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+        with FTSConcurrentWorkload(self, index=pre_upgrade_idx, driver=fts_callable,
+                                   label="phase 4 KV master rebalance-in") as workload:
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                                  nodes_out, [],
                                                  services=['kv,index,n1ql'])
-        rebalance.result()
-        for task in load_tasks:
-            task.result()
+            rebalance.result()
+        workload_errors.extend(workload.errors)
 
         errors = self._test_create_single_collection_index()
         if len(errors) > 0:
@@ -390,6 +470,19 @@ class UpgradeFTS(NewUpgradeBaseTest):
         errors = self._test_new_metrics(endpoint='_prometheusMetricsHigh')
         if len(errors) > 0:
             post_upgrade_errors["_test_new_metrics(endpoint='_prometheusMetricsHigh')"] = errors
+
+        # CBQE-8242
+        errors = self._post_upgrade_crud_all_buckets(label="post-upgrade")
+        if errors:
+            post_upgrade_errors['post_upgrade_crud_all_buckets'] = errors
+
+        # CBQE-8242
+        errors = self._post_upgrade_new_index_check(label="post-upgrade")
+        if errors:
+            post_upgrade_errors['post_upgrade_new_index'] = errors
+
+        if workload_errors:
+            post_upgrade_errors['workload_during_upgrade'] = workload_errors
 
         self.assertEquals(len(partial_upgrade_errors.keys()), 0,
                           f"The following partial fts upgrade tests are failed: {partial_upgrade_errors}")
@@ -2032,3 +2125,1195 @@ class UpgradeFTS(NewUpgradeBaseTest):
             self.fail("test_udf_online_upgrade failed:\n" +
                       "\n".join(f"  {k}: {v}" for k, v in errors.items()))
         log.info("test_udf_online_upgrade PASSED")
+
+    # =========================================================================
+    # =========================================================================
+
+    def _upgrade_workload(self, label, driver, index):
+        """Concurrent CRUD + query workload around one rebalance of an upgrade."""
+        if driver is None:
+            return contextlib.nullcontext()
+
+        workload = FTSConcurrentWorkload(self, index=index, driver=driver, label=label)
+
+        @contextlib.contextmanager
+        def _run():
+            with workload:
+                yield
+            self.upgrade_workload_errors.extend(workload.errors)
+
+        return _run()
+
+    def _assert_cluster_fully_upgraded(self, label=""):
+        """Every cluster node must be on upgrade_to before version-gated checks run.
+
+        A single node left behind silently disables cluster-wide features
+        (encryption at rest among them) while every individual node upgrade still
+        reports success, so the suite would otherwise carry on testing nothing.
+        Returns a list of findings.
+        """
+        errors = []
+        target = str(self.upgrade_to or "").split('-')[0]
+        try:
+            rest = RestConnection(self.master)
+            versions = rest.get_nodes_versions()
+        except Exception as err:
+            return [f"[{label}] could not read node versions: {err}"]
+
+        stale = [v for v in versions if not str(v).startswith(target)]
+        if stale:
+            errors.append(
+                f"[{label}] not every cluster node is on {self.upgrade_to}: {versions}. "
+                f"A node left on the old build blocks cluster-wide features.")
+        else:
+            log.info(f"[{label}] all cluster nodes on {target}: {versions}")
+
+        try:
+            compat = rest.get_pools_default().get("nodes", [{}])[0].get("clusterCompatibility")
+            major = str(target).split('.')[0]
+            minor = str(target).split('.')[1] if '.' in str(target) else '0'
+            expected = int(major) * 65536 + int(minor)
+            if compat is not None and int(compat) < expected:
+                errors.append(
+                    f"[{label}] cluster compatibility is {compat}, expected >= {expected} "
+                    f"for {target}. Version-gated features stay disabled until it advances.")
+            else:
+                log.info(f"[{label}] cluster compatibility {compat} (>= {expected})")
+        except Exception as err:
+            log.warning(f"[{label}] could not read cluster compatibility: {err}")
+        return errors
+
+    def _remaining_cluster_nodes(self, already_upgraded):
+        """Cluster nodes not in `already_upgraded`, master last."""
+        done = {(n.ip, str(n.port)) for n in already_upgraded}
+        rest = [n for n in self.servers[:self.nodes_init]
+                if (n.ip, str(n.port)) not in done]
+        master_ip = getattr(self.master, 'ip', None)
+        return sorted(rest, key=lambda n: n.ip == master_ip)
+
+    def _upgrade_rest_of_cluster(self, already_upgraded, label, driver=None, index=None):
+        """Upgrade every remaining cluster node, so the cluster ends fully upgraded.
+
+        Upgrading only the FTS nodes leaves cluster-wide features (encryption at
+        rest, for one) still served by a pre-upgrade master.
+        """
+        remaining = self._remaining_cluster_nodes(already_upgraded)
+        if not remaining:
+            return []
+        for node in remaining:
+            self._move_rest_endpoint_off(node, label)
+            self._rolling_upgrade_fts_nodes([node], label=f"{label} [{node.ip}]",
+                                            driver=driver, index=index)
+        return remaining
+
+    def _move_rest_endpoint_off(self, node, label=""):
+        """Ensure `node` is not self.servers[0] before it is rebalanced out.
+
+        RebalanceTask talks to servers[0] (task.py: RestConnection(self.servers[0])),
+        so rebalancing that same node out and back in makes ns_server reject the
+        add as a self-join. Rotate another cluster node to the front instead;
+        membership is unchanged, only the order.
+        """
+        if self.servers[0].ip != node.ip:
+            return
+        cluster = self.servers[:self.nodes_init]
+        tail = self.servers[self.nodes_init:]
+        replacement = next((s for s in cluster if s.ip != node.ip), None)
+        if replacement is None:
+            return
+        self.servers = ([replacement] + [s for s in cluster if s.ip != replacement.ip]) + tail
+        self.master = replacement
+        self.rest = RestConnection(self.master)
+        log.info(f"{label}: REST endpoint moved to {replacement.ip} before upgrading {node.ip}")
+
+    def construct_custom_plan_params(self, replicas, partitions):
+        """Plan params for an FTS index."""
+        return {'numReplicas': replicas, 'indexPartitions': partitions}
+
+    def get_fts_query_node(self):
+        """Node to send FTS queries to; servers[0] may not run fts."""
+        fts_nodes = self.get_nodes_from_services_map(service_type="fts", get_all_nodes=True)
+        if not fts_nodes:
+            self.log.warning("no node in the cluster runs fts, falling back to %s"
+                             % self.servers[0].ip)
+            return self.servers[0]
+        return fts_nodes[0]
+
+    def _rolling_upgrade_fts_nodes(self, nodes_out, label="", version=None,
+                                   driver=None, index=None):
+        """Rebalance nodes out, install `version` on them, rebalance back in."""
+        version = version or self.upgrade_to
+        log.info("=" * 20 + f" Rolling upgrade {label}: {[n.ip for n in nodes_out]} -> {version}")
+
+        # CBQE-8242
+        with self._upgrade_workload(f"{label} rebalance-out", driver, index):
+            self.cluster.async_rebalance(self.servers[:self.nodes_init], [], nodes_out).result()
+
+        for thread in self._async_update(version, nodes_out):
+            thread.join()
+        log.info(f"==== {label}: nodes upgraded to {version} ====")
+        self.sleep(120)
+
+        services_in = []
+        for service in list(self.services_map.keys()):
+            for node in nodes_out:
+                if "{0}:{1}".format(node.ip, node.port) in self.services_map[service]:
+                    services_in.append(service)
+        with self._upgrade_workload(f"{label} rebalance-in", driver, index):
+            self.cluster.async_rebalance(
+                self.servers[:self.nodes_init], nodes_out, [], services=services_in
+            ).result()
+        log.info(f"==== {label}: nodes rebalanced back in ====")
+        return nodes_out
+
+    def _offline_upgrade_all_nodes(self, label="", version=None):
+        # CBQE-8242
+        """Stop every node, upgrade them all to `version`, bring the cluster back up."""
+        version = version or self.upgrade_to
+        log.info("=" * 20 + f" Offline upgrade {label}: stopping all nodes -> {version}")
+        for server in self.servers:
+            remote = RemoteMachineShellConnection(server)
+            remote.stop_server()
+            remote.disconnect()
+
+        for thread in self._async_update(version, self.servers):
+            thread.join()
+        self.add_built_in_server_user()
+        log.info(f"==== {label}: offline upgrade to {version} complete ====")
+        self.sleep(120)
+
+    # =========================================================================
+    # =========================================================================
+
+    def _totoro_post_upgrade_checks(self, label):
+        """CBQE-8242 items 2-4 applied to the Totoro feature upgrade tests."""
+        errors = {}
+        if self.upgrade_workload_errors:
+            errors['workload_during_upgrade'] = list(self.upgrade_workload_errors)
+            self.upgrade_workload_errors = []
+
+        crud_errors = self._post_upgrade_crud_all_buckets(label=label)
+        if crud_errors:
+            errors['post_upgrade_crud_all_buckets'] = crud_errors
+
+        index_errors = self._post_upgrade_new_index_check(
+            label=label, index_name="totoro_post_idx")
+        if index_errors:
+            errors['post_upgrade_new_index'] = index_errors
+        return errors
+
+    def _vector_feature_knobs(self):
+        """Read the Totoro vector knobs from conf params."""
+        knobs = {}
+        bq_index_type = self.input.param("bq_index_type", None)
+        if bq_index_type:
+            knobs['bq_index_type'] = bq_index_type
+        if self.input.param("fastmerge", False):
+            knobs['fastmerge'] = True
+        if self.input.param("gpu_index", False):
+            knobs['gpu'] = True
+        return knobs
+
+    def _vector_feature_label(self, knobs):
+        return ", ".join(f"{k}={v}" for k, v in sorted(knobs.items())) or "none"
+
+    def _push_all_vector_data(self, fts_callable, end_index=10005001):
+        """Load the vector dataset in the four xattr/base64 permutations."""
+        for xattr in (False, True):
+            for base64_flag in (False, True):
+                try:
+                    fts_callable.push_vector_data(
+                        self.servers[0],
+                        str(self.rest_settings.rest_username),
+                        str(self.rest_settings.rest_password),
+                        xattr=xattr, base64Flag=base64_flag, end_index=end_index)
+                except Exception as err:
+                    log.warning(f"push_vector_data(xattr={xattr}, base64={base64_flag}) failed: {err}")
+
+    def _validate_vector_feature_definition(self, index_name, knobs, node=None):
+        """Confirm the requested Totoro knobs survived a round trip through FTS."""
+        errors = []
+        target = node if node is not None else self.get_fts_query_node()
+        status, index_def = RestConnection(target).get_fts_index_definition(name=index_name)
+        if not status:
+            return [f"could not read definition of '{index_name}': {index_def}"]
+
+        definition = index_def['indexDef']
+        store = definition.get('params', {}).get('store', {})
+        properties = (definition.get('params', {}).get('mapping', {})
+                      .get('types', {}).get('_default._default', {}).get('properties', {}))
+
+        vector_field = None
+        for prop in properties.values():
+            fields = prop.get('fields') or []
+            if fields and fields[0].get('type', '').startswith('vector'):
+                vector_field = fields[0]
+                break
+        if vector_field is None:
+            errors.append(f"'{index_name}': no vector field found in definition {properties}")
+            return errors
+
+        if 'bq_index_type' in knobs:
+            actual = vector_field.get('vector_index_optimized_for')
+            if actual != knobs['bq_index_type']:
+                errors.append(f"'{index_name}': vector_index_optimized_for="
+                              f"{actual!r}, expected {knobs['bq_index_type']!r}")
+        if 'fastmerge' in knobs:
+            if not store.get('vector_index_fast_merge', False):
+                errors.append(f"'{index_name}': vector_index_fast_merge not set in params.store: {store}")
+        if 'gpu' in knobs:
+            if not vector_field.get('gpu', False):
+                errors.append(f"'{index_name}': gpu not set on vector field: {vector_field}")
+
+        if not errors:
+            log.info(f"'{index_name}': Totoro knobs validated ({self._vector_feature_label(knobs)})")
+        return errors
+
+    def _vector_upgrade_setup(self):
+        """Pre-upgrade: load vectors, build a legacy index, capture a recall baseline."""
+        fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False,
+                                   variable_node=self.get_fts_query_node(),
+                                   servers=self.servers)
+        fts_callable.load_data(self.num_items)
+        self._push_all_vector_data(fts_callable)
+
+        plans = self.construct_custom_plan_params(0, self.input.param("num_partitions", 1))
+        result, status = fts_callable.create_vector_index(
+            False, False, self.LEGACY_VECTOR_INDEX, plans, dimensions=self.vector_dimension, node=self.get_fts_query_node())
+        self.assertEqual(status, 200,
+                         f"failed to create pre-upgrade legacy vector index: {result}")
+        self.sleep(self.vector_index_build_wait, "letting the legacy vector index build")
+
+        passed, baseline = fts_callable.run_vector_queries_stats(
+            index_name=self.LEGACY_VECTOR_INDEX)
+        self.assertTrue(passed,
+                        f"pre-upgrade baseline kNN queries failed on the old build: {baseline}")
+        log.info(f"Pre-upgrade baseline for '{self.LEGACY_VECTOR_INDEX}': {baseline}")
+        return fts_callable, baseline
+
+    def _assert_feature_index_rejected(self, fts_callable, knobs, index_name, stage, node=None):
+        """A Totoro-knob index must not be creatable before the cluster supports it."""
+        errors = []
+        plans = self.construct_custom_plan_params(0, 1)
+        result, status = fts_callable.create_vector_index(
+            False, False, index_name, plans, dimensions=self.vector_dimension,
+            node=node, **knobs)
+        if status == 200:
+            errors.append(
+                f"[{stage}] vector index with {self._vector_feature_label(knobs)} was "
+                f"created on a cluster that does not fully support it (result={result})")
+            try:
+                fts_callable.delete_fts_index(index_name)
+            except Exception as err:
+                log.warning(f"could not clean up unexpected index '{index_name}': {err}")
+        else:
+            log.info(f"[{stage}] got the expected rejection for "
+                     f"{self._vector_feature_label(knobs)}: {result}")
+        return errors
+
+    def _validate_legacy_index_survived(self, fts_callable, baseline, stage):
+        """The pre-upgrade index must still answer kNN queries at its baseline recall."""
+        errors = []
+        passed, stats = fts_callable.run_vector_queries_stats(index_name=self.LEGACY_VECTOR_INDEX)
+        if not passed:
+            errors.append(f"[{stage}] legacy vector index queries failed after upgrade: {stats}")
+            return errors
+
+        tolerance = self.vector_recall_tolerance
+        for metric in ('fts_recall', 'fts_accuracy'):
+            before, after = baseline.get(metric, 0), stats.get(metric, 0)
+            if after < before - tolerance:
+                errors.append(
+                    f"[{stage}] legacy index {metric} regressed across upgrade: "
+                    f"{before} -> {after} (tolerance {tolerance})")
+        log.info(f"[{stage}] legacy index survived upgrade: {stats} (baseline {baseline})")
+        return errors
+
+    def test_vector_features_online_upgrade(self):
+        """Online rolling upgrade for the Totoro vector index features."""
+        errors = {}
+        knobs = self._vector_feature_knobs()
+        if not knobs:
+            self.skipTest("no vector feature requested - set bq_index_type, "
+                          "fastmerge=True and/or gpu_index=True in the conf entry")
+        log.info(f"Vector feature upgrade under test: {self._vector_feature_label(knobs)}")
+
+        fts_nodes = self.get_nodes_from_services_map(service_type="fts", get_all_nodes=True)
+        if not fts_nodes or len(fts_nodes) < 2:
+            self.fail("test_vector_features_online_upgrade requires >= 2 FTS nodes")
+
+        log.info("=" * 20 + " Stage 0: pre-upgrade vector baseline")
+        fts_callable, baseline = self._vector_upgrade_setup()
+
+        stage0 = self._assert_feature_index_rejected(
+            fts_callable, knobs, "vec_feature_stage0", "Stage 0")
+        if stage0:
+            errors['s0_feature_index'] = stage0
+
+        # CBQE-8242
+        self._rolling_upgrade_fts_nodes([fts_nodes[0]], label="Stage 1 (first FTS node)",
+                                        driver=fts_callable)
+
+        log.info("=" * 20 + " Stage 2: mixed-cluster vector checks")
+        fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False,
+                                   variable_node=self.get_fts_query_node(), servers=self.servers)
+        stage2 = self._validate_legacy_index_survived(fts_callable, baseline, "Stage 2")
+        if stage2:
+            errors['s2_legacy_index'] = stage2
+
+        stage2_feature = self._assert_feature_index_rejected(
+            fts_callable, knobs, "vec_feature_stage2", "Stage 2")
+        if stage2_feature:
+            errors['s2_feature_index'] = stage2_feature
+
+        self._upgrade_rest_of_cluster([fts_nodes[0]], "Stage 3 (rest of cluster)",
+                                      driver=fts_callable)
+
+        log.info("=" * 20 + " Stage 4: post-upgrade vector feature checks")
+        fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False,
+                                   variable_node=self.get_fts_query_node(), servers=self.servers)
+        errors.update(self._vector_post_upgrade_checks(fts_callable, knobs, baseline))
+
+        errors.update(self._totoro_post_upgrade_checks("vector online upgrade"))
+
+        if errors:
+            self.fail("test_vector_features_online_upgrade failed:\n" +
+                      "\n".join(f"  {k}: {v}" for k, v in errors.items()))
+        log.info("test_vector_features_online_upgrade PASSED")
+
+    def test_vector_features_offline_upgrade(self):
+        """Offline upgrade for the Totoro vector index features."""
+        errors = {}
+        knobs = self._vector_feature_knobs()
+        if not knobs:
+            self.skipTest("no vector feature requested - set bq_index_type, "
+                          "fastmerge=True and/or gpu_index=True in the conf entry")
+        log.info(f"Vector feature offline upgrade under test: {self._vector_feature_label(knobs)}")
+
+        log.info("=" * 20 + " Pre-upgrade vector baseline")
+        fts_callable, baseline = self._vector_upgrade_setup()
+
+        pre = self._assert_feature_index_rejected(
+            fts_callable, knobs, "vec_feature_pre", "pre-upgrade")
+        if pre:
+            errors['pre_feature_index'] = pre
+
+        self._offline_upgrade_all_nodes(label="vector features")
+
+        log.info("=" * 20 + " Post-upgrade vector feature checks")
+        fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False,
+                                   variable_node=self.get_fts_query_node(), servers=self.servers)
+        errors.update(self._vector_post_upgrade_checks(fts_callable, knobs, baseline))
+
+        errors.update(self._totoro_post_upgrade_checks("vector offline upgrade"))
+
+        if errors:
+            self.fail("test_vector_features_offline_upgrade failed:\n" +
+                      "\n".join(f"  {k}: {v}" for k, v in errors.items()))
+        log.info("test_vector_features_offline_upgrade PASSED")
+
+    def _vector_post_upgrade_checks(self, fts_callable, knobs, baseline):
+        """Shared post-upgrade stage for the online and offline vector tests."""
+        errors = {}
+
+        survived = self._validate_legacy_index_survived(fts_callable, baseline, "post-upgrade")
+        if survived:
+            errors['post_legacy_index'] = survived
+
+        result, status = fts_callable.update_vector_index(
+            False, False, self.LEGACY_VECTOR_INDEX, dimensions=self.vector_dimension, **knobs, node=self.get_fts_query_node())
+        if status != 200:
+            errors['post_legacy_update'] = [
+                f"could not enable {self._vector_feature_label(knobs)} on the existing "
+                f"index '{self.LEGACY_VECTOR_INDEX}': {result}"]
+        else:
+            self.sleep(self.vector_index_build_wait, "letting the updated index rebuild with the feature on")
+            def_errors = self._validate_vector_feature_definition(self.LEGACY_VECTOR_INDEX, knobs)
+            if def_errors:
+                errors['post_legacy_definition'] = def_errors
+            passed, stats = fts_callable.run_vector_queries_stats(
+                index_name=self.LEGACY_VECTOR_INDEX)
+            if not passed:
+                errors['post_legacy_feature_query'] = [
+                    f"kNN queries failed after switching the existing index onto "
+                    f"{self._vector_feature_label(knobs)}: {stats}"]
+            else:
+                log.info(f"in-place feature enable on the legacy index: {stats}")
+
+        plans = self.construct_custom_plan_params(0, self.input.param("num_partitions", 1))
+        result, status = fts_callable.create_vector_index(
+            False, False, self.FEATURE_VECTOR_INDEX, plans,
+            dimensions=self.vector_dimension, **knobs, node=self.get_fts_query_node())
+        if status != 200:
+            errors['post_feature_index_create'] = [
+                f"could not create a {self._vector_feature_label(knobs)} index on the "
+                f"upgraded cluster: {result}"]
+            return errors
+
+        self.sleep(self.vector_index_build_wait, "letting the new feature index build")
+        def_errors = self._validate_vector_feature_definition(self.FEATURE_VECTOR_INDEX, knobs)
+        if def_errors:
+            errors['post_feature_definition'] = def_errors
+
+        passed, stats = fts_callable.run_vector_queries_stats(index_name=self.FEATURE_VECTOR_INDEX)
+        if not passed:
+            errors['post_feature_query'] = [
+                f"kNN queries failed on the new {self._vector_feature_label(knobs)} "
+                f"index: {stats}"]
+        else:
+            tolerance = self.vector_recall_tolerance
+            if stats.get('fts_recall', 0) < baseline.get('fts_recall', 0) - tolerance:
+                errors['post_feature_recall'] = [
+                    f"{self._vector_feature_label(knobs)} recall {stats.get('fts_recall')} is "
+                    f"more than {tolerance} below the pre-upgrade baseline "
+                    f"{baseline.get('fts_recall')}"]
+            log.info(f"new feature index stats: {stats} (baseline {baseline})")
+
+        return errors
+
+    # =========================================================================
+    # =========================================================================
+
+    def _ear_setup_baseline(self, ear):
+        """Pre-upgrade: index data on an unencrypted cluster and prove it is plaintext."""
+        fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False,
+                                   servers=self.servers)
+        fts_callable.load_data(self.num_items)
+        index = fts_callable.create_fts_index(
+            self.EAR_INDEX, source_type='couchbase', source_name="default",
+            index_type='fulltext-index', index_params=None, plan_params=None,
+            source_params=None, source_uuid=None, collection_index=False,
+            _type=None, analyzer="standard", no_check=False, cluster=self.cb_cluster)
+        fts_callable.wait_for_indexing_complete(self.num_items)
+
+        hits, _, _, status = index.execute_query(query=self.EAR_QUERY)
+        self.assertNotEqual(hits, -1, f"pre-upgrade baseline query failed: status={status}")
+        log.info(f"Pre-upgrade baseline: {hits} hits for {self.EAR_QUERY}")
+
+        plaintext_errors = ear.segments_plaintext_errors(
+            label="pre-upgrade segments should be plaintext")
+        self.assertEqual(
+            plaintext_errors, [],
+            "pre-upgrade segments were not readable as plaintext, so a later "
+            f"'encrypted' verdict would prove nothing: {plaintext_errors}")
+
+        return fts_callable, index, hits
+
+    def _ear_post_upgrade_checks(self, ear, index, baseline_hits):
+        """Enable encryption on the fully upgraded cluster and verify it took effect."""
+        errors = {}
+
+        upgrade_errors = self._assert_cluster_fully_upgraded("post-upgrade")
+        if upgrade_errors:
+            errors['cluster_not_fully_upgraded'] = upgrade_errors
+            return errors
+
+        secret_id = ear.create_kek()
+        if secret_id is None:
+            errors['kek'] = "failed to create the bucket-encryption KEK after upgrade"
+            return errors
+
+        status, response = ear.try_enable_bucket_encryption("default", secret_id)
+        if not status:
+            errors['enable'] = (f"enabling bucket encryption failed on the fully "
+                                f"upgraded cluster: {response}")
+            return errors
+        log.info("Bucket encryption enabled post-upgrade")
+
+        # A 200 from the bucket POST only means the request was accepted -- a
+        # pre-8.1 node returns 200 while ignoring the parameter entirely. Read the
+        # setting back so "enabled" means the cluster actually stored it.
+        applied = ear.bucket_encryption_key_id("default")
+        if applied is None or str(applied) != str(secret_id):
+            errors['enable_not_applied'] = (
+                f"bucket encryption was accepted but not applied: "
+                f"encryptionAtRestKeyId reads back as {applied!r}, expected {secret_id!r}")
+        else:
+            log.info(f"bucket 'default' reports encryptionAtRestKeyId={applied}")
+
+        # Do NOT call controller/dropEncryptionAtRestDeks here. That drops the DEKs
+        # to force a ROTATION of already-encrypted data; calling it right after
+        # enabling encryption throws away the DEK FTS has just started using and
+        # restarts from nothing. cbauth polls FTS for keys in use, sees the empty
+        # key meaning unencrypted data remains, and drives the re-encryption on its
+        # own -- the test just has to wait for that cycle.
+
+        if not ear.getinusekeys_available():
+            errors['getinusekeys'] = (
+                "FTS GetInUseKeys (:8094/api/encryption/GetInUseKeys) answered "
+                "'Page not found' after the upgrade. FTS encryption-at-rest is "
+                "expected to work on this build, so the endpoint should be present.")
+
+        completed, deks = ear.wait_for_encryption_complete(
+            "default", timeout=self.ear_reencryption_timeout)
+        if not completed:
+            errors['reencryption'] = (
+                f"FTS still reported unencrypted data for 'default' after "
+                f"{self.ear_reencryption_timeout}s (deks={deks})")
+        elif not deks:
+            errors['deks'] = "no FTS DEK in use for 'default' after enabling encryption"
+
+        # Whether enabling encryption on an ALREADY-BUILT index retroactively
+        # re-encrypts its existing segments is still an open question with the
+        # FTS team. Report it, but only fail the test when
+        # enforce_segment_encryption=True, so this one check does not block the
+        # other 21 tests in the suite from running.
+        # Best-effort flush of rewritten segments; not the trigger, so keep it short.
+        ear.force_merge_and_wait(index.name, timeout=120)
+        segment_errors = ear.segments_encrypted_errors_settled(label="post-upgrade segments")
+        if segment_errors:
+            errors['segments'] = segment_errors
+
+        hits, _, _, status = index.execute_query(query=self.EAR_QUERY)
+        if hits != baseline_hits:
+            errors['data_loss'] = (f"hits changed across upgrade + encryption: "
+                                   f"baseline={baseline_hits}, now={hits} (status={status})")
+        else:
+            log.info(f"Post-upgrade query still returns {hits} hits - no data loss")
+
+        return errors
+
+    def test_ear_online_upgrade(self):
+        """Online rolling upgrade for FTS encryption at rest."""
+        errors = {}
+        ear = EARUpgradeHelper(self)
+
+        fts_nodes = self.get_nodes_from_services_map(service_type="fts", get_all_nodes=True)
+        if not fts_nodes or len(fts_nodes) < 2:
+            self.fail("test_ear_online_upgrade requires >= 2 FTS nodes")
+
+        try:
+            log.info("=" * 20 + " Stage 0: pre-upgrade EAR baseline")
+            fts_callable, index, baseline_hits = self._ear_setup_baseline(ear)
+
+            if ear.getinusekeys_available():
+                errors['s0_getinusekeys'] = (
+                    "GetInUseKeys answered on the pre-upgrade build - the cluster is "
+                    "not actually running a pre-8.1 version, so this run proves nothing")
+
+            if ear.create_kek() is not None:
+                errors['s0_enable'] = (
+                    "the encryption-at-rest secrets API answered on the pre-upgrade "
+                    "build - the cluster is not actually pre-8.1")
+            else:
+                log.info("Stage 0: secrets API unreachable pre-upgrade, as expected")
+
+            # CBQE-8242
+            self._rolling_upgrade_fts_nodes([fts_nodes[0]], label="Stage 1 (first FTS node)",
+                                            driver=fts_callable, index=index)
+
+            log.info("=" * 20 + " Stage 2: mixed-cluster EAR checks")
+            secret_id = ear.create_kek()
+            if secret_id is None:
+                log.info("Stage 2: KEK could not be created in a mixed cluster - "
+                         "encryption is unreachable, which satisfies the gate")
+            else:
+                status, response = ear.try_enable_bucket_encryption("default", secret_id)
+                if status:
+                    errors['s2_enable'] = (
+                        f"bucket encryption was accepted on a MIXED-version cluster - "
+                        f"it must be blocked until every node is upgraded: {response}")
+                    ear.try_disable_bucket_encryption("default")
+                else:
+                    log.info(f"Stage 2: encryption correctly blocked in mixed mode: {response}")
+
+            hits, _, _, status = index.execute_query(query=self.EAR_QUERY)
+            if hits != baseline_hits:
+                errors['s2_query'] = (f"mixed-cluster query returned {hits} hits, "
+                                      f"baseline was {baseline_hits} (status={status})")
+
+            self._upgrade_rest_of_cluster([fts_nodes[0]], "Stage 3 (rest of cluster)",
+                                          driver=fts_callable, index=index)
+
+            log.info("=" * 20 + " Stage 4: post-upgrade EAR checks")
+            errors.update(self._ear_post_upgrade_checks(ear, index, baseline_hits))
+        finally:
+            ear.cleanup_secrets()
+
+        errors.update(self._totoro_post_upgrade_checks("EAR online upgrade"))
+
+        if errors:
+            self.fail("test_ear_online_upgrade failed:\n" +
+                      "\n".join(f"  {k}: {v}" for k, v in errors.items()))
+        log.info("test_ear_online_upgrade PASSED")
+
+    def test_ear_offline_upgrade(self):
+        """Offline upgrade for FTS encryption at rest."""
+        errors = {}
+        ear = EARUpgradeHelper(self)
+
+        try:
+            log.info("=" * 20 + " Pre-upgrade EAR baseline")
+            fts_callable, index, baseline_hits = self._ear_setup_baseline(ear)
+
+            if ear.create_kek() is not None:
+                errors['pre_enable'] = (
+                    "the encryption-at-rest secrets API answered on the pre-upgrade "
+                    "build - the cluster is not actually pre-8.1")
+
+            self._offline_upgrade_all_nodes(label="encryption at rest")
+
+            log.info("=" * 20 + " Post-upgrade EAR checks")
+            errors.update(self._ear_post_upgrade_checks(ear, index, baseline_hits))
+        finally:
+            ear.cleanup_secrets()
+
+        errors.update(self._totoro_post_upgrade_checks("EAR offline upgrade"))
+
+        if errors:
+            self.fail("test_ear_offline_upgrade failed:\n" +
+                      "\n".join(f"  {k}: {v}" for k, v in errors.items()))
+        log.info("test_ear_offline_upgrade PASSED")
+
+    # =========================================================================
+    # CBQE-8244, MB-63246, MB-62427
+    # =========================================================================
+
+    def _fts_index_segment_version(self, index_name, node=None):
+        """Read params.store.segmentVersion for an index, or None if unavailable."""
+        try:
+            target = node if node is not None else self.get_fts_query_node()
+            status, index_def = RestConnection(target).get_fts_index_definition(name=index_name)
+            if not status:
+                return None
+            return index_def['indexDef'].get('params', {}).get('store', {}).get('segmentVersion')
+        except Exception as err:
+            log.warning(f"could not read segmentVersion for '{index_name}': {err}")
+            return None
+
+    def _fts_panic_counts(self):
+        """Panic/crash counts in fts.log per node, summed across keywords."""
+        from lib.log_scanner import LogScanner
+        counts = {}
+        for node in self.get_nodes_from_services_map(service_type="fts", get_all_nodes=True) or []:
+            try:
+                matches = LogScanner(server=node, skip_security_scan=True).scan() or {}
+                counts[node.ip] = sum(matches.get('fts.log', {}).values())
+            except Exception as err:
+                log.warning(f"panic scan failed on {node.ip}: {err}")
+                counts[node.ip] = 0
+        return counts
+
+    def _check_new_panics(self, baseline, label):
+        """Errors for any fts.log panic that appeared since `baseline`."""
+        errors = []
+        current = self._fts_panic_counts()
+        for node_ip, count in current.items():
+            before = baseline.get(node_ip, 0)
+            if count > before:
+                errors.append(
+                    f"[{label}] {count - before} new panic/crash line(s) in fts.log on "
+                    f"{node_ip} (was {before}, now {count}) - see MB-62427")
+        return errors, current
+
+    def test_chained_upgrade(self):
+        """Multi-hop chained upgrade carrying one index the whole way (CBQE-8244)."""
+        errors = {}
+        chain = [v for v in (self.upgrade_versions or []) if v]
+        if len(chain) < 2:
+            self.skipTest(
+                "test_chained_upgrade needs at least two hops - the dispatcher "
+                "must pass upgrade_version=A;B[;C] (got: %s)" % chain)
+
+        upgrade_type = self.input.param("chained_upgrade_type", "offline")
+        log.info("=" * 20 + f" Chained upgrade: {self.initial_version} -> " +
+                 " -> ".join(chain) + f" ({upgrade_type})")
+
+        fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False,
+                                   servers=self.servers)
+        fts_callable.load_data(self.num_items)
+        carried_idx = fts_callable.create_fts_index(
+            self.CHAINED_INDEX, source_type='couchbase', source_name="default",
+            index_type='fulltext-index', index_params=None, plan_params=None,
+            source_params=None, source_uuid=None, collection_index=False,
+            _type=None, analyzer="standard", no_check=False, cluster=self.cb_cluster)
+        fts_callable.wait_for_indexing_complete(self.num_items)
+
+        baseline_hits, _, _, status = carried_idx.execute_query(query=self.EAR_QUERY)
+        self.assertNotEqual(baseline_hits, -1,
+                            f"baseline query failed on {self.initial_version}: {status}")
+        indexed_before = carried_idx.get_indexed_doc_count()
+        segment_versions = {self.initial_version: self._fts_index_segment_version(self.CHAINED_INDEX)}
+        panic_baseline = self._fts_panic_counts()
+        log.info(f"Baseline on {self.initial_version}: hits={baseline_hits}, "
+                 f"indexed={indexed_before}, segmentVersion={segment_versions[self.initial_version]}")
+
+        for hop, version in enumerate(chain, start=1):
+            label = f"hop {hop} ({version})"
+            log.info("=" * 20 + f" Chained upgrade {label}")
+
+            if upgrade_type == "online":
+                fts_nodes = self.get_nodes_from_services_map(service_type="fts", get_all_nodes=True)
+                self._rolling_upgrade_fts_nodes(fts_nodes, label=label, version=version)
+            else:
+                self._offline_upgrade_all_nodes(label=label, version=version)
+
+            fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False,
+                                       variable_node=self.get_fts_query_node(),
+                                       servers=self.servers)
+
+            # MB-63246
+            ingest_errors = self._validate_carried_index_ingests(
+                fts_callable, carried_idx, indexed_before, label)
+            if ingest_errors:
+                errors[f"h{hop}_ingest"] = ingest_errors
+            indexed_before = carried_idx.get_indexed_doc_count()
+
+            hits, _, _, status = carried_idx.execute_query(query=self.EAR_QUERY)
+            if hits == -1 or status == 'fail':
+                errors[f"h{hop}_query"] = f"carried index could not be queried at {version}: {status}"
+            elif hits < baseline_hits:
+                errors[f"h{hop}_hits"] = (f"carried index lost data at {version}: "
+                                          f"{hits} hits, baseline was {baseline_hits}")
+
+            # MB-62427
+            panic_errors, panic_baseline = self._check_new_panics(panic_baseline, label)
+            if panic_errors:
+                errors[f"h{hop}_panic"] = panic_errors
+
+            segment_versions[version] = self._fts_index_segment_version(self.CHAINED_INDEX)
+            log.info(f"{label}: hits={hits}, indexed={indexed_before}, "
+                     f"segmentVersion={segment_versions[version]}")
+
+        log.info(f"segmentVersion across the chain: {segment_versions}")
+
+        post_errors = self._post_upgrade_new_index_check(
+            label="post-chain", index_name="chained_post_idx")
+        if post_errors:
+            errors['post_chain_new_index'] = post_errors
+
+        crud_errors = self._post_upgrade_crud_all_buckets(label="post-chain")
+        if crud_errors:
+            errors['post_chain_crud'] = crud_errors
+
+        if errors:
+            self.fail(f"test_chained_upgrade failed (chain: {self.initial_version} -> "
+                      + " -> ".join(chain) + "):\n"
+                      + "\n".join(f"  {k}: {v}" for k, v in errors.items()))
+        log.info("test_chained_upgrade PASSED")
+
+    def _validate_carried_index_ingests(self, fts_callable, index, indexed_before, label):
+        """The carried index must pick up docs written after the hop (MB-63246)."""
+        errors = []
+        batch = self.input.param("chained_ingest_batch", 10000)
+        try:
+            fts_callable.load_data(batch)
+        except Exception as err:
+            return [f"[{label}] could not load the post-hop batch: {err}"]
+
+        deadline = time.time() + self.input.param("chained_ingest_timeout", 600)
+        indexed_after = indexed_before
+        while time.time() < deadline:
+            try:
+                indexed_after = index.get_indexed_doc_count()
+                if indexed_after > indexed_before:
+                    break
+            except Exception as err:
+                log.info(f"[{label}] waiting for ingestion: {err}")
+            time.sleep(10)
+
+        if indexed_after <= indexed_before:
+            errors.append(
+                f"[{label}] carried index stopped ingesting after the upgrade: "
+                f"indexed {indexed_before} before, {indexed_after} after loading "
+                f"{batch} new docs - this is the MB-63246 signature")
+        else:
+            log.info(f"[{label}] carried index still ingests: "
+                     f"{indexed_before} -> {indexed_after}")
+        return errors
+
+    # =========================================================================
+    # =========================================================================
+
+    def _search_history_supported(self, node):
+        """True when :8094/api/searchHistory answers on this node (8.1+)."""
+        try:
+            RestConnection(node).get_search_history(limit=1)
+            return True
+        except Exception as err:
+            log.info(f"searchHistory unavailable on {node.ip}: {err}")
+            return False
+
+    def _set_search_history(self, node, enabled):
+        """Toggle searchHistoryEnabled on one node. Returns (ok, detail)."""
+        try:
+            RestConnection(node).set_node_setting("searchHistoryEnabled",
+                                                  "true" if enabled else "false")
+            return True, "ok"
+        except Exception as err:
+            return False, str(err)
+
+    def _search_history_entries(self, node, index_name=None, limit=100):
+        try:
+            response = RestConnection(node).get_search_history(limit=limit, index=index_name)
+            return response.get("results") or [], response.get("total", 0)
+        except Exception as err:
+            log.info(f"could not read search history from {node.ip}: {err}")
+            return None, 0
+
+    def test_search_history_online_upgrade(self):
+        """Online rolling upgrade for FTS search history."""
+        errors = {}
+        fts_nodes = self.get_nodes_from_services_map(service_type="fts", get_all_nodes=True)
+        if not fts_nodes or len(fts_nodes) < 2:
+            self.fail("test_search_history_online_upgrade requires >= 2 FTS nodes")
+
+        log.info("=" * 20 + " Stage 0: pre-upgrade search-history baseline")
+        fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False,
+                                   servers=self.servers)
+        fts_callable.load_data(self.num_items)
+        index = fts_callable.create_fts_index(
+            self.SEARCH_HISTORY_INDEX, source_type='couchbase', source_name="default",
+            index_type='fulltext-index', index_params=None, plan_params=None,
+            source_params=None, source_uuid=None, collection_index=False,
+            _type=None, analyzer="standard", no_check=False, cluster=self.cb_cluster)
+        fts_callable.wait_for_indexing_complete(self.num_items)
+
+        if any(self._search_history_supported(n) for n in fts_nodes):
+            errors['s0_endpoint'] = ("the searchHistory endpoint answered on the pre-upgrade "
+                                     "build - the cluster is not actually pre-8.1, so this "
+                                     "run proves nothing")
+
+        self._rolling_upgrade_fts_nodes([fts_nodes[0]], label="Stage 1 (first FTS node)",
+                                        driver=fts_callable, index=index)
+
+        log.info("=" * 20 + " Stage 2: mixed-cluster search-history checks")
+        upgraded, old = fts_nodes[0], fts_nodes[1]
+        if not self._search_history_supported(upgraded):
+            errors['s2_upgraded_node'] = (f"searchHistory did not answer on the upgraded node "
+                                          f"{upgraded.ip}")
+        if self._search_history_supported(old):
+            errors['s2_old_node'] = (f"searchHistory answered on the NOT-yet-upgraded node "
+                                     f"{old.ip}")
+
+        hits, _, _, status = index.execute_query(query=self.EAR_QUERY)
+        if hits == -1 or status == 'fail':
+            errors['s2_query'] = f"query failed in the mixed cluster: status={status}"
+
+        self._upgrade_rest_of_cluster([fts_nodes[0]], "Stage 3 (rest of cluster)",
+                                      driver=fts_callable, index=index)
+
+        log.info("=" * 20 + " Stage 4: post-upgrade search-history checks")
+        current_fts = self.get_nodes_from_services_map(service_type="fts", get_all_nodes=True)
+
+        unsupported = [n.ip for n in current_fts if not self._search_history_supported(n)]
+        if unsupported:
+            errors['s4_endpoint'] = f"searchHistory still unavailable on {unsupported}"
+
+        for node in current_fts:
+            ok, detail = self._set_search_history(node, True)
+            if not ok:
+                errors.setdefault('s4_enable', []).append(f"{node.ip}: {detail}")
+        self.sleep(10, "letting the searchHistoryEnabled setting propagate")
+
+        probe_queries = self.input.param("search_history_queries", 10)
+        for _ in range(probe_queries):
+            index.execute_query(query=self.EAR_QUERY, zero_results_ok=True)
+        self.sleep(15, "letting search history flush")
+
+        total_entries = 0
+        for node in current_fts:
+            entries, total = self._search_history_entries(node, index_name=index.name)
+            if entries is None:
+                errors.setdefault('s4_read', []).append(f"could not read history from {node.ip}")
+                continue
+            total_entries += max(total, len(entries))
+            log.info(f"search history on {node.ip}: {len(entries)} entries (total={total})")
+
+        if total_entries == 0:
+            errors['s4_recorded'] = (f"ran {probe_queries} queries with searchHistoryEnabled on "
+                                     f"every FTS node, but no history was recorded")
+
+        errors.update(self._totoro_post_upgrade_checks("search history upgrade"))
+        if errors:
+            self.fail("test_search_history_online_upgrade failed:\n" +
+                      "\n".join(f"  {k}: {v}" for k, v in errors.items()))
+        log.info("test_search_history_online_upgrade PASSED")
+
+    # =========================================================================
+    # =========================================================================
+
+    DEEP_PAGINATION_FIELDS = {
+        "salary": "number",
+        "join_date": "datetime",
+        "location": "geopoint",
+    }
+
+    def _nontextual_sort_mode(self, sort_type):
+        """Sort spec for a non-textual field; "_id" breaks ties deterministically."""
+        if sort_type == "numeric":
+            return [{"by": "field", "field": "salary", "type": "number"}, "_id"]
+        if sort_type == "datetime":
+            return [{"by": "field", "field": "join_date", "type": "date"}, "_id"]
+        if sort_type == "geo":
+            return [{"by": "geo_distance", "field": "location", "unit": "mi",
+                     "location": {"lat": 40.7128, "lon": -74.0060}}, "_id"]
+        raise ValueError(f"unknown sort_type: {sort_type}")
+
+    def _create_deep_pagination_index(self, fts_callable, index_name):
+        """Index the emp dataset with docvalues on the non-textual sort fields."""
+        index = fts_callable.create_fts_index(
+            index_name, source_type='couchbase', source_name="default",
+            index_type='fulltext-index', index_params=None, plan_params=None,
+            source_params=None, source_uuid=None, collection_index=False,
+            _type=None, analyzer="standard", no_check=False, cluster=self.cb_cluster)
+
+        properties = {}
+        for field, ftype in self.DEEP_PAGINATION_FIELDS.items():
+            properties[field] = {
+                "enabled": True, "dynamic": False,
+                "fields": [{"docvalues": True, "include_term_vectors": True,
+                            "index": True, "name": field, "type": ftype}],
+            }
+        mapping = index.index_definition['params']['mapping']
+        mapping['default_mapping'] = {"dynamic": False, "enabled": True, "properties": properties}
+        mapping['docvalues_dynamic'] = True
+        index.index_definition['uuid'] = index.get_uuid()
+        index.update()
+        fts_callable.wait_for_indexing_complete(self.num_items)
+        return index
+
+    def _check_deep_pagination(self, index, sort_type, label):
+        """search_after / search_before must line up with a full ordered scan."""
+        errors = []
+        partial_size = self.input.param("partial_size", 2)
+        start_index = self.input.param("partial_start_index", 3)
+        try:
+            sort_mode = self._nontextual_sort_mode(sort_type)
+        except ValueError as err:
+            return [f"[{label}] {err}"]
+
+        cluster = index.get_cluster()
+        base_query = {"explain": False, "fields": ["*"], "highlight": {},
+                      "query": {"match_all": {}}, "size": self.num_items, "sort": sort_mode}
+        all_hits, all_matches, _, _ = cluster.run_fts_query(index.name, base_query)
+        if not all_matches or len(all_matches) <= start_index + partial_size:
+            return [f"[{label}/{sort_type}] full scan returned too few rows to paginate "
+                    f"(hits={all_hits}, matches={len(all_matches or [])})"]
+        all_ids = [m['id'] for m in all_matches]
+
+        anchor = all_matches[start_index].get('decoded_sort', all_matches[start_index]['sort'])
+        after_q = dict(base_query, size=partial_size, search_after=anchor)
+        _, after_matches, _, _ = cluster.run_fts_query(index.name, after_q)
+        for i, match in enumerate(after_matches or []):
+            expected = start_index + 1 + i
+            if expected < len(all_ids) and match['id'] != all_ids[expected]:
+                errors.append(f"[{label}/{sort_type}] search_after position {i}: got "
+                              f"{match['id']}, expected {all_ids[expected]}")
+
+        before_q = dict(base_query, size=partial_size, search_before=anchor)
+        _, before_matches, _, _ = cluster.run_fts_query(index.name, before_q)
+        before_ids = [m['id'] for m in (before_matches or [])]
+        expected_before = all_ids[max(0, start_index - len(before_ids)):start_index]
+        if before_ids and before_ids != expected_before:
+            errors.append(f"[{label}/{sort_type}] search_before returned {before_ids}, "
+                          f"expected {expected_before}")
+
+        if not errors:
+            log.info(f"[{label}/{sort_type}] deep pagination consistent with the full scan")
+        return errors
+
+    def test_deep_pagination_online_upgrade(self):
+        """Online rolling upgrade for deep pagination over non-textual content."""
+        errors = {}
+        fts_nodes = self.get_nodes_from_services_map(service_type="fts", get_all_nodes=True)
+        if not fts_nodes or len(fts_nodes) < 2:
+            self.fail("test_deep_pagination_online_upgrade requires >= 2 FTS nodes")
+
+        sort_types = [t.strip() for t in
+                      str(self.input.param("sort_types", "numeric;datetime")).split(";") if t.strip()]
+
+        log.info("=" * 20 + " Stage 0: pre-upgrade deep-pagination baseline")
+        fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False,
+                                   servers=self.servers)
+        fts_callable.load_data(self.num_items)
+        index = self._create_deep_pagination_index(fts_callable, self.DEEP_PAGINATION_INDEX)
+
+        pre = self._check_deep_pagination(index, sort_types[0], "Stage 0")
+        if not pre:
+            errors['s0_worked'] = (f"deep pagination over a {sort_types[0]} sort already worked "
+                                   f"on the pre-upgrade build - either the cluster is not "
+                                   f"pre-8.1 or the check is not exercising the feature")
+        else:
+            log.info(f"Stage 0: deep pagination not yet supported, as expected: {pre}")
+
+        self._rolling_upgrade_fts_nodes([fts_nodes[0]], label="Stage 1 (first FTS node)",
+                                        driver=fts_callable, index=index)
+        self._upgrade_rest_of_cluster([fts_nodes[0]], "Stage 3 (rest of cluster)",
+                                      driver=fts_callable, index=index)
+
+        log.info("=" * 20 + " Stage 4: post-upgrade deep-pagination checks")
+        for sort_type in sort_types:
+            found = self._check_deep_pagination(index, sort_type, "post-upgrade")
+            if found:
+                errors[f"post_{sort_type}"] = found
+
+        errors.update(self._totoro_post_upgrade_checks("deep pagination upgrade"))
+        if errors:
+            self.fail("test_deep_pagination_online_upgrade failed:\n" +
+                      "\n".join(f"  {k}: {v}" for k, v in errors.items()))
+        log.info("test_deep_pagination_online_upgrade PASSED")
+
+    # =========================================================================
+    # =========================================================================
+
+    FTS_MAX_COLLECTIONS_PER_INDEX = 100
+
+    def _bulk_create_collections(self, num_scopes, collections_per_scope, bucket="default"):
+        """Create num_scopes x collections_per_scope collections via the manifest API."""
+        total = num_scopes * collections_per_scope
+        log.info(f"Bulk creating {num_scopes} scopes x {collections_per_scope} collections "
+                 f"({total} total) on '{bucket}'")
+        status = BucketOperationHelper.bulk_create_collection_on_bucket(
+            server_info=self.master, bucket_name=bucket,
+            scopes=num_scopes, collections_per_scope=collections_per_scope,
+            preserve_og_manifest=True,
+            scope_prefix="bulk_scope_", collection_prefix="bulk_coll_")
+        self.assertTrue(status, f"bulk collection creation failed on '{bucket}'")
+        self.sleep(30, "letting the collection manifest settle")
+        return total
+
+    def test_collections_scale_online_upgrade(self):
+        """Online rolling upgrade of a cluster carrying thousands of collections."""
+        errors = {}
+        fts_nodes = self.get_nodes_from_services_map(service_type="fts", get_all_nodes=True)
+        if not fts_nodes or len(fts_nodes) < 2:
+            self.fail("test_collections_scale_online_upgrade requires >= 2 FTS nodes")
+
+        num_scopes = self.input.param("num_scopes", 1)
+        per_scope = self.input.param("num_collections_per_scope", 1000)
+        fts_collections = min(self.input.param("fts_collections", 100),
+                              per_scope, self.FTS_MAX_COLLECTIONS_PER_INDEX)
+
+        total = self._bulk_create_collections(num_scopes, per_scope)
+        log.info(f"Indexing {fts_collections} of {total} collections")
+
+        scope = "bulk_scope_0"
+        collections = [f"bulk_coll_0_{i}" for i in range(fts_collections)]
+
+        fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False,
+                                   servers=self.servers, scope=scope, collections=collections,
+                                   collection_index=True)
+        fts_callable.load_data(self.num_items)
+
+        index = fts_callable.create_fts_index(
+            self.COLLECTIONS_INDEX, source_type='couchbase', source_name="default",
+            index_type='fulltext-index', index_params=None, plan_params=None,
+            source_params=None, source_uuid=None, collection_index=True,
+            _type=[f"{scope}.{c}" for c in collections], analyzer="standard",
+            scope=scope, collections=collections, no_check=False, cluster=self.cb_cluster)
+        fts_callable.wait_for_indexing_complete()
+
+        indexed_before = index.get_indexed_doc_count()
+        hits_before, _, _, status = index.execute_query(query={"match_all": {}},
+                                                        zero_results_ok=True)
+        log.info(f"Pre-upgrade: {total} collections, index holds {indexed_before} docs, "
+                 f"{hits_before} hits")
+        if not indexed_before:
+            self.fail(f"pre-upgrade index over {fts_collections} collections indexed 0 docs")
+
+        self._rolling_upgrade_fts_nodes([fts_nodes[0]], label="Stage 1 (first FTS node)",
+                                        driver=fts_callable, index=index)
+        self._upgrade_rest_of_cluster([fts_nodes[0]], "Stage 3 (rest of cluster)",
+                                      driver=fts_callable, index=index)
+
+        log.info("=" * 20 + " Post-upgrade collection-scale checks")
+        indexed_after = index.get_indexed_doc_count()
+        if indexed_after < indexed_before:
+            errors['doc_count'] = (f"carried index lost docs across the upgrade: "
+                                   f"{indexed_before} -> {indexed_after}")
+
+        hits_after, _, _, status = index.execute_query(query={"match_all": {}},
+                                                       zero_results_ok=True)
+        if hits_after == -1 or status == 'fail':
+            errors['query'] = f"carried index could not be queried after upgrade: {status}"
+
+        try:
+            manifest = BucketOperationHelper.get_api_manifest_json_from_bucket(
+                self.master, "default")
+            scopes_after = len(manifest.get('scopes', []))
+            log.info(f"Post-upgrade manifest holds {scopes_after} scopes")
+            if scopes_after < num_scopes:
+                errors['manifest'] = (f"scopes lost across the upgrade: expected at least "
+                                      f"{num_scopes}, manifest has {scopes_after}")
+        except Exception as err:
+            errors['manifest_read'] = f"could not read the collection manifest: {err}"
+
+        errors.update(self._totoro_post_upgrade_checks("collection scale upgrade"))
+        if errors:
+            self.fail("test_collections_scale_online_upgrade failed:\n" +
+                      "\n".join(f"  {k}: {v}" for k, v in errors.items()))
+        log.info("test_collections_scale_online_upgrade PASSED")
+
+    # =========================================================================
+    # =========================================================================
+
+    def test_hierarchical_online_upgrade(self):
+        """Online rolling upgrade with a hierarchical (nested) FTS index."""
+        errors = {}
+        fts_nodes = self.get_nodes_from_services_map(service_type="fts", get_all_nodes=True)
+        if not fts_nodes or len(fts_nodes) < 2:
+            self.fail("test_hierarchical_online_upgrade requires >= 2 FTS nodes")
+
+        loader = SDKDataLoader(
+            num_ops=self.num_items, percent_create=100,
+            json_template=self.input.param("hierarchical_dataset", "hierarchical"),
+            key_prefix=self.input.param("hierarchical_doc_prefix", "hier_"),
+            scope="_default", collection="_default")
+        for task in self.cb_cluster.async_load_all_buckets_from_generator(loader):
+            task.result()
+
+        index = self.cb_cluster.create_hierarchical_fts_index(
+            name=self.HIERARCHICAL_INDEX, source_name="default")
+        self.sleep(self.vector_index_build_wait, "letting the hierarchical index build")
+
+        indexed_before = index.get_indexed_doc_count()
+        hits_before, _, _, status = index.execute_query(query={"match_all": {}},
+                                                        zero_results_ok=True)
+        log.info(f"Pre-upgrade hierarchical index: {indexed_before} docs, {hits_before} hits")
+        if not indexed_before:
+            self.fail("pre-upgrade hierarchical index indexed 0 docs")
+
+        fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False,
+                                   servers=self.servers)
+
+        self._rolling_upgrade_fts_nodes([fts_nodes[0]], label="Stage 1 (first FTS node)",
+                                        driver=fts_callable, index=index)
+        self._upgrade_rest_of_cluster([fts_nodes[0]], "Stage 3 (rest of cluster)",
+                                      driver=fts_callable, index=index)
+
+        log.info("=" * 20 + " Post-upgrade hierarchical checks")
+        indexed_after = index.get_indexed_doc_count()
+        if indexed_after < indexed_before:
+            errors['doc_count'] = (f"hierarchical index lost docs across the upgrade: "
+                                   f"{indexed_before} -> {indexed_after}")
+
+        hits_after, _, _, status = index.execute_query(query={"match_all": {}},
+                                                       zero_results_ok=True)
+        if hits_after == -1 or status == 'fail':
+            errors['query'] = f"hierarchical index could not be queried after upgrade: {status}"
+        elif hits_after < hits_before:
+            errors['hits'] = (f"hierarchical query lost hits across the upgrade: "
+                              f"{hits_before} -> {hits_after}")
+
+        try:
+            new_index = self.cb_cluster.create_hierarchical_fts_index(
+                name="hier_post_idx", source_name="default")
+            self.sleep(self.vector_index_build_wait, "letting the new hierarchical index build")
+            validator = FTSPostChangeValidator(self, driver=fts_callable, label="post-upgrade")
+            errors_new = validator.validate_index_end_to_end(new_index)
+            if errors_new:
+                errors['new_hierarchical_index'] = errors_new
+        except Exception as err:
+            errors['new_hierarchical_index'] = f"could not create one after the upgrade: {err}"
+        finally:
+            try:
+                self.cb_cluster.delete_fts_index("hier_post_idx")
+            except Exception as err:
+                log.warning(f"could not clean up 'hier_post_idx': {err}")
+
+        errors.update(self._totoro_post_upgrade_checks("hierarchical upgrade"))
+        if errors:
+            self.fail("test_hierarchical_online_upgrade failed:\n" +
+                      "\n".join(f"  {k}: {v}" for k, v in errors.items()))
+        log.info("test_hierarchical_online_upgrade PASSED")

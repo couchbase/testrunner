@@ -747,28 +747,40 @@ class FTSCallable:
         rest = RestConnection(self.cb_cluster.get_random_fts_node())
         return rest.get_fts_defrag_output(node, creds).json()
 
-    def create_vector_index(self, xattr_flag, base64_flag, index_name,plans, similarity="l2_norm", dimensions=128):
-
-        self.store_in_xattr = xattr_flag
-        self.encode_base64_vector = base64_flag
-
+    def _build_vector_index_body(self, index_name, similarity="l2_norm", dimensions=128,
+                                 bq_index_type=None, fastmerge=None, gpu=None,
+                                 segment_version=None):
+        """Build a vector index definition, applying the xattr/base64 layout and"""
         index_body = copy.deepcopy(self.vector_index_definition)
         index_body["name"] = index_name
-        index_body["params"]["mapping"]["types"]["_default._default"]["properties"]["vector_data"]["fields"][0][
-            "dims"] = dimensions
-        index_body["params"]["mapping"]["types"]["_default._default"]["properties"]["vector_data"]["fields"][0][
-            "similarity"] = similarity
+
+        vector_field = index_body["params"]["mapping"]["types"]["_default._default"][
+            "properties"]["vector_data"]["fields"][0]
+        vector_field["dims"] = dimensions
+        vector_field["similarity"] = similarity
+
+        if bq_index_type is not None:
+            vector_field["vector_index_optimized_for"] = bq_index_type
+        if gpu is not None:
+            if gpu:
+                vector_field["gpu"] = True
+            else:
+                vector_field.pop("gpu", None)
+        if fastmerge is not None:
+            store = index_body["params"].setdefault("store", {})
+            if fastmerge:
+                store["vector_index_fast_merge"] = True
+            else:
+                store.pop("vector_index_fast_merge", None)
+        if segment_version is not None:
+            index_body["params"].setdefault("store", {})["segmentVersion"] = int(segment_version)
 
         if self.encode_base64_vector:
             if self.store_in_xattr:
-                index_body["params"]["mapping"]["types"]["_default._default"]["properties"]["vector_data"][
-                    "fields"][0]['name'] = "vector_encoded"
+                vector_field['name'] = "vector_encoded"
             else:
-                index_body["params"]["mapping"]["types"]["_default._default"]["properties"]["vector_data"][
-                    "fields"][0]['name'] = "vector_data_base64"
-
-            index_body["params"]["mapping"]["types"]["_default._default"]["properties"]["vector_data"]["fields"][0][
-                'type'] = "vector_base64"
+                vector_field['name'] = "vector_data_base64"
+            vector_field['type'] = "vector_base64"
 
             vector_temp = index_body["params"]["mapping"]["types"]["_default._default"]["properties"]["vector_data"]
             index_body['params']['mapping']['types']['_default._default']['properties'] = {}
@@ -787,11 +799,27 @@ class FTSCallable:
                 "dynamic": False,
                 "properties": vector_temp}
 
+        return index_body
+
+    def create_vector_index(self, xattr_flag, base64_flag, index_name, plans, similarity="l2_norm",
+                            dimensions=128, bq_index_type=None, fastmerge=None, gpu=None,
+                            segment_version=None, node=None):
+        """Create a vector index. `node` picks the coordinating FTS node."""
+
+        self.store_in_xattr = xattr_flag
+        self.encode_base64_vector = base64_flag
+
+        index_body = self._build_vector_index_body(
+            index_name, similarity=similarity, dimensions=dimensions,
+            bq_index_type=bq_index_type, fastmerge=fastmerge, gpu=gpu,
+            segment_version=segment_version)
+
         index_body['planParams']['indexPartitions'] = plans['indexPartitions']
         index_body['planParams']['numReplicas'] = plans['numReplicas']
 
         try:
-            status, result = RestConnection(self.servers[1]).create_fts_index(index_name, index_body, mode="upgrade")
+            target = node if node is not None else self.servers[1]
+            status, result = RestConnection(target).create_fts_index(index_name, index_body, mode="upgrade")
             if status:
                 time.sleep(100)
                 return str(result), 200
@@ -801,68 +829,40 @@ class FTSCallable:
             print(e)
             return str(e), 100
 
-    def update_vector_index(self, xattr_flag, base64_flag, index_name, similarity="l2_norm", dimensions=128):
+    def update_vector_index(self, xattr_flag, base64_flag, index_name, similarity="l2_norm",
+                            dimensions=128, bq_index_type=None, fastmerge=None, gpu=None,
+                            segment_version=None, node=None):
+        """Update an existing vector index in place."""
 
         self.store_in_xattr = xattr_flag
         self.encode_base64_vector = base64_flag
 
+        target = node if node is not None else self.servers[1]
+
         uuid = ""
         try:
-            uuid = RestConnection(self.servers[1]).get_fts_index_uuid(index_name, bucket="default")
+            uuid = RestConnection(target).get_fts_index_uuid(index_name, bucket="default")
         except Exception as e:
             print(e)
 
-
-        index_body_def = RestConnection(self.servers[1]).get_fts_index_definition(name=index_name)[1]['indexDef']
+        index_body_def = RestConnection(target).get_fts_index_definition(name=index_name)[1]['indexDef']
         index_partition = index_body_def['planParams']['indexPartitions']
         num_replicas = index_body_def['planParams']['numReplicas']
 
-
+        index_body = None
         try:
-            index_body = copy.deepcopy(self.vector_index_definition)
-            index_body["name"] = index_name
-            index_body["params"]["mapping"]["types"]["_default._default"]["properties"]["vector_data"]["fields"][0][
-                "dims"] = dimensions
-            index_body["params"]["mapping"]["types"]["_default._default"]["properties"]["vector_data"]["fields"][0][
-                "similarity"] = similarity
+            index_body = self._build_vector_index_body(
+                index_name, similarity=similarity, dimensions=dimensions,
+                bq_index_type=bq_index_type, fastmerge=fastmerge, gpu=gpu,
+                segment_version=segment_version)
             index_body["uuid"] = uuid
-
-            if self.encode_base64_vector:
-                if self.store_in_xattr:
-                    index_body["params"]["mapping"]["types"]["_default._default"]["properties"]["vector_data"][
-                        "fields"][0]['name'] = "vector_encoded"
-                else:
-                    index_body["params"]["mapping"]["types"]["_default._default"]["properties"]["vector_data"][
-                        "fields"][0]['name'] = "vector_data_base64"
-
-                index_body["params"]["mapping"]["types"]["_default._default"]["properties"]["vector_data"]["fields"][0][
-                    'type'] = "vector_base64"
-
-                vector_temp = index_body["params"]["mapping"]["types"]["_default._default"]["properties"]["vector_data"]
-                index_body['params']['mapping']['types']['_default._default']['properties'] = {}
-                if self.store_in_xattr:
-                    index_body['params']['mapping']['types']['_default._default']['properties'][
-                        'vector_encoded'] = vector_temp
-                else:
-                    index_body['params']['mapping']['types']['_default._default']['properties'][
-                        'vector_data_base64'] = vector_temp
-
-            if self.store_in_xattr:
-                vector_temp = index_body['params']['mapping']['types']['_default._default']['properties']
-                index_body['params']['mapping']['types']['_default._default']['properties'] = {}
-                index_body['params']['mapping']['types']['_default._default']['properties']['_$xattrs'] = {
-                    "enabled": True,
-                    "dynamic": False,
-                    "properties": vector_temp}
-
             index_body['planParams']['indexPartitions'] = index_partition
             index_body['planParams']['numReplicas'] = num_replicas
-
         except Exception as ex:
             print(f"error occured while trying to update index . reason : {ex}\n")
 
         try:
-            status, result = RestConnection(self.servers[1]).update_fts_index(index_name, index_body, mode="upgrade")
+            status, result = RestConnection(target).update_fts_index(index_name, index_body, mode="upgrade")
             if status:
                 time.sleep(50)
                 return str(result), 200
@@ -1203,7 +1203,17 @@ class FTSCallable:
 
     def run_vector_queries(self, store_in_xattr=False, encode_base_64=False, vector_field_name="vector_data",
                            vector_field_type="vector", index_name=None):
+        """Run the kNN query set against an index. Returns True when recall/accuracy hold."""
+        is_passed, _ = self.run_vector_queries_stats(
+            store_in_xattr=store_in_xattr, encode_base_64=encode_base_64,
+            vector_field_name=vector_field_name, vector_field_type=vector_field_type,
+            index_name=index_name)
+        return is_passed
 
+    def run_vector_queries_stats(self, store_in_xattr=False, encode_base_64=False,
+                                 vector_field_name="vector_data", vector_field_type="vector",
+                                 index_name=None):
+        """As run_vector_queries, but also returns the measured stats dict."""
         is_passed = True
         self.encode_base64_vector = encode_base_64
         self.store_in_xattr = store_in_xattr
@@ -1225,6 +1235,7 @@ class FTSCallable:
 
         all_stats = []
         bad_indexes = []
+        index_stats = {'index_name': index_name or '', 'fts_accuracy': 0, 'fts_recall': 0}
 
         if index_name:
             index_name = index_name
@@ -1232,7 +1243,6 @@ class FTSCallable:
             index_name = "index_default_vector"
         try:
             self.index_obj = {"name": index_name}
-            index_stats = {'index_name': '', 'fts_accuracy': 0, 'fts_recall': 0}
             dataset_name = self.vector_dataset
             queries = self.get_query_vectors(dataset_name)
             neighbours = self.get_groundtruth_file(dataset_name)
@@ -1268,7 +1278,7 @@ class FTSCallable:
             self.log.error(e)
             is_passed = False
 
-        return is_passed
+        return is_passed, index_stats
 
     def get_ideal_index_distribution(self,k, n):
         if k==0:
