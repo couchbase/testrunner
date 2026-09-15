@@ -2811,7 +2811,10 @@ class BaseSecondaryIndexingTests(QueryTests):
 
     def _kill_all_processes_index(self, server):
         shell = RemoteMachineShellConnection(server)
-        shell.execute_command("pkill indexer")
+        if shell.extract_remote_info().type.lower() == 'windows':
+            shell.terminate_process(process_name="indexer")  # pkill absent in Cygwin
+        else:
+            shell.execute_command("pkill indexer")
 
     def _kill_projector_process(self, server):
         shell = RemoteMachineShellConnection(server)

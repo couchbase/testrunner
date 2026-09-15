@@ -50,7 +50,10 @@ class PlannerGSI(BaseSecondaryIndexingTests):
     def _find_least_loaded_index_node(self, count=1):
         index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
         remote = RemoteMachineShellConnection(index_node)
-        output_file = '/tmp/index_plan.log'
+        # cbindexplan.exe resolves /tmp against the current drive, not the Cygwin /tmp that
+        # SFTP reads back; the ssh home dir is visible to both (same trick as cbcollect_info)
+        win = remote.extract_remote_info().type.lower() == 'windows'
+        output_file = 'index_plan.log' if win else '/tmp/index_plan.log'
         dest_file = 'index_plan.log'
         del_cmd = f'rm -rf {output_file}'
         self.log.info("Deleting index_plan.log from Remote host")

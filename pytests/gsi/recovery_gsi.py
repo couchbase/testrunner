@@ -204,7 +204,7 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
                 node_c = node
                 break
         # get num_rollback stats before triggering in-memory recovery
-        conn = RestConnection(self.master)
+        conn = RestConnection(self.index_nodes[0])  # stats are on the index node's :9102
         num_rollback_before_recovery = conn.get_num_rollback_stat(bucket=bucket_name)
         try:
             self.block_incoming_network_from_node(node_b, node_c)
