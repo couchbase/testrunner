@@ -671,17 +671,27 @@ class FTSCRLBase(FTSBaseTest):
         Under nodeToNode=Require every node cert needs an applicable CRL or the
         cluster fails closed for reasons unrelated to the revocation under
         test. Nodes may be signed by different intermediates, so this groups by
-        issuer and uploads one CRL each, revoking only the requested nodes.
+        issuer and uploads one CRL each -- each carrying the full revoked set,
+        because the intermediates share an issuer name (see below).
         """
         servers = servers or self._input.servers
         revoked_ips = {node.ip for node in revoked_nodes}
         by_issuer = {}
+        all_serials = []
         for server in servers:
             entry = self.node_cert_entry(server)
-            bucket = by_issuer.setdefault(
-                entry["signed_by"], {"node": server, "serials": []})
+            by_issuer.setdefault(entry["signed_by"], {"node": server})
             if server.ip in revoked_ips:
-                bucket["serials"].append(self.node_cert_serial(server))
+                all_serials.append(self.node_cert_serial(server))
+
+        # Every x509main intermediate is minted with the same CN
+        # (ClientAndServerSigningCA) and CRLs are matched to a certificate by
+        # ISSUER NAME, so these CRLs all collide under one name. Putting the
+        # revoked serials in every issuer's CRL means the revocation holds
+        # whichever one the server picks; listing a serial an issuer never
+        # issued matches nothing and is harmless.
+        for info in by_issuer.values():
+            info["serials"] = list(all_serials)
 
         for issuer, info in by_issuer.items():
             cert, key = self.node_issuer_ca(info["node"])

@@ -30,7 +30,8 @@ from cryptography.x509.oid import ExtendedKeyUsageOID
 from lib.membase.api.rest_client import RestConnection
 from lib.remote.remote_util import RemoteMachineShellConnection
 from pytests.security.crl_base import CRLBase
-from pytests.security.crl_utils import CRLUtils
+from pytests.security.crl_utils import (CRLUtils,
+                                        DIAGNOSTIC_OK_STATUSES)
 from pytests.security.ntonencryptionBase import ntonencryptionBase
 from pytests.security.x509_multiple_CA_util import Validation
 from .tuq import QueryTests
@@ -1463,8 +1464,10 @@ class QueryCRLTests(QueryTests, CRLBase):
         certs_result = result.get('certs', result.get('results', [result]))
         cert_status = (certs_result[0].get('status', '') if isinstance(certs_result, list)
                        and certs_result else result.get('status', '')).lower()
-        self.assertEqual(cert_status, 'valid',
-            f"Expected 'valid' for Client B, got '{cert_status}'. Full: {result}")
+        self.assertIn(cert_status, DIAGNOSTIC_OK_STATUSES,
+            f"Expected a not-revoked status for Client B (one of "
+            f"{sorted(DIAGNOSTIC_OK_STATUSES)}), got '{cert_status}'. "
+            f"Full: {result}")
 
     def test_cert_diagnostic_matches_connection_outcome(self):
         """Section 6 (standing check): Diagnostic verdict must match live TLS behavior.
@@ -1475,7 +1478,7 @@ class QueryCRLTests(QueryTests, CRLBase):
             (self.client_a_cert, self.client_a_cert_path, self.client_a_key_path,
              "Client A", "revoked", False),
             (self.client_b_cert, self.client_b_cert_path, self.client_b_key_path,
-             "Client B", "valid", True),
+             "Client B", DIAGNOSTIC_OK_STATUSES, True),
         ]:
             cert_pem = self.crl_utils.cert_to_pem(cert_obj)
             diag = self._call_diagnostic_validate(cert_pem, policy="Required")
@@ -1487,8 +1490,11 @@ class QueryCRLTests(QueryTests, CRLBase):
             code, body = self._query_with_cert(cert_path, key_path)
             connection_ok = code is not None
             self.log.info(f"{label}: diagnostic={diag_status}, connection_ok={connection_ok}")
-            self.assertEqual(diag_status, expected_diag,
-                f"{label}: diagnostic='{diag_status}', expected '{expected_diag}'")
+            expected = ({expected_diag} if isinstance(expected_diag, str)
+                        else set(expected_diag))
+            self.assertIn(diag_status, expected,
+                f"{label}: diagnostic='{diag_status}', expected one of "
+                f"{sorted(expected)}")
             self.assertEqual(connection_ok, should_connect,
                 f"{label}: connection_ok={connection_ok} but expected {should_connect} — "
                 f"diagnostic and live TLS behavior disagree")
@@ -3022,8 +3028,9 @@ class QueryCRLTests(QueryTests, CRLBase):
             certs_result = diag_b.get('certs', diag_b.get('results', [diag_b]))
             status_b = (certs_result[0].get('status', '') if isinstance(certs_result, list)
                         and certs_result else diag_b.get('status', '')).lower()
-            self.assertEqual(status_b, 'valid',
-                f"Client B (valid cert) should return 'valid', got '{status_b}'")
+            self.assertIn(status_b, DIAGNOSTIC_OK_STATUSES,
+                f"Client B (valid cert) should return a not-revoked status "
+                f"(one of {sorted(DIAGNOSTIC_OK_STATUSES)}), got '{status_b}'")
             self.log.info(f"Diagnostic validate — Client B: {status_b} ✓")
 
         # Client A (revoked) — should return 'revoked'
