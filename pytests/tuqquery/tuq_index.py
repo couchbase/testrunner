@@ -1649,6 +1649,119 @@ class QueriesViewsTests(QuerySanityTests):
                                 return result
         return None
 
+    def test_mb73846_or_predicate_filter_on_index_scan(self):
+        """MB-73846: With OR predicate, filter is not applied on IndexScan3.
+        In 7.6.x/8.0.x the OR clause caused IndexScan3 to have no filter,
+        so early filtering was skipped. After fix, IndexScan3 must have a
+        filter containing the OR clause.
+        Uses the existing employee dataset fields: join_day (scalar equality),
+        join_mo (IS NOT NULL + equality), skills and VMs (array_contains).
+        EXPLAIN-only, so whether the array_contains predicates actually match
+        any document is irrelevant — what matters is that the fields exist and
+        are arrays, mirroring arr1/arr2 in the MB repro."""
+        self.fail_if_no_buckets()
+        query_bucket = self.query_buckets[0]
+        index_name = 'ix_mb73846'
+        primary_dropped = False
+        try:
+            self.run_cbq_query(
+                f"CREATE INDEX {index_name} ON {query_bucket}"
+                f"(join_day, join_mo, skills, VMs) USING {self.index_type}"
+            )
+            self._wait_for_index_online(self.buckets[0], index_name)
+
+            # Drop #primary for the duration of the EXPLAIN. The MB repro has no
+            # USE INDEX hint, and we want the optimizer to choose the index the
+            # same way it did there. This dataset has no index statistics, so the
+            # CBO mis-costs the primary scan path (cardinality ~1e-19) and a full
+            # primary scan looks free — with #primary present it wins and the plan
+            # contains no IndexScan3 at all. Removing the fallback lets join_day = 1
+            # sarg the leading key of ix_mb73846 on its own merits. Restored in
+            # the finally block below.
+            self.run_cbq_query(f"DROP PRIMARY INDEX ON {query_bucket} USING {self.index_type}")
+            primary_dropped = True
+
+            # Use existing employee dataset — no custom data needed.
+            # generate_docs_employee emits skills (array of strings) and VMs
+            # (array of objects); it has no 'tasks' field, that belongs to a
+            # different generator.
+            explain_query = (
+                f"EXPLAIN SELECT d.* FROM {query_bucket} AS d "
+                f"WHERE join_day = 1 AND join_mo IS NOT NULL "
+                f"AND (join_mo = 1 OR array_contains(skills, 'skill2010') "
+                f"OR array_contains(VMs, 1))"
+            )
+            result = self.run_cbq_query(explain_query)
+            plan = self.ExplainPlanHelper(result)
+            self.log.info(f"MB-73846 explain plan: {plan}")
+
+            def find_index_scans(node):
+                found = []
+                if isinstance(node, dict):
+                    if node.get('#operator') == 'IndexScan3':
+                        found.append(node)
+                    for v in node.values():
+                        found.extend(find_index_scans(v))
+                elif isinstance(node, list):
+                    for item in node:
+                        found.extend(find_index_scans(item))
+                return found
+
+            index_scans = find_index_scans(plan)
+            self.assertTrue(len(index_scans) > 0,
+                            f"No IndexScan3 in plan — {index_name} was not chosen even "
+                            f"with #primary dropped, so this run does not exercise "
+                            f"MB-73846: {plan}")
+
+            # Only assert on the scan for our index; a plan may legitimately
+            # contain other IndexScan3 nodes that carry no filter.
+            target_scans = [s for s in index_scans if s.get('index') == index_name]
+            self.assertTrue(target_scans,
+                            f"Plan has IndexScan3 nodes but none on {index_name} — "
+                            f"a different index was chosen, so this run does not "
+                            f"exercise MB-73846: {plan}")
+
+            # Two plan shapes both represent the fixed behaviour:
+            #   a) one IndexScan3 whose filter is the whole OR clause, or
+            #   b) a UnionScan that splits the OR into one IndexScan3 per disjunct,
+            #      each carrying its own filter (a disjunct that maps onto an exact
+            #      span, e.g. join_mo = 1, correctly needs no filter at all).
+            # What distinguishes fixed from broken is that the array_contains
+            # predicates reach the index scan instead of only being evaluated in the
+            # post-Fetch Filter — that is the "early filter ... reduces the number of
+            # items due to array" the MB describes. So assert on the filters across
+            # all scans for this index rather than demanding one on every scan.
+            scan_filters = [str(s['filter']).lower() for s in target_scans if 'filter' in s]
+            self.assertTrue(scan_filters,
+                            f"MB-73846 regression: no IndexScan3 on {index_name} carries a "
+                            f"filter — the OR predicate was not pushed down to the index "
+                            f"scan at all: {plan}")
+
+            combined_filters = ' '.join(scan_filters)
+            for operand in ('skills', 'vms'):
+                self.assertIn(operand, combined_filters,
+                              f"MB-73846 regression: array predicate on '{operand}' did not "
+                              f"reach any index scan filter, so it is only evaluated after "
+                              f"Fetch. Index scan filters were: {scan_filters}")
+
+            self.log.info(f"MB-73846 OR predicate pushed down across "
+                          f"{len(target_scans)} IndexScan3 node(s); "
+                          f"index-level filters: {scan_filters}")
+
+        finally:
+            try:
+                self.run_cbq_query(f"DROP INDEX {index_name} ON {query_bucket} USING {self.index_type}")
+            except Exception:
+                pass
+            # Put #primary back before leaving — later tests in this suite rely on it.
+            if primary_dropped:
+                try:
+                    self.run_cbq_query(
+                        f"CREATE PRIMARY INDEX ON {query_bucket} USING {self.index_type}")
+                    self._wait_for_index_online(self.buckets[0], '#primary')
+                except Exception as e:
+                    self.log.error(f"Failed to restore #primary on {query_bucket}: {e}")
+
 class QueriesJoinViewsTests(JoinTests):
 
     def setUp(self):
