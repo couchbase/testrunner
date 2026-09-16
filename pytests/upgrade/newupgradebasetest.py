@@ -855,6 +855,18 @@ class NewUpgradeBaseTest(BaseTestCase):
             self.log.info(ex)
             raise
 
+    def _node_has_data_service(self, node):
+        """True when `node` runs kv, so a graceful failover is allowed."""
+        try:
+            services = self.rest.get_nodes_services().get(
+                "{0}:{1}".format(node.ip, node.port), [])
+        except Exception as error:
+            self.log.warning(
+                "could not read services for {0} ({1}); using hard "
+                "failover".format(node.ip, error))
+            return False
+        return "kv" in services
+
     def offline_fail_over_upgrade(self):
         try:
             self.log.info("offline_failover_upgrade")
@@ -867,8 +879,15 @@ class NewUpgradeBaseTest(BaseTestCase):
                 if iterator == 0:
                     load_data_node = upgrade_nodes[1]
 
-                self.rest.fail_over('ns_1@' + upgrade_nodes[total_nodes - 1].ip,
-                                    graceful=True)
+                # Graceful failover needs the data service; an fts-only node
+                # (initial-services-setting=kv-kv-fts-fts puts one last) is
+                # refused with "Failover cannot be done gracefully for a node
+                # without data service". The node is reinstalled and full-
+                # recovered right below, so a hard failover costs nothing here.
+                failover_node = upgrade_nodes[total_nodes - 1]
+                self.rest.fail_over(
+                    'ns_1@' + failover_node.ip,
+                    graceful=self._node_has_data_service(failover_node))
                 self.sleep(timeout=60)
                 self.rest.set_recovery_type('ns_1@' + upgrade_nodes[total_nodes - 1].ip,
                                             "full")

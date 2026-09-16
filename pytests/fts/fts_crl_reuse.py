@@ -49,6 +49,7 @@ class CRLEnforcementMixin(object):
         self._crl_number = 0
         self._crl_active = False
         self._crl_issuer_trusted = False
+        self._relax_encryption_for_sdk_paths()
         if self._input.param("crl_enabled", True):
             try:
                 self.enable_crl_enforcement()
@@ -67,6 +68,35 @@ class CRLEnforcementMixin(object):
                         "could not drop node encryption after a failed "
                         "setUp: {0}".format(cleanup_error))
                 raise
+
+    def _relax_encryption_for_sdk_paths(self):
+        """Drop clusterEncryptionLevel from strict to all.
+
+        The multiple_ca fixture sets strict, which closes every non-TLS port.
+        The suites this mixin wraps load data over plaintext couchbase:// --
+        the Python SDK and the sequoiatools/vectorloader container both -- so
+        strict makes them fail with LCB_ERR_CONNECTION_REFUSED / SDK connect
+        timeouts before any CRL behaviour is exercised. `all` still encrypts
+        node-to-node traffic and leaves clientAuth CRL enforcement intact,
+        which is what these tests actually assert.
+        """
+        if self._input.param("crl_keep_strict", False):
+            return
+        try:
+            status, content = RestConnection(
+                self.master).set_node_encryption_level("all")
+            if not status:
+                self.log.warning(
+                    "could not lower clusterEncryptionLevel to 'all': "
+                    "{0}".format(content))
+            else:
+                self.log.info(
+                    "clusterEncryptionLevel lowered to 'all' so the inherited "
+                    "suite's SDK data paths can connect")
+        except Exception as error:
+            self.log.warning(
+                "could not lower clusterEncryptionLevel to 'all': "
+                "{0}".format(error))
 
     def tearDown(self):
         try:
@@ -249,7 +279,11 @@ class CRLVectorSearch(CRLEnforcementMixin, VectorSearch):
         index_obj = next(item for item in index
                          if item['name'] == "i1")['index_obj']
 
-        queries = self.get_query_vectors(self.vector_dataset)
+        # VectorSearch.setUp normalises vector_dataset to a LIST, but
+        # get_query_vectors takes one dataset name -- passing the list reaches
+        # `name in HDF5_FORMATTED_DATASETS` and raises "unhashable type: list".
+        # The base suite passes index['dataset'], so do the same.
+        queries = self.get_query_vectors(index[0]['dataset'])
         vector = queries[0].tolist()
 
         def knn():

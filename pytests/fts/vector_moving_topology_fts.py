@@ -401,14 +401,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
             self.log.info("Index count for %s: %s"
                           % (index.name, index.get_indexed_doc_count()))
 
-        failover_node = self._cb_cluster.get_kv_nodes()[-1]
-        for node in self._cb_cluster.get_nodes():
-            if node.ip == self._cb_cluster.get_master_node().ip:
-                continue
-            node_services = node.services.split(",")
-            if "kv" in node_services:
-                failover_node = node
-                break
+        failover_node = self._pick_failover_kv_node()
 
         task = self._cb_cluster.async_failover(graceful=True, node=failover_node)
         task.result()
@@ -428,14 +421,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
             self.log.info("Index count for %s: %s"
                           % (index.name, index.get_indexed_doc_count()))
 
-        failover_node = self._cb_cluster.get_kv_nodes()[-1]
-        for node in self._cb_cluster.get_nodes():
-            if node.ip == self._cb_cluster.get_master_node().ip:
-                continue
-            node_services = node.services.split(",")
-            if "kv" in node_services:
-                failover_node = node
-                break
+        failover_node = self._pick_failover_kv_node()
 
         task = self._cb_cluster.async_failover(graceful=True, node=failover_node)
         task.result()
@@ -455,14 +441,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
             self.log.info("Index count for %s: %s"
                           % (index.name, index.get_indexed_doc_count()))
 
-        failover_node = self._cb_cluster.get_kv_nodes()[-1]
-        for node in self._cb_cluster.get_nodes():
-            if node.ip == self._cb_cluster.get_master_node().ip:
-                continue
-            node_services = node.services.split(",")
-            if "kv" in node_services:
-                failover_node = node
-                break
+        failover_node = self._pick_failover_kv_node()
 
         task = self._cb_cluster.async_failover(node=failover_node)
         task.result()
@@ -839,14 +818,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                 hits, _, _, _ = index.execute_query(query=self.query,
                                                     expected_hits=self._find_expected_indexed_items_number())
 
-        failover_node = self._cb_cluster.get_kv_nodes()[-1]
-        for node in self._cb_cluster.get_nodes():
-            if node.ip == self._cb_cluster.get_master_node().ip:
-                continue
-            node_services = node.services.split(",")
-            if "kv" in node_services:
-                failover_node = node
-                break
+        failover_node = self._pick_failover_kv_node()
 
         task = self._cb_cluster.async_failover(node=failover_node)
         task.result()
@@ -921,14 +893,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                 hits, _, _, _ = index.execute_query(query=self.query,
                                                     expected_hits=self._find_expected_indexed_items_number())
 
-        failover_node = self._cb_cluster.get_kv_nodes()[-1]
-        for node in self._cb_cluster.get_nodes():
-            if node.ip == self._cb_cluster.get_master_node().ip:
-                continue
-            node_services = node.services.split(",")
-            if "kv" in node_services:
-                failover_node = node
-                break
+        failover_node = self._pick_failover_kv_node()
 
         task = self._cb_cluster.async_failover(graceful=True, node=failover_node)
         task.result()
@@ -968,14 +933,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                 hits, _, _, _ = index.execute_query(query=self.query,
                                                     expected_hits=self._find_expected_indexed_items_number())
 
-        failover_node = self._cb_cluster.get_kv_nodes()[-1]
-        for node in self._cb_cluster.get_nodes():
-            if node.ip == self._cb_cluster.get_master_node().ip:
-                continue
-            node_services = node.services.split(",")
-            if "kv" in node_services:
-                failover_node = node
-                break
+        failover_node = self._pick_failover_kv_node()
 
         task = self._cb_cluster.async_failover(graceful=True, node=failover_node)
         task.result()
@@ -1816,14 +1774,12 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         else:
             services = ['fts']
 
-        failover_node = self._cb_cluster.get_kv_nodes()[-1]
-        for node in self._cb_cluster.get_nodes():
-            if node.ip == self._cb_cluster.get_master_node().ip:
-                continue
-            node_services = node.services.split(",")
-            if "kv" in node_services:
-                failover_node = node
-                break
+        if graceful or recovery == "delta":
+            failover_node = self._pick_failover_kv_node()
+        else:
+            # A hard failover of an fts-only node is fine, and that is what this
+            # branch adds back.
+            failover_node = self._cb_cluster.get_fts_nodes()[0]
 
         tasks = []
         tasks.append(self._cb_cluster.async_failover_add_back_node(

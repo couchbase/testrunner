@@ -280,7 +280,14 @@ class UpgradeTests(NewUpgradeBaseTest):
 
 
     def test_upgrade(self):
-        self.fts_obj = FTSCallable(nodes=self.servers, es_validate=True)
+        # Honour compare_es rather than demanding ES unconditionally. No
+        # upgrade conf sets it, so hardcoding True made every upgrade test
+        # depend on the ES node being up: FTSCallable's constructor deletes a
+        # stale ES index, and an unreachable ES raised out of it before the
+        # upgrade ran at all.
+        self.fts_obj = FTSCallable(
+            nodes=self.servers,
+            es_validate=self.input.param("compare_es", False))
         self.event_threads = []
         self.after_event_threads = []
         try:

@@ -1407,8 +1407,12 @@ class FTSCRL(FTSCRLBase):
         # Restore, and confirm the failure was the revocation and not a
         # cluster left permanently broken by the test.
         self.restore_node_certs(crl_number=3)
-        restored = self._cb_cluster.run_n1ql_query(search_query)
-        restored_hits = self._n1ql_hits(restored)
+        # Un-revocation needs the same two allowances as the revocation: the
+        # CRL cache has to catch up, and the pooled connection has to be
+        # dropped so a fresh handshake re-evaluates the cert.
+        self.restart_cbft(fts_node)
+        self.wait_for_indexing_complete()
+        restored_hits = self._wait_for_n1ql_hits(search_query, baseline_hits)
         self.assertEqual(
             restored_hits, baseline_hits,
             "SEARCH() did not recover after un-revoking the FTS node cert: "
@@ -1586,6 +1590,23 @@ class FTSCRL(FTSCRLBase):
         if not rows or not isinstance(rows[0], dict):
             return None
         return rows[0].get("hits")
+
+    def _wait_for_n1ql_hits(self, query, expected, timeout=300, interval=10):
+        """Poll until the query returns `expected` hits; return the last count."""
+        deadline = time.time() + timeout
+        hits = None
+        while True:
+            try:
+                hits = self._n1ql_hits(self._cb_cluster.run_n1ql_query(query))
+            except Exception as exc:
+                self.log.info("SEARCH() still failing during recovery: "
+                              "{0}".format(str(exc)[:160]))
+                hits = None
+            if hits == expected:
+                return hits
+            if time.time() >= deadline:
+                return hits
+            time.sleep(interval)
 
     def _wait_for_n1ql_failure(self, query, timeout=180, interval=10):
         """Poll until `query` stops returning hits. Returns the last hit count

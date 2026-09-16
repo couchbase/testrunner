@@ -63,13 +63,25 @@ class FTSCallable:
         self.collection_index = collection_index
         self.create_gen = None
         if self.compare_es and not self.elastic_node:
-            raise "For ES result validation, pls add elastic search node in the .ini file."
+            raise Exception(
+                "compare_es is set but the .ini declares no elastic search "
+                "node; add one or run without ES validation.")
         elif self.compare_es:
             self.log.info(f"Using ES index name: {self.es_index_name}")
             self.es = ElasticSearchBase(self.elastic_node, self.log)
             if es_reset:
                 self.log.info(f"Cleaning existing index: {self.es_index_name}")
-                self.es.delete_index(self.es_index_name)
+                try:
+                    self.es.delete_index(self.es_index_name)
+                except Exception as error:
+                    # Dropping a possibly-absent stale index must not be what
+                    # decides the test; say plainly that ES is unusable.
+                    raise Exception(
+                        "compare_es is set but the elastic search node at "
+                        "{0} is unreachable, so ES validation cannot run: "
+                        "{1}".format(
+                            getattr(self.elastic_node, "ip", self.elastic_node),
+                            error))
                 self.es.create_empty_index_with_bleve_equivalent_std_analyzer(self.es_index_name)
                 self.log.info(f"Created ES index: {self.es_index_name} with BLEVE.STD_ANALYZER")
 

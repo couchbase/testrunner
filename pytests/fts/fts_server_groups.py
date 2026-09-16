@@ -130,8 +130,17 @@ class FTSServerGroups(FTSBaseTest, NewUpgradeBaseTest):
             self.fail(err)
         index_replica = idx.get_num_replicas()
         zones_with_replica = self.calculate_zones_with_replica(index=idx)
-        self.assertEqual(index_replica + 1, zones_with_replica,
+        # Each pindex copy the planner places can take its own zone, so the
+        # spread is bounded by the fts-bearing zone count and by the number of
+        # copies, partitions x (replicas + 1). Asserting replicas + 1 alone only
+        # holds for a single-partition index - with partitions=2 and 0 replicas
+        # the two partitions legitimately land in two different zones.
+        partitions = int(self._input.param("partitions", 1))
+        expected_zones = min(self.count_zones_with_fts(),
+                             partitions * (index_replica + 1))
+        self.assertEqual(expected_zones, zones_with_replica,
                         f"Found incorrect replicas distribution: index replicas: {index_replica}"
+                        f", partitions: {partitions}, expected zones: {expected_zones}"
                         f", zones with replica count: {zones_with_replica}")
         err = self.validate_partition_distribution(self.fts_rest)
         if len(err) > 0:
@@ -347,7 +356,11 @@ class FTSServerGroups(FTSBaseTest, NewUpgradeBaseTest):
             self.fail(err)
         self.eject_nodes(eject_nodes_structure=eject_nodes_structure, eject_type=eject_type)
 
-        self.wait_for_indexing_complete(item_count=1000)
+        # Most of the fts nodes are ejected here on purpose, so the index cannot
+        # reach the full doc count again - the assertion below is about partial
+        # results. Let the survivors settle rather than waiting for a
+        # convergence that this test has just made impossible.
+        self.sleep(60, "Letting the surviving fts nodes settle after the ejection")
 
         self._maybe_rebalance()
         err = self.validate_partition_distribution(self.fts_rest)
@@ -488,6 +501,12 @@ class FTSServerGroups(FTSBaseTest, NewUpgradeBaseTest):
         _, num_pindexes = rest_client.get_fts_stats(index_name=index.name, bucket_name=index.source_bucket.name,
                                                         stat_name="num_pindexes_actual")
         return num_pindexes
+
+    def count_zones_with_fts(self):
+        """Zones that hold at least one fts node, i.e. how wide a spread is possible."""
+        zones_list = self.rest.get_all_zones_info()
+        return sum(1 for zone in zones_list['groups']
+                   if any('fts' in node['services'] for node in zone['nodes']))
 
     def calculate_zones_with_replica(self, index=None):
         zones_list = self.rest.get_all_zones_info()

@@ -734,12 +734,21 @@ class FTSCRLBase(FTSBaseTest):
         """
         node = node or self.fts_nodes[0]
         port = int(port or CbServer.ssl_fts_port)
-        context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-        context.check_hostname = False
-        context.verify_mode = ssl.CERT_NONE
-        context.load_cert_chain(identity.cert_path, identity.key_path)
-        context.minimum_version = ssl.TLSVersion.TLSv1_2
-        context.maximum_version = ssl.TLSVersion.TLSv1_2
+        # Reuse one context per identity: a session belongs to the context that
+        # created it, and handing it to a fresh one raises "Session refers to a
+        # different SSLContext" - which is exactly what resumption needs here.
+        if not hasattr(self, "_tls12_contexts"):
+            self._tls12_contexts = {}
+        ctx_key = (identity.cert_path, identity.key_path)
+        context = self._tls12_contexts.get(ctx_key)
+        if context is None:
+            context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+            context.check_hostname = False
+            context.verify_mode = ssl.CERT_NONE
+            context.load_cert_chain(identity.cert_path, identity.key_path)
+            context.minimum_version = ssl.TLSVersion.TLSv1_2
+            context.maximum_version = ssl.TLSVersion.TLSv1_2
+            self._tls12_contexts[ctx_key] = context
 
         raw = socket.create_connection((node.ip, port), timeout=timeout)
         secure = context.wrap_socket(raw, server_hostname=node.ip,

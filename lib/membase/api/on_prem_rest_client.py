@@ -3201,7 +3201,19 @@ class RestConnection(object):
             if bucket_name is None and index_name is None:
                 key = stat_name
             else:
-                key = bucket_name+':'+index_name+':'+stat_name
+                key = '%s:%s:%s' % (bucket_name, index_name, stat_name)
+                if key not in json_parsed:
+                    # The caller may not know the bucket, and a scoped index
+                    # reports under its full bucket.scope.name - so match the
+                    # index name against the key's middle segment instead.
+                    for k in json_parsed:
+                        parts = k.split(':')
+                        if (len(parts) == 3 and parts[2] == stat_name
+                                and (bucket_name is None or parts[0] == bucket_name)
+                                and (parts[1] == index_name
+                                     or parts[1].endswith('.' + index_name))):
+                            key = k
+                            break
             if key in json_parsed:
                 return status, json_parsed[key]
             attempts += 1
@@ -4308,12 +4320,28 @@ class RestConnection(object):
             json_parsed = json.loads(content)
         return status, json_parsed
 
+    def _fts_scoped_endpoint(self, bucket, scope):
+        """Whether this index lives under /api/bucket/<b>/scope/<s>/index/<n>.
+
+        A collection-scoped index has to be created, queried and dropped there.
+        The legacy /api/index/<n> endpoint registers it as <bucket>._default.<n>,
+        so SEARCH() cannot resolve it for the scope it actually indexes and
+        fails with "Search() function using KNN and no search index".
+        """
+        if not bucket:
+            # No bucket to build the scoped path from - callers that omit it
+            # have always used the legacy endpoint.
+            return False
+        if self.is_elixir:
+            return True
+        if scope is not None and scope != "_default":
+            return True
+        return self.use_scoped_fts and bucket != "_default"
+
     def create_fts_index(self, index_name, params, bucket="_default", scope="_default",mode =None):
         """create or edit fts index , returns (status, full_index_name) on success"""
         api = self.fts_baseUrl + "api/index/{0}".format(index_name)
-        if self.is_elixir or (
-                self.use_scoped_fts
-                and (bucket != "_default" or (scope is not None and scope != "_default"))):
+        if self._fts_scoped_endpoint(bucket, scope):
             if scope is None:
                 scope = "_default"
             api = self.fts_baseUrl + "api/bucket/{0}/scope/{1}/index/{2}".format(bucket, scope, index_name)
@@ -4338,9 +4366,7 @@ class RestConnection(object):
 
     def update_fts_index(self, index_name, index_def, bucket="_default", scope="_default",mode=None):
         api = self.fts_baseUrl + "api/index/{0}".format(index_name)
-        if self.is_elixir or (
-                self.use_scoped_fts
-                and (bucket != "_default" or (scope is not None and scope != "_default"))):
+        if self._fts_scoped_endpoint(bucket, scope):
             if scope is None:
                 scope = "_default"
             api = self.fts_baseUrl + "api/bucket/{0}/scope/{1}/index/{2}".format(bucket, scope, index_name)
@@ -4366,9 +4392,7 @@ class RestConnection(object):
         # the scoped endpoint and default scope to "_default" if the caller
         # didn't specify one. Match how update_fts_index/get_fts_index_uuid
         # already handle this.
-        use_scoped = self.is_elixir or (
-            self.use_scoped_fts
-            and (bucket != "_default" or (scope is not None and scope != "_default")))
+        use_scoped = self._fts_scoped_endpoint(bucket, scope)
         if use_scoped:
             effective_scope = scope if scope is not None else "_default"
             api = self.fts_baseUrl + "api/bucket/{0}/scope/{1}/index/{2}".format(
@@ -4393,9 +4417,7 @@ class RestConnection(object):
         """ get fts index/alias definition for elixir"""
         json_parsed = {}
         api = self.fts_baseUrl + "api/index"
-        if self.is_elixir or (
-                self.use_scoped_fts
-                and (bucket != "_default" or (scope is not None and scope != "_default"))):
+        if self._fts_scoped_endpoint(bucket, scope):
             if scope is None:
                 scope = "_default"
             api = self.fts_baseUrl + "api/bucket/{0}/scope/{1}/index".format(bucket, scope)
@@ -4409,9 +4431,7 @@ class RestConnection(object):
         """ get number of docs indexed"""
         json_parsed = {}
         api = self.fts_baseUrl + "api/index/{0}/count".format(name)
-        if self.is_elixir or (
-                self.use_scoped_fts
-                and (bucket != "_default" or (scope is not None and scope != "_default"))):
+        if self._fts_scoped_endpoint(bucket, scope):
             if scope is None:
                 scope = "_default"
             api = self.fts_baseUrl + "api/bucket/{0}/scope/{1}/index/{2}/count".format(bucket, scope, name)
@@ -4424,9 +4444,7 @@ class RestConnection(object):
         """ Returns uuid of index/alias """
         json_parsed = {}
         api = self.fts_baseUrl + "api/index/{0}".format(name)
-        if self.is_elixir or (
-                self.use_scoped_fts
-                and (bucket != "_default" or (scope is not None and scope != "_default"))):
+        if self._fts_scoped_endpoint(bucket, scope):
             if scope is None:
                 scope = "_default"
             api = self.fts_baseUrl + "api/bucket/{0}/scope/{1}/index/{2}".format(bucket, scope, name)
@@ -4451,9 +4469,7 @@ class RestConnection(object):
     def delete_fts_index(self, name, bucket="_default", scope="_default"):
         """ delete fts index/alias """
         api = self.fts_baseUrl + "api/index/{0}".format(name)
-        if self.is_elixir or (
-                self.use_scoped_fts
-                and (bucket != "_default" or (scope is not None and scope != "_default"))):
+        if self._fts_scoped_endpoint(bucket, scope):
             if scope is None:
                 scope = "_default"
             api = self.fts_baseUrl + "api/bucket/{0}/scope/{1}/index/{2}".format(bucket, scope, name)
@@ -4465,9 +4481,7 @@ class RestConnection(object):
     def delete_fts_index_extended_output(self, name, bucket="_default", scope="_default"):
         """ delete fts index/alias """
         api = self.fts_baseUrl + "api/index/{0}".format(name)
-        if self.is_elixir or (
-                self.use_scoped_fts
-                and (bucket != "_default" or (scope is not None and scope != "_default"))):
+        if self._fts_scoped_endpoint(bucket, scope):
             if scope is None:
                 scope = "_default"
             api = self.fts_baseUrl + "api/bucket/{0}/scope/{1}/index/{2}".format(bucket, scope, name)
@@ -4593,9 +4607,7 @@ class RestConnection(object):
         api = self.fts_baseUrl + "api/index/{0}/query".format(index_name)
         if node:
             api = "http://{0}:8094/api/index/{1}/query".format(node.ip,index_name)
-        if self.is_elixir or (
-                self.use_scoped_fts
-                and (bucket != "_default" or (scope is not None and scope != "_default"))):
+        if self._fts_scoped_endpoint(bucket, scope):
             if scope is None:
                 scope = "_default"
             api = self.fts_baseUrl + "api/bucket/{0}/scope/{1}/index/{2}/query".format(bucket, scope, index_name)

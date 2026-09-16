@@ -207,7 +207,7 @@ class StableTopFTS(FTSBaseTest):
             raise FTSException("FTS service has not started: %s" %e)
 
     def create_simple_default_index(self, data_loader_output=False):
-        self._verify_rbac_exclusion_fts()
+       self._verify_rbac_exclusion_fts()
         plan_params = self.construct_plan_params()
         self.load_data(generator=None, data_loader_output=data_loader_output, num_items=self._num_items)
         if not (self.bucket_storage == "magma"):

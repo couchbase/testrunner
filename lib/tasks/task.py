@@ -1835,13 +1835,21 @@ class ESBulkLoadGeneratorTask(Task):
                       format(self.index_name, indexed))
         self.state = FINISHED
         if failed:
-            # Fail here instead of leaving a short ES index behind - every
-            # downstream ES comparison in this test would fail with a confusing
-            # doc-count mismatch that points nowhere near the load.
-            self.set_exception(Exception(
-                "ES bulk load lost {0} docs; ES index '{1}' has {2} docs"
-                .format(failed, self.index_name, indexed)))
-            return
+            # A batch can report failure and still have landed, so trust the
+            # index count over the request status and only fail when ES really
+            # is short. Leaving a short index behind makes every downstream ES
+            # comparison fail with a mismatch that points nowhere near the load.
+            attempted = loaded + failed
+            if indexed < attempted:
+                self.set_exception(Exception(
+                    "ES bulk load lost {0} docs; ES index '{1}' has {2} of {3}"
+                    .format(attempted - indexed, self.index_name, indexed,
+                            attempted)))
+                return
+            self.log.warning(
+                "ES bulk load reported {0} failed docs but index '{1}' holds "
+                "{2} of {3}; treating the load as complete."
+                .format(failed, self.index_name, indexed, attempted))
         self.set_result(True)
 
 

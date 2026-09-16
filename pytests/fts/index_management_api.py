@@ -237,10 +237,12 @@ class IndexManagementAPI(FTSBaseTest):
         if self.second_index:
             if self.run_in_parallel:
                 self._cb_cluster.create_fts_index(name=self.sample_index_name_1, source_name="default",
-                                                  collection_index=collection_index, _type=_type)
+                                                  collection_index=collection_index, _type=_type,
+                                                  scope=index_scope, collections=index_collections)
             else:
                 self._cb_cluster.create_fts_index_wait_for_completion(self.sample_index_name_1, "default",
-                                                                      collection_index=collection_index, _type=_type)
+                                                                      collection_index=collection_index, _type=_type,
+                                                                      scope=index_scope, collections=index_collections)
 
         current_index_count = fts_index.get_indexed_doc_count()
 

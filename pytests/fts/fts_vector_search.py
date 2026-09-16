@@ -467,6 +467,12 @@ class VectorSearch(FTSBaseTest):
         self.query = fts_vector_query
 
         self.expected_accuracy_and_recall = self.input.param("expected_accuracy_and_recall", 85)
+        # Prefiltering is graded on its own bar: the filter leaves only a small
+        # slice of the indexed corpus eligible, so an IVF index trained on the
+        # whole corpus recalls fewer of the exact top-k than an unfiltered search
+        # does. Defaults to the generic bar until QE settles on the right number.
+        self.prefilter_expected_accuracy_and_recall = self.input.param(
+            "prefilter_expected_accuracy_and_recall", self.expected_accuracy_and_recall)
         self.vector_field_type = "vector_base64" if self.encode_base64_vector else "vector"
 
 
@@ -1099,14 +1105,22 @@ class VectorSearch(FTSBaseTest):
                     self.log.info("Expected: No results. Observed : No results. Passed")
             else:
                 num_retries = self.query_retries
+                n1ql_error = None
                 while num_retries:
                     self.log.info(f"Attempt ({self.query_retries - num_retries + 1} / {self.query_retries})")
                     try:
                         n1ql_hits = self._cb_cluster.run_n1ql_query(n1ql_query)['results'][0]['$1']
                         break
                     except Exception as ex:
+                        n1ql_error = ex
                         time.sleep(5)
                     num_retries -= 1
+                else:
+                    # Every attempt errored, so n1ql_hits is still its -1 sentinel.
+                    # Left alone it compares equal to the FTS sentinel below and a
+                    # run where neither side worked reports "validation passed".
+                    self.fail(f"N1QL search query failed after {self.query_retries} "
+                              f"attempts: {n1ql_error}. Query: {n1ql_query}")
 
             if n1ql_hits == 0:
                 n1ql_hits = -1
@@ -1125,7 +1139,10 @@ class VectorSearch(FTSBaseTest):
                                                                     score=fusion_score, score_params=fusion_params,
                                                                     validation_data=validation_data,
                                                                     fts_nodes=fts_nodes,variable_node=variable_node)
-            if type(status) == str or status['failed'] != 0:
+            # status is a str on some error paths, and a dict that may not
+            # carry 'failed' at all -- e.g. an invalid-value query. Treat
+            # anything that is not a clean dict as a retryable failure.
+            if not isinstance(status, dict) or status.get('failed', 0) != 0:
                 print(f"debug : status : {status}\n")
                 time.sleep(5)
                 num_retries -= 1
@@ -1150,9 +1167,10 @@ class VectorSearch(FTSBaseTest):
 
 
         if self.run_n1ql_search_function:
-            if n1ql_hits == hits:  #
+            if n1ql_hits == hits:
                 self.log.info(
-                    f"Validation for N1QL and FTS Passed! N1QL hits =  {n1ql_hits}, FTS hits = {hits}")
+                    f"N1QL and FTS agree on {'no hits' if hits == -1 else hits} "
+                    f"hits (N1QL = {n1ql_hits}, FTS = {hits})")
             else:
                 self.log.info({"query": self.query, "reason": f"N1QL hits =  {n1ql_hits}, FTS hits = {hits}"})
 
@@ -3460,8 +3478,18 @@ class VectorSearch(FTSBaseTest):
                 index_stats['faiss_accuracy'] = (sum(faiss_accuracy) / len(faiss_accuracy)) * 100
                 index_stats['faiss_recall'] = (sum(faiss_recall) / len(faiss_recall))
 
-            if index_stats['fts_accuracy'] < self.expected_accuracy_and_recall or index_stats[
-                'fts_recall'] < self.expected_accuracy_and_recall or len(queries_with_failed_prefilter_condition) > 0:
+            expected = self.prefilter_expected_accuracy_and_recall
+
+            # An exact FAISS reference that disagrees with the groundtruth means
+            # the answer key (or the start_key shift) is off, not FTS.
+            if perform_faiss_validation and index_stats['faiss_recall'] < expected:
+                self.log.error(
+                    f"Exact FAISS reference only recalls {index_stats['faiss_recall']} of "
+                    f"the groundtruth for {index_stats['index_name']}, so the answer key "
+                    f"itself does not line up - read the FTS numbers below with that in mind.")
+
+            if index_stats['fts_accuracy'] < expected or index_stats[
+                'fts_recall'] < expected or len(queries_with_failed_prefilter_condition) > 0:
                 bad_indexes.append(index_stats)
             all_stats.append(index_stats)
 
