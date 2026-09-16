@@ -227,7 +227,13 @@ class XDCRPrioritization(XDCRNewBaseTest):
         self.sleep(30, "Letting the new collections reach the target")
 
         src_conn = RestConnection(self.src_master)
-        src_conn.set_xdcr_param(bucket_name, bucket_name, 'priority', initial_priority)
+        # set_xdcr_param() lowercases its value for goxdcr's boolean params,
+        # but priority is a case-sensitive enum - only High/Medium/Low are
+        # accepted and 'high' is rejected with 400 "priority is invalid".
+        # set_xdcr_params() posts the value unchanged, which is also how the
+        # conf-driven 'default@C1=priority:High' path sets it.
+        src_conn.set_xdcr_params(bucket_name, bucket_name,
+                                 {'priority': initial_priority})
         self.log.info("Set initial priority to {}".format(initial_priority))
 
         TenKCollectionHelper.select_and_load(
@@ -235,7 +241,8 @@ class XDCRPrioritization(XDCRNewBaseTest):
 
         self.sleep(15, "Mid-replication pause before priority change")
 
-        src_conn.set_xdcr_param(bucket_name, bucket_name, 'priority', target_priority)
+        src_conn.set_xdcr_params(bucket_name, bucket_name,
+                                 {'priority': target_priority})
         self.log.info("Switched priority from {} to {}".format(
             initial_priority, target_priority))
 
@@ -248,9 +255,18 @@ class XDCRPrioritization(XDCRNewBaseTest):
         except Exception as e:
             self.fail("Priority change 10K catch-up failed: {}".format(e))
 
+        # _wait_for_replication_to_catchup() above IS the equality check: it
+        # fails the test unless both sides match, and it subtracts the
+        # _system._query / _system._mobile collections first. Those are seeded
+        # on the source by setUp's all-collections SDK load and are never
+        # replicated, so a raw src == dest assertion here would compare
+        # replicated docs on one side against replicated + _system on the
+        # other and fail by exactly the _system total. Assert only that data
+        # actually arrived; log the raw counts for diagnostics.
         src_count = TenKCollectionHelper.get_bucket_item_count(self.src_master, bucket_name)
         dest_count = TenKCollectionHelper.get_bucket_item_count(self.dest_master, bucket_name)
-        self.assertEqual(src_count, dest_count,
-                         "Priority change mismatch: src={}, dest={}".format(
-                             src_count, dest_count))
+        self.log.info("Raw bucket counts (incl. non-replicated _system): "
+                      "src={}, dest={}".format(src_count, dest_count))
+        self.assertGreater(dest_count, 0,
+                           "Destination has no items after priority change")
         self.log.info("Priority change 10K test passed")
