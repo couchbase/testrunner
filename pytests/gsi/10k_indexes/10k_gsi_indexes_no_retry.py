@@ -2367,9 +2367,10 @@ class TenKGSIIndexesNoRetry(BaseSecondaryIndexingTests):
         Performs rebalance operation on indexer nodes.
         rebalance_type='swap': swap rebalance (remove one, add one)
         rebalance_type='rebalance_out': rebalance out an indexer node
+        rebalance_type='rebalance_in': rebalance in an indexer node
 
         Args:
-            node_in: For swap rebalance, the node to add. If None, uses self.servers[self.nodes_init].
+            node_in: For swap/rebalance_in, the node to add. If None, uses self.servers[self.nodes_init].
 
         Returns:
             tuple: (node_out, node_in) - The nodes being removed and added (node_in is None for rebalance_out)
@@ -2452,6 +2453,30 @@ class TenKGSIIndexesNoRetry(BaseSecondaryIndexingTests):
             )
             self.log.info(f"Waiting for rebalance-out to complete (timeout={rebalance_timeout}s)...")
             task.result(timeout=rebalance_timeout)
+
+        elif rebalance_type == "rebalance_in":
+            if node_in is None:
+                if self.nodes_init >= len(self.servers):
+                    raise Exception(
+                        f"Cannot perform rebalance-in: nodes_init={self.nodes_init} "
+                        f"but only {len(self.servers)} servers configured. "
+                        f"No spare node available."
+                    )
+                node_in = self.servers[self.nodes_init]
+            node_out = None
+            self.log.info(f"Adding indexer node: {node_in.ip}")
+            if self.indexMemQuota:
+                RestConnection(node_in).set_service_memoryQuota(service='indexMemoryQuota',
+                                                                memoryQuota=int(self.indexMemQuota))
+            self.log.info(f"[{rebalance_id}] Rebalance STARTING: rebalance-in node={node_in.ip}")
+            task = self.cluster.async_rebalance(
+                servers=self.servers[:self.nodes_init],
+                to_add=[node_in],
+                to_remove=[],
+                services=services
+            )
+            self.log.info(f"Waiting for rebalance-in to complete (timeout={rebalance_timeout}s)...")
+            task.result(timeout=rebalance_timeout)
         else:
             raise ValueError(f"Unknown rebalance_type: {rebalance_type}")
 
@@ -2487,7 +2512,7 @@ class TenKGSIIndexesNoRetry(BaseSecondaryIndexingTests):
             self.index_loss_report.append({
                 'rebalance_id': rebalance_id,
                 'type': rebalance_type,
-                'node_out': node_out.ip,
+                'node_out': node_out.ip if node_out else None,
                 'lost': lost,
                 'added': added,
                 'before': instances_before,
@@ -3074,11 +3099,12 @@ class TenKGSIIndexesNoRetry(BaseSecondaryIndexingTests):
           4a  Assert index scans used + fan-out
           4b  N cycles of 200-collection sampled mutations (insert+update+delete, 25 docs
               each, 3-min gap between cycles) -> manual UPDATE STATISTICS -> queries on fresh stats
-          5   Shard-based swap rebalance; background mutation + scan threads run during
-              rebalance (2-min cycle gaps, all query nodes); pre + post replica-integrity gates
+          5   Shard-based rebalance-in, rebalance-out and swap; background mutation + scan
+              threads run during rebalance (2-min cycle gaps, all query nodes);
+              pre + post replica-integrity gates
           6   Post-shard validations (online + replicas intact + no pending + scans)
-          7   DCP swap rebalance; same background workload pattern as Step 5;
-              pre + post replica-integrity gates (never skipped)
+          7   DCP rebalance-in, rebalance-out and swap; same background workload pattern
+              as Step 5; pre + post replica-integrity gates (never skipped)
           8   Post-DCP validations (online + replicas intact + no pending + scans)
           8b  Query-node resilience -> assert online after
           9   Drop all indexes synchronously -> assert zero indexes remain
@@ -3433,7 +3459,7 @@ class TenKGSIIndexesNoRetry(BaseSecondaryIndexingTests):
 
         # ── Step 5: shard-based swap rebalance ─────────────────────────────────
         self.log.info("=" * 80)
-        self.log.info("Step 5: Shard-based swap rebalance with background mutations + scans")
+        self.log.info("Step 5: Shard-based rebalance-in/out/swap with background mutations + scans")
         self.log.info("=" * 80)
 
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
@@ -3474,7 +3500,10 @@ class TenKGSIIndexesNoRetry(BaseSecondaryIndexingTests):
         self.log.info("Background mutation + scan threads started")
 
         try:
-            node_swapped_out, node_swapped_in = self._rebalance_indexer_nodes(rebalance_type="swap")
+            self._rebalance_indexer_nodes(rebalance_type="rebalance_in", node_in=node_to_add)
+            node_rebalanced_out, _ = self._rebalance_indexer_nodes(rebalance_type="rebalance_out")
+            node_swapped_out, node_swapped_in = self._rebalance_indexer_nodes(
+                rebalance_type="swap", node_in=node_rebalanced_out)
         finally:
             mutation_event.set()
             scan_event.set()
@@ -3522,7 +3551,7 @@ class TenKGSIIndexesNoRetry(BaseSecondaryIndexingTests):
 
         # ── Step 7: DCP swap rebalance (never skipped) ─────────────────────────
         self.log.info("=" * 80)
-        self.log.info("Step 7: DCP swap rebalance with background mutations + scans")
+        self.log.info("Step 7: DCP rebalance-in/out/swap with background mutations + scans")
         self.log.info("=" * 80)
         self.disable_shard_based_rebalance()
         self.sleep(5, "After disabling shard-based rebalance")
@@ -3561,7 +3590,9 @@ class TenKGSIIndexesNoRetry(BaseSecondaryIndexingTests):
         self.log.info("Background mutation + scan threads started")
 
         try:
-            self._rebalance_indexer_nodes(rebalance_type="swap", node_in=node_swapped_out)
+            self._rebalance_indexer_nodes(rebalance_type="rebalance_in", node_in=node_swapped_out)
+            dcp_node_rebalanced_out, _ = self._rebalance_indexer_nodes(rebalance_type="rebalance_out")
+            self._rebalance_indexer_nodes(rebalance_type="swap", node_in=dcp_node_rebalanced_out)
         finally:
             mutation_event.set()
             scan_event.set()
