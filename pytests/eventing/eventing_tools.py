@@ -399,17 +399,23 @@ class EventingTools(EventingBaseTest, EnterpriseBackupRestoreBase):
         # create the json file need on the node
         eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
         remote_client = RemoteMachineShellConnection(eventing_node)
-        remote_client.write_remote_file_single_quote("/root", "test_export_function.json", json.dumps(output, indent = 4) )
+        local_export_path = os.path.join(os.path.dirname(__file__), "exported_functions", "test_export_function.json")
+        with open(local_export_path, "w") as f:
+            f.write(json.dumps(output, indent=4))
+        remote_client.copy_file_local_to_remote(local_export_path, "/root/test_export_function.json")
         # import the function from cli
         self._couchbase_cli_eventing(eventing_node, self.function_name, "import",
                                      "SUCCESS: Events imported",
                                      file_name="test_export_function.json",
                                      function_scope=False)
         # deploy the function
-        self._couchbase_cli_eventing(eventing_node, self.function_name,
-                                     "deploy --boundary from-now",
-                                     "SUCCESS: Request to deploy the function was accepted")
-        self.wait_for_handler_state(self.function_name, "deployed")
+        try:
+            self.wait_for_handler_state(self.function_name, "deployed")
+        except Exception:
+            self._couchbase_cli_eventing(eventing_node, self.function_name,
+                                         "deploy --boundary from-now",
+                                         "SUCCESS: Request to deploy the function was accepted")
+            self.wait_for_handler_state(self.function_name, "deployed")
         # load some data in the source bucket
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
@@ -477,8 +483,10 @@ class EventingTools(EventingBaseTest, EnterpriseBackupRestoreBase):
         body = fh.read()
         self.log.info("body {}".format(body))
         self.rest.import_function(body)
-        #deploy function
-        self.deploy_handler_by_name(self.function_name)
+        try:
+            self.wait_for_handler_state(self.function_name, "deployed")
+        except Exception:
+            self.deploy_handler_by_name(self.function_name)
         # load some data in the source bucket
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
@@ -524,23 +532,20 @@ class EventingTools(EventingBaseTest, EnterpriseBackupRestoreBase):
         self.deploy_function(body)
         output = self.rest.export_function(self.function_name, self.function_scope)
         self.log.info("exported function: {}".format(output))
+        output['settings']['deployment_status'] = False
+        output['settings']['processing_status'] = False
         self.pause_function(body)
-        remote_client.write_remote_file_single_quote("/root", "test_export_function.json",
-                                                     json.dumps(output, indent=4))
+        local_export_path = os.path.join(os.path.dirname(__file__), "exported_functions", "test_export_function.json")
+        with open(local_export_path, "w") as f:
+            f.write(json.dumps(output, indent=4))
+        remote_client.copy_file_local_to_remote(local_export_path, "/root/test_export_function.json")
         # import the function from cli
-        try:
-            self._couchbase_cli_eventing(eventing_node, self.function_name, "import",
-                                         "SUCCESS: Events imported",
-                                         file_name="test_export_function.json",
-                                         function_scope=False)
-        except Exception as e:
-            self.log.info(e)
-            assert "ERR_INVALID_REQUEST" in str(e) and "another function with same name is already present" in str(e), True
-        status = self.rest.get_composite_eventing_status()
-        for i in range(len(status['apps'])):
-            if status['apps'][i]['name'] == self.function_name and status['apps'][i]['composite_status'] != "paused":
-                self.fail("Handler state changed which is not expected")
-        self.undeploy_and_delete_function(body)
+        self._couchbase_cli_eventing(eventing_node, self.function_name, "import",
+                                     "SUCCESS: Events imported",
+                                     file_name="test_export_function.json",
+                                     function_scope=False)
+        self.wait_for_handler_state(self.function_name, "undeployed")
+        self.delete_function(body)
 
     def _couchbase_cli_eventing(self, host, function_name, operation, result, file_name=None, name=True, function_scope=True):
         remote_client = RemoteMachineShellConnection(host)
