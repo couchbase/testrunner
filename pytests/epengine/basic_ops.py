@@ -110,13 +110,18 @@ class basic_ops(BaseTestCase):
             try:
                 mcd = client.memcached(KEY_NAME + str(i))
                 _, flags, exp, seqno, cas = client.memcached(KEY_NAME + str(i)).getMeta(KEY_NAME + str(i))
-                rc = mcd.del_with_meta(KEY_NAME + str(i), 0, 0, 2, cas + 1)
+                # Use the current revSeqno (+1) so the delete always wins conflict
+                # resolution. Hardcoding seqno=2 assumed set(rev 1)+subdoc(rev 2),
+                # which breaks (Memcached error #2 'Exists') when the server bumps
+                # the revSeqno past 2 for the set + xattr-subdoc sequence.
+                rc = mcd.del_with_meta(KEY_NAME + str(i), 0, 0, seqno + 1, cas + 1)
             except MemcachedError as exp:
                 self.fail("Exception with del_with meta - {0}".format(exp))
         self.cluster.compact_bucket(self.master, "default")
         if self.maxttl:
             time_to_sleep = (self.maxttl - (end_time - start_time)) + 20
-            self.sleep(int(time_to_sleep))
+            # The load itself can outlast maxttl
+            self.sleep(max(0, int(time_to_sleep)))
         else:
             self.sleep(60)
         active_bucket_items = rest.get_active_key_count("default")
