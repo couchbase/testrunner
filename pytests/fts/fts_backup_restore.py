@@ -77,8 +77,12 @@ class BackupRestore(FTSBaseTest):
         indexes_for_backup = eval(TestInputSingleton.input.param("expected_indexes", "[]"))
         resolved_indexes = self._resolve_index_names(indexes_for_backup, index_definitions, backup)
         for idx in resolved_indexes:
-            backup_index_def = backup[idx]
-            index_definitions[idx]['backup_def'] = backup_index_def
+            backup_key = self._backup_key(idx, index_definitions, backup)
+            if backup_key is None:
+                # Left as {}; _check_indexes_definitions reports the index as
+                # missing from the backup, which is the real assertion here.
+                continue
+            index_definitions[idx]['backup_def'] = backup[backup_key]
 
         # delete all indexes before restoring from backup
         self._cb_cluster.delete_all_fts_indexes()
@@ -88,8 +92,12 @@ class BackupRestore(FTSBaseTest):
 
         # getting restored indexes definitions and storing them in indexes definitions dict
         for ix_name in resolved_indexes:
-            _,restored_index_def = self.rest.get_fts_index_definition(ix_name)
-            index_definitions[ix_name]['restored_def'] = restored_index_def
+            index = self._index_for(ix_name, index_definitions)
+            if index is not None:
+                index_definitions[ix_name]['restored_def'] = self._fetch_index_def(
+                    index.name, index._source_name, index.scope)
+            else:
+                index_definitions[ix_name]['restored_def'] = self._fetch_index_def(ix_name)
 
         #compare all 3 types of index definitions: initial, backed up, and restored from backup
         errors = self._check_indexes_definitions(index_definitions=index_definitions, indexes_for_backup=resolved_indexes)
@@ -149,8 +157,14 @@ class BackupRestore(FTSBaseTest):
         short_remap_names = [ix[0] for ix in indexes_for_backup]
         resolved_remap_names = self._resolve_index_names(short_remap_names, index_definitions, backup)
         for ix, resolved_name in zip(indexes_for_backup, resolved_remap_names):
-            _,restored_index_def = self.rest.get_fts_index_definition(resolved_name)
-            index_definitions[resolved_name]['remapped_def'] = restored_index_def['indexDef']
+            # ix[1] is where the remap sent this index, so it - not the index's
+            # original bucket/scope - is what addresses it after the restore.
+            name, bucket, scope = self._remapped_location(resolved_name, ix[1])
+            remapped_def = self._fetch_index_def(name, bucket, scope)
+            if not remapped_def:
+                self.fail("Index %s was not found at its remapped location %s "
+                          "after restore." % (resolved_name, ix[1]))
+            index_definitions[resolved_name]['remapped_def'] = remapped_def['indexDef']
 
         # prepare indexes information for tests
         expected_mappings = eval(TestInputSingleton.input.param("remapped_idx", "[]"))
@@ -228,8 +242,12 @@ class BackupRestore(FTSBaseTest):
         indexes_for_backup = eval(TestInputSingleton.input.param("expected_indexes", "[]"))
         resolved_indexes = self._resolve_index_names(indexes_for_backup, index_definitions, backup)
         for idx in resolved_indexes:
-            backup_index_def = backup[idx]
-            index_definitions[idx]['backup_def'] = backup_index_def
+            backup_key = self._backup_key(idx, index_definitions, backup)
+            if backup_key is None:
+                # Left as {}; _check_indexes_definitions reports the index as
+                # missing from the backup, which is the real assertion here.
+                continue
+            index_definitions[idx]['backup_def'] = backup[backup_key]
 
         # delete all indexes before restoring from backup
         while len(self._cb_cluster.get_indexes()) > 0:
@@ -258,8 +276,12 @@ class BackupRestore(FTSBaseTest):
 
         # getting restored indexes definitions and storing them in indexes definitions dict
         for ix_name in resolved_indexes:
-            _,restored_index_def = self.rest.get_fts_index_definition(ix_name)
-            index_definitions[ix_name]['restored_def'] = restored_index_def
+            index = self._index_for(ix_name, index_definitions)
+            if index is not None:
+                index_definitions[ix_name]['restored_def'] = self._fetch_index_def(
+                    index.name, index._source_name, index.scope)
+            else:
+                index_definitions[ix_name]['restored_def'] = self._fetch_index_def(ix_name)
 
         #compare all 3 types of index definitions: initial, backed up, and restored from backup
         errors = self._check_indexes_definitions(index_definitions=index_definitions, indexes_for_backup=resolved_indexes)
@@ -434,6 +456,8 @@ class BackupRestore(FTSBaseTest):
         index_definitions[index.name]['initial_def'] = {}
         index_definitions[index.name]['backup_def'] = {}
         index_definitions[index.name]['restored_def'] = {}
+        index_definitions[index.name]['remapped_def'] = {}
+        index_definitions[index.name]['index'] = index
 
         _, index_def = index.get_index_defn()
         initial_index_def = index_def['indexDef']
@@ -461,8 +485,12 @@ class BackupRestore(FTSBaseTest):
         indexes_for_backup = eval(TestInputSingleton.input.param("expected_indexes", "[]"))
         resolved_indexes = self._resolve_index_names(indexes_for_backup, index_definitions, backup)
         for idx in resolved_indexes:
-            backup_index_def = backup[idx]
-            index_definitions[idx]['backup_def'] = backup_index_def
+            backup_key = self._backup_key(idx, index_definitions, backup)
+            if backup_key is None:
+                # Left as {}; _check_indexes_definitions reports the index as
+                # missing from the backup, which is the real assertion here.
+                continue
+            index_definitions[idx]['backup_def'] = backup[backup_key]
 
         # delete all indexes before restoring from backup
         while len(self._cb_cluster.get_indexes()) > 0:
@@ -473,8 +501,12 @@ class BackupRestore(FTSBaseTest):
 
         # getting restored indexes definitions and storing them in indexes definitions dict
         for ix_name in resolved_indexes:
-            _,restored_index_def = self.rest.get_fts_index_definition(ix_name)
-            index_definitions[ix_name]['restored_def'] = restored_index_def
+            index = self._index_for(ix_name, index_definitions)
+            if index is not None:
+                index_definitions[ix_name]['restored_def'] = self._fetch_index_def(
+                    index.name, index._source_name, index.scope)
+            else:
+                index_definitions[ix_name]['restored_def'] = self._fetch_index_def(ix_name)
 
         #compare all 3 types of index definitions: initial, backed up, and restored from backup
         errors = self._check_indexes_definitions(index_definitions=index_definitions, indexes_for_backup=resolved_indexes)
@@ -768,16 +800,35 @@ class BackupRestore(FTSBaseTest):
 
         #check restored json
         for ix_name in index_definitions.keys():
-            if index_definitions[ix_name]['restored_def'] != {}:
-                initial_index_defn = index_definitions[ix_name]['initial_def']
-                restored_index_defn = index_definitions[ix_name]['restored_def']['indexDef']
-                restore_check = self._validate_restored(restored_index_defn, initial_index_defn)
-                if not restore_check:
+            if index_definitions[ix_name]['restored_def'] == {}:
+                if ix_name in indexes_for_backup:
                     if ix_name not in errors.keys():
                         errors[ix_name] = []
-                    errors[ix_name].append(f"Restored fts index signature differs from original signature for index {ix_name}")
+                    errors[ix_name].append(f"Index {ix_name} was expected to be restored from backup, but the server holds no definition for it!")
+                continue
+            initial_index_defn = index_definitions[ix_name]['initial_def']
+            restored_index_defn = index_definitions[ix_name]['restored_def']['indexDef']
+            restore_check = self._validate_restored(restored_index_defn, initial_index_defn)
+            if not restore_check:
+                if ix_name not in errors.keys():
+                    errors[ix_name] = []
+                errors[ix_name].append(f"Restored fts index signature differs from original signature for index {ix_name}")
 
         return errors
+
+    @staticmethod
+    def _same_index_signature(left, right):
+        """Compare two index definitions, tolerating how each side qualifies the
+        name. A backup records an index as '<bucket>.<scope>.<name>', which is
+        what the server registered, while the scoped endpoint reports the very
+        same index as just '<name>'. Everything else must still match exactly.
+        """
+        left = dict(left)
+        right = dict(right)
+        for defn in (left, right):
+            if isinstance(defn.get('name'), str):
+                defn['name'] = defn['name'].split('.')[-1]
+        return left == right
 
     def _validate_backup(self, backup, initial):
         if 'uuid' in initial.keys():
@@ -786,7 +837,7 @@ class BackupRestore(FTSBaseTest):
             del initial['sourceUUID']
         if 'uuid' in backup.keys():
             del backup['uuid']
-        return backup == initial
+        return self._same_index_signature(backup, initial)
 
     def _validate_restored(self, restored, initial):
         del restored['uuid']
@@ -796,7 +847,7 @@ class BackupRestore(FTSBaseTest):
             del restored['sourceUUID']
         if 'sourceUUID' in initial:
             del initial['sourceUUID']
-        if restored != initial:
+        if not self._same_index_signature(restored, initial):
             self.log.info(f"Initial index JSON: {json.dumps(initial)}")
             self.log.info(f"Restored index JSON: {json.dumps(restored)}")
             return False
@@ -836,6 +887,58 @@ class BackupRestore(FTSBaseTest):
             if required_type not in index_types:
                 errors.append(f"Remapped type is not found in index {remapped['name']}. Expected type - {required_type}")
         return errors
+
+    def _index_for(self, ix_name, index_definitions):
+        """The FTSIndex recorded under a key of index_definitions, if any."""
+        return (index_definitions.get(ix_name) or {}).get('index')
+
+    def _backup_key(self, ix_name, index_definitions, backup):
+        """Key under which `backup` holds the index known locally as `ix_name`.
+
+        A backup always reports an index by the name the server registered it
+        under - '<bucket>.<scope>.<name>' - while an index created through the
+        scoped endpoint keeps its short name locally, so index_definitions and
+        the backup are not keyed alike. Returns None when the backup really
+        does not hold this index, which is a result and not an error: the
+        filter tests expect exactly that.
+        """
+        if ix_name in backup:
+            return ix_name
+        index = self._index_for(ix_name, index_definitions)
+        if index is not None and index.full_name in backup:
+            return index.full_name
+        short = ix_name.split(".")[-1]
+        for key in backup.keys():
+            if key.split(".")[-1] == short:
+                return key
+        return None
+
+    def _fetch_index_def(self, name, bucket="_default", scope="_default"):
+        """Index definition as the server holds it, or {} when it has none.
+
+        Callers store {} to mean 'not on the server', which the checks below
+        report as a failure - rather than dying on a missing 'indexDef' key.
+        """
+        _, response = self.rest.get_fts_index_definition(name, bucket, scope)
+        if isinstance(response, dict) and 'indexDef' in response:
+            return response
+        return {}
+
+    def _remapped_location(self, ix_name, target):
+        """(name, bucket, scope) addressing an index at the remap target it
+        landed on - 'b2', 'b1.s2' or 'b1.s2.c1'.
+
+        Mirrors RestConnection._fts_scoped_endpoint: a scoped index is fetched
+        by short name under bucket/scope, a bucket-level one by the qualified
+        name the legacy endpoint registers it under.
+        """
+        parts = target.split(".")
+        bucket = parts[0]
+        scope = parts[1] if len(parts) > 1 else None
+        short = ix_name.split(".")[-1]
+        if scope and scope != "_default":
+            return short, bucket, scope
+        return "{0}._default.{1}".format(bucket, short), bucket, scope
 
     def _resolve_index_names(self, short_names, index_definitions, backup=None):
         """Resolve short index names (e.g. 'i1') to full names (e.g. 'b1._default.i1')
@@ -892,6 +995,10 @@ class BackupRestore(FTSBaseTest):
             index_definitions[test_index.name]['initial_def'] = {}
             index_definitions[test_index.name]['backup_def'] = {}
             index_definitions[test_index.name]['restored_def'] = {}
+            index_definitions[test_index.name]['remapped_def'] = {}
+            # Keep the index itself: its bucket/scope are what address it over
+            # REST, and its full_name is what the server and the backup call it.
+            index_definitions[test_index.name]['index'] = test_index
 
             _, index_def = test_index.get_index_defn()
             initial_index_def = index_def['indexDef']
@@ -905,7 +1012,12 @@ class BackupRestore(FTSBaseTest):
                     index_is_synced = True
                     break
             if not index_is_synced:
-                self.rest.delete_fts_index(ix_name)
+                index = self._index_for(ix_name, index_definitions)
+                if index is not None:
+                    self.rest.delete_fts_index(index.name, index._source_name,
+                                               index.scope)
+                else:
+                    self.rest.delete_fts_index(ix_name)
 
 
 """indexer_stats.py: Test index stats correctness, membership and availability

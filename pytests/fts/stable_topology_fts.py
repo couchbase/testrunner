@@ -207,7 +207,7 @@ class StableTopFTS(FTSBaseTest):
             raise FTSException("FTS service has not started: %s" %e)
 
     def create_simple_default_index(self, data_loader_output=False):
-       self._verify_rbac_exclusion_fts()
+        self._verify_rbac_exclusion_fts()
         plan_params = self.construct_plan_params()
         self.load_data(generator=None, data_loader_output=data_loader_output, num_items=self._num_items)
         if not (self.bucket_storage == "magma"):
@@ -359,7 +359,7 @@ class StableTopFTS(FTSBaseTest):
 
         if self.index_insights:
             for index in self._cb_cluster.get_indexes():
-                self.validate_index_insights(index.name, field="name",
+                self.validate_index_insights(index.full_name, field="name",
                                              insight="termFrequencies")
 
     def run_default_index_query_rfr(self, query=None, expected_hits=None, expected_no_of_results=None):
@@ -419,7 +419,7 @@ class StableTopFTS(FTSBaseTest):
             self.validate_search_history(index_name=index.name)
 
         if self.index_insights:
-            self.validate_index_insights(index.name, field="name",
+            self.validate_index_insights(index.full_name, field="name",
                                          insight="termFrequencies")
 
     def test_query_type_rfr(self):

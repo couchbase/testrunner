@@ -1399,8 +1399,24 @@ class FTSIndex:
         """Construct the fully-prefixed index name (bucket.scope.name) for global endpoint."""
         if self._source_name and self.index_type != "fulltext-alias":
             scope = self.scope if self.scope else "_default"
+            # _update_index_name may already have replaced self.name with the
+            # server's own fully-qualified name - do not qualify it twice.
+            if self.name.startswith(self._source_name + "."):
+                return self.name
             return "{0}.{1}.{2}".format(self._source_name, scope, self.name)
         return self.name
+
+    @property
+    def full_name(self):
+        """The name the server knows this index by: '<bucket>.<scope>.<name>'.
+
+        An index created through the scoped endpoint keeps its short name
+        locally, because every call there carries bucket and scope separately.
+        Anything crossing into the server's own namespace - backup index keys,
+        the targets of a global alias, index stats - has to use this rather
+        than self.name, which is only meaningful alongside bucket and scope.
+        """
+        return self._build_full_index_name()
 
     def _uses_scoped_endpoint(self):
         """Mirrors RestConnection._fts_scoped_endpoint. An index created there
@@ -2523,6 +2539,12 @@ class CouchbaseCluster:
                            + int(TestInputSingleton.input.param("default_bucket", True)))
             kv_floor = max(MIN_KV_QUOTA, num_buckets * MIN_KV_QUOTA)
 
+            # Re-measure after every trim instead of subtracting what was given
+            # up. The node that sets the overshoot need not be the one being
+            # trimmed: under a spec like D:F+Q+I the worst node is fts+index with
+            # no kv on it at all, so lowering kv buys that node nothing and the
+            # request still gets rejected - with the bookkeeping believing it was
+            # already paid for.
             overshoot = worst_node_charge(kv_quota, fts_quota) - reserved
             if overshoot > 0:
                 take = min(overshoot, max(0, kv_quota - kv_floor))
@@ -2533,7 +2555,7 @@ class CouchbaseCluster:
                         % (reserved, overshoot, kv_quota - take, kv_quota,
                            kv_floor, num_buckets))
                     kv_quota -= take
-                    overshoot -= take
+                overshoot = worst_node_charge(kv_quota, fts_quota) - reserved
             if overshoot > 0:
                 take = min(overshoot, max(0, fts_quota - FTS_QUOTA))
                 if take:
@@ -2542,7 +2564,7 @@ class CouchbaseCluster:
                         "its buckets; reducing fts quota to %s. Separate kv and "
                         "fts onto different nodes." % (fts_quota - take))
                     fts_quota -= take
-                    overshoot -= take
+                overshoot = worst_node_charge(kv_quota, fts_quota) - reserved
             if overshoot > 0:
                 self.__log.warning(
                     "topology %s cannot back kv %s + index %s + fts %s against "
@@ -7725,7 +7747,10 @@ class FTSBaseTest(unittest.TestCase):
         if not alias_def:
             alias_def = {"targets": {}}
             for index in target_indexes:
-                alias_def['targets'][index.name] = {}
+                # An alias created inside a scope resolves its targets within
+                # that same scope, so short names are right there. A global
+                # alias has to name them as the server does - bucket.scope.name.
+                alias_def['targets'][index.name if scope else index.full_name] = {}
         if bucket:
             return self._cb_cluster.create_fts_index(name=name,
                                                      source_name=bucket.name,

@@ -1109,7 +1109,16 @@ class VectorSearch(FTSBaseTest):
                 while num_retries:
                     self.log.info(f"Attempt ({self.query_retries - num_retries + 1} / {self.query_retries})")
                     try:
-                        n1ql_hits = self._cb_cluster.run_n1ql_query(n1ql_query)['results'][0]['$1']
+                        n1ql_response = self._cb_cluster.run_n1ql_query(n1ql_query)
+                        if 'results' not in n1ql_response:
+                            # The query errored and the server said why under
+                            # 'errors'. Subscripting straight to 'results' turns
+                            # that into a bare KeyError('results'), which tells
+                            # a caller asserting on the message nothing at all.
+                            raise Exception("n1ql query returned no results: %s"
+                                            % (n1ql_response.get('errors')
+                                               or n1ql_response))
+                        n1ql_hits = n1ql_response['results'][0]['$1']
                         break
                     except Exception as ex:
                         n1ql_error = ex
@@ -1383,7 +1392,7 @@ class VectorSearch(FTSBaseTest):
 
         if self.index_insights:
             for index in indexes:
-                self.validate_index_insights(index['index_obj'].name,
+                self.validate_index_insights(index['index_obj'].full_name,
                                              field=self.vector_field_name,
                                              insight="centroidCardinalities")
 
@@ -2069,7 +2078,7 @@ class VectorSearch(FTSBaseTest):
 
         if self.index_insights:
             for index in indexes:
-                self.validate_index_insights(index['index_obj'].name,
+                self.validate_index_insights(index['index_obj'].full_name,
                                              field=self.vector_field_name,
                                              insight="centroidCardinalities")
 
@@ -2816,6 +2825,20 @@ class VectorSearch(FTSBaseTest):
 
         return errors
 
+    @staticmethod
+    def _same_index_signature(left, right):
+        """Compare two index definitions, tolerating how each side qualifies the
+        name. A backup records an index as '<bucket>.<scope>.<name>', which is
+        what the server registered, while the scoped endpoint reports the very
+        same index as just '<name>'. Everything else must still match exactly.
+        """
+        left = dict(left)
+        right = dict(right)
+        for defn in (left, right):
+            if isinstance(defn.get('name'), str):
+                defn['name'] = defn['name'].split('.')[-1]
+        return left == right
+
     def _validate_backup(self, backup, initial):
         if 'uuid' in initial.keys():
             del initial['uuid']
@@ -2823,7 +2846,7 @@ class VectorSearch(FTSBaseTest):
             del initial['sourceUUID']
         if 'uuid' in backup.keys():
             del backup['uuid']
-        return backup == initial
+        return self._same_index_signature(backup, initial)
 
     def _validate_restored(self, restored, initial):
         del restored['uuid']
@@ -2833,7 +2856,7 @@ class VectorSearch(FTSBaseTest):
             del restored['sourceUUID']
         if 'sourceUUID' in initial:
             del initial['sourceUUID']
-        if restored != initial:
+        if not self._same_index_signature(restored, initial):
             self.log.info(f"Initial index JSON: {json.dumps(initial)}")
             self.log.info(f"Restored index JSON: {json.dumps(restored)}")
             return False

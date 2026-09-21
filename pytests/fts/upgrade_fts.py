@@ -738,8 +738,12 @@ class UpgradeFTS(NewUpgradeBaseTest):
                                       target_indexes):
         alias_def = {"targets": {}}
         for index in target_indexes:
-            alias_def['targets'][index.name] = {}
-            alias_def['targets'][index.name]['indexUUID'] = index.get_uuid()
+            # This alias is created without a scope, so the server resolves its
+            # targets in the global namespace: they have to be named
+            # bucket.scope.name. index.name stays short for a scoped index.
+            target = index.full_name
+            alias_def['targets'][target] = {}
+            alias_def['targets'][target]['indexUUID'] = index.get_uuid()
         alias = FTSIndex(self.cb_cluster, name=alias_name,
                          index_type='fulltext-alias', index_params=alias_def)
         rest = self.get_rest_handle_for_credentials(username, password)
