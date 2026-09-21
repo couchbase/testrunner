@@ -125,53 +125,40 @@ class VectorIndexTrainListWait(BaseSecondaryIndexingTests):
         # Never go below the 10-centroid minimum, which would itself be a non-retryable error.
         return max(10, num_docs // (num_partition * 2))
 
-    def _encode_collection_vectors_to_base64(self, namespace, vector_field="embedding",
-                                             batch_size=50):
+    def _insert_base64_docs(self, namespace, num_docs, dimension=128,
+                            vector_field="embedding", batch_size=100, start=0):
         """
-        Re-write `vector_field` in every document of `namespace` as a base64-encoded string.
+        INSERT documents whose vector field is already base64-encoded. Written by hand
+        because the magma SIFTLoader has no base64 path for siftBigANN.
 
-        The magma SIFTLoader cannot emit base64 vectors: SDKDataLoader accepts a base64 flag
-        (documentgenerator.py) but MagmaDocLoader.execute never forwards it into the SIFTLoader
-        command line, and the DocLoader itself has no base64 encoding path. An index defined
-        over DECODE_VECTOR(field, false) therefore sees no decodable vector at all and can never
-        satisfy train_list. Convert the loaded float arrays client-side instead.
+        Keep batch_size small: run_cbq_query sends the statement in the request URL, and
+        1500 128-dimension vectors overflow the 1MB header limit. The server answers 431
+        and the failed POST is logged without raising, so the batch vanishes silently.
 
-        Returns the number of documents converted.
+        Returns the number of documents sent, which is not evidence they landed.
         """
-        select_query = (
-            f"SELECT meta().id AS id, `{vector_field}` AS vec FROM {namespace} "
-            f"WHERE `{vector_field}` IS NOT MISSING"
-        )
-        rows = self.run_cbq_query(query=select_query, server=self.query_node)['results']
-        self.log.info(f"Encoding {len(rows)} documents in {namespace} to base64")
-
-        converted = 0
-        skipped = 0
-        for start in range(0, len(rows), batch_size):
-            batch = rows[start:start + batch_size]
-            keys, cases = [], []
-            for row in batch:
-                vec = row.get('vec')
-                if not isinstance(vec, list):
-                    # Already encoded, or the field is not a float array — leave it alone.
-                    skipped += 1
-                    continue
-                doc_id = row['id']
-                keys.append(doc_id)
-                cases.append(f'WHEN "{doc_id}" THEN "{self.encode_floats_to_base64(vec)}"')
-            if not keys:
-                continue
-            key_list = ", ".join(f'"{k}"' for k in keys)
-            update_query = (
-                f"UPDATE {namespace} USE KEYS [{key_list}] "
-                f"SET `{vector_field}` = CASE meta().id {' '.join(cases)} END"
+        self.log.info(f"Inserting {num_docs} base64-encoded docs into {namespace}")
+        inserted = 0
+        for batch_start in range(start, start + num_docs, batch_size):
+            batch_end = min(batch_start + batch_size, start + num_docs)
+            values = []
+            for i in range(batch_start, batch_end):
+                vec = [random.uniform(0, 255) for _ in range(dimension)]
+                encoded = self.encode_floats_to_base64(vec)
+                values.append(
+                    f'("b64_doc_{i}", {{"{vector_field}": "{encoded}", '
+                    f'"id": {i}, "size": {i % 100}, "brand": "brand_{i % 10}", '
+                    f'"color": "color_{i % 7}", "country": "country_{i % 5}", '
+                    f'"type": "type_{i % 3}"}})'
+                )
+            insert_query = (
+                f"INSERT INTO {namespace} (KEY, VALUE) VALUES {', '.join(values)}"
             )
-            self.run_cbq_query(query=update_query, server=self.query_node)
-            converted += len(keys)
+            self.run_cbq_query(query=insert_query, server=self.query_node)
+            inserted += batch_end - batch_start
 
-        self.log.info(
-            f"Base64 encoding complete: {converted} converted, {skipped} skipped")
-        return converted
+        self.log.info(f"Inserted {inserted} base64-encoded docs into {namespace}")
+        return inserted
 
     # ==================== Modular Index Creation Methods ====================
 
@@ -477,37 +464,56 @@ class VectorIndexTrainListWait(BaseSecondaryIndexingTests):
     def _poll_indexes_until_ready(self, index_names, timeout=None, interval=None):
         """
         Poll /getIndexStatus until all indexes are Ready or timeout.
-        
+
+        Status changes are logged at INFO (not DEBUG) and the final state of every
+        index is dumped on timeout. Without that, a timeout here says only "did not
+        become Ready" and the cause can be recovered from nothing short of a cbcollect.
+
         Returns:
             True if all indexes became Ready, False otherwise
         """
         timeout = timeout or self.poll_timeout
         interval = interval or self.poll_interval
-        
+
         self.log.info(f"Polling {len(index_names)} indexes (timeout={timeout}s, interval={interval}s)")
         start_time = time.time()
-        
+        last_seen = {}
+
         while time.time() - start_time < timeout:
             all_ready = True
             for index_name in index_names:
                 status_info = self._get_index_status(index_name)
-                
+
                 if status_info:
-                    self.log.debug(f"Index {index_name}: status={status_info['status']}, "
-                                  f"error={status_info['error']}")
-                    
+                    current = (status_info['status'], status_info['error'])
+                    if last_seen.get(index_name) != current:
+                        self.log.info(
+                            f"Index {index_name}: status={status_info['status']}, "
+                            f"progress={status_info.get('progress')}, "
+                            f"error={status_info['error']}")
+                        last_seen[index_name] = current
+
                     if status_info['status'] != 'Ready' or status_info['error']:
                         all_ready = False
                 else:
+                    if last_seen.get(index_name) != 'MISSING':
+                        self.log.info(
+                            f"Index {index_name}: not present in indexer metadata yet")
+                        last_seen[index_name] = 'MISSING'
                     all_ready = False
-            
+
             if all_ready:
                 self.log.info(f"All {len(index_names)} indexes are Ready!")
                 return True
-            
+
             time.sleep(interval)
-        
-        self.log.warning(f"Timeout waiting for indexes to become Ready")
+
+        self.log.warning(
+            f"Timeout waiting for indexes to become Ready after {timeout}s. Final state:")
+        for index_name in index_names:
+            self.log.warning(
+                f"  {index_name}: REST status={self._get_index_status(index_name)}, "
+                f"system:indexes state={self._get_index_state(index_name)}")
         return False
 
     def _verify_indexes_online(self, index_names):
@@ -1180,8 +1186,9 @@ class VectorIndexTrainListWait(BaseSecondaryIndexingTests):
         Steps:
             1. Create bucket with scopes and collections
             2. Create vector index with train_list_wait=true targeting Base64-encoded vector field
-            3. Load 10,000 documents with 128-dimension float-array vectors
-            3b. Re-encode the vector field as Base64 client-side (the loader cannot emit Base64)
+            3. Insert 10,000 documents whose 128-dimension vectors are already
+               Base64-encoded (the loader cannot emit Base64 for siftBigANN, and
+               loading float arrays first would fail the build terminally)
             4. Poll /getIndexStatus every 5s for up to 120s until status='Ready'
             5. Verify state='online' via system:indexes
             6. Run vector scans and verify results
@@ -1214,55 +1221,22 @@ class VectorIndexTrainListWait(BaseSecondaryIndexingTests):
         
         self.sleep(15, "Waiting for index creation to be processed")
         
-        # Step 3: Load documents. The loader emits plain float-array embeddings — it has no
-        # base64 encoding path (see _encode_collection_vectors_to_base64) — so passing base64=True
-        # here would be silently ignored. The vectors are re-encoded client-side in Step 3b.
-        gen_create = SDKDataLoader(
-            num_ops=self.num_of_docs_per_collection,
-            percent_create=100,
-            percent_update=0,
-            percent_delete=0,
-            scope=scope_name,
-            collection=collection_name,
-            json_template=self.json_template,
-            output=True,
-            username=self.username,
-            password=self.password,
-            key_prefix='doc_',
-            model=self.data_model
-        )
-        
-        task = self.cluster.async_load_gen_docs(
-            self.master,
-            bucket=bucket_name,
-            generator=gen_create,
-            use_magma_loader=True
-        )
-        task.result()
-        self.sleep(30, "Waiting for documents to be persisted")
-
-        # Confirm the load actually landed before blaming the indexer for anything downstream.
-        count_query = f"SELECT COUNT(*) AS cnt FROM {namespace}"
+        # Step 3: Write documents ALREADY base64-encoded. A float array decodes to
+        # nothing, and training gives up permanently once it samples too few vectors.
+        self._insert_base64_docs(namespace, self.num_of_docs_per_collection)
+        # Count what landed, not what was sent: a rejected batch is logged but not
+        # raised, and would otherwise surface only as a poll timeout 20 minutes later.
         loaded = self.run_cbq_query(
-            query=count_query, server=self.query_node)['results'][0]['cnt']
-        self.log.info(f"Documents loaded into {namespace}: {loaded}")
+            query=f"SELECT RAW COUNT(*) FROM {namespace}",
+            server=self.query_node)['results'][0]
+        self.log.info(f"Documents in {namespace} after insert: {loaded}")
         self.assertGreaterEqual(
             loaded, base64_train_list,
-            f"Only {loaded} documents loaded but train_list={base64_train_list}; "
+            f"Only {loaded} base64 documents landed but train_list={base64_train_list}; "
             f"the index can never train. This is a loader/setup problem, not an indexer bug"
         )
+        self.sleep(30, "Waiting for base64 docs to be persisted and indexer retry")
 
-        # Step 3b: Re-encode the vector field as base64 so DECODE_VECTOR(embedding, false)
-        # resolves. Until this runs the index has zero decodable vectors and stays in
-        # RetryableTrainListSizeError regardless of document count.
-        converted = self._encode_collection_vectors_to_base64(namespace)
-        self.assertGreaterEqual(
-            converted, base64_train_list,
-            f"Encoded only {converted} documents to base64 but train_list={base64_train_list}; "
-            f"the index cannot reach its training threshold"
-        )
-        self.sleep(30, "Waiting for base64 mutations to be persisted and indexer retry")
-        
         # Step 4: Poll for Ready
         self.assertTrue(
             self._poll_indexes_until_ready([base64_index_name]),
