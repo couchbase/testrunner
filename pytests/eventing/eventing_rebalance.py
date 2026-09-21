@@ -620,8 +620,10 @@ class EventingRebalance(EventingBaseTest):
         reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
+        # master's nodeServices view can lag briefly right after a swap rebalance
+        # completes; give it time to stabilize before querying the service map.
+        self.sleep(15, "Waiting for cluster topology to stabilize post-KV-swap rebalance")
         if getattr(self, 'is_encryption', False):
-            self.sleep(15, "Waiting for bucket REST endpoint to stabilize post-KV-swap")
             self._verify_log_encrypted_on_node(eventing_node)
         if getattr(self, 'clientauth_crl', False):
             self._assert_clientauth_crl_state_persisted(self._crl_node)

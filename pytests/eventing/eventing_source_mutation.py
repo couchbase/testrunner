@@ -7,7 +7,9 @@ from lib.testconstants import STANDARD_BUCKET_PORT
 from pytests.eventing.eventing_constants import HANDLER_CODE
 from pytests.eventing.eventing_base import EventingBaseTest
 import logging
-from couchbase.bucket import Bucket
+from couchbase.cluster import Cluster
+from couchbase.options import ClusterOptions
+from couchbase.auth import PasswordAuthenticator
 
 log = logging.getLogger()
 
@@ -74,8 +76,9 @@ class EventingSourceMutation(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION,
                                               worker_count=3)
         self.deploy_function(body)
-        url = 'couchbase://{ip}/{name}'.format(ip=self.master.ip, name=self.src_bucket_name)
-        bucket = Bucket(url, username="cbadminbucket", password="password")
+        url = 'couchbase://{ip}'.format(ip=self.master.ip)
+        cluster = Cluster(url, ClusterOptions(PasswordAuthenticator("cbadminbucket", "password")))
+        bucket = cluster.bucket(self.src_bucket_name).default_collection()
         bucket.insert('customer123', {'some': 'value'})
         self.verify_eventing_results(self.function_name,2,skip_stats_validation=True)
         self.pause_function(body)

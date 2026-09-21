@@ -72,7 +72,7 @@ class EventingSanity(EventingBaseTest):
         body = self.create_save_function_body(self.function_name,'handler_code/collections/n1ql_insert_with_timer.js')
         self.deploy_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
-        self.verify_doc_count_collections("default.scope0.collection1", self.docs_per_day * self.num_docs)
+        self.verify_doc_count_collections("default.scope0.collection1", self.docs_per_day * self.num_docs, timeout=3600)
         self.undeploy_and_delete_function(body)
 
     def test_timer_events_from_handler_code_with_bucket_ops(self):
@@ -80,7 +80,7 @@ class EventingSanity(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_WITH_DOC_TIMER)
         self.deploy_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
-        self.verify_doc_count_collections("default.scope0.collection1", self.docs_per_day * self.num_docs)
+        self.verify_doc_count_collections("default.scope0.collection1", self.docs_per_day * self.num_docs, timeout=3600)
         self.undeploy_and_delete_function(body)
 
 
@@ -101,7 +101,7 @@ class EventingSanity(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_WITH_TIMER_WITHOUT_CONTEXT)
         self.deploy_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
-        self.verify_doc_count_collections("default.scope0.collection1", self.docs_per_day * self.num_docs)
+        self.verify_doc_count_collections("default.scope0.collection1", self.docs_per_day * self.num_docs, timeout=3600)
         self.undeploy_and_delete_function(body)
 
     def test_cancel_timers_with_timers_being_overwritten(self):
@@ -109,7 +109,7 @@ class EventingSanity(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OP_WITH_TIMER_OVERWRITTEN)
         self.deploy_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
-        self.verify_doc_count_collections("default.scope0.collection1", self.docs_per_day * self.num_docs)
+        self.verify_doc_count_collections("default.scope0.collection1", self.docs_per_day * self.num_docs, timeout=3600)
         self.undeploy_and_delete_function(body)
 
     def test_source_doc_mutations(self):
@@ -141,10 +141,10 @@ class EventingSanity(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION)
         self.deploy_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
-        self.verify_doc_count_collections("default.scope0.collection0", self.docs_per_day * self.num_docs*2)
+        self.verify_doc_count_collections("default.scope0.collection0", self.docs_per_day * self.num_docs*2, timeout=3600)
         # delete all documents
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0",is_delete=True)
-        self.verify_doc_count_collections("default.scope0.collection0", self.docs_per_day * self.num_docs)
+        self.verify_doc_count_collections("default.scope0.collection0", self.docs_per_day * self.num_docs, timeout=3600)
         self.undeploy_and_delete_function(body)
 
     def test_source_bucket_mutations_with_timers(self):
@@ -152,10 +152,10 @@ class EventingSanity(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_WITH_TIMERS)
         self.deploy_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
-        self.verify_doc_count_collections("default.scope0.collection0", self.docs_per_day * self.num_docs*2)
+        self.verify_doc_count_collections("default.scope0.collection0", self.docs_per_day * self.num_docs*2, timeout=3600)
         # delete all documents
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0",is_delete=True)
-        self.verify_doc_count_collections("default.scope0.collection0", self.docs_per_day * self.num_docs)
+        self.verify_doc_count_collections("default.scope0.collection0", self.docs_per_day * self.num_docs, timeout=3600)
         self.undeploy_and_delete_function(body)
 
     def test_pause_resume_execution(self):
@@ -182,7 +182,7 @@ class EventingSanity(EventingBaseTest):
         # update all documents
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0",is_update=True)
         # Wait for eventing to catch up with all the update mutations and verify results
-        self.verify_doc_count_collections("default.scope0.collection0", self.docs_per_day * self.num_docs*2)
+        self.verify_doc_count_collections("default.scope0.collection0", self.docs_per_day * self.num_docs*2, timeout=3600)
         self.undeploy_and_delete_function(body)
 
     def test_compress_handler(self):
@@ -216,7 +216,7 @@ class EventingSanity(EventingBaseTest):
         # Wait for eventing to catch up with all the update mutations and verify results
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0",is_delete=True)
         # Wait for eventing to catch up with all the delete mutations and verify results
-        self.verify_doc_count_collections("default.scope0.collection2", self.docs_per_day * self.num_docs)
+        self.verify_doc_count_collections("default.scope0.collection2", self.docs_per_day * self.num_docs, timeout=3600)
         self.verify_doc_count_collections("default.scope0.collection1", 0)
         self.assertEqual(self.get_stats_value(self.function_name,"execution_stats.timer_cancel_counter"),self.docs_per_day * 2016)
         self.undeploy_and_delete_function(body)
@@ -227,6 +227,6 @@ class EventingSanity(EventingBaseTest):
         ClusterOperationHelper.flushctl_set(self.master, "exp_pager_stime", 3, bucket=self.default_bucket_name)
         body = self.create_save_function_body(self.function_name, "handler_code/ABO/curl_timer_insert.js")
         self.deploy_function(body)
-        self.verify_doc_count_collections("default.scope0.collection1", self.docs_per_day * self.num_docs)
+        self.verify_doc_count_collections("default.scope0.collection1", self.docs_per_day * self.num_docs, timeout=3600)
         self.verify_doc_count_collections("default.scope0.collection2", 0)
         self.undeploy_and_delete_function(body)

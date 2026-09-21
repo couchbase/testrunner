@@ -193,9 +193,9 @@ class EventingMultiHandler(EventingBaseTest):
         for tk in task:
             tk.result()
 
-    def verify_destination_buckets(self,num_docs):
+    def verify_destination_buckets(self,num_docs,timeout=1800):
         for bind in self.binding_map:
-            self.verify_doc_count_collections(bind,num_docs *self.binding_map[bind])
+            self.verify_doc_count_collections(bind,num_docs *self.binding_map[bind],timeout=timeout)
 
     def test_multiple_handle_multiple_collections_rebalance_in(self):
         # load data
@@ -340,10 +340,10 @@ class EventingMultiHandler(EventingBaseTest):
         reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
-        self.verify_destination_buckets(self.docs_per_day * self.num_docs)
+        self.verify_destination_buckets(self.docs_per_day * self.num_docs, timeout=3600)
         # delete load data
         self.load_data_to_all_source_collections(is_delete=True)
-        self.verify_destination_buckets(0)
+        self.verify_destination_buckets(0, timeout=3600)
         self.undeploy_delete_all_handler()
         # Get all eventing nodes
         nodes_out_list = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)

@@ -532,8 +532,21 @@ class EventingBaseTest(QueryHelperTests):
         else:
             return self.rest.get_all_functions(username, password)
 
-    def refresh_rest_server(self):
+    def refresh_rest_server(self, retry_count=5, retry_interval=5):
+        # Right after a rebalance completes, the master's nodeServices view can
+        # briefly lag behind the actual topology, so get_nodes_from_services_map
+        # may transiently return None/empty. Retry with backoff instead of
+        # failing immediately.
         eventing_nodes_list = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
+        attempt = 0
+        while not eventing_nodes_list and attempt < retry_count:
+            attempt += 1
+            self.sleep(retry_interval, message="Waiting for master's service map to reflect eventing node "
+                                                "post-rebalance (attempt {0}/{1})...".format(attempt, retry_count))
+            eventing_nodes_list = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
+        if not eventing_nodes_list:
+            raise Exception("Could not find any eventing node in the cluster's service map via master {0} "
+                            "after {1} retries".format(self.master.ip, retry_count))
         self.restServer = eventing_nodes_list[0]
         self.rest = RestConnection(self.restServer)
         return len(eventing_nodes_list)
@@ -903,18 +916,27 @@ class EventingBaseTest(QueryHelperTests):
     def check_word_count_eventing_log(self, function_name, word, expected_count, return_count_only=False, bucket_name=None, scope_name=None, global_function=False):
         eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
         array_of_counts = []
-        path = ""
-        if global_function:
+        # Eventing log filenames aren't derived from the function name, and
+        # there's no <function_name> subdirectory under @eventing/ -- logs are
+        # grouped only by the function's deployed bucket/scope (or sit at the
+        # @eventing/ root for a globally-scoped function). Fall back to the
+        # function's actual function_scope when the caller doesn't specify one,
+        # instead of assuming a per-function directory that never exists.
+        if not global_function and bucket_name is None and hasattr(self, 'function_scope'):
+            if self.function_scope.get("bucket") == "*":
+                global_function = True
+            else:
+                bucket_name = self.function_scope.get("bucket")
+                scope_name = self.function_scope.get("scope")
+        if global_function or bucket_name is None:
             path = ""
-        elif bucket_name is None:
-            path += function_name
-        elif scope_name is None:
-            scope_name = "_default"
         else:
+            if scope_name is None:
+                scope_name = "_default"
             # Get bucket uuid
             uuid = self.rest.fetch_bucket_uuid(bucket_name)
             bucket_uuid = "b_" + uuid
-            path += bucket_uuid
+            path = bucket_uuid
             manifest = self.rest.get_bucket_manifest(bucket_name)
             # Find the scope ID for the specified scope
             scope_id = None
@@ -934,7 +956,7 @@ class EventingBaseTest(QueryHelperTests):
             count, error = shell.execute_non_sudo_command(command)
             self.log.info("count : {} and error : {} ".format(count,error))
             if isinstance(count, list):
-                count = int(count[0])
+                count = int(count[0]) if count else 0
             else:
                 count = int(count)
             log.info("Node : {0} , word count on : {1}".format(eventing_node.ip, count))

@@ -514,7 +514,7 @@ class EventingJWTAuth(EventingBaseTest):
         self.deploy_function(body, jwt_token=self.jwt_token)
         # Drop function scope — eventing internally undeploys and deletes the function
         self.rest.delete_bucket(self.src_bucket_name)
-        self.wait_for_handler_state(self.function_name, "undeployed")
+        self.wait_for_handler_internal_undeployment_and_deletion(body['appname'])
 
 
     def test_eventing_jwt_dropping_metadata_keyspace_when_handler_is_deployed(self):

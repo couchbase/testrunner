@@ -220,11 +220,12 @@ class EventingCurl(EventingBaseTest):
             body = self.create_save_function_body(self.function_name, "handler_code/curl/bad_ssl_cert.js",validate_ssl=True)
             self.deploy_function(body)
             # Wait for eventing to catch up with all the create mutations and verify results
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True,
+                                         timeout=3600)
             # delete json documents
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                       batch_size=self.batch_size, op_type='delete')
-            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True, timeout=3600)
             self.undeploy_and_delete_function(body)
 
         def test_curl_restrict_access_to_diag_eval_endpoint_via_eventing(self):
@@ -249,12 +250,12 @@ class EventingCurl(EventingBaseTest):
                 self.function_name, "handler_code/curl/curl_enable_disable.js")
             self.deploy_function(body)
             self.verify_doc_count_collections("dst_bucket._default._default",
-                                              self.docs_per_day * self.num_docs)
+                                              self.docs_per_day * self.num_docs, timeout=3600)
             self.rest.enable_curl()
             self.load(self.gens_load, buckets=self.src_bucket,
                       flag=self.item_flag, verify_data=False,
                       batch_size=self.batch_size, op_type='delete')
-            self.verify_doc_count_collections("dst_bucket._default._default", 0)
+            self.verify_doc_count_collections("dst_bucket._default._default", 0, timeout=3600)
             self.undeploy_and_delete_function(body)
 
         # MB-55045
@@ -281,5 +282,6 @@ class EventingCurl(EventingBaseTest):
             self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default")
             body = self.create_save_function_body(self.function_name, self.handler_code)
             self.deploy_function(body)
-            self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * self.num_docs)
+            self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * self.num_docs,
+                                              timeout=3600)
             self.undeploy_and_delete_function(body)

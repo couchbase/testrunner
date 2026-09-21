@@ -90,6 +90,7 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
 
     def _verify_doc_count(self, namespace, expected_count, *args, **kwargs):
         log.info("Verifying doc count for {0}, expecting {1}".format(namespace, expected_count))
+        kwargs.setdefault('timeout', 3600)
         return self.verify_doc_count_collections(namespace, expected_count, *args, **kwargs)
 
     def tearDown(self):

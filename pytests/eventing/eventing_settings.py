@@ -266,7 +266,7 @@ class EventingSettings(EventingBaseTest):
             self.rest.create_function(body['appname'], body, self.function_scope)
         except Exception as e:
             self.log.info(e)
-            assert "ERR_INVALID_REQUEST" in str(e) and "timer_context_size expected interger value" in str(e), True
+            assert "ERR_INVALID_REQUEST" in str(e) and "timer_context_size expected integer value" in str(e), True
 
     def test_bindings_to_non_existent_buckets(self):
         try:
