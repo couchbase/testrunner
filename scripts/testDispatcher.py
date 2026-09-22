@@ -128,7 +128,7 @@ def get_servers_cloud(options, descriptor, how_many, is_addl_pool, os_version, p
         type = pool_id
     if options.serverType in (AWS, AWS_ONDEMAND):
         ssh_key_path = OS.environ.get("AWS_SSH_KEY")
-        return cloud_provision.aws_get_servers(descriptor, how_many, os_version, type, ssh_key_path, options.architecture, gpu_count=int(options.gpu_count)), None
+        return cloud_provision.aws_get_servers(descriptor, how_many, os_version, type, ssh_key_path, options.architecture, gpu_count=int(options.gpu_count), instance_type=options.instance_type), None
     elif options.serverType == GCP:
         ssh_key_path = OS.environ.get("GCP_SSH_KEY")
         return cloud_provision.gcp_get_servers(descriptor, how_many, os_version, type, ssh_key_path, options.architecture), None
@@ -499,6 +499,14 @@ def main():
                       help='Number of GPU-enabled nodes to provision (AWS only). '
                            'These nodes are appended at the end of the returned list '
                            'so they map to the F slot(s) in cluster=D,D,D,D,F confs.')
+    # AWS only: pin the EC2 instance type of the CB nodes instead of the default
+    # t3.xlarge (4 vCPU / 16 GB). For memory-hungry suites, e.g. the analytics
+    # 10k-collections subcomponent (t2.2xlarge = 32 GB, r6i.2xlarge = 64 GB).
+    parser.add_option('--instance-type', dest='instance_type', default=None,
+                      help='EC2 instance type for the Couchbase nodes (AWS only). '
+                           'Unset -> the per-arch default (t3.xlarge x86_64, '
+                           't4g.xlarge arm64). Additional-pool nodes (elastic-fts, '
+                           'localstack) and GPU nodes are unaffected.')
     parser.add_option('--capella_url', dest='capella_url', default=None)
     parser.add_option('--capella_user', dest='capella_user', default=None)
     parser.add_option('--capella_password', dest='capella_password', default=None)

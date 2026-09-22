@@ -1059,7 +1059,8 @@ def _describe_ips_ordered(ec2_client, instance_ids):
     return [by_id[i] for i in instance_ids]
 
 
-def aws_get_servers(name, count, os, type, ssh_key_path, architecture=None, gpu_count=0):
+def aws_get_servers(name, count, os, type, ssh_key_path, architecture=None, gpu_count=0,
+                    instance_type=None):
     # Returned IPs are CPU nodes first, GPU nodes last. The dispatcher writes
     # them into the .ini in that order, so this lines up with confs that put
     # GPU-requiring services (e.g. FTS) at the end of cluster=D,D,D,D,F.
@@ -1070,19 +1071,19 @@ def aws_get_servers(name, count, os, type, ssh_key_path, architecture=None, gpu_
 
     cpu_count = count - gpu_count
 
-    instance_type = "t3.xlarge"
+    cpu_instance_type = "t3.xlarge"
     ssh_username = AWS_OS_USERNAME_MAP[os]
 
     if type != "couchbase":
         image_id = AWS_AMI_MAP[type]
         # TODO: Change to centos x86 AMI (CBQE-7627)
         if type == "localstack":
-            instance_type = "t4g.xlarge"
+            cpu_instance_type = "t4g.xlarge"
             ssh_username = "ec2-user"
     else:
         image_id = AWS_AMI_MAP["couchbase"][os][architecture]
         if architecture in ["aarch64", "arm64"]:
-            instance_type = "t4g.xlarge"
+            cpu_instance_type = "t4g.xlarge"
 
     if type == "elastic-fts":
         # ES node: pre-baked Debian 12 + Elasticsearch 8.17.0 AMI (packer/deb12_es.pkr.hcl),
@@ -1091,11 +1092,21 @@ def aws_get_servers(name, count, os, type, ssh_key_path, architecture=None, gpu_
         # SSH baked. So post_provisioner, install_elastic_search, and the CBQE-8153 reboot
         # are all skipped for this type. m5.large (not the old burstable t2.large) so ES
         # indexing isn't network/CPU-credit throttled.
-        instance_type = "m5.large"
+        cpu_instance_type = "m5.large"
         os = "debian"
         architecture = "x86_64"
         ssh_username = "root"
         image_id = "ami-0d4988398ac9866fb"
+
+    # Per-dispatch override (dispatcher --instance-type): suites that need more RAM than
+    # the default t3.xlarge (4 vCPU / 16 GB) -- e.g. the analytics 10k-collections
+    # subcomponent -- pin their own type. CB nodes only: the addl-pool types
+    # (elastic-fts / localstack) keep the instance types matched to their pre-baked AMIs,
+    # and GPU nodes keep AWS_GPU_INSTANCE_TYPE.
+    if instance_type and type == "couchbase":
+        cpu_instance_type = instance_type
+        log.info("Using overridden instance type {} for {} CB node(s)".format(
+            cpu_instance_type, cpu_count))
 
     ec2_resource = boto3.resource('ec2', region_name='us-east-1')
     ec2_client = boto3.client('ec2', region_name='us-east-1')
@@ -1146,7 +1157,7 @@ def aws_get_servers(name, count, os, type, ssh_key_path, architecture=None, gpu_
             ImageId=image_id,
             MinCount=cpu_count,
             MaxCount=cpu_count,
-            InstanceType=instance_type,
+            InstanceType=cpu_instance_type,
             TagSpecifications=[{'ResourceType': 'instance', 'Tags': base_tags}],
             **common_kwargs
         )
