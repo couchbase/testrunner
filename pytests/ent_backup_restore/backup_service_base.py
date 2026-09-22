@@ -715,6 +715,31 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
             return self.repository_api.cluster_self_repository_state_id_task_history_get_with_http_info(state, repo_name, **kwargs)
         return self.repository_api.cluster_self_repository_state_id_task_history_get(state, repo_name, **kwargs)
 
+    def describe_task(self, task):
+        """ Summarise a task from the task history for logging.
+
+        The backup service reports why a task ended the way it did in the
+        `error`/`error_code` fields of the task itself and of each of its node
+        runs, with the cbbackupmgr output in `out`. None of it is visible in a
+        bare `assertTrue`, so collect it into a single message.
+
+        Args:
+            task (TaskRun): An entry from the task history.
+        """
+        description = [f"Task '{task.task_name}' (type: {task.type}) reported status '{task.status}'"]
+
+        if task.error or task.error_code:
+            description.append(f"  error_code: {task.error_code}, error: {task.error}")
+
+        for node_run in task.node_runs or []:
+            description.append(f"  node {node_run.node_id}: status '{node_run.status}', "
+                               f"error_code: {node_run.error_code}, error: {node_run.error}")
+
+            if node_run.out:
+                description.append(f"  node {node_run.node_id} output: {node_run.out}")
+
+        return "\n".join(description)
+
     def map_task_to_backup(self, state, repo_name, task_name):
         return self.get_task_history(state, repo_name, task_name=task_name)[0].backup
 
@@ -770,61 +795,96 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
 
         return False
 
+    def abandon_wait(self, reason):
+        """ Log why a wait was abandoned and report it as a failure.
+
+        Returns False so a wait can hand its result straight back to its caller while leaving the reason in the test log,
+        rather than failing with a bare `False is not true`.
+
+        Args:
+            reason (str): Why the wait was abandoned.
+        """
+        self.log.error(reason)
+        return False
+
     def wait_for_backup_task(self, state, repo_name, retries, sleep_time, task_name=None, task_scheduled_time=None):
         """ Wait for the latest backup Task to complete.
 
-        Retries are automatically scaled up when the caller-supplied budget
-        (retries × sleep_time seconds) is shorter than what num_items requires.
+        The caller-supplied budget (retries × sleep_time seconds) is treated as a
+        wall clock deadline rather than a poll count, so the time actually waited
+        no longer drifts with REST latency, and the final poll is always
+        evaluated rather than discarded by an off by one check.
+
+        The budget is extended when it is shorter than what num_items requires.
         This prevents spurious failures when callers pass small hardcoded values
         (e.g. retries=20, sleep_time=20 → 400 s) that were calibrated for
         small item counts but are insufficient at 100k+ items.
+
+        Each phase below gets the full budget, which is how the retry based
+        version behaved. On failure the reason is logged by `abandon_wait`.
         """
-        # Scale retries so total wait is at least max(400, num_items // 50) s
-        min_total_wait = max(400, self.num_items // 50)
-        if retries * sleep_time < min_total_wait:
-            retries = max(retries, (min_total_wait + sleep_time - 1) // sleep_time)
+        # Scale the budget so each phase waits at least max(400, num_items // 50) s
+        budget = max(retries * sleep_time, 400, self.num_items // 50)
 
         # Wait for any existing running tasks to finish running
-        for i in range(0, retries):
-            repository = self.repository_api.cluster_self_repository_state_id_get(state, repo_name)
+        deadline = time.time() + budget
 
-            if i == retries - 1:
-                return False
+        while True:
+            repository = self.repository_api.cluster_self_repository_state_id_get(state, repo_name)
 
             if not repository.running_one_off and not repository.running_tasks:
                 break
+
+            if time.time() >= deadline:
+                return self.abandon_wait(f"Tasks were still running on the repository '{repo_name}' after "
+                                         f"{budget}s (running_one_off: {repository.running_one_off}, "
+                                         f"running_tasks: {repository.running_tasks})")
 
             self.sleep(sleep_time)
 
         # Check the task is present in the task history with the status 'done'
         if task_name:
-            for i in range(0, retries):
+            deadline = time.time() + budget
+
+            while True:
                 task_history = self.get_task_history(state, repo_name, task_name=task_name)
 
                 # Be more specific by filtering tasks which match the original schedule time
                 if task_scheduled_time:
                     task_history = [task for task in task_history if TimeUtil.rfc3339nano_to_datetime(task.start) >= TimeUtil.rfc3339nano_to_datetime(task_scheduled_time)]
 
-                if i == retries - 1:
-                    return False
-
                 if len(task_history) > 0:
                     if task_history[0].status == 'done':
                         return True
 
                     if task_history[0].status == 'failed':
-                        return False
+                        return self.abandon_wait(self.describe_task(task_history[0]))
+
+                if time.time() >= deadline:
+                    if len(task_history) > 0:
+                        return self.abandon_wait(f"The task '{task_name}' did not complete within {budget}s. "
+                                                 f"{self.describe_task(task_history[0])}")
+
+                    return self.abandon_wait(f"The task '{task_name}' did not appear in the task history of "
+                                             f"the repository '{repo_name}' within {budget}s")
 
                 self.sleep(sleep_time)
 
         # Check there is a complete task at the top in the list of backups
-        for i in range(0, retries):
+        deadline = time.time() + budget
+
+        while True:
             backups = self.get_backups(state, repo_name)
+
             if len(backups) > 0 and backups[0].complete:
                 return True
-            self.sleep(sleep_time)
 
-        return False
+            if time.time() >= deadline:
+                return self.abandon_wait(f"The repository '{repo_name}' did not have a complete backup at the "
+                                         f"head of its backup list within {budget}s "
+                                         f"(backups: {len(backups)})")
+
+            self.sleep(sleep_time)
 
     def wait_until_documents_are_persisted(self, timeout=None):
         """ Wait until the documents are persisted to disk
@@ -896,7 +956,9 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         task_name = self.active_repository_api.cluster_self_repository_active_id_backup_post(repo_name, body=Body4(full_backup = full_backup)).task_name
         # Wait until task has completed
         self.sys_log_count[Tag.BACKUP_STARTED] += 1
-        self.assertTrue(self.wait_for_backup_task(state, repo_name, retries, sleep_time, task_name=task_name))
+        self.assertTrue(self.wait_for_backup_task(state, repo_name, retries, sleep_time, task_name=task_name),
+                        f"The one off backup '{task_name}' on the repository '{repo_name}' did not complete "
+                        f"successfully, see the logged reason above")
         self.sys_log_count[Tag.BACKUP_COMPLETED] += 1
         return task_name
 
@@ -1011,7 +1073,9 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         self.sys_log_count[Tag.RESTORE_STARTED] += 1
 
         # Check the task completed successfully
-        self.assertTrue(self.wait_for_backup_task(state, repo_name, retries, sleep_time, task_name=task_name))
+        self.assertTrue(self.wait_for_backup_task(state, repo_name, retries, sleep_time, task_name=task_name),
+                        f"The one off restore '{task_name}' of the repository '{repo_name}' into "
+                        f"{body.target} did not complete successfully, see the logged reason above")
         self.sys_log_count[Tag.RESTORE_COMPLETED] += 1
 
         return task_name
@@ -1041,12 +1105,21 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         # Add repositories and tie default plan to repository
         self.active_repository_api.cluster_self_repository_active_id_post(repo_name, body=body)
 
-    def drop_all_buckets(self, retries=10, sleep=30):
-        """ Drop all buckets
+    def drop_all_buckets(self, retries=10, sleep=30, timeout=200):
+        """ Drop all buckets and wait until they have actually gone
+
+        The REST call only returns that the deletion was accepted, so callers
+        which immediately restore into the same cluster (with
+        auto_create_buckets) would otherwise race a bucket which is still being
+        deleted: cbbackupmgr sees the bucket, skips creating it, and then loses
+        it part way through the restore.
         """
         rest_connection = RestConnection(self.master)
         for bucket in self.buckets:
+            bucket_name = bucket.name if hasattr(bucket, 'name') else bucket
             rest_connection.delete_bucket(bucket, retries, sleep)
+            self.assertTrue(BucketOperationHelper.wait_for_bucket_deletion(bucket_name, rest_connection, timeout),
+                            f"The bucket '{bucket_name}' still existed {timeout}s after it was deleted")
 
     def flush_all_buckets(self):
         """ Flush all buckets to empty cluster of documents
