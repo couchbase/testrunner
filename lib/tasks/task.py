@@ -899,6 +899,17 @@ class RebalanceTask(Task):
                                 remote_ip, node.port, services=services_for_node)
             except ServerAlreadyJoinedException:
                 pass
+        self.__apply_node_throttle_settings()
+
+    def __apply_node_throttle_settings(self):
+        """basetestcase only covers servers[:nodes_init]; throttle added nodes too."""
+        if not self.to_add:
+            return
+        try:
+            RestConnection.apply_conf_node_throttle_settings(self.to_add)
+        except Exception as e:
+            self.log.warning("Could not apply node throttle settings to "
+                             "added nodes: {0}".format(e))
 
     def start_rebalance(self, task_manager):
         nodes = self.rest.node_statuses()

@@ -93,6 +93,10 @@ class RestHelper(object):
         return all(node.status == 'healthy' for node in nodes)
 
     def rebalance_reached(self, percentage=100,retry_count=40):
+        # a throttled rebalance is slow, not stuck
+        if TestInputSingleton.input is not None:
+            retry_count *= TestInputSingleton.input.param(
+                "throttle_timeout_multiplier", 1)
         start = time.time()
         progress = 0
         previous_progress = 0

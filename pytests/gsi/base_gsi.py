@@ -32,6 +32,7 @@ from couchbase_helper.query_definitions import SQLDefinitionGenerator
 from couchbase_helper.tuq_generators import TuqGenerators
 from couchbase_helper.encryption_at_rest_helper import EncryptionAtRestHelper
 from .gsi_encryption_helpers import GSIEncryptionHelpers
+from .gsi_throttle_helpers import GSIThrottleHelpers
 from lib.membase.helper.cluster_helper import ClusterOperationHelper
 from lib.remote.remote_util import RemoteMachineShellConnection
 from lib.testconstants import WIN_COUCHBASE_LOGS_PATH, LINUX_COUCHBASE_LOGS_PATH
@@ -54,6 +55,7 @@ class BaseSecondaryIndexingTests(QueryTests):
 
     def setUp(self):
         super(BaseSecondaryIndexingTests, self).setUp()
+        self.throttle_test = self.input.param("collect_throttle_stats", False)
         self.ansi_join = self.input.param("ansi_join", False)
         self.index_lost_during_move_out = []
         self.run_continous_query = False
@@ -275,6 +277,10 @@ class BaseSecondaryIndexingTests(QueryTests):
                 self.fail(f"Disabling sequential scan failed. {response.content}")
             self.log.info(f"{data} set")
             self.log.info(response.text)
+
+        if self.throttle_test:
+            self.gsi_throttle_helper = GSIThrottleHelpers(self)
+            self.gsi_throttle_helper.setup()
 
     # ========================================================================
     # File Encryption Validation Methods
@@ -1121,7 +1127,11 @@ class BaseSecondaryIndexingTests(QueryTests):
             )
 
     def tearDown(self):
-        super(BaseSecondaryIndexingTests, self).tearDown()
+        try:
+            if getattr(self, "gsi_throttle_helper", None) is not None:
+                self.gsi_throttle_helper.teardown()
+        finally:
+            super(BaseSecondaryIndexingTests, self).tearDown()
 
     def assert_all_indexers_metastore_type(self, expected="magma", timeout=120, index_nodes=None):
         """
@@ -1440,6 +1450,8 @@ class BaseSecondaryIndexingTests(QueryTests):
             self.log.info(restore_out)
 
         self.buckets = self.rest.get_buckets()
+        if getattr(self, "throttle_test", False):
+            GSIThrottleHelpers(self).apply_bucket_settings()
         self.namespaces = []
         for bucket in self.buckets:
             scopes = self.rest.get_bucket_scopes(bucket=bucket)
@@ -3114,6 +3126,8 @@ class BaseSecondaryIndexingTests(QueryTests):
 
 
     def wait_until_indexes_online(self, timeout=1800, defer_build=False, check_paused_index=False, schedule_index=False):
+        if getattr(self, "throttle_test", False):
+            timeout = GSIThrottleHelpers.scaled_timeout(timeout)
         rest = RestConnection(self.master)
         init_time = time.time()
         check = False
@@ -3222,6 +3236,8 @@ class BaseSecondaryIndexingTests(QueryTests):
         return index_list
 
     def wait_until_specific_index_online(self, index_name='', timeout=600, defer_build=False):
+        if getattr(self, "throttle_test", False):
+            timeout = GSIThrottleHelpers.scaled_timeout(timeout)
         rest = RestConnection(self.master)
         init_time = time.time()
         check = False
@@ -3257,6 +3273,8 @@ class BaseSecondaryIndexingTests(QueryTests):
         return check
 
     def verify_index_in_index_map(self, index_name='', timeout=600):
+        if getattr(self, "throttle_test", False):
+            timeout = GSIThrottleHelpers.scaled_timeout(timeout)
         rest = RestConnection(self.master)
         init_time = time.time()
         check = False

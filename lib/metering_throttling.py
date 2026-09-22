@@ -1,4 +1,5 @@
 import re
+import time
 import requests
 from lib.Cb_constants.CBServer import CbServer
 from cb_tools.cbstats import Cbstats
@@ -459,3 +460,124 @@ class KVRateLimiting(object):
         if elapsed_secs <= 0:
             return 0
         return (delta.get("ru", 0) + delta.get("wu", 0)) / float(elapsed_secs)
+
+
+# On-prem KV rate-limiting (8.5+): kv_* series per bucket, no service label.
+# kv_throttle_duration_seconds_* stays 0 for DCP before 8.5.0-1248 (MB-74217).
+class kv_throttle_stats(object):
+
+    COUNTERS = ("kv_ru_total", "kv_wu_total",
+                "kv_throttle_count_total", "kv_reject_count_total",
+                "kv_throttle_duration_seconds_count",
+                "kv_throttle_duration_seconds_sum")
+    LIMITS = ("kv_throttle_hard_limit", "kv_throttle_reserved")
+    METRICS = COUNTERS + LIMITS
+
+    # "no limit" (2^64-1) arrives in exponent form, so compare by magnitude
+    UNLIMITED_ABOVE = 10 ** 18
+
+    @staticmethod
+    def is_unlimited(hard_limit):
+        return hard_limit > kv_throttle_stats.UNLIMITED_ABOVE
+
+    def __init__(self, servers, username, password):
+        """servers: KV nodes to scrape; counters are summed across them."""
+        if not isinstance(servers, (list, tuple, set)):
+            servers = [servers]
+        self.servers = list(servers)
+        self.auth = requests.auth.HTTPBasicAuth(username, password)
+        self.log = logger.Logger.get_logger()
+
+    def __url(self, server):
+        ip = server.ip if hasattr(server, 'ip') else server
+        if CbServer.use_https:
+            return f"https://{ip}:{CbServer.ssl_port}/metrics"
+        return f"http://{ip}:{CbServer.port}/metrics"
+
+    @staticmethod
+    def __pattern(metric, bucket):
+        return re.compile(r'^%s\{bucket="%s"\} ([0-9.e+-]+)$'
+                          % (metric, re.escape(bucket)), re.MULTILINE)
+
+    def get_bucket_stats(self, bucket):
+        bucket_name = bucket.name if hasattr(bucket, 'name') else bucket
+        stats = {metric: 0 for metric in kv_throttle_stats.METRICS}
+        for server in self.servers:
+            response = requests.get(self.__url(server), auth=self.auth,
+                                    verify=False)
+            if response.status_code not in (200, 201):
+                raise Exception(f'Failed to read metrics from '
+                                f'{self.__url(server)}: {response.text}')
+            for metric in kv_throttle_stats.METRICS:
+                found = kv_throttle_stats.__pattern(
+                    metric, bucket_name).findall(response.text)
+                if not found:
+                    continue
+                value = int(float(found[0]))
+                if metric in kv_throttle_stats.LIMITS:
+                    # per-bucket setting, not a per-node quantity
+                    stats[metric] = value
+                else:
+                    stats[metric] += value
+        stats['ts'] = time.time()
+        self.log.info(f'KV THROTTLE STATS for {bucket_name}: {stats}')
+        return stats
+
+    @staticmethod
+    def delta(before, after):
+        elapsed = after['ts'] - before['ts']
+        # counters going backwards means the bucket was recreated mid-test
+        recreated = any(after[metric] < before[metric]
+                        for metric in kv_throttle_stats.COUNTERS)
+        result = {metric: after[metric] - (0 if recreated else before[metric])
+                  for metric in kv_throttle_stats.COUNTERS}
+        result['bucket_recreated'] = recreated
+        result['elapsed'] = round(elapsed, 3)
+        for metric in kv_throttle_stats.LIMITS:
+            result[metric] = after[metric]
+        waits = result['kv_throttle_duration_seconds_count']
+        result['throttle_wait_mean'] = round(
+            result['kv_throttle_duration_seconds_sum'] / waits, 4) if waits else 0
+        if elapsed > 0:
+            result['ru_per_sec'] = round(result['kv_ru_total'] / elapsed, 2)
+            result['wu_per_sec'] = round(result['kv_wu_total'] / elapsed, 2)
+            result['units_per_sec'] = round(
+                (result['kv_ru_total'] + result['kv_wu_total']) / elapsed, 2)
+        else:
+            result['ru_per_sec'] = result['wu_per_sec'] = 0
+            result['units_per_sec'] = 0
+        return result
+
+    def get_bucket_limits(self, bucket):
+        stats = self.get_bucket_stats(bucket)
+        return stats['kv_throttle_reserved'], stats['kv_throttle_hard_limit']
+
+
+# Same counters over cbstats, as a drop-in for kv_throttle_stats.
+class cbstats_throttle_stats(kv_throttle_stats):
+
+    def __init__(self, servers, username=None, password=None):
+        kv_throttle_stats.__init__(self, servers, username, password)
+
+    def get_bucket_stats(self, bucket):
+        bucket_name = bucket.name if hasattr(bucket, 'name') else bucket
+        stats = {metric: 0 for metric in kv_throttle_stats.METRICS}
+        for server in self.servers:
+            shell = RemoteMachineShellConnection(server)
+            try:
+                raw = Cbstats(shell).all_stats(bucket_name)
+            finally:
+                shell.disconnect()
+            for metric in kv_throttle_stats.METRICS:
+                cbstats_name = metric[len("kv_"):]
+                if cbstats_name not in raw:
+                    continue
+                value = int(float(raw[cbstats_name]))
+                if metric in kv_throttle_stats.LIMITS:
+                    stats[metric] = value
+                else:
+                    stats[metric] += value
+        stats['ts'] = time.time()
+        self.log.info(f'KV THROTTLE STATS (cbstats) for {bucket_name}: '
+                      f'{stats}')
+        return stats
