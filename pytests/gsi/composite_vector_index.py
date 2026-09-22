@@ -1034,7 +1034,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.run_cbq_query(query=query, server=self.n1ql_node)
         except Exception as err:
             # Expecting an error since there's no SPARSE VECTOR field
-            err_msg = 'Vector index requires at least one vector index key'
+            err_msg = 'Cannot have more than one index key for VECTOR index'
             self.assertTrue(err_msg in str(err), f"Index with multiple scalars but no SPARSE VECTOR should fail: {err}")
 
         # Scenario 3: Sparse index with defer_build=false on empty collection
@@ -1042,8 +1042,9 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         scope = '_default'
         collection = 'empty_collection_sparse'
 
-        self.collection_rest.create_scope_collection(bucket=self.test_bucket, scope=scope, collection=collection)
-        empty_collection_namespace = f"default:{self.test_bucket}.{scope}.{collection}"
+        self.collection_rest.create_collection(bucket=self.namespaces[0].split(':')[-1].split('.')[0], scope=scope, collection=collection)
+        empty_collection_namespace = f"{self.namespaces[0].rsplit('.', 2)[0]}.{scope}.{collection}"
+        self.sleep(10, "Wait for the new collection to reach the query service")
 
         index_gen_3 = QueryDefinition(index_name='sparse_empty_defer_false', is_base64=self.base64,
                                       index_fields=['`sparse` SPARSE VECTOR'],
