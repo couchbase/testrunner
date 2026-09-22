@@ -1774,6 +1774,11 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         with ThreadPoolExecutor() as executor_main:
             try:
                 event = Event()
+                # Assigned only late in the try (post-upgrade mutations). Initialise
+                # here so the finally can be guarded - otherwise a failure earlier in
+                # the try (e.g. the index-status comparison) makes the finally raise
+                # UnboundLocalError and masks the real failure.
+                mutation_future = None
                 self.enable_redistribute_indexes()
 
                 select_queries_scalar = self.create_index_in_batches(replica_count=1, scalar=True,
@@ -1874,7 +1879,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                             self.bhive_index=True
                         else:
                             self.bhive_index=False
-                        create_queries = self.gsi_util_obj.get_create_index_list(definition_list=defs, namespace=namespace, bhive_index=self.bhive_index)
+                        create_queries = self.gsi_util_obj.get_create_index_list(definition_list=defs, namespace=namespace, bhive_index=self.bhive_index, defer_build=True)
                         select_queries.extend(self.gsi_util_obj.get_select_queries(definition_list=defs, namespace=namespace))
                         build_queries.append(self.gsi_util_obj.get_build_indexes_query(definition_list=defs, namespace=namespace))
 
@@ -1910,7 +1915,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
 
             finally:
                 event.set()
-                mutation_future.result()
+                if mutation_future is not None:
+                    mutation_future.result()
 
     def _compare_index_status(self, before, after, fields_to_ignore):
         before_indexes = {(idx['indexName'], idx.get('bucket', ''), idx.get('scope', ''),
@@ -3795,7 +3801,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         else:
             self.validate_shard_affinity(node_in=node_in, provisioned=provisioned)
 
-    def create_index_in_batches(self, num_batches=2, replica_count=None, randomise_replica_count=True, scalar=False, dataset="Hotel", bhive=False, skip_extra_indexes=True, scale_down_indexes_count=False):
+    def create_index_in_batches(self, num_batches=2, replica_count=None, randomise_replica_count=True, scalar=False, dataset="Hotel", bhive=False, skip_extra_indexes=True, scale_down_indexes_count=False, defer_build=True):
         select_queries = set()
         query_node = self.get_nodes_from_services_map(service_type="n1ql")
         if scale_down_indexes_count:
@@ -3829,9 +3835,19 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                                   namespace=namespace,
                                                                   num_replica=replica_count,
-                                                                  randomise_replica_count=randomise_replica_count, bhive_index=bhive)
+                                                                  randomise_replica_count=randomise_replica_count,
+                                                                  bhive_index=bhive, defer_build=defer_build)
                 self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace,
                                                      query_node=query_node)
+                # Build the deferred indexes with a single BUILD so their builds are
+                # queued together instead of each CREATE triggering its own immediate
+                # build. Concurrent builds on the same keyspace return "Build Already
+                # In Progress" and leave vector indexes stuck in Error/Retrying.
+                if defer_build:
+                    build_query = self.gsi_util_obj.get_build_indexes_query(definition_list=query_definitions,
+                                                                            namespace=namespace)
+                    self.gsi_util_obj.create_gsi_indexes(create_queries=[build_query], database=namespace,
+                                                         query_node=query_node)
         return select_queries
 
     def upgrade_and_downgrade_and_validate_single_node(self, node_to_upgrade, select_queries, scan_results_check=True, downgrade=False):

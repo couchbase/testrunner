@@ -3116,7 +3116,8 @@ class BaseSecondaryIndexingTests(QueryTests):
                     self.log.info(f"Can't reach desired Resident Ratio in {timeout} secs.")
 
 
-    def wait_until_indexes_online(self, timeout=1800, defer_build=False, check_paused_index=False, schedule_index=False):
+    def wait_until_indexes_online(self, timeout=7200, defer_build=False, check_paused_index=False, schedule_index=False,
+                                  raise_on_timeout=True):
         rest = RestConnection(self.master)
         init_time = time.time()
         check = False
@@ -3165,6 +3166,16 @@ class BaseSecondaryIndexingTests(QueryTests):
             self.log.info(f"Indexes are not online after {timeout} seconds")
             self.log.info(f"Index status: {index_status}")
             check = False
+            # Most callers ignore the return value, so a False on timeout is
+            # silently swallowed and the caller moves on. When a caller invokes
+            # this once per index in a loop (e.g. post_upgrade_validate_vector_index
+            # alters replicas + waits for each index definition), a permanently
+            # stuck build makes every iteration burn the full timeout, so the test
+            # grinds on until the Jenkins wall-clock aborts the whole job. Raise so
+            # the first timeout fails the test instead.
+            if raise_on_timeout:
+                raise Exception(f"Indexes did not come online within {timeout} seconds. "
+                                f"Last index status: {index_status}")
         return check
 
     def check_if_indexes_in_dgm(self):

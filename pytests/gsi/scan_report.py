@@ -1702,7 +1702,7 @@ class Scan_Report(FileBasedRebalance):
             all_scalar_index_names.extend([d.index_name for d in scalar_defs])
 
         self.log.info("Waiting for indexes to come online")
-        if not self.wait_until_indexes_online():
+        if not self.wait_until_indexes_online(raise_on_timeout=False):
             self.fail("Indexes did not come online in expected time")
             
 
