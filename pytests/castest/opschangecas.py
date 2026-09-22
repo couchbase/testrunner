@@ -185,10 +185,49 @@ class OpsChangeCasTests(CasBaseTest):
             except Exception as ex:
                 raise Exception(ex)
 
+    def _server_for(self, server_str):
+        """Map an 'ip:port' entry of the vbucket map to a test input server."""
+        ip, memcached_port = server_str.rsplit(":", 1)
+        matches = [server for server in self.servers if server.ip == ip]
+        if not matches:
+            raise Exception('no server in the test input matches %s'
+                            % server_str)
+        if len(matches) > 1:
+            # a cluster_run holds every node on one ip, so the ns_server port
+            # of the node owning that memcached port is what tells them apart
+            for node in RestConnection(self.master).get_nodes():
+                if node.ip == ip and node.memcached == int(memcached_port):
+                    for server in matches:
+                        if int(server.port) == int(node.port):
+                            return server
+        return matches[0]
+
+    def _allow_invalid_hlc(self, bucket_name):
+        """Let the bucket accept a CAS beyond hlcMaxFutureThreshold.
+
+        From 7.9 new buckets are created with invalidHlcStrategy=error, so
+        set_with_meta carrying a poisoned CAS is rejected with cas_value_invalid
+        (seen as EEXISTS by clients that do not negotiate XERROR). These tests
+        deliberately poison max_cas, so the check has to be relaxed first.
+        """
+        rest = RestConnection(self.master)
+        try:
+            rest.change_bucket_props(bucket_name, invalidHlcStrategy="ignore")
+            self.sleep(5, "wait for invalidHlcStrategy to reach memcached")
+            self.log.info("invalidHlcStrategy for %s is now %s"
+                          % (bucket_name,
+                             rest.get_bucket_json(bucket_name).get(
+                                 "invalidHlcStrategy")))
+        except Exception as ex:
+            # pre-7.9 builds do not know the param and do not validate the CAS
+            self.log.info("could not set invalidHlcStrategy: %s" % ex)
+
     def _corrupt_max_cas(self, mcd, key):
         # set the CAS to -2 and then mutate to increment to -1 and then it should stop there
+        # the rev seqno must beat the existing one (1 after the initial set),
+        # otherwise revid conflict resolution rejects the set_with_meta with EEXISTS
         mcd.setWithMetaInvalid(key, json.dumps({'value': 'value2'}),
-                               0, 0, 0, -2)
+                               0, 0, 2, -2)
         # print 'max cas pt1', mcd.getMeta(key)[4]
         mcd.set(key, 0, 0, json.dumps({'value':'value3'}))
         # print 'max cas pt2', mcd.getMeta(key)[4]
@@ -213,7 +252,17 @@ class OpsChangeCasTests(CasBaseTest):
         mc_active = client.memcached(KEY_NAME)
         mc_replica = client.memcached( KEY_NAME, replica_index=0 )
 
+        # the max_cas is poisoned on the node owning the active vbucket for the
+        # key, which is not necessarily self.master. That is the node to
+        # rebalance out, and the replica node is the one that has to survive it
+        vb_id = client._get_vBucket_id(KEY_NAME)
+        active_node = self._server_for(client.vBucketMap[vb_id])
+        replica_node = self._server_for(client.vBucketMapReplica[vb_id][0])
+        self.log.info('active for {0} is {1}, replica is {2}'
+                      .format(KEY_NAME, active_node.ip, replica_node.ip))
+
         # set the CAS to -2 and then mutate to increment to -1 and then it should stop there
+        self._allow_invalid_hlc('default')
         self._corrupt_max_cas(mc_active, KEY_NAME)
 
         # CAS should be 0 now, do some gets and sets to verify that nothing bad happens
@@ -224,22 +273,24 @@ class OpsChangeCasTests(CasBaseTest):
         # remove that node
         self.log.info('Remove the node with -1 max cas')
 
-        rebalance = self.cluster.async_rebalance(self.servers[-1:],
+        rebalance = self.cluster.async_rebalance([replica_node],
                                                  [],
-                                                 [self.master])
+                                                 [active_node])
         rebalance.result()
+
+        # the replica has been promoted, so its copy is readable now
         replica_CAS = mc_replica.getMeta(KEY_NAME)[4]
 
         # add the node back
         self.log.info('Add the node back, the max_cas should be healed')
-        rebalance = self.cluster.async_rebalance(self.servers[-1:],
-                                                 [self.master],
+        rebalance = self.cluster.async_rebalance([replica_node],
+                                                 [active_node],
                                                  [])
 
         rebalance.result()
 
         # verify the CAS is good
-        client = VBucketAwareMemcached(rest, 'default')
+        client = VBucketAwareMemcached(RestConnection(replica_node), 'default')
         mc_active = client.memcached(KEY_NAME)
         active_CAS = mc_active.getMeta(KEY_NAME)[4]
 
@@ -263,6 +314,7 @@ class OpsChangeCasTests(CasBaseTest):
         mc_active = client.memcached(KEY_NAME)
 
         # set the CAS to -2 and then mutate to increment to -1 and then it should stop there
+        self._allow_invalid_hlc('default')
         self._corrupt_max_cas(mc_active, KEY_NAME)
         corrupt_cas = mc_active.getMeta(KEY_NAME)[4]
 

@@ -3781,7 +3781,8 @@ class RestConnection(object):
                       expiryPagerSleepTime=None,
                       throttleEnabled=None,
                       throttleReserved=None,
-                      throttleHardLimit=None):
+                      throttleHardLimit=None,
+                      invalidHlcStrategy=None):
         bucket_name = bucket.name if isinstance(bucket, Bucket) else bucket
         api = '{0}{1}{2}'.format(self.baseUrl, 'pools/default/buckets/', bucket_name)
         params_dict = {}
@@ -3814,6 +3815,10 @@ class RestConnection(object):
             params_dict["throttleReserved"] = throttleReserved
         if throttleHardLimit is not None:
             params_dict["throttleHardLimit"] = throttleHardLimit
+        # How the bucket handles a CAS beyond hlcMaxFutureThreshold (7.9+).
+        # One of error / ignore / replace
+        if invalidHlcStrategy:
+            params_dict["invalidHlcStrategy"] = invalidHlcStrategy
 
         params = urllib.parse.urlencode(params_dict)
 
