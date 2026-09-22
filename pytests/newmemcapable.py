@@ -249,8 +249,8 @@ class GetrTests(BaseTestCase):
 
         self.log.info("LOAD PHASE")
         end_time = time.time() + self.wait_timeout * 30
-        while (int(mc.stats()["vb_active_perc_mem_resident"]) == 0 or\
-               int(mc.stats()["vb_active_perc_mem_resident"]) > resident_ratio) and\
+        while (float(mc.stats()["vb_active_perc_mem_resident"]) == 0 or\
+               float(mc.stats()["vb_active_perc_mem_resident"]) > resident_ratio) and\
               time.time() < end_time:
             self.log.info("Resident ratio is %s" % mc.stats()["vb_active_perc_mem_resident"])
             gen = DocumentGenerator('test_docs', '{{"age": {0}}}', range(5),
@@ -260,7 +260,7 @@ class GetrTests(BaseTestCase):
                                    flag=self.flags, only_store_hash=False, batch_size=1)
             self.num_items += delta_items
             self.log.info("Resident ratio is %s" % mc.stats()["vb_active_perc_mem_resident"])
-        self.assertTrue(int(mc.stats()["vb_active_perc_mem_resident"]) < resident_ratio,
+        self.assertTrue(float(mc.stats()["vb_active_perc_mem_resident"]) < resident_ratio,
                         "Resident ratio is not reached")
         self.verify_cluster_stats(self.servers[:self.nodes_init], only_store_hash=False,
                                   batch_size=1)
