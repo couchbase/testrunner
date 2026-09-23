@@ -92,6 +92,7 @@ LOCAL_BUILD_SIZE_CMD = "cd {} && wc -c {}"
 CB_ENTERPRISE = "couchbase-server-enterprise"
 CB_COMMUNITY = "couchbase-server-community"
 CB_ENTERPRISE_ANALYTICS = "enterprise-analytics"
+CB_OPERATIONAL_INSIGHTS = "operational-insights"
 CB_EDITIONS = [CB_COMMUNITY, CB_ENTERPRISE]
 CB_DOWNLOAD_SERVER = "172.23.126.166"
 
@@ -129,6 +130,7 @@ CMDS = {
             "rm -rf /tmp/entbackup*;" +
             "systemctl -q stop couchbase-server;" +
             "systemctl -q stop " + CB_ENTERPRISE_ANALYTICS + ";" +
+            "systemctl -q stop " + CB_OPERATIONAL_INSIGHTS + ";" +
             UNMOUNT_NFS_CMD +
 
             # ### Block for fixing ntp service using chrony
@@ -153,16 +155,18 @@ CMDS = {
             # ### End of block for fixing ntp service issues
 
             "apt-get purge -y 'couchbase*' > /dev/null; sleep 10;"
-            "dpkg --purge $(dpkg -l | grep -e couchbase -e " + CB_ENTERPRISE_ANALYTICS + " | awk '{print $2}'"
+            "dpkg --purge $(dpkg -l | grep -e couchbase -e " + CB_ENTERPRISE_ANALYTICS + " -e " + CB_OPERATIONAL_INSIGHTS + " | awk '{print $2}'"
             " | xargs echo); sleep 10; "
             "rm /var/lib/dpkg/info/couchbase-*; sleep 10;"
             "rm /var/lib/dpkg/info/" + CB_ENTERPRISE_ANALYTICS + "*; sleep 10;"
+            "rm /var/lib/dpkg/info/" + CB_OPERATIONAL_INSIGHTS + "*; sleep 10;"
             "kill -9 `ps -ef |egrep couchbase|cut -f3 -d' '`;" +
             "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] +
             " > /dev/null && echo 1 || echo 0; "
-            "dpkg -P couchbase-server; dpkg -P " + CB_ENTERPRISE_ANALYTICS + "; "
+            "dpkg -P couchbase-server; dpkg -P " + CB_ENTERPRISE_ANALYTICS + "; dpkg -P " + CB_OPERATIONAL_INSIGHTS + "; "
             "rm -rf /var/lib/dpkg/info/couchbase-*;"
             "rm -rf /var/lib/dpkg/info/" + CB_ENTERPRISE_ANALYTICS + "*;"
+            "rm -rf /var/lib/dpkg/info/" + CB_OPERATIONAL_INSIGHTS + "*;"
             "du -ch /data | grep total; rm -rf /data/*;"
             "apt install -y wget curl; "
             "dpkg --configure -a; apt-get update; "
@@ -233,6 +237,7 @@ CMDS = {
             UNMOUNT_NFS_CMD +
             "yes | yum remove 'couchbase*' > /dev/null; " +
             "yes | yum remove '" + CB_ENTERPRISE_ANALYTICS + "*' > /dev/null; " +
+            "yes | yum remove '" + CB_OPERATIONAL_INSIGHTS + "*' > /dev/null; " +
             "rm -rf /tmp/tmp* ; " +
             "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + "; " +
             "rm -rf " + DEFAULT_NONROOT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0; " +
