@@ -25,6 +25,15 @@ from testconstants import CB_RELEASE_BUILDS, COLUMNAR_VERSION_NAME
 logging.config.fileConfig("scripts.logging.conf")
 log = logging.getLogger()
 
+# pgrep/pkill -f match the full cmdline, which includes the remote `bash -c "<cmd>"`
+# running them. Bracketing the first char keeps the pattern from matching itself.
+APT_DAILY_PROC_PATTERN = "'[u]nattended-upgrade|[a]pt.systemd.daily'"
+# fuser (psmisc) is not installed on every image; fall back to exact process names.
+# pgrep -x matches the comm, which the kernel truncates to 15 chars.
+DPKG_BUSY_CHECK = ("fuser /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock >/dev/null 2>&1 "
+                   "|| pgrep -x 'dpkg|apt|apt-get|unattended-upgr|apt.systemd.dai' "
+                   ">/dev/null 2>&1")
+
 NodeHelpers = []
 # Default params
 params = {
@@ -249,29 +258,33 @@ class NodeHelper:
             # is the upgrader it invokes. Wait for either to drain on its own first.
             wait_cmd = (
                 "for i in $(seq 1 {0}); do "
-                "  pgrep -f 'unattended-upgrade|apt.systemd.daily' >/dev/null 2>&1 || exit 0; "
+                "  pgrep -f {1} >/dev/null 2>&1 || exit 0; "
                 "  sleep 5; "
                 "done; exit 1"
-            ).format(iters)
+            ).format(iters, APT_DAILY_PROC_PATTERN)
             root_shell.execute_command(wait_cmd, debug=self.params["debug_logs"])
 
             recover_cmd = (
                 "flag=clean; "
-                "if pgrep -f 'unattended-upgrade|apt.systemd.daily' >/dev/null 2>&1; then "
-                "  pkill -9 -f 'unattended-upgrade|apt.systemd.daily' 2>/dev/null; "
+                "if pgrep -f {0} >/dev/null 2>&1; then "
+                "  pkill -9 -f {0} 2>/dev/null; "
                 "  sleep 2; flag=killed; "
                 "fi; "
-                "if fuser /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock >/dev/null 2>&1 "
-                "   || pgrep -x dpkg >/dev/null 2>&1; then "
-                "  echo dpkg-busy; exit 1; "
+                "if {1}; then "
+                "  echo $flag; echo dpkg-busy; exit 1; "
                 "fi; "
                 "rm -f /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock "
                 "      /var/cache/apt/archives/lock; "
                 "DEBIAN_FRONTEND=noninteractive dpkg --configure -a 2>/dev/null; "
                 "echo $flag"
-            )
+            ).format(APT_DAILY_PROC_PATTERN, DPKG_BUSY_CHECK)
             o, _ = root_shell.execute_command(recover_cmd, debug=self.params["debug_logs"])
-            if any("killed" in line for line in (o or [])):
+            killed = any("killed" in line for line in (o or []))
+            if any("dpkg-busy" in line for line in (o or [])):
+                log.warning("dpkg still busy on {0}{1}; skipped lock cleanup and dpkg --configure -a"
+                            .format(self.ip, " after force-killing apt-daily/unattended-upgrade"
+                                    if killed else ""))
+            elif killed:
                 log.warning("Force-killed apt-daily/unattended-upgrade on {0} and recovered dpkg state".format(self.ip))
             else:
                 log.info("apt-daily/unattended-upgrade neutralized cleanly on {0}".format(self.ip))
@@ -358,16 +371,14 @@ class NodeHelper:
             return
         iterations = max(1, timeout // 5)
         cmd = (
-            "if ! command -v fuser >/dev/null 2>&1; then echo apt-busy; exit 1; fi; "
             "for i in $(seq 1 {0}); do "
-            "  if ! fuser /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock "
-            "       >/dev/null 2>&1 "
-            "     && ! pgrep -f unattended-upgr >/dev/null 2>&1; then "
+            "  if ! {{ {1}; }} "
+            "     && ! pgrep -f {2} >/dev/null 2>&1; then "
             "    echo apt-idle; exit 0; "
             "  fi; "
             "  sleep 5; "
             "done; echo apt-busy"
-        ).format(iterations)
+        ).format(iterations, DPKG_BUSY_CHECK, APT_DAILY_PROC_PATTERN)
         log.info("Waiting up to {0}s for apt/dpkg to be idle on {1}".format(timeout, self.ip))
         try:
             o, _ = self.shell.execute_command(cmd, debug=self.params["debug_logs"])
