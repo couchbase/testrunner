@@ -129,6 +129,7 @@ CMDS = {
             "rm -rf /tmp/cbbackupmgr-staging;" +
             "rm -rf /tmp/entbackup*;" +
             "systemctl -q stop couchbase-server;" +
+            "systemctl -q stop operational-insights;" +
             UNMOUNT_NFS_CMD +
             "systemctl restart systemd-timesyncd; "
             "apt-get purge -y 'couchbase*' > /dev/null; sleep 10;"
@@ -136,6 +137,7 @@ CMDS = {
             " | xargs echo); sleep 10; "
             "rm /var/lib/dpkg/info/couchbase-*; sleep 10;"
             "rm /var/lib/dpkg/info/enterprise-analytics; sleep 10;"
+            "dpkg --purge operational-insights; rm -f /var/lib/dpkg/info/operational-insights.*; dpkg -P operational-insights; "
             "kill -9 `ps -ef |egrep couchbase|cut -f3 -d' '`;" +
             "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] +
             " > /dev/null && echo 1 || echo 0; "
@@ -209,6 +211,7 @@ CMDS = {
         "uninstall":
             UNMOUNT_NFS_CMD +
             "yes | yum remove 'couchbase*' > /dev/null; " +
+            "yes | yum remove 'operational-insights*' > /dev/null; " +
             "rm -rf /tmp/tmp* ; " +
             "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + "; " +
             "rm -rf " + DEFAULT_NONROOT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0",
