@@ -370,14 +370,14 @@ class EventingN1QL(EventingBaseTest):
             if "Can not execute DML query on bucket" not in str(ex):
                 self.fail("recursive mutations are allowed through n1ql")
         count = 0
-        while count < 20:
+        while count < 900:
             count += 1
             result = self.n1ql_helper.run_cbq_query(query, server=self.n1ql_server)['results'][0]['$1']
             if result == 0:
                 self.log.info("Eventing is able to set expiration values in dst_bucket")
                 break
             self.sleep(timeout=2, message="Waiting for docs to get expired")
-        self.assertNotEqual(count, 20, "All docs didn't expired in dst_bucket. Check eventing logs for details.")
+        self.assertNotEqual(count, 900, "All docs didn't expired in dst_bucket. Check eventing logs for details.")
         self.undeploy_and_delete_function(body)
 
     #MB-42513

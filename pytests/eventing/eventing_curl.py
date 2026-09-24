@@ -280,7 +280,7 @@ class EventingCurl(EventingBaseTest):
 
         def test_curl_with_different_timeouts_for_individual_requests(self):
             self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default")
-            body = self.create_save_function_body(self.function_name, self.handler_code)
+            body = self.create_save_function_body(self.function_name, self.handler_code, worker_count=4, cpp_worker_thread_count=4)
             self.deploy_function(body)
             self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * self.num_docs,
                                               timeout=3600)

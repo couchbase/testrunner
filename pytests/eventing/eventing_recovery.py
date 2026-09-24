@@ -636,7 +636,12 @@ class EventingRecovery(EventingBaseTest):
             self.resume_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
         if not self.cancel_timer:
-            if self.is_sbm:
+            if self.is_expired:
+                if self.non_default_collection:
+                    self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", 0)
+                else:
+                    self.verify_doc_count_collections("dst_bucket._default._default", 0)
+            elif self.is_sbm:
                 if self.non_default_collection:
                     self.verify_doc_count_collections("src_bucket.src_bucket.src_bucket",
                                                       self.docs_per_day * self.num_docs * 2)

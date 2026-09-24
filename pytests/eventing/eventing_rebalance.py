@@ -103,7 +103,7 @@ class EventingRebalance(EventingBaseTest):
             self.fts_index_name = "travel_sample_test"
             self.fts_doc_count = 31500
             self.fts_callable = FTSCallable(nodes=self.servers, es_validate=False)
-            self.fts_memory_quota = 3000
+            self.fts_memory_quota = 2000
             log.info("Setting FTS memory quota to %s MB" % self.fts_memory_quota)
             self.rest.set_service_memoryQuota(service='ftsMemoryQuota', memoryQuota=self.fts_memory_quota)
         # analytics setup
@@ -869,10 +869,12 @@ class EventingRebalance(EventingBaseTest):
         eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
         remote = RemoteMachineShellConnection(kv_node[1])
         remote.stop_server()
+        rebalance_master = next(node for node in kv_node if node.ip != kv_node[1].ip)
         self.sleep(40, "Wait for autofailover")
         try:
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
-                                                     [], [eventing_node, kv_node[1]])
+                                                     [], [eventing_node, kv_node[1]],
+                                                     master=rebalance_master)
             reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             rebalance.result()
