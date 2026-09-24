@@ -281,13 +281,18 @@ class NodeHelper:
                 "fi; "
                 "rm -f /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock "
                 "      /var/cache/apt/archives/lock; "
-                "DEBIAN_FRONTEND=noninteractive dpkg --configure -a 2>/dev/null; "
+                "DEBIAN_FRONTEND=noninteractive dpkg --configure -a >/dev/null 2>&1 "
+                "  || echo configure-failed; "
                 "echo $flag"
             ).format(APT_DAILY_PROC_PATTERN, DPKG_BUSY_CHECK)
             o, _ = root_shell.execute_command(recover_cmd, debug=self.params["debug_logs"])
             killed = any("killed" in line for line in (o or []))
             if any("dpkg-busy" in line for line in (o or [])):
                 log.warning("dpkg still busy on {0}{1}; skipped lock cleanup and dpkg --configure -a"
+                            .format(self.ip, " after force-killing apt-daily/unattended-upgrade"
+                                    if killed else ""))
+            elif any("configure-failed" in line for line in (o or [])):
+                log.warning("dpkg --configure -a failed on {0}{1}; dpkg state may need manual recovery"
                             .format(self.ip, " after force-killing apt-daily/unattended-upgrade"
                                     if killed else ""))
             elif killed:
