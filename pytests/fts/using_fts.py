@@ -39,7 +39,7 @@ class USINGFTS(FTSBaseTest):
         if self.using_fts_and_gsi:
             query = "select * from default:default.test.collection1 USE INDEX (USING GSI,USING FTS) where dept = 'Sales'"
         elif self.specific_index:
-            query = "select * from default:default.test.collection1 USE INDEX (custom_index USING FTS) where dept = 'Sales'"
+            query = f"select * from default:default.test.collection1 USE INDEX (`{index.full_name}` USING FTS) where dept = 'Sales'"
         else:
             query = "select * from default:default.test.collection1 USE INDEX (USING FTS) where dept = 'Sales'"
         explain_results = self.n1ql_helper.run_cbq_query(query="explain " + query, server=self.master)
@@ -54,7 +54,7 @@ class USINGFTS(FTSBaseTest):
             if self.using_fts_and_gsi:
                 query = "select * from default:default.test.collection2 USE INDEX (USING GSI,USING FTS) where dept = 'Sales'"
             elif self.specific_index:
-                query = "select * from default:default.test.collection2 USE INDEX (custom_index USING FTS) where dept = 'Sales'"
+                query = f"select * from default:default.test.collection2 USE INDEX (`{index.full_name}` USING FTS) where dept = 'Sales'"
             else:
                 query = "select * from default:default.test.collection2 USE INDEX (USING FTS) where dept = 'Sales'"
             explain_results = self.n1ql_helper.run_cbq_query(
@@ -88,7 +88,7 @@ class USINGFTS(FTSBaseTest):
         if self.using_fts_and_gsi:
             query = "select * from default:default.test.collection1 USE INDEX (USING GSI,USING FTS) where dept = 'Sales'"
         elif self.specific_index:
-            query = "select * from default:default.test.collection1 USE INDEX (custom_index USING FTS) where dept = 'Sales'"
+            query = f"select * from default:default.test.collection1 USE INDEX (`{index.full_name}` USING FTS) where dept = 'Sales'"
         else:
             query = "select * from default:default.test.collection1 USE INDEX (USING FTS) where dept = 'Sales'"
         explain_results = self.n1ql_helper.run_cbq_query(query="explain " + query, server=self.master)
@@ -103,7 +103,7 @@ class USINGFTS(FTSBaseTest):
             if self.using_fts_and_gsi:
                 query = "select * from default:default.test.collection2 USE INDEX (USING GSI,USING FTS) where dept = 'Sales'"
             elif self.specific_index:
-                query = "select * from default:default.test.collection2 USE INDEX (custom_index USING FTS) where dept = 'Sales'"
+                query = f"select * from default:default.test.collection2 USE INDEX (`{index.full_name}` USING FTS) where dept = 'Sales'"
             else:
                 query = "select * from default:default.test.collection2 USE INDEX (USING FTS) where dept = 'Sales'"
             explain_results = self.n1ql_helper.run_cbq_query(
@@ -136,7 +136,7 @@ class USINGFTS(FTSBaseTest):
         if self.using_fts_and_gsi:
             query = "select * from collection1 USE INDEX (USING GSI,USING FTS) where dept = 'Sales'"
         elif self.specific_index:
-            query = "select * from collection1 USE INDEX (custom_index USING FTS) where dept = 'Sales'"
+            query = f"select * from collection1 USE INDEX (`{index.full_name}` USING FTS) where dept = 'Sales'"
         else:
             query = "select * from collection1 USE INDEX (USING FTS) where dept = 'Sales'"
         explain_results = self.n1ql_helper.run_cbq_query(query="explain " + query, server=self.master, query_context="default:default.test")
@@ -151,7 +151,7 @@ class USINGFTS(FTSBaseTest):
             if self.using_fts_and_gsi:
                 query = "select * from collection2 USE INDEX (USING GSI,USING FTS) where dept = 'Sales'"
             elif self.specific_index:
-                query = "select * from collection2 USE INDEX (custom_index USING FTS) where dept = 'Sales'"
+                query = f"select * from collection2 USE INDEX (`{index.full_name}` USING FTS) where dept = 'Sales'"
             else:
                 query = "select * from collection2 USE INDEX (USING FTS) where dept = 'Sales'"
             explain_results = self.n1ql_helper.run_cbq_query(
