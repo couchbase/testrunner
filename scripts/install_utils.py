@@ -156,6 +156,10 @@ class NodeHelper:
         return os
 
     def uninstall_cb(self):
+        # The deb uninstall runs apt/dpkg (apt update, apt purge, dpkg --purge),
+        # so neutralize apt-daily and wait for the lock before it, not just before install.
+        self.disable_unattended_upgrades()
+        self.wait_for_apt_lock_free(timeout=300)
         need_nonroot_relogin = False
         if self.shell.nonroot:
             self.node.ssh_username = "root"
@@ -229,13 +233,15 @@ class NodeHelper:
             return
         log.info("Disabling unattended-upgrades on {0}".format(self.ip))
 
+        # Restore whatever non-root user was configured, not a hardcoded "nonroot".
+        orig_ssh_username = self.node.ssh_username
         if self.nonroot:
             try:
                 self.node.ssh_username = "root"
                 root_shell = RemoteMachineShellConnection(self.node, exit_on_failure=False)
             except Exception as e:
                 log.warning("disable_unattended_upgrades: cannot connect as root on {0}: {1}".format(self.ip, e))
-                self.node.ssh_username = "nonroot"
+                self.node.ssh_username = orig_ssh_username
                 return
         else:
             root_shell = self.shell
@@ -293,7 +299,7 @@ class NodeHelper:
         finally:
             if self.nonroot:
                 root_shell.disconnect()
-                self.node.ssh_username = "nonroot"
+                self.node.ssh_username = orig_ssh_username
 
     def pre_install_cb(self):
         self.disable_unattended_upgrades()
