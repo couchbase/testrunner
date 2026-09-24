@@ -64,8 +64,11 @@ class EventingEncryptionAtRest(EventingBaseTest):
         # clientAuth CRL Configuration
         self.clientauth_crl = self.input.param('clientauth_crl', False)
         if self.clientauth_crl:
-            eventing_ssl_port = self.input.param('eventing_ssl_port', 18096)
             self.clientauth_crl_mode = self.input.param('clientauth_crl_mode', 'Require')
+        # nodeToNode CRL: one KV node revoked during the log-encryption change
+        self.n2n_crl_revoke = self.input.param('n2n_crl_revoke', False)
+        if self.clientauth_crl or self.n2n_crl_revoke:
+            eventing_ssl_port = self.input.param('eventing_ssl_port', 18096)
             self.crl = EventingCRLCallable(self.master, self.servers, log=self.log,
                                            eventing_ssl_port=eventing_ssl_port)
 
@@ -80,21 +83,19 @@ class EventingEncryptionAtRest(EventingBaseTest):
                 self.rest.delete_secret(secret_id)
             except Exception as e:
                 self.log.warning("Failed to delete secret {}: {}".format(secret_id, e))
-        if getattr(self, 'clientauth_crl', False):
+        if getattr(self, 'crl', None):
             try:
                 self.crl.cleanup()
             except Exception as e:
-                self.log.warning("clientAuth CRL cleanup failed: %s" % str(e))
+                self.log.warning("CRL cleanup failed: %s" % str(e))
         super(EventingEncryptionAtRest, self).tearDown()
 
     # ---- clientAuth CRL helpers ----
 
     def _setup_clientauth_crl_on_node(self, eventing_node):
         """
-        Deploy a CA-signed node cert + enable clientCertAuth + revoke client 'a' on
-        `eventing_node`, the fixed target all clientAuth CRL probes in this test will
-        keep hitting regardless of whatever log-encryption state change happens to
-        it. Call once, before that state change starts.
+        CA-signed node cert on `eventing_node`, clientCertAuth on, client 'a' revoked.
+        Call once, before the log-encryption change.
         """
         self.crl.trust_ca_on_cluster(self.crl.ca_cert, server=eventing_node)
         self.crl.deploy_node_cert(eventing_node)
@@ -113,10 +114,7 @@ class EventingEncryptionAtRest(EventingBaseTest):
 
     def _assert_clientauth_crl_state_persisted(self, eventing_node):
         """
-        Compares the CRL file's diagnostics entry (checksum) on `eventing_node`
-        before vs. after the log-encryption state change -- catches a silent
-        reload/reset of the CRL config that _assert_clientauth_crl_gating's
-        behavior-only probe could miss.
+        clientAuth CRL checksum on `eventing_node` unchanged across the log-encryption change.
         """
         current_status = self.crl.wait_for_crl_poll_interval(self.crl.crl_filename)
         baseline_entry = self._diagnostics_entry_for_node(self._crl_baseline_status, eventing_node)
@@ -132,9 +130,7 @@ class EventingEncryptionAtRest(EventingBaseTest):
 
     def _assert_clientauth_crl_gating(self, eventing_node):
         """
-        Revoked client ('a') must be TLS-rejected; the control client ('b') must
-        still be accepted -- proves clientAuth CRL enforcement survived whatever
-        log-encryption state change happened on this fixed eventing node.
+        Revoked client 'a' rejected, valid client 'b' accepted on `eventing_node`.
         """
         revoked, valid = self._crl_clients['a'], self._crl_clients['b']
         self.assertFalse(
@@ -146,6 +142,48 @@ class EventingEncryptionAtRest(EventingBaseTest):
         self.log.info("clientAuth CRL gating confirmed on {0}: revoked cert rejected, valid cert accepted".format(
             eventing_node.ip))
 
+    # ---- nodeToNode CRL (one KV node revoked) helpers ----
+
+    def _n2n_revoke_kv_node(self, body):
+        """
+        n2n encryption on, one non-eventing, non-master KV node revoked under Require,
+        eventing-producer restarted. Call after the function is at its full count.
+        """
+        self.crl.enable_n2n_encryption(level=self.input.param('n2n_encryption_level', 'all'))
+        eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
+        eventing_ips = {n.ip for n in eventing_nodes}
+        for eventing_node in eventing_nodes:
+            self.crl.trust_ca_on_cluster(self.crl.ca_cert, server=eventing_node)
+        candidates = [n for n in self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+                      if n.ip not in eventing_ips]
+        self.assertGreaterEqual(len(candidates), 2,
+                                "n2n_crl_revoke needs 2 non-eventing KV nodes, got {0}".format(
+                                    [n.ip for n in candidates]))
+        target = next((n for n in candidates if n.ip != self.master.ip), candidates[0])
+        self.crl.revoke_node_certs([target])
+        self.crl.set_nodetonode_crl_mode("Require")
+        self.crl.wait_for_crl_poll_interval(self.crl.n2n_crl_filename)
+        self.crl.restart_eventing_producer_and_wait(self, body['appname'], tolerate_failure=True)
+        self.log.info("n2n CRL: KV node {0} revoked under Require".format(target.ip))
+
+    def _load_while_kv_node_revoked(self):
+        """Load num_docs*2 -- dst must end up partial: num_docs < dst < num_docs*2."""
+        self.load_data_to_collection(self.num_docs * 2, "src_bucket._default._default")
+        dst_count = self.crl.wait_for_collection_count_stable(self, "dst_bucket._default._default")
+        self.assertGreater(dst_count, self.num_docs,
+                           "Expected dst count > {0} with one KV node revoked, got {1} "
+                           "(neither KV node's vbuckets were reachable)".format(self.num_docs, dst_count))
+        self.assertLess(dst_count, self.num_docs * 2,
+                        "Expected dst count < {0} with one KV node revoked, got {1} "
+                        "(looks like the revoked node's vbuckets were still reachable)".format(
+                            self.num_docs * 2, dst_count))
+
+    def _n2n_unrevoke_and_verify(self, body):
+        """Un-revoke, restart eventing-producer -- dst must reach exactly num_docs*2."""
+        self.crl.unrevoke_n2n()
+        self.crl.restart_eventing_producer_and_wait(self, body['appname'])
+        self.verify_doc_count_collections("dst_bucket._default._default", self.num_docs * 2)
+        self.log.info("n2n CRL: KV node un-revoked, dst caught up to the full count")
 
     # -------------------------- Helper Functions --------------------------
 
@@ -159,7 +197,12 @@ class EventingEncryptionAtRest(EventingBaseTest):
         self.verify_doc_count_collections("dst_bucket._default._default", self.num_docs)
         return body
 
-    def _trigger_more_mutations(self):
+    def _trigger_more_mutations(self, partial_ok=False):
+        # With a KV node revoked only part of a load gets processed -- check that
+        # partial signature instead of a full on_update_success increase.
+        if partial_ok:
+            self._load_while_kv_node_revoked()
+            return
         # Capture baseline before loading so we can detect actual processing,
         # not just rely on the destination count (which stays constant for updates).
         before = self.get_stats_value(self.function_name, "execution_stats.on_update_success")
@@ -692,6 +735,9 @@ class EventingEncryptionAtRest(EventingBaseTest):
         if getattr(self, 'clientauth_crl', False):
             self._setup_clientauth_crl_on_node(eventing_node)
             self._assert_clientauth_crl_gating(eventing_node)
+        # nodeToNode CRL: revoke one KV node for the rest of the encryption change
+        if self.n2n_crl_revoke:
+            self._n2n_revoke_kv_node(body)
         self.sleep(15, "Wait for app-log writes to settle before snapshot")
 
         files_before = self._list_log_files(eventing_node, log_dir)
@@ -705,7 +751,7 @@ class EventingEncryptionAtRest(EventingBaseTest):
 
         key_id = self._create_log_encryption_secret()
         self._set_log_encryption_method("encryptionKey", key_id=key_id)
-        self._trigger_more_mutations()
+        self._trigger_more_mutations(partial_ok=self.n2n_crl_revoke)
 
         files_after = self._wait_for_rotation(
             eventing_node, log_dir, baseline_count=len(files_before),
@@ -738,6 +784,9 @@ class EventingEncryptionAtRest(EventingBaseTest):
                 self._file_is_encrypted(eventing_node, path),
                 "Pre-state file {} became encrypted after state change".format(path))
             self._assert_file_is_readable_plaintext(eventing_node, path)
+        # nodeToNode CRL: un-revoke -> previously-blocked vbuckets catch up exactly
+        if self.n2n_crl_revoke:
+            self._n2n_unrevoke_and_verify(body)
         self.undeploy_and_delete_function(body)
 
     def test_state_change_enabled_to_disabled(self):
@@ -1012,6 +1061,9 @@ class EventingEncryptionAtRest(EventingBaseTest):
         if getattr(self, 'clientauth_crl', False):
             self._setup_clientauth_crl_on_node(eventing_node)
             self._assert_clientauth_crl_gating(eventing_node)
+        # nodeToNode CRL: revoke one KV node for the rest of the encryption change
+        if self.n2n_crl_revoke:
+            self._n2n_revoke_kv_node(body)
         self.sleep(15, "Wait for initial app-log writes to settle")
 
         files_before = self._list_log_files(eventing_node, log_dir)
@@ -1028,7 +1080,7 @@ class EventingEncryptionAtRest(EventingBaseTest):
             self.dek_rotation_interval,
             "Waiting {}s for DEK rotation".format(self.dek_rotation_interval))
 
-        self._trigger_more_mutations()
+        self._trigger_more_mutations(partial_ok=self.n2n_crl_revoke)
         files_after = self._wait_for_rotation(
             eventing_node, log_dir, baseline_count=len(files_before),
             timeout=self.rotation_wait_timeout)
@@ -1055,6 +1107,9 @@ class EventingEncryptionAtRest(EventingBaseTest):
         applogs = self.get_app_logs(
             self.function_name, size=self.logsize, aggregate=self.aggregate)
         self._assert_app_log_non_empty(applogs)
+        # nodeToNode CRL: un-revoke -> previously-blocked vbuckets catch up exactly
+        if self.n2n_crl_revoke:
+            self._n2n_unrevoke_and_verify(body)
         self.undeploy_and_delete_function(body)
 
     def test_log_encryption_drop_deks_reencrypt_and_decrypt(self):

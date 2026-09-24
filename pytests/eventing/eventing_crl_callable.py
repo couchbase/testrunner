@@ -10,10 +10,6 @@ Owns:
   - cert-based REST calls
   - CRL-diagnostics polling
 
-Does not own: topology churn (rebalance/failover) or forcing eventing-producer
-to reconnect -- kill_producer()/wait_for_handler_state() stay on
-EventingBaseTest; that timing is the caller's job.
-
 Quick start:
 
     crl = EventingCRLCallable(self.master, self.servers, log=self.log)
@@ -36,11 +32,13 @@ Quick start:
 import datetime
 import json
 import os
+import ssl
 import tempfile
 import time
 
 import requests
-from cryptography.x509.oid import ExtendedKeyUsageOID
+from cryptography import x509
+from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 
 from lib.membase.api.rest_client import RestConnection
 from lib.remote.remote_util import RemoteMachineShellConnection
@@ -51,6 +49,10 @@ from pytests.security.x509main import x509main
 
 
 class EventingCRLCallable:
+    # CNs of the test CAs this helper and EventingCRL/CRLBase generate -- a node cert
+    # issued by one of these is a leftover from an earlier CRL test run
+    TEST_CA_CNS = ("EventingCRLTestCA", "TestCA1")
+
     def __init__(self, master, servers, log=None, ca_cn="EventingCRLTestCA",
                  crl_filename="eventing_crl_test.pem",
                  n2n_crl_filename="eventing_n2n_crl_test.pem",
@@ -67,12 +69,16 @@ class EventingCRLCallable:
         self._rbac_users = []
         self._temp_files = []
         self._n2n_enabled = False
+        # nodes given a test-CA cert/trust -- reset in cleanup() so a later test's
+        # fresh CA doesn't find a cert it can't verify (addNode: "Unknown CA")
+        self._cert_touched_nodes = {}
         self._clientauth_crl_number = 0
         self._n2n_crl_number = 0
 
         if not self.rest.is_enterprise_edition():
             raise RuntimeError("CRL support requires an Enterprise Edition cluster.")
 
+        self.reset_stale_test_certs(set(self.TEST_CA_CNS) | {ca_cn})
         self.ca_cert, self.ca_key = self.crl_utils.generate_ca(ca_cn)
         self.trust_ca_on_cluster(self.ca_cert, server=master)
         self._log("EventingCRLCallable ready, CA={0}, trusted on master {1}".format(ca_cn, master.ip))
@@ -89,6 +95,7 @@ class EventingCRLCallable:
         the cluster to load it (POST /node/controller/loadTrustedCAs).
         """
         server = server or self.master
+        self._cert_touched_nodes[server.ip] = server
         pem_bytes = self.crl_utils.cert_to_pem(ca_cert)
         install_path = x509main(host=server).install_path
         ca_dir = "{0}{1}/CA".format(install_path, x509main.CHAINFILEPATH)
@@ -116,6 +123,7 @@ class EventingCRLCallable:
             self.ca_cert, self.ca_key, cn=server.ip, dns_names=[server.ip],
             extended_key_usage=[ExtendedKeyUsageOID.SERVER_AUTH],
         )
+        self._cert_touched_nodes[server.ip] = server
         install_path = x509main(host=server).install_path
         node_dir = "{0}{1}".format(install_path, x509main.CHAINFILEPATH)
         shell = RemoteMachineShellConnection(server)
@@ -132,11 +140,51 @@ class EventingCRLCallable:
         if not status:
             raise RuntimeError("reloadCertificate failed on {0}: {1}".format(server.ip, content))
         self._log("Node cert deployed + activated on {0} (serial={1})".format(server.ip, serial))
+        self.verify_active_node_cert(server, serial)
         return serial
+
+    def get_active_node_cert_serial(self, server):
+        """Serial of `server`'s active cert, or None if it can't be read."""
+        status, content = self.rest.get_node_certificate_by_name(server.ip)
+        if not status:
+            # not a cluster member (e.g. a node about to be rebalanced in) -- the
+            # cluster can't report its cert, so read the one it presents instead
+            try:
+                pem = ssl.get_server_certificate((server.ip, 18091), timeout=10)
+                return x509.load_pem_x509_certificate(pem.encode()).serial_number
+            except Exception as exc:
+                self._log("Could not fetch active cert for node {0}: {1} / {2}".format(server.ip, content, exc))
+                return None
+        try:
+            cert_info = json.loads(content) if isinstance(content, (str, bytes)) else content
+            pem = cert_info.get('pem') or cert_info.get('cert')
+            if not pem:
+                self._log("No pem/cert field in cert response for node {0}".format(server.ip))
+                return None
+            pem_bytes = pem.encode() if isinstance(pem, str) else pem
+            return x509.load_pem_x509_certificate(pem_bytes).serial_number
+        except Exception as e:
+            self._log("Could not parse active cert for node {0}: {1}".format(server.ip, e))
+            return None
+
+    def verify_active_node_cert(self, server, expected_serial):
+        """Log MATCH/MISMATCH of `server`'s active cert vs `expected_serial`; True on a match."""
+        actual_serial = self.get_active_node_cert_serial(server)
+        match = actual_serial == expected_serial
+        self._log("Active cert serial on node {0}: {1} (expected {2}) -> {3}".format(
+            server.ip, actual_serial, expected_serial, "MATCH" if match else "MISMATCH"))
+        return match
 
     # ---- Node-to-node (n2n) CRL ----
 
     def enable_n2n_encryption(self, level="all"):
+        current_level = self.rest.get_pools_default().get("clusterEncryptionLevel")
+        if current_level in ("all", "strict"):
+            # already on (e.g. an upgrade suite set strict) -- don't downgrade it, and
+            # leave _n2n_enabled False so cleanup() doesn't turn off what it didn't turn on
+            self._log("n2n encryption already on (clusterEncryptionLevel={0}), leaving it as is".format(
+                current_level))
+            return
         self._log("Enabling n2n encryption cluster-wide (level={0})".format(level))
         ntonencryptionBase().setup_nton_cluster(self.servers, clusterEncryptionLevel=level)
         actual_level = self.rest.get_pools_default().get("clusterEncryptionLevel")
@@ -175,6 +223,18 @@ class EventingCRLCallable:
         self._log("n2n CRL uploaded (crl_number={0}), revoked node(s)={1} (serials={2})".format(
             self._n2n_crl_number, [n.ip for n in nodes_to_revoke], serials))
         return serials
+
+    def unrevoke_n2n(self):
+        """Upload a newer nodeToNode CRL revoking nothing, and wait for it to load."""
+        self._n2n_crl_number += 1
+        crl_pem = self.crl_utils.build_crl(
+            self.ca_cert, self.ca_key, revoked_serials=[], crl_number=self._n2n_crl_number)
+        status, content, _ = self.rest.upload_crl_file(self.n2n_crl_filename, crl_pem)
+        if not status:
+            raise RuntimeError("n2n un-revoke CRL upload failed: {0}".format(content))
+        self._track_uploaded_file(self.n2n_crl_filename)
+        self._log("n2n CRL re-uploaded with no revoked serials (crl_number={0})".format(self._n2n_crl_number))
+        self.wait_for_crl_poll_interval(self.n2n_crl_filename)
 
     def set_nodetonode_crl_mode(self, mode):
         status, content, _ = self.rest.post_crl_settings({"policyPerScope": {"nodeToNode": mode}})
@@ -327,22 +387,82 @@ class EventingCRLCallable:
         except requests.exceptions.ConnectionError as e:
             raise RuntimeError("Expected a TLS-layer rejection but got a connection error instead: {0}".format(e))
 
-    def probe_eventing_ssl(self, eventing_node, cert_path, key_path, ca_path, eventing_ssl_port=None):
-        """mTLS handshake against Eventing's HTTPS port. True = accepted, False = TLS-rejected.
-        A ConnectionError is a real failure (not a rejection) and is raised, not swallowed."""
+    def probe_eventing_ssl(self, eventing_node, cert_path, key_path, ca_path, eventing_ssl_port=None,
+                           connect_retries=12, connect_retry_sleep=5):
+        """mTLS probe of Eventing's HTTPS port: True = accepted, False = rejected (TLS error or 401).
+        Connection refused is retried (listener restarts after a cert reload), then raised."""
         port = eventing_ssl_port or self.eventing_ssl_port
+        for attempt in range(1, connect_retries + 1):
+            try:
+                resp = self.crl_utils.perform_mtls_handshake(
+                    eventing_node.ip, port, cert_path, key_path, ca_path, path="/api/v1/functions")
+                if resp.status_code == 401:
+                    self._log("mTLS probe against {0}:{1} -> REJECTED via HTTP 401 (fallback for a TLS alert): {2}".format(
+                        eventing_node.ip, port, resp.text))
+                    return False
+                self._log("mTLS probe against {0}:{1} -> ACCEPTED".format(eventing_node.ip, port))
+                return True
+            except requests.exceptions.SSLError as e:
+                # SSLError subclasses ConnectionError -- must be caught first
+                self._log("mTLS probe against {0}:{1} -> REJECTED: {2}".format(eventing_node.ip, port, e))
+                return False
+            except requests.exceptions.ConnectionError as e:
+                if attempt == connect_retries:
+                    raise RuntimeError(
+                        "mTLS probe against {0}:{1} failed with a connection error, not a TLS rejection "
+                        "(after {2} attempts): {3}".format(eventing_node.ip, port, connect_retries, e))
+                self._log("mTLS probe against {0}:{1}: port not accepting connections yet "
+                          "(attempt {2}/{3}), retrying in {4}s: {5}".format(
+                              eventing_node.ip, port, attempt, connect_retries, connect_retry_sleep, e))
+                time.sleep(connect_retry_sleep)
+
+    # ---- Eventing-side helpers (take the calling EventingBaseTest as `test`) ----
+
+    def wait_for_handler_state_with_retry(self, test, name, status, retries=5, retry_sleep=10):
+        """test.wait_for_handler_state(), retried on transient errors (e.g. INTERNAL_SERVER_ERROR)."""
+        last_exc = None
+        for attempt in range(retries):
+            try:
+                test.wait_for_handler_state(name, status)
+                return
+            except Exception as e:
+                last_exc = e
+                self._log("wait_for_handler_state({0}, {1}) failed (attempt {2}/{3}): {4}".format(
+                    name, status, attempt + 1, retries, e))
+                time.sleep(retry_sleep)
+        raise last_exc
+
+    def restart_eventing_producer_and_wait(self, test, appname, tolerate_failure=False, respawn_wait=120):
+        """Kill eventing-producer on all eventing nodes and wait for `appname` to be deployed.
+        tolerate_failure=True logs instead of raising."""
+        for eventing_node in test.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True):
+            self._log("Killing eventing-producer on {0} to force reconnection".format(eventing_node.ip))
+            test.kill_producer(eventing_node)
+        test.sleep(respawn_wait, "Waiting for eventing-producer to respawn")
         try:
-            self.crl_utils.perform_mtls_handshake(
-                eventing_node.ip, port, cert_path, key_path, ca_path, path="/api/v1/functions")
-            self._log("mTLS probe against {0}:{1} -> ACCEPTED".format(eventing_node.ip, port))
-            return True
-        except requests.exceptions.SSLError as e:
-            self._log("mTLS probe against {0}:{1} -> REJECTED: {2}".format(eventing_node.ip, port, e))
-            return False
-        except requests.exceptions.ConnectionError as e:
-            raise RuntimeError(
-                "mTLS probe against {0}:{1} failed with a connection error, not a TLS rejection: {2}".format(
-                    eventing_node.ip, port, e))
+            self.wait_for_handler_state_with_retry(test, appname, "deployed")
+        except Exception as e:
+            if not tolerate_failure:
+                raise
+            self._log("{0} did not reach 'deployed' after eventing-producer restart "
+                      "(to be checked if this is expected behaviour): {1}".format(appname, e))
+
+    def get_collection_doc_count(self, test, namespace):
+        bucket, scope, collection = namespace.split(".")
+        return test.stat.get_collection_item_count_cumulative(bucket, scope, collection, test.get_kv_nodes())
+
+    def wait_for_collection_count_stable(self, test, namespace, interval=15, max_checks=8):
+        """Poll `namespace`'s item count until it stops changing; returns the count."""
+        previous = self.get_collection_doc_count(test, namespace)
+        for _ in range(max_checks):
+            test.sleep(interval, "Waiting for {0} count to stabilize (currently {1})".format(namespace, previous))
+            current = self.get_collection_doc_count(test, namespace)
+            if current == previous:
+                return current
+            previous = current
+        self._log("{0} count did not stabilize within {1}s, using last value {2}".format(
+            namespace, interval * max_checks, previous))
+        return previous
 
     # ---- Misc ----
 
@@ -394,8 +514,8 @@ class EventingCRLCallable:
             self._created_files.append(filename)
 
     def cleanup(self):
-        """Call from the caller's tearDown -- deletes uploaded CRL files, resets policy,
-        disables clientCertAuth, deletes RBAC users, temp files, and n2n encryption."""
+        """Call from tearDown: removes CRL files, policy, clientCertAuth, RBAC users, temp
+        files, n2n encryption, and resets touched nodes' certs."""
         for filename in self._created_files:
             try:
                 self.rest.delete_crl_file(filename)
@@ -422,4 +542,53 @@ class EventingCRLCallable:
             except OSError as exc:
                 self._log("Temp file cleanup error for {0}: {1}".format(path, exc))
         self._temp_files = []
-        self.disable_n2n_encryption()
+        try:
+            self.disable_n2n_encryption()
+        finally:
+            self.reset_node_certs()
+
+    def reset_node_certs(self):
+        """Reset every node this helper touched back to a cluster-generated cert."""
+        for server in list(self._cert_touched_nodes.values()):
+            self._reset_node_cert(server)
+        self._cert_touched_nodes = {}
+
+    def reset_stale_test_certs(self, test_ca_cns):
+        """Reset any server still presenting a cert from a previous run's test CA."""
+        for server in self.servers:
+            issuer_cn = self._presented_cert_issuer_cn(server)
+            if issuer_cn in test_ca_cns:
+                self._log("Stale test cert on {0} (issuer CN={1}) -- resetting before the test".format(
+                    server.ip, issuer_cn))
+                self._reset_node_cert(server)
+
+    def _presented_cert_issuer_cn(self, server, port=18091):
+        """Issuer CN of the cert `server` presents on `port`, or None (works on spare nodes)."""
+        try:
+            pem = ssl.get_server_certificate((server.ip, port), timeout=10)
+            cert = x509.load_pem_x509_certificate(pem.encode())
+            attrs = cert.issuer.get_attributes_for_oid(NameOID.COMMON_NAME)
+            return attrs[0].value if attrs else None
+        except Exception as exc:
+            self._log("Could not read presented cert on {0}:{1}: {2}".format(server.ip, port, exc))
+            return None
+
+    def _reset_node_cert(self, server):
+        """Remove the test cert files from `server`'s inbox and regenerate its cert."""
+        try:
+            inbox = "{0}{1}".format(x509main(host=server).install_path, x509main.CHAINFILEPATH)
+            shell = RemoteMachineShellConnection(server)
+            try:
+                shell.execute_command("rm -f {0}/chain.pem {0}/pkey.key {0}/CA/crl_test_ca.pem".format(inbox))
+            finally:
+                shell.disconnect()
+        except Exception as exc:
+            self._log("Inbox cleanup error on {0}: {1}".format(server.ip, exc))
+        try:
+            status, content = RestConnection(server).refresh_certificate()
+            if status:
+                self._log("Node cert regenerated on {0}".format(server.ip))
+            else:
+                self._log("regenerateCertificate refused on {0}: {1}".format(server.ip, content))
+        except Exception as exc:
+            self._log("regenerateCertificate failed on {0}: {1}".format(server.ip, exc))

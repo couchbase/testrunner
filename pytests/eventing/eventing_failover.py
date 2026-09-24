@@ -293,6 +293,11 @@ class EventingFailover(EventingBaseTest):
         if getattr(self, 'clientauth_crl', False):
             self._setup_clientauth_crl_on_node(eventing_server[0])
             self._assert_clientauth_crl_gating(eventing_server[0])
+            # the node about to be failed over + recovered also gets a CA-signed cert, so it
+            # can be probed after recovery and its cert checked to have survived it
+            self.crl.trust_ca_on_cluster(self.crl.ca_cert, server=eventing_server[1])
+            self._recovered_node_serial = self.crl.deploy_node_cert(eventing_server[1])
+            self._assert_clientauth_crl_gating(eventing_server[1])
         body = self.create_save_function_body(self.function_name, self.handler_code, jwt_token=jwt_token)
         self.deploy_function(body, jwt_token=jwt_token)
         if getattr(self, 'is_encryption', False):
@@ -322,6 +327,14 @@ class EventingFailover(EventingBaseTest):
         if getattr(self, 'clientauth_crl', False):
             self._assert_clientauth_crl_state_persisted(eventing_server[0])
             self._assert_clientauth_crl_gating(eventing_server[0])
+            # recovered node: CRL back with an unchanged checksum, its cert kept across the
+            # full recovery, and enforcement intact on it
+            self.sleep(30, "Waiting for eventing on recovered node {0} to start listening".format(
+                eventing_server[1].ip))
+            self._assert_clientauth_crl_state_persisted(eventing_server[1])
+            self.assertTrue(self.crl.verify_active_node_cert(eventing_server[1], self._recovered_node_serial),
+                            "Active cert on {0} changed across failover + full recovery".format(eventing_server[1].ip))
+            self._assert_clientauth_crl_gating(eventing_server[1])
         # Run FTS validation if FTS handler is being used
         if getattr(self, 'is_fts', False):
             self.run_fts_validation()

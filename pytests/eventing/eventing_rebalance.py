@@ -127,8 +127,14 @@ class EventingRebalance(EventingBaseTest):
         # clientAuth CRL Configuration (Optional)
         self.clientauth_crl = self.input.param('clientauth_crl', False)
         if self.clientauth_crl:
-            eventing_ssl_port = self.input.param('eventing_ssl_port', 18096)
             self.clientauth_crl_mode = self.input.param('clientauth_crl_mode', 'Require')
+        # nodeToNode CRL Configuration (Optional)
+        self.n2n_crl = self.input.param('n2n_crl', False)
+        if self.n2n_crl:
+            self.n2n_crl_mode = self.input.param('n2n_crl_mode', 'Require')
+            self.n2n_encryption_level = self.input.param('n2n_encryption_level', 'all')
+        if self.clientauth_crl or self.n2n_crl:
+            eventing_ssl_port = self.input.param('eventing_ssl_port', 18096)
             self.crl = EventingCRLCallable(self.master, self.servers, log=self.log,
                                            eventing_ssl_port=eventing_ssl_port)
 
@@ -162,75 +168,21 @@ class EventingRebalance(EventingBaseTest):
                     cbas_rest.execute_statement_on_cbas("DISCONNECT LINK Local", None)
             except Exception as e:
                 log.exception("Analytics teardown cleanup failed: %s", str(e))
-        if getattr(self, 'clientauth_crl', False):
+        if getattr(self, 'crl', None):
             try:
                 self.crl.cleanup()
             except Exception as e:
-                log.warning("clientAuth CRL cleanup failed: %s" % str(e))
+                log.warning("CRL cleanup failed: %s" % str(e))
         super(EventingRebalance, self).tearDown()
         log.info("==============  EventingRebalance tearDown has completed ==============")
-
-    def _setup_clientauth_crl_on_node(self, eventing_node):
-        """
-        Deploy a CA-signed node cert + enable clientCertAuth + revoke client 'a' on
-        `eventing_node`, the fixed target all clientAuth CRL probes in this test will
-        keep hitting regardless of whatever topology churn happens elsewhere in the
-        cluster. Call once, before the rebalance starts.
-        """
-        self.crl.trust_ca_on_cluster(self.crl.ca_cert, server=eventing_node)
-        self.crl.deploy_node_cert(eventing_node)
-        self._crl_clients, self._crl_ca_path = self.crl.setup_clientauth_crl(mode=self.clientauth_crl_mode)
-        # baseline diagnostics snapshot (filename, checksum, lastReload) -- compared
-        # against a post-rebalance snapshot later to confirm the CRL config itself
-        # wasn't silently reloaded/reset by the rebalance, not just that it still
-        # happens to behave correctly
-        self._crl_baseline_status = self.crl.wait_for_crl_poll_interval(self.crl.crl_filename)
-
-    def _diagnostics_entry_for_node(self, diagnostics, node):
-        for key, entry in diagnostics.items():
-            if key.split(":")[0] == node.ip:
-                return entry
-        return None
-
-    def _assert_clientauth_crl_state_persisted(self, eventing_node):
-        """
-        Compares the CRL file's diagnostics entry (checksum) on `eventing_node`
-        before vs. after the rebalance -- catches a silent reload/reset of the CRL
-        config that _assert_clientauth_crl_gating's behavior-only probe could miss.
-        """
-        current_status = self.crl.wait_for_crl_poll_interval(self.crl.crl_filename)
-        baseline_entry = self._diagnostics_entry_for_node(self._crl_baseline_status, eventing_node)
-        current_entry = self._diagnostics_entry_for_node(current_status, eventing_node)
-        self.assertIsNotNone(baseline_entry, "No pre-rebalance CRL baseline captured for {0}".format(eventing_node.ip))
-        self.assertIsNotNone(current_entry, "CRL file {0} no longer reported on {1} after rebalance".format(
-            self.crl.crl_filename, eventing_node.ip))
-        self.assertEqual(baseline_entry.get("checksum"), current_entry.get("checksum"),
-                         "CRL checksum for {0} changed across rebalance on {1}: {2} -> {3}".format(
-                             self.crl.crl_filename, eventing_node.ip,
-                             baseline_entry.get("checksum"), current_entry.get("checksum")))
-        log.info("clientAuth CRL state confirmed persisted across rebalance on {0} (checksum unchanged)".format(
-            eventing_node.ip))
-
-    def _assert_clientauth_crl_gating(self, eventing_node):
-        """
-        Revoked client ('a') must be TLS-rejected; the control client ('b') must
-        still be accepted -- proves clientAuth CRL enforcement survived whatever
-        topology change (node added/removed, KV swap) happened around this fixed
-        eventing node.
-        """
-        revoked, valid = self._crl_clients['a'], self._crl_clients['b']
-        self.assertFalse(
-            self.crl.probe_eventing_ssl(eventing_node, revoked['cert_path'], revoked['key_path'], self._crl_ca_path),
-            "Revoked clientAuth cert was NOT rejected on {0}".format(eventing_node.ip))
-        self.assertTrue(
-            self.crl.probe_eventing_ssl(eventing_node, valid['cert_path'], valid['key_path'], self._crl_ca_path),
-            "Valid clientAuth cert was unexpectedly rejected on {0}".format(eventing_node.ip))
-        log.info("clientAuth CRL gating confirmed on {0}: revoked cert rejected, valid cert accepted".format(
-            eventing_node.ip))
 
     def test_eventing_rebalance_in_when_existing_eventing_node_is_processing_mutations(self):
         # Setup JWT configuration if enabled
         jwt_token = self.setup_jwt_config() if self.jwt_auth else None
+
+        # n2n CRL setup if enabled -- before deploy, so eventing connects under the CRL
+        if getattr(self, 'n2n_crl', False):
+            self._setup_n2n_crl()
 
         # clientAuth CRL setup if enabled -- the pre-existing eventing node is
         # untouched by a rebalance-IN, so it stays a valid fixed target throughout
@@ -274,6 +226,8 @@ class EventingRebalance(EventingBaseTest):
             services_in = [self.input.param('services_in', 'kv')]
         else:
             services_in = ["eventing"]
+        if getattr(self, 'n2n_crl', False):
+            self._prepare_incoming_node_for_n2n(self.servers[self.nodes_init])
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [],
                                                  services=services_in, cluster_config=self.cluster_config)
         reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
@@ -282,9 +236,13 @@ class EventingRebalance(EventingBaseTest):
         if getattr(self, 'is_encryption', False):
             eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
             self._verify_log_encrypted_on_node(eventing_node)
+        if getattr(self, 'n2n_crl', False):
+            self._assert_n2n_crl_state_persisted()
         if getattr(self, 'clientauth_crl', False):
             self._assert_clientauth_crl_state_persisted(self._crl_node)
             self._assert_clientauth_crl_gating(self._crl_node)
+            if services_in == ["eventing"]:
+                self._assert_clientauth_crl_on_new_node(self.servers[self.nodes_init])
         if self.pause_resume:
             self.resume_function(body, jwt_token=jwt_token)
         # Run FTS validation if FTS handler is being used
@@ -336,6 +294,10 @@ class EventingRebalance(EventingBaseTest):
         # Setup JWT configuration if enabled
         jwt_token = self.setup_jwt_config() if self.jwt_auth else None
 
+        # n2n CRL setup if enabled -- before deploy, so eventing connects under the CRL
+        if getattr(self, 'n2n_crl', False):
+            self._setup_n2n_crl()
+
         # FTS setup if using FTS handler
         if getattr(self, 'is_fts', False):
             self.load_sample_buckets(self.master, "travel-sample")
@@ -386,6 +348,8 @@ class EventingRebalance(EventingBaseTest):
         remaining_ev_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
         if getattr(self, 'is_encryption', False):
             self._verify_log_encrypted_on_node(remaining_ev_node)
+        if getattr(self, 'n2n_crl', False):
+            self._assert_n2n_crl_state_persisted(nodes_out=[nodes_out_ev])
         if getattr(self, 'clientauth_crl', False):
             self._assert_clientauth_crl_state_persisted(self._crl_node)
             self._assert_clientauth_crl_gating(self._crl_node)
@@ -2530,3 +2494,133 @@ class EventingRebalance(EventingBaseTest):
             log.warning("Log rotation did not occur within {}s after DEK rotation".format(timeout))
         else:
             log.info("DEK rotation confirmed: new log file appeared in {}".format(log_dir))
+
+    ###########################################################################
+    # CRL (clientAuth + nodeToNode) helpers
+    ###########################################################################
+
+    def _setup_clientauth_crl_on_node(self, eventing_node):
+        """
+        CA-signed node cert on `eventing_node`, clientCertAuth on, client 'a' revoked.
+        Call once, before the rebalance.
+        """
+        self.crl.trust_ca_on_cluster(self.crl.ca_cert, server=eventing_node)
+        self.crl.deploy_node_cert(eventing_node)
+        self._crl_clients, self._crl_ca_path = self.crl.setup_clientauth_crl(mode=self.clientauth_crl_mode)
+        # baseline diagnostics snapshot (filename, checksum, lastReload) -- compared
+        # against a post-rebalance snapshot later to confirm the CRL config itself
+        # wasn't silently reloaded/reset by the rebalance, not just that it still
+        # happens to behave correctly
+        self._crl_baseline_status = self.crl.wait_for_crl_poll_interval(self.crl.crl_filename)
+
+    def _diagnostics_entry_for_node(self, diagnostics, node):
+        for key, entry in diagnostics.items():
+            if key.split(":")[0] == node.ip:
+                return entry
+        return None
+
+    def _assert_clientauth_crl_state_persisted(self, eventing_node):
+        """
+        clientAuth CRL checksum on `eventing_node` unchanged across the rebalance.
+        """
+        current_status = self.crl.wait_for_crl_poll_interval(self.crl.crl_filename)
+        baseline_entry = self._diagnostics_entry_for_node(self._crl_baseline_status, eventing_node)
+        current_entry = self._diagnostics_entry_for_node(current_status, eventing_node)
+        self.assertIsNotNone(baseline_entry, "No pre-rebalance CRL baseline captured for {0}".format(eventing_node.ip))
+        self.assertIsNotNone(current_entry, "CRL file {0} no longer reported on {1} after rebalance".format(
+            self.crl.crl_filename, eventing_node.ip))
+        self.assertEqual(baseline_entry.get("checksum"), current_entry.get("checksum"),
+                         "CRL checksum for {0} changed across rebalance on {1}: {2} -> {3}".format(
+                             self.crl.crl_filename, eventing_node.ip,
+                             baseline_entry.get("checksum"), current_entry.get("checksum")))
+        log.info("clientAuth CRL state confirmed persisted across rebalance on {0} (checksum unchanged)".format(
+            eventing_node.ip))
+
+    def _assert_clientauth_crl_gating(self, eventing_node):
+        """
+        Revoked client 'a' rejected, valid client 'b' accepted on `eventing_node`.
+        """
+        revoked, valid = self._crl_clients['a'], self._crl_clients['b']
+        self.assertFalse(
+            self.crl.probe_eventing_ssl(eventing_node, revoked['cert_path'], revoked['key_path'], self._crl_ca_path),
+            "Revoked clientAuth cert was NOT rejected on {0}".format(eventing_node.ip))
+        self.assertTrue(
+            self.crl.probe_eventing_ssl(eventing_node, valid['cert_path'], valid['key_path'], self._crl_ca_path),
+            "Valid clientAuth cert was unexpectedly rejected on {0}".format(eventing_node.ip))
+        log.info("clientAuth CRL gating confirmed on {0}: revoked cert rejected, valid cert accepted".format(
+            eventing_node.ip))
+
+    def _assert_clientauth_crl_on_new_node(self, new_node):
+        """
+        Rebalanced-in node inherited the clientAuth CRL (same checksum) and enforces it.
+        CA-signed cert is deployed only after the inheritance check, so it can be probed.
+        """
+        current_status = self.crl.wait_for_crl_poll_interval(self.crl.crl_filename)
+        new_entry = self._diagnostics_entry_for_node(current_status, new_node)
+        baseline_entry = self._diagnostics_entry_for_node(self._crl_baseline_status, self._crl_node)
+        self.assertIsNotNone(new_entry, "CRL file {0} not reported on newly rebalanced-in node {1}".format(
+            self.crl.crl_filename, new_node.ip))
+        self.assertEqual(baseline_entry.get("checksum"), new_entry.get("checksum"),
+                         "CRL checksum on new node {0} differs from the cluster's: {1} vs {2}".format(
+                             new_node.ip, new_entry.get("checksum"), baseline_entry.get("checksum")))
+        log.info("New node {0} inherited clientAuth CRL {1} automatically (checksum matches)".format(
+            new_node.ip, self.crl.crl_filename))
+        self.crl.trust_ca_on_cluster(self.crl.ca_cert, server=new_node)
+        self.crl.deploy_node_cert(new_node)
+        self._assert_clientauth_crl_gating(new_node)
+
+    def _setup_n2n_crl(self):
+        """
+        n2n encryption + a CA-signed (NOT revoked) node cert on every KV node, and a
+        valid nodeToNode CRL under n2n_crl_mode
+        every Eventing->KV connection is CRL-checked
+        """
+        self.crl.enable_n2n_encryption(level=self.n2n_encryption_level)
+        for node in self.servers[:self.nodes_init]:
+            self.crl.trust_ca_on_cluster(self.crl.ca_cert, server=node)
+        kv_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+        for kv_node in kv_nodes:
+            self.crl.deploy_node_cert(kv_node)
+        self.crl.revoke_node_certs([])
+        self.crl.set_nodetonode_crl_mode(self.n2n_crl_mode)
+        self._n2n_crl_baseline_status = self.crl.wait_for_crl_poll_interval(self.crl.n2n_crl_filename)
+        # the level actually in effect -- enable_n2n_encryption() leaves an already
+        # all/strict cluster as it is, so this can differ from n2n_encryption_level
+        self._n2n_level_baseline = RestConnection(self.master).get_pools_default().get("clusterEncryptionLevel")
+        if self._n2n_level_baseline != self.n2n_encryption_level:
+            log.warning("Cluster was already on clusterEncryptionLevel={0} (requested {1}) -- "
+                        "running the n2n CRL checks at {0}".format(self._n2n_level_baseline,
+                                                                   self.n2n_encryption_level))
+        log.info("n2n CRL set up: level={0}, mode={1}, CA-signed certs on KV nodes {2}".format(
+            self._n2n_level_baseline, self.n2n_crl_mode, [n.ip for n in kv_nodes]))
+
+    def _prepare_incoming_node_for_n2n(self, node):
+        """
+        CA-signed cert on the incoming node before rebalance-in - a cluster on
+        uploaded certs refuses a self-generated one (addNode: "Unknown CA").
+        """
+        self.crl.trust_ca_on_cluster(self.crl.ca_cert, server=node)
+        self.crl.deploy_node_cert(node)
+
+    def _assert_n2n_crl_state_persisted(self, nodes_out=None):
+        """
+        After the rebalance: n2n encryption level unchanged and
+        checksum is unchanged on every node that stayed in the cluster.
+        """
+        out_ips = {n.ip for n in (nodes_out or [])}
+        actual_level = RestConnection(self.master).get_pools_default().get("clusterEncryptionLevel")
+        self.assertEqual(actual_level, self._n2n_level_baseline,
+                         "clusterEncryptionLevel changed across rebalance: {0} -> {1}".format(
+                             self._n2n_level_baseline, actual_level))
+        current_status = self.crl.wait_for_crl_poll_interval(self.crl.n2n_crl_filename)
+        for node_key, baseline_entry in self._n2n_crl_baseline_status.items():
+            node_ip = node_key.split(":")[0]
+            if node_ip in out_ips:
+                continue
+            current_entry = next((e for k, e in current_status.items() if k.split(":")[0] == node_ip), None)
+            self.assertIsNotNone(current_entry, "n2n CRL file {0} no longer reported on {1} after rebalance".format(
+                self.crl.n2n_crl_filename, node_ip))
+            self.assertEqual(baseline_entry.get("checksum"), current_entry.get("checksum"),
+                             "n2n CRL checksum changed across rebalance on {0}: {1} -> {2}".format(
+                                 node_ip, baseline_entry.get("checksum"), current_entry.get("checksum")))
+        log.info("n2n CRL state confirmed persisted across rebalance on nodes {0}".format(list(current_status)))

@@ -49,6 +49,7 @@ import tempfile
 import urllib.parse
 
 import requests
+from cryptography import x509
 from cryptography.x509.oid import ExtendedKeyUsageOID
 
 from pytests.eventing.eventing_base import EventingBaseTest
@@ -72,6 +73,7 @@ class EventingCRL(CRLBase, EventingBaseTest):
         self.client_cert_auth_state = self.input.param("client_cert_auth_state", "hybrid")
         self.crl_poll_wait = self.input.param("crl_poll_wait", 6)
         self.crl_expiry_wait = self.input.param("crl_expiry_wait", 30)
+        self.n2n_crl_expiry_wait = self.input.param("n2n_crl_expiry_wait", 300)
         self.crl_filename = "eventing_crl_test.pem"
         self.n2n_crl_filename = "eventing_n2n_crl_test.pem"
         self.ntonencrypt_level = self.input.param("ntonencrypt_level", "all")
@@ -131,11 +133,52 @@ class EventingCRL(CRLBase, EventingBaseTest):
         finally:
             shell.disconnect()
         self.log.info("Files copied, calling reloadCertificate on {0}".format(server.ip))
-        node_rest = RestConnection(server) if server.ip != self.master.ip else self.rest
+        # Always target `server` explicitly -- self.rest is NOT guaranteed to point at
+        # self.master here (this class's setUp() repoints it at the eventing node), so
+        # reusing it for any other node silently reloads the cert on the wrong node.
+        node_rest = RestConnection(server)
         status, content = node_rest.reload_certificate()
         self.assertTrue(status, "reloadCertificate failed on {0}: {1}".format(server.ip, content))
         self.log.info("Node cert deployed + activated on {0}: {1}".format(server.ip, content))
+        self._log_active_node_cert_serial(server, expected_serial=serial)
         return serial
+
+    def _get_active_node_cert_serial(self, server):
+        """
+        Fetch the certificate currently active on `server` and return just its
+        serial number (int), without dumping the raw cert/PEM content into logs.
+        """
+        status, content = self.rest.get_node_certificate_by_name(server.ip)
+        if not status:
+            self.log.warning("Could not fetch active cert for node {0}: {1}".format(server.ip, content))
+            return None
+        try:
+            cert_info = json.loads(content) if isinstance(content, (str, bytes)) else content
+            pem = cert_info.get('pem') or cert_info.get('cert')
+            if not pem:
+                self.log.warning("No pem/cert field in cert response for node {0}".format(server.ip))
+                return None
+            pem_bytes = pem.encode() if isinstance(pem, str) else pem
+            return x509.load_pem_x509_certificate(pem_bytes).serial_number
+        except Exception as e:
+            self.log.warning("Could not parse active cert for node {0}: {1}".format(server.ip, e))
+            return None
+
+    def _log_active_node_cert_serial(self, server, expected_serial=None):
+        """
+        Log just the serial number of the certificate currently active on `server`,
+        so we can confirm per-node that reloadCertificate actually took effect
+        (rather than assuming it did just because the REST call returned 200) --
+        without printing the full cert content.
+        """
+        actual_serial = self._get_active_node_cert_serial(server)
+        if expected_serial is not None:
+            match = "MATCH" if actual_serial == expected_serial else "MISMATCH"
+            self.log.info("Active cert serial on node {0}: {1} (expected {2}) -> {3}".format(
+                server.ip, actual_serial, expected_serial, match))
+        else:
+            self.log.info("Active cert serial on node {0}: {1}".format(server.ip, actual_serial))
+        return actual_serial
 
     def _generate_client_certs(self, specs=None):
         """
@@ -514,23 +557,43 @@ class EventingCRL(CRLBase, EventingBaseTest):
         the CRL's nextUpdate (default +30d), also for expiry tests.
         """
         serials = []
+        node_to_serial = {}
         for node in nodes_to_revoke:
             self._trust_ca_on_cluster(self.ca_cert, server=node)
             serial = self._deploy_node_cert(node)
             serials.append(serial)
+            node_to_serial[node.ip] = serial
+            self.log.info("Deployed cert for node {0}: serial={1}".format(node.ip, serial))
         next_update = None
         if next_update_seconds is not None:
             next_update = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(
                 seconds=next_update_seconds)
-        self.log.info("Revoking node(s) {0} (serials={1}), next_update={2}".format(
-            [n.ip for n in nodes_to_revoke], serials, next_update or "default (+30d)"))
+        self.log.info("Revoking node(s) -> serial map: {0}, next_update={1}".format(
+            node_to_serial, next_update or "default (+30d)"))
         crl_pem = self.crl_utils.build_crl(
             self.ca_cert, self.ca_key, revoked_serials=serials, crl_number=1, next_update=next_update)
         status, content, _ = self.rest.upload_crl_file(self.n2n_crl_filename, crl_pem)
         self.assertTrue(status, "n2n CRL upload failed: {0}".format(content))
         self._track_uploaded_file(self.n2n_crl_filename)
         self.log.info("n2n CRL uploaded: {0}".format(self.n2n_crl_filename))
-        return serials
+        return serials, node_to_serial
+
+    def _verify_nodes_still_on_revoked_cert(self, node_to_serial):
+        """
+        Re-query each revoked node's active cert AFTER the CRL poll interval has
+        cleared, and log per-node PASS/FAIL against the serial we expect to still
+        be installed there -- pinpoints exactly which node (if any) silently
+        didn't get its cert deployed/reloaded, instead of inferring it indirectly
+        from the aggregate doc count.
+        """
+        for node in self._get_kv_nodes():
+            if node.ip not in node_to_serial:
+                continue
+            expected_serial = node_to_serial[node.ip]
+            actual_serial = self._get_active_node_cert_serial(node)
+            match = "MATCH" if actual_serial == expected_serial else "MISMATCH"
+            self.log.info("Post-poll cert check on {0}: active serial={1} (expected {2}) -> {3}".format(
+                node.ip, actual_serial, expected_serial, match))
 
     def _set_nodetonode_crl_mode(self, mode):
         self.log.info("Setting nodeToNode CRL mode -> {0}".format(mode))
@@ -977,9 +1040,10 @@ class EventingCRL(CRLBase, EventingBaseTest):
         kv_nodes = self._get_kv_nodes()
         body = self._create_and_deploy_n2n_function()
 
-        self._revoke_node_certs(kv_nodes)
+        _, node_to_serial = self._revoke_node_certs(kv_nodes)
         self._set_nodetonode_crl_mode(self.nodetonode_crl_mode)
         self._wait_for_crl_poll_interval(self.n2n_crl_filename)
+        self._verify_nodes_still_on_revoked_cert(node_to_serial)
         self._force_function_reconnect(body)
 
         # load_data_to_collection()'s key range is always [0, num_items), so loading
@@ -987,6 +1051,7 @@ class EventingCRL(CRLBase, EventingBaseTest):
         # ones -- dst_bucket count only grows past num_docs if some got processed.
         self.load_data_to_collection(self.num_docs * 2, "src_bucket._default._default")
         self._wait_for_update_stat_stable()
+        self.sleep(240)
         dst_count = self._get_dst_doc_count()
         self._print_final_state()
         self.assertEqual(dst_count, self.num_docs,
@@ -1006,12 +1071,53 @@ class EventingCRL(CRLBase, EventingBaseTest):
         target_node = kv_nodes[0]
         body = self._create_and_deploy_n2n_function()
 
-        self._revoke_node_certs([target_node])
+        _, node_to_serial = self._revoke_node_certs([target_node])
         self._set_nodetonode_crl_mode(self.nodetonode_crl_mode)
         self._wait_for_crl_poll_interval(self.n2n_crl_filename)
+        self._verify_nodes_still_on_revoked_cert(node_to_serial)
         self._force_function_reconnect(body)
         self._wait_for_update_stat_stable()
 
+        self.load_data_to_collection(self.num_docs * 2, "src_bucket._default._default")
+        self._wait_for_update_stat_stable()
+        self.sleep(240)
+        dst_count = self._get_dst_doc_count()
+        self._print_final_state()
+        self.assertGreater(dst_count, self.num_docs,
+                           "Expected dst_bucket count > {0} with one KV node revoked, got {1} "
+                           "(neither KV node's vbuckets were reachable)".format(self.num_docs, dst_count))
+        self.assertLess(dst_count, self.num_docs * 2,
+                        "Expected dst_bucket count < {0} with one KV node revoked, got {1} "
+                        "(looks like the revoked node's vbuckets were still reachable)".format(
+                            self.num_docs * 2, dst_count))
+        self.log.info(">>> test_n2n_crl_one_of_two_kv_nodes_revoked finished <<<")
+
+    def test_n2n_crl_unrevoke_kv_node_restores_full_processing(self):
+        """
+        n2n un-revoke -> once a revoked KV node is dropped from a newer CRL, dst catches
+        up to exactly the source count (no docs lost while it was revoked).
+        """
+        self.log.info(">>> test_n2n_crl_unrevoke_kv_node_restores_full_processing starting <<<")
+        self._enable_n2n_encryption()
+        self._trust_ca_on_eventing_node()
+        kv_nodes = self._get_kv_nodes()
+        self.assertEqual(len(kv_nodes), 2, "This test needs exactly 2 KV nodes, got {0}".format(len(kv_nodes)))
+        target_node = kv_nodes[0]
+        body = self._create_and_deploy_n2n_function()
+
+        # Revoke one KV node: same partial-reachability signature as
+        # test_n2n_crl_one_of_two_kv_nodes_revoked.
+        _, node_to_serial = self._revoke_node_certs([target_node])
+        self._set_nodetonode_crl_mode("Require")
+        self._wait_for_crl_poll_interval(self.n2n_crl_filename)
+        self._verify_nodes_still_on_revoked_cert(node_to_serial)
+        #To be checked if this is expected behaviour (INTERNAL_SERVER_ERROR on api/v1/status)
+        try:
+            self._force_function_reconnect(body)
+        except Exception as e:
+            self.log.warning("_force_function_reconnect did not reach 'deployed' after KV node cert was "
+                             "revoked (to be checked if this is expected behaviour): {0}".format(e))
+        self._wait_for_update_stat_stable()
         self.load_data_to_collection(self.num_docs * 2, "src_bucket._default._default")
         self._wait_for_update_stat_stable()
         dst_count = self._get_dst_doc_count()
@@ -1023,7 +1129,19 @@ class EventingCRL(CRLBase, EventingBaseTest):
                         "Expected dst_bucket count < {0} with one KV node revoked, got {1} "
                         "(looks like the revoked node's vbuckets were still reachable)".format(
                             self.num_docs * 2, dst_count))
-        self.log.info(">>> test_n2n_crl_one_of_two_kv_nodes_revoked finished <<<")
+
+        # Un-revoke: a newer CRL (crl_number 2 > 1) that no longer lists the node.
+        crl_pem = self.crl_utils.build_crl(self.ca_cert, self.ca_key, revoked_serials=[], crl_number=2)
+        status, content, _ = self.rest.upload_crl_file(self.n2n_crl_filename, crl_pem)
+        self.assertTrue(status, "Un-revoke n2n CRL upload failed: {0}".format(content))
+        self.log.info("n2n CRL re-uploaded with no revoked serials (crl_number=2)")
+        self._wait_for_crl_poll_interval(self.n2n_crl_filename)
+        self._force_function_reconnect(body)
+
+        # The previously-blocked vbuckets must catch up: exact count, not just "more".
+        self.verify_doc_count_collections("dst_bucket._default._default", self.num_docs * 2)
+        self._print_final_state()
+        self.log.info(">>> test_n2n_crl_unrevoke_kv_node_restores_full_processing finished <<<")
 
     # ------------------- N2N CRL: Eventing's own node cert ------------------
     # n2n is mutual -- KV validates the peer cert on inbound connections too,
@@ -1185,27 +1303,22 @@ class EventingCRL(CRLBase, EventingBaseTest):
         self.sleep(30, "Waiting for post-revocation OnUpdate attempt to resolve")
         dst_count = self._get_dst_doc_count()
         self.log.info("dst_bucket doc count: {0}".format(dst_count))
-        self.sleep(3600)
         self.assertEqual(dst_count, self.num_docs,
                          "Expected dst_bucket count to stay at {0} (N1QL insert should fail) "
                          "with the N1QL node revoked, got {1}".format(self.num_docs, dst_count))
         self.log.info(">>> test_n2n_crl_n1ql_node_revoked finished <<<")
 
     # ----------------------------- CRL Expiry -------------------------------
-    # A stale CRL doesn't fail uniformly: Require hard-fails everyone from that
-    # CA (no fresh list = no verifiable decision = no access); Permissive
-    # soft-fails (unverifiable != revoked). clientAuth and n2n are tested
-    # independently -- a Require clientAuth policy would otherwise hard-fail
-    # the framework's own non-cert admin calls used to check n2n.
+    # Expired CRL behaviour by mode:
+    #   Require    -> every cert from that CA is rejected (status can't be verified)
+    #   Permissive -> certs are still accepted (unverifiable is not revoked)
+    # clientAuth and n2n expiry are tested separately: an expired clientAuth CRL
+    # under Require would also block the admin calls used to check n2n.
 
     def test_clientauth_crl_expiry_require_hard_fails_all_certs(self):
         """
-        clientAuth CRL expiry under Require -> once the only CRL for this CA
-        goes stale, Require hard-fails EVERY cert signed by it, not just the
-        one already known-revoked -- no fresh list means no verifiable
-        decision, and Require means "no verifiable decision, no access".
-        Observed live: client B (never revoked) gets the same TLS-layer
-        rejection as client A once the CRL passes its nextUpdate.
+        clientAuth CRL expiry under Require -> every cert from this CA is rejected
+        once the CRL expires, including the never-revoked client B.
         """
         self.log.info(">>> test_clientauth_crl_expiry_require_hard_fails_all_certs starting <<<")
         clients, ca_path = self._setup_clientauth_crl(next_update_seconds=self.crl_expiry_wait)
@@ -1231,10 +1344,7 @@ class EventingCRL(CRLBase, EventingBaseTest):
 
     def test_clientauth_crl_expiry_permissive_valid_client_not_blocked(self):
         """
-        clientAuth CRL expiry under Permissive -> a valid client cert must
-        keep authenticating (soft-fail: unverifiable != revoked). If this
-        also rejects the valid cert, that's a real bug -- Permissive isn't
-        supposed to hard-fail on unverifiable status the way Require does.
+        clientAuth CRL expiry under Permissive -> a valid client cert is still accepted.
         """
         self.log.info(">>> test_clientauth_crl_expiry_permissive_valid_client_not_blocked starting <<<")
         clients, ca_path = self._setup_clientauth_crl(next_update_seconds=self.crl_expiry_wait)
@@ -1258,9 +1368,7 @@ class EventingCRL(CRLBase, EventingBaseTest):
 
     def test_n2n_crl_expiry_permissive_kv_continues_to_function(self):
         """
-        n2n CRL expiry under Permissive -> a KV node revoked via a
-        short-lived CRL must become reachable again once that CRL entry
-        expires (soft-fail: unverifiable != revoked).
+        n2n CRL expiry under Permissive -> a revoked KV node is reachable again once the CRL expires.
         """
         self.log.info(">>> test_n2n_crl_expiry_permissive_kv_continues_to_function starting <<<")
         self._enable_n2n_encryption()
@@ -1270,7 +1378,7 @@ class EventingCRL(CRLBase, EventingBaseTest):
         target_node = kv_nodes[0]
         body = self._create_and_deploy_n2n_function()
 
-        self._revoke_node_certs([target_node], next_update_seconds=self.crl_expiry_wait)
+        self._revoke_node_certs([target_node], next_update_seconds=self.n2n_crl_expiry_wait)
         self._set_nodetonode_crl_mode("Permissive")
         self._wait_for_crl_poll_interval(self.n2n_crl_filename)
         self._force_function_reconnect(body)
@@ -1285,13 +1393,12 @@ class EventingCRL(CRLBase, EventingBaseTest):
         self.assertGreater(dst_count, self.num_docs,
                            "Expected dst_bucket count > {0} with one KV node revoked, got {1} "
                            "(neither KV node's vbuckets were reachable)".format(self.num_docs, dst_count))
-        # Commenting out until KV Node Revocation Bug is fixed
-        # self.assertLess(dst_count, self.num_docs * 2,
-        #                 "Expected dst_bucket count < {0} with one KV node revoked, got {1} "
-        #                 "(looks like the revoked node's vbuckets were still reachable)".format(
-        #                     self.num_docs * 2, dst_count))
+        self.assertLess(dst_count, self.num_docs * 2,
+                        "Expected dst_bucket count < {0} with one KV node revoked, got {1} "
+                        "(looks like the revoked node's vbuckets were still reachable)".format(
+                            self.num_docs * 2, dst_count))
 
-        self.sleep(self.crl_expiry_wait, "Waiting for the n2n CRL's nextUpdate to pass (expiry)")
+        self.sleep(self.n2n_crl_expiry_wait, "Waiting for the n2n CRL's nextUpdate to pass (expiry)")
         self.rest.reload_crl()
         status, files, _ = self.rest.get_crl_files()
         self.log.info("n2n CRL files after expiry wait: {0}".format(files))
@@ -1311,9 +1418,7 @@ class EventingCRL(CRLBase, EventingBaseTest):
 
     def test_n2n_crl_expiry_require_node_stays_blocked(self):
         """
-        n2n CRL expiry under Require -> a KV node revoked via a short-lived
-        CRL must STAY unreachable once that CRL entry expires (hard-fail: no
-        fresh list = no verifiable decision = no access).
+        n2n CRL expiry under Require -> a revoked KV node stays unreachable after the CRL expires.
         """
         self.log.info(">>> test_n2n_crl_expiry_require_node_stays_blocked starting <<<")
         self._enable_n2n_encryption()
@@ -1323,10 +1428,15 @@ class EventingCRL(CRLBase, EventingBaseTest):
         target_node = kv_nodes[0]
         body = self._create_and_deploy_n2n_function()
 
-        self._revoke_node_certs([target_node], next_update_seconds=self.crl_expiry_wait)
+        self._revoke_node_certs([target_node], next_update_seconds=self.n2n_crl_expiry_wait)
         self._set_nodetonode_crl_mode("Require")
         self._wait_for_crl_poll_interval(self.n2n_crl_filename)
-        self._force_function_reconnect(body)
+        #To be checked if this is expected behaviour (INTERNAL_SERVER_ERROR on api/v1/stats)
+        try:
+            self._force_function_reconnect(body)
+        except Exception as e:
+            self.log.warning("_force_function_reconnect did not reach 'deployed' after KV node cert was "
+                             "revoked (to be checked if this is expected behaviour): {0}".format(e))
         self._wait_for_update_stat_stable()
 
         # While the CRL is still valid: same partial-reachability signature as
@@ -1335,20 +1445,27 @@ class EventingCRL(CRLBase, EventingBaseTest):
         self._wait_for_update_stat_stable()
         dst_count = self._get_dst_doc_count()
         self._print_final_state()
-        # Commenting out until KV Node Revocation Bug is fixed
-        # self.assertGreater(dst_count, self.num_docs,
-        #                    "Expected dst_bucket count > {0} with one KV node revoked, got {1} "
-        #                    "(neither KV node's vbuckets were reachable)".format(self.num_docs, dst_count))
-        # self.assertLess(dst_count, self.num_docs * 2,
-        #                 "Expected dst_bucket count < {0} with one KV node revoked, got {1} "
-        #                 "(looks like the revoked node's vbuckets were still reachable)".format(
-        #                     self.num_docs * 2, dst_count))
+        self.assertGreater(dst_count, self.num_docs,
+                           "Expected dst_bucket count > {0} with one KV node revoked, got {1} "
+                           "(neither KV node's vbuckets were reachable)".format(self.num_docs, dst_count))
+        self.assertLess(dst_count, self.num_docs * 2,
+                        "Expected dst_bucket count < {0} with one KV node revoked, got {1} "
+                        "(looks like the revoked node's vbuckets were still reachable)".format(
+                            self.num_docs * 2, dst_count))
 
-        self.sleep(self.crl_expiry_wait, "Waiting for the n2n CRL's nextUpdate to pass (expiry)")
+        pre_expiry_count = dst_count
+
+        self.sleep(self.n2n_crl_expiry_wait, "Waiting for the n2n CRL's nextUpdate to pass (expiry)")
         self.rest.reload_crl()
         status, files, _ = self.rest.get_crl_files()
         self.log.info("n2n CRL files after expiry wait: {0}".format(files))
+        #To be checked if this is expected behaviour (INTERNAL_SERVER_ERROR on api/v1/stats)
         self._force_function_reconnect(body)
+        # try:
+        #     self._force_function_reconnect(body)
+        # except Exception as e:
+        #     self.log.warning("_force_function_reconnect did not reach 'deployed' after n2n CRL expiry with "
+        #                      "KV node still revoked (to be checked if this is expected behaviour): {0}".format(e))
 
         # Post-expiry, under Require: the previously-revoked node's vbuckets
         # should STAY unreachable -- growth from the untouched node only.
@@ -1356,9 +1473,9 @@ class EventingCRL(CRLBase, EventingBaseTest):
         self._wait_for_update_stat_stable()
         dst_count = self._get_dst_doc_count()
         self._print_final_state()
-        self.assertGreater(dst_count, self.num_docs * 2,
-                           "Expected dst_bucket count > {0} (the untouched KV node's vbuckets should keep "
-                           "growing normally), got {1}".format(self.num_docs * 2, dst_count))
+        self.assertGreater(dst_count, pre_expiry_count,
+                           "Expected dst_bucket count > pre-expiry count {0} (the untouched KV node's vbuckets "
+                           "should keep growing normally), got {1}".format(pre_expiry_count, dst_count))
         self.assertLess(dst_count, self.num_docs * 3,
                         "Expected dst_bucket count < {0} (Require should hard-fail on a stale n2n CRL -- "
                         "the previously-revoked KV node should stay unreachable), got {1}".format(

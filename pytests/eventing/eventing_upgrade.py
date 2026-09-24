@@ -83,6 +83,9 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
         if self.clientauth_crl:
             self.clientauth_crl_eventing_ssl_port = self.input.param('eventing_ssl_port', 18096)
             self.clientauth_crl_mode = self.input.param('clientauth_crl_mode', 'Require')
+        # nodeToNode CRL: one KV node revoked + un-revoked on the upgraded cluster
+        self.n2n_crl_revoke = self.input.param('n2n_crl_revoke', False)
+        self.n2n_crl_docs = self.input.param('n2n_crl_docs', 2000)
         log.info("==============  EventingUpgrade setup has completed ==============")
 
     def _verify_doc_count(self, namespace, expected_count, *args, **kwargs):
@@ -121,7 +124,7 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
             try:
                 self.crl.cleanup()
             except Exception as e:
-                log.warning("clientAuth CRL cleanup failed: %s" % str(e))
+                log.warning("CRL cleanup failed: %s" % str(e))
         super(EventingUpgrade, self).tearDown()
         log.info("==============  EventingUpgrade tearDown has completed ==============")
 
@@ -217,6 +220,8 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
         self._enable_tls_if_configured()
         # clientAuth CRL: revoked cert rejected, valid cert accepted, on the upgraded cluster
         self._verify_clientauth_crl_post_upgrade()
+        # nodeToNode CRL: one KV node revoked -> partial, un-revoked -> full (self-contained)
+        self._verify_n2n_crl_revoke_post_upgrade()
         self._verify_pre_upgrade_handlers_survived()
         # Re-assert memory quotas after upgrade — swapped nodes may have different auto-detected values
         self._set_memory_quotas()
@@ -263,6 +268,8 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
         self._enable_tls_if_configured()
         # clientAuth CRL: revoked cert rejected, valid cert accepted, on the upgraded cluster
         self._verify_clientauth_crl_post_upgrade()
+        # nodeToNode CRL: one KV node revoked -> partial, un-revoked -> full (self-contained)
+        self._verify_n2n_crl_revoke_post_upgrade()
         self._verify_pre_upgrade_handlers_survived()
         self._set_memory_quotas()
         # Post-upgrade features: collections, travel-sample, FTS, analytics, new handlers
@@ -927,6 +934,46 @@ class EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest):
         eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
         self._setup_clientauth_crl_on_node(eventing_node)
         self._assert_clientauth_crl_gating(eventing_node)
+
+    def _verify_n2n_crl_revoke_post_upgrade(self):
+        if not getattr(self, 'n2n_crl_revoke', False):
+            return
+        if getattr(self, 'crl', None) is None:
+            self.crl = EventingCRLCallable(self.master, self.servers, log=log,
+                                           eventing_ssl_port=self.input.param('eventing_ssl_port', 18096))
+        self.crl.enable_n2n_encryption()  # no-op if already strict (enable_n2n_encryption_and_tls)
+        eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
+        self.crl.trust_ca_on_cluster(self.crl.ca_cert, server=eventing_node)
+        target = next(n for n in self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+                      if n.ip not in (eventing_node.ip, self.master.ip))
+        # dedicated keyspaces + function -- no other handler sees these mutations
+        src_ns = self._ns(self.src_bucket_name, "n2n_crl_src", scope="_default")
+        dst_ns = self._ns(self.dst_bucket_name, "n2n_crl_dst", scope="_default")
+        collections_rest = CollectionsRest(self.master)
+        collections_rest.create_collection(self.src_bucket_name, "_default", "n2n_crl_src")
+        collections_rest.create_collection(self.dst_bucket_name, "_default", "n2n_crl_dst")
+        self.rest = RestConnection(eventing_node)
+        self.create_function_with_collection(
+            "n2n_crl", "handler_code/delete_doc_bucket_op.js", src_namespace=src_ns,
+            meta_namespace="{0}._default._default".format(self.metadata_bucket_name),
+            collection_bindings=["dst_bucket.{0}.rw".format(dst_ns)])
+        self.deploy_handler_by_name("n2n_crl")
+
+        self.crl.revoke_node_certs([target])
+        self.crl.set_nodetonode_crl_mode("Require")
+        self.crl.wait_for_crl_poll_interval(self.crl.n2n_crl_filename)
+        self.crl.restart_eventing_producer_and_wait(self, "n2n_crl", tolerate_failure=True)
+        self.load_data_to_collection(self.n2n_crl_docs, src_ns)
+        dst_count = self.crl.wait_for_collection_count_stable(self, dst_ns)
+        self.assertTrue(0 < dst_count < self.n2n_crl_docs,
+                        "Expected 0 < {0} count < {1} with KV node {2} revoked, got {3}".format(
+                            dst_ns, self.n2n_crl_docs, target.ip, dst_count))
+
+        self.crl.unrevoke_n2n()
+        self.crl.restart_eventing_producer_and_wait(self, "n2n_crl")
+        self._verify_doc_count(dst_ns, self.n2n_crl_docs)
+        self.undeploy_function_by_name("n2n_crl")
+        self.rest.delete_single_function("n2n_crl", self.function_scope)
 
     def _run_full_mutation_cycle(self, include_fts_analytics=True):
         """Load data, verify all handlers processed, delete data, verify cleanup."""
