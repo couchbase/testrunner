@@ -1513,8 +1513,9 @@ class FTSIndex:
     def get_src_bucket_doc_count(self):
         return self.__cluster.get_doc_count_in_bucket(self.source_bucket)
 
-    def get_src_collections_doc_count(self):
-        return self.__cluster.get_doc_count_in_collections(self.source_bucket, self.scope, self.collections)
+    def get_src_collections_doc_count(self, extra_collections=None):
+        return self.__cluster.get_doc_count_in_collections(self.source_bucket, self.scope, self.collections,
+                                                           extra_collections=extra_collections)
 
     def get_uuid(self):
         rest = RestConnection(self.__cluster.get_random_fts_node())
@@ -3034,11 +3035,14 @@ class CouchbaseCluster:
     def get_doc_count_in_bucket(self, bucket):
         return RestConnection(self.__master_node).get_active_key_count(bucket)
 
-    def get_doc_count_in_collections(self, bucket, scope, collections):
+    def get_doc_count_in_collections(self, bucket, scope, collections, extra_collections=None):
         stat = CollectionsStats(self.__master_node)
         count = 0
         for c in collections:
             count = count + stat.get_collection_item_count_cumulative(bucket, scope, c, self.get_kv_nodes())
+        if extra_collections:
+            for c in extra_collections:
+                count = count + stat.get_collection_item_count_cumulative(bucket, scope, c, self.get_kv_nodes())
         return count
 
     def delete_bucket(self, bucket_name):
@@ -4832,6 +4836,8 @@ class FTSBaseTest(unittest.TestCase):
         self.index_per_bucket = self._input.param("index_per_bucket", 1)
         self.dataset = self._input.param("dataset", "emp")
         self.sample_query = {"match": "Safiya Morgan", "field": "name"}
+        # Read by wait_for_indexing_complete; bulk collection creation itself is master-only
+        self.bulk_collections = self._input.param("bulk_collections", False)
         self.compare_es = self._input.param("compare_es", False)
         if self.compare_es:
             if not self.elastic_node:
