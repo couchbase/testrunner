@@ -28,11 +28,12 @@ except ImportError:
     print('WARN: fail to import docker')
 
 from couchbase_helper.cluster import Cluster
-from membase.api.rest_client import RestConnection, Bucket
+from membase.api.rest_client import RestConnection, RestHelper, Bucket
 from membase.api.exception import ServerUnavailableException
 from remote.remote_util import RemoteMachineShellConnection
 from remote.remote_util import RemoteUtilHelper
-from testconstants import STANDARD_BUCKET_PORT, LINUX_COUCHBASE_BIN_PATH
+from testconstants import (STANDARD_BUCKET_PORT, LINUX_COUCHBASE_BIN_PATH,
+                           FTS_SERVICE_QUOTA, MIN_KV_QUOTA, FTS_QUOTA)
 from membase.helper.cluster_helper import ClusterOperationHelper
 from couchbase_helper.stats_tools import StatsCommon
 from membase.helper.bucket_helper import BucketOperationHelper
@@ -614,6 +615,20 @@ class NodeHelper:
             bucket_names = [bucket_names]
         start = time.time()
         for server in warmupnodes:
+            services = (getattr(server, "services", "") or "")
+            if services and "kv" not in services.split(","):
+                NodeHelper._log.info(
+                    "%s does not run the kv service (services: %s), waiting for "
+                    "ns_server instead of bucket warmup" % (server.ip, services))
+                try:
+                    NodeHelper.wait_service_started(server)
+                    if not RestHelper(RestConnection(server)).is_ns_server_running():
+                        NodeHelper._log.error(
+                            "ERROR: ns_server did not come back up on %s" % server.ip)
+                except Exception as e:
+                    NodeHelper._log.error(
+                        "ERROR: could not confirm %s is back up: %s" % (server.ip, e))
+                continue
             for bucket in bucket_names:
                 while time.time() - start < 2100:
                     mc = None
@@ -639,10 +654,15 @@ class NodeHelper:
                     except Exception as e:
                         NodeHelper._log.info(e)
                         time.sleep(10)
-                    if mc.stats()["ep_warmup_thread"] == "running":
-                        NodeHelper._log.info(
-                            "ERROR: ep_warmup_thread's status not complete")
-                    mc.close()
+                    try:
+                        if mc and mc.stats()["ep_warmup_thread"] == "running":
+                            NodeHelper._log.info(
+                                "ERROR: ep_warmup_thread's status not complete")
+                    except Exception as e:
+                        NodeHelper._log.info(e)
+                    finally:
+                        if mc:
+                            mc.close()
 
     @staticmethod
     def wait_node_restarted(
@@ -2219,12 +2239,71 @@ class CouchbaseCluster:
 
     def __set_fts_ram_quota(self):
         is_n1ql = TestInputSingleton.input.param("is_n1ql", False)
-        fts_quota = 3000
-        index_quota = 600
-        if(is_n1ql):
-            fts_quota = 2400
+        requested_fts_quota = TestInputSingleton.input.param("fts_quota", FTS_SERVICE_QUOTA)
+        all_servers = TestInputSingleton.input.servers or self.__nodes
+        spec = TestInputSingleton.input.param("cluster", "") or ""
+        if isinstance(spec, (list, tuple)):
+            spec = ",".join(spec)
+        for letter, service in {'D': 'kv', 'F': 'fts', 'I': 'index', 'Q': 'n1ql'}.items():
+            spec = spec.replace(letter, service)
+        mixed_nodes = []
+        if spec.strip():
+            for entry in re.split('[-,:]', spec):
+                entry_services = entry.replace('+', ',').split(',')
+                if "kv" in entry_services and "fts" in entry_services:
+                    mixed_nodes.append("(from cluster spec: %s)" % entry)
+                    break
+        else:
+            for node in all_servers:
+                node_services = (getattr(node, "services", "") or "kv").split(",")
+                if "kv" in node_services and "fts" in node_services:
+                    mixed_nodes.append(node.ip)
+        fts_shares_a_kv_node = bool(mixed_nodes) or len(all_servers) == 1
+        index_quota = TestInputSingleton.input.param("index_quota", 600)
+        kv_quota = TestInputSingleton.input.param("kv_quota", 3000)
         try:
-            RestConnection(self.__master_node).modify_memory_quota(kv_quota = 3000, fts_quota = fts_quota, index_quota = index_quota)
+            rest = RestConnection(self.__master_node)
+            reserved = int(rest.get_nodes_self().mcdMemoryReserved)
+
+            fts_quota = max(FTS_SERVICE_QUOTA, requested_fts_quota)
+            if fts_shares_a_kv_node and kv_quota + index_quota + fts_quota > reserved:
+                fts_quota = requested_fts_quota
+                self.__log.warning(
+                    "fts shares a node with kv (%s) that cannot back kv %s + index "
+                    "%s + fts %s against %sMB, so fts_quota stays at %s. Separate "
+                    "the services onto different nodes to give FTS its full quota."
+                    % (mixed_nodes or [self.__master_node.ip], kv_quota,
+                       index_quota, FTS_SERVICE_QUOTA, reserved,
+                       requested_fts_quota))
+            elif fts_quota != requested_fts_quota:
+                self.__log.warning(
+                    "fts_quota=%s is too small for FTS to index with; using %s"
+                    % (requested_fts_quota, fts_quota))
+            if(is_n1ql):
+                fts_quota = 2400
+
+            master_services = (getattr(self.__master_node, "services", "") or "kv").split(",")
+            charged = kv_quota + index_quota
+            if fts_shares_a_kv_node or "fts" in master_services:
+                charged += fts_quota
+            if charged > reserved:
+                trimmed = max(MIN_KV_QUOTA, kv_quota - (charged - reserved))
+                self.__log.warning(
+                    "quotas charged to a kv+fts node total %sMB but a node can "
+                    "only back %sMB; using kv quota %s instead of %s"
+                    % (charged, reserved, trimmed, kv_quota))
+                kv_quota = trimmed
+                still_over = kv_quota + index_quota + \
+                    (fts_quota if (fts_shares_a_kv_node or "fts" in master_services) else 0)
+                if still_over > reserved:
+                    fts_quota = max(FTS_QUOTA, fts_quota - (still_over - reserved))
+                    self.__log.warning(
+                        "kv quota alone could not absorb the overshoot; reducing "
+                        "fts quota to %s so every node can back the request. "
+                        "Separate kv and fts onto different nodes."
+                        % fts_quota)
+            rest.modify_memory_quota(kv_quota=kv_quota, fts_quota=fts_quota,
+                                     index_quota=index_quota)
         except Exception as ex:
             print(f"Error setting memory quota for the cluster.\nSource : fts_base.py.\nError : {ex}\n")
 
@@ -4836,7 +4915,6 @@ class FTSBaseTest(unittest.TestCase):
         self.index_per_bucket = self._input.param("index_per_bucket", 1)
         self.dataset = self._input.param("dataset", "emp")
         self.sample_query = {"match": "Safiya Morgan", "field": "name"}
-        # Read by wait_for_indexing_complete; bulk collection creation itself is master-only
         self.bulk_collections = self._input.param("bulk_collections", False)
         self.compare_es = self._input.param("compare_es", False)
         if self.compare_es:
@@ -5326,6 +5404,7 @@ class FTSBaseTest(unittest.TestCase):
         # vector-upgrade run - waited forever and the build died on the
         # 780-minute Jenkins timeout with no results at all.
         wait_timeout = int(self._input.param("index_wait_timeout", 1200))
+        settle_polls = int(self._input.param("index_settle_polls", 10))
         for index in self._cb_cluster.get_indexes():
             if index.index_type == "fulltext-alias":
                 continue
@@ -5335,6 +5414,8 @@ class FTSBaseTest(unittest.TestCase):
             deadline = time.time() + wait_timeout
             started = time.time()
             first_count = None
+            last_counts = None
+            unchanged_polls = 0
             while True:
                 if time.time() > deadline:
                     elapsed = time.time() - started
@@ -5386,16 +5467,34 @@ class FTSBaseTest(unittest.TestCase):
                     if item_count and index_doc_count > item_count:
                         break
 
+                    if (index_doc_count, container_doc_count) == last_counts:
+                        unchanged_polls += 1
+                    else:
+                        last_counts = (index_doc_count, container_doc_count)
+                        unchanged_polls = 0
+
                     if index_doc_count > container_doc_count > 0:
                         # The index holds more than the collections we counted as
                         # its source, so indexing is not what is outstanding -
                         # waiting can only time out. Seen where an index spans one
                         # more collection than get_src_collections_doc_count sums.
+                        num_mutations = index.get_num_mutations_to_index()
+                        if unchanged_polls >= settle_polls and num_mutations == 0:
+                            self.log.info(
+                                f"FTS index '{index.name}' has {index_doc_count} docs, "
+                                f"more than the {container_doc_count} counted in its "
+                                f"source collections, unchanged for {unchanged_polls} "
+                                f"polls with nothing left to index; treating "
+                                f"indexing as complete")
+                            break
                         self.log.info(
-                            f"FTS index '{index.name}' has {index_doc_count} docs, "
-                            f"more than the {container_doc_count} counted in its "
-                            f"source collections; treating indexing as complete")
-                        break
+                            f"FTS index '{index.name}' has {index_doc_count} docs "
+                            f"against {container_doc_count} in the source "
+                            f"(num_mutations_to_index: {num_mutations}, unchanged "
+                            f"for {unchanged_polls}/{settle_polls} polls); waiting "
+                            f"for deletes/expiries and the source count to settle")
+                        time.sleep(6)
+                        continue
 
                     if container_doc_count == index_doc_count:
                         if compare_es:
@@ -6075,7 +6174,8 @@ class FTSBaseTest(unittest.TestCase):
             if index.collections:
                 container_doc_count = index.get_src_collections_doc_count()
             else:
-                container_doc_count = index.get_src_bucket_doc_count()
+                container_doc_count = self._cb_cluster.get_doc_count_in_collections(
+                    index.source_bucket, "_default", ["_default"])
 
             self.log.info("Docs in index {0}={1}, bucket docs={2}".
                           format(index.name, docs_indexed, container_doc_count))
@@ -6483,8 +6583,16 @@ class FTSBaseTest(unittest.TestCase):
                 print(stat.get_collection_stats(bkt))
             return
         load_tasks = self.async_load_data(generator=generator, data_loader_output=data_loader_output)
+        load_timeout = int(self._input.param("load_timeout", 3600))
+        deadline = time.time() + load_timeout
         for task in load_tasks:
-            task.result()
+            try:
+                task.result(timeout=max(1, deadline - time.time()))
+            except Exception as e:
+                if time.time() < deadline:
+                    raise
+                self.fail(f"Data load did not finish within {load_timeout}s "
+                          f"(load_timeout); a load task is stuck: {e!r}")
         self.log.info("Loading phase complete!")
 
     def async_load_data(self, generator=None, data_loader_output=False, filename=None, dataset=None):

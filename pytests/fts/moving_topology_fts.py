@@ -819,6 +819,7 @@ class MovingTopFTS(FTSBaseTest):
         kv_node = self._cb_cluster.get_kv_nodes()[1]
         task = self._cb_cluster.async_failover(graceful=True,node=kv_node)
         task.result()
+        RestConnection(self._cb_cluster.get_master_node()).monitorRebalance()
         self.sleep(60)
         self._cb_cluster.add_back_node(recovery_type='delta', services=["kv"])
         for index in self._cb_cluster.get_indexes():
@@ -841,6 +842,7 @@ class MovingTopFTS(FTSBaseTest):
         kv_node = self._cb_cluster.get_kv_nodes()[1]
         task = self._cb_cluster.async_failover(graceful=True,node=kv_node)
         task.result()
+        RestConnection(self._cb_cluster.get_master_node()).monitorRebalance()
         self.sleep(60)
         self._cb_cluster.add_back_node(recovery_type='full', services=["kv"])
         for index in self._cb_cluster.get_indexes():
@@ -1215,6 +1217,7 @@ class MovingTopFTS(FTSBaseTest):
         kv_node = self._cb_cluster.get_kv_nodes()[1]
         task = self._cb_cluster.async_failover(graceful=True,node=kv_node)
         task.result()
+        RestConnection(self._cb_cluster.get_master_node()).monitorRebalance()
         self.sleep(30)
         self._cb_cluster.add_back_node(recovery_type='delta', services=["kv"])
         for index in self._cb_cluster.get_indexes():
@@ -1238,6 +1241,7 @@ class MovingTopFTS(FTSBaseTest):
         kv_node = self._cb_cluster.get_kv_nodes()[1]
         task = self._cb_cluster.async_failover(graceful=True,node=kv_node)
         task.result()
+        RestConnection(self._cb_cluster.get_master_node()).monitorRebalance()
         self.sleep(30)
         self._cb_cluster.add_back_node(recovery_type='full', services=["kv"])
         for index in self._cb_cluster.get_indexes():
@@ -2315,8 +2319,9 @@ class MovingTopFTS(FTSBaseTest):
         """
         self.load_data()
 
-        non_master_nodes = list(set(self._cb_cluster.get_nodes())-
-                           {self._master})
+        fts_ips = {node.ip for node in self._cb_cluster.get_fts_nodes()}
+        non_master_nodes = sorted(set(self._cb_cluster.get_nodes()) - {self._master},
+                                  key=lambda node: (node.ip in fts_ips, node.ip))
 
         from lib.membase.api.rest_client import RestConnection, RestHelper
         rest = RestConnection(self._master)
