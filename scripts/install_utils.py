@@ -826,14 +826,18 @@ def __copy_thread(src_path, dest_path, node):
 
 def _copy_to_nodes(debug=False):
     copy_threads = []
+    local_dir = _get_local_download_dir()
     for node in NodeHelpers:
         if debug:
-            src_path = node.build.debug_path
+            src_path = local_dir + node.build.debug_name
+            dst_path = __get_download_dir(node, disregard_skip_local_download=True) \
+                       + node.build.debug_name
+            node.build.debug_path = dst_path
         else:
-            src_path = node.build.path
-        dst_path = __get_download_dir(node, disregard_skip_local_download=True) \
-                   + node.build.name
-        node.build.path = dst_path
+            src_path = local_dir + node.build.name
+            dst_path = __get_download_dir(node, disregard_skip_local_download=True) \
+                       + node.build.name
+            node.build.path = dst_path
         # don't copy if the file already exists and size matches
         if check_file_size(node, debug):
             continue
@@ -1013,19 +1017,22 @@ def install_tools():
         node.shell.execute_command(f"rm {download_dir}/{node.admin_tools_name}")
 
 def check_and_retry_download_binary_local(node):
-    log.info("Downloading build binary to {0}..".format(node.build.path))
+    local_dir = _get_local_download_dir()
+    local_build_path = local_dir + node.build.name
+    local_debug_path = local_dir + node.build.debug_name \
+        if node.build.debug_build_present else None
+    log.info("Downloading build binary to {0}..".format(local_build_path))
     if node.build.debug_build_present:
-        log.info("Downloading debug binary to {0}..".format(
-            node.build.debug_path))
+        log.info("Downloading debug binary to {0}..".format(local_debug_path))
     duration, event, timeout = install_constants.WAIT_TIMES[node.info.deliverable_type][
         "download_binary"]
-    cmd = install_constants.WGET_CMD.format(__get_download_dir(node),
+    cmd = install_constants.WGET_CMD.format(local_dir,
                                             node.build.name,
                                             node.build.url)
     cmd_debug = None
     if node.build.debug_build_present:
         cmd_debug = install_constants.WGET_CMD.format(
-            __get_download_dir(node),
+            local_dir,
             node.build.debug_name,
             node.build.debug_url)
     start_time = time.time()
@@ -1033,7 +1040,7 @@ def check_and_retry_download_binary_local(node):
         try:
             log.info("Executing cmd on local : {}".format(cmd))
             exit_code = _execute_local(cmd, timeout)
-            if exit_code == 0 and os.path.exists(node.build.path):
+            if exit_code == 0 and os.path.exists(local_build_path):
                 break
             time.sleep(duration)
         except Exception as e:
@@ -1041,7 +1048,7 @@ def check_and_retry_download_binary_local(node):
             time.sleep(duration)
     else:
         print_result_and_exit("Unable to download build in {0}s on {1}, exiting".format(timeout,
-                                                                                        node.build.path))
+                                                                                        local_build_path))
     if node.build.debug_build_present:
         # Download debug info build
         start_time = time.time()
@@ -1051,7 +1058,7 @@ def check_and_retry_download_binary_local(node):
                 if cmd_debug:
                     exit_code_debug = _execute_local(cmd_debug, timeout)
                 if exit_code_debug == 0 and os.path.exists(
-                        node.build.debug_path):
+                        local_debug_path):
                     break
                 time.sleep(duration)
             except Exception as e:
@@ -1061,7 +1068,7 @@ def check_and_retry_download_binary_local(node):
         else:
             print_result_and_exit("Unable to download debug build in "
                                   "{0}s on {1}, exiting".format(
-                timeout, node.build.debug_path))
+                timeout, local_debug_path))
 
 
 def check_file_exists(node, filepath):
@@ -1122,6 +1129,13 @@ def check_and_retry_download_binary(cmd, node, path, debug_build=False):
             time.sleep(duration)
     else:
         print_result_and_exit("Unable to download build in {0}s on {1}, exiting".format(timeout, node.ip))
+
+
+def _get_local_download_dir():
+    workspace = os.environ.get('WORKSPACE')
+    base = workspace if workspace else '/tmp'
+    os.makedirs(base, exist_ok=True)
+    return base.rstrip('/') + '/'
 
 
 def __get_download_dir(node, disregard_skip_local_download=False):
