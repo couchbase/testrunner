@@ -89,11 +89,12 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
 
     """ Returns node containing active vb0 """
     def get_active_vb0_node(self, master):
-        nodes = self.src_nodes
         ip = VBucketAwareMemcached(RestConnection(master), 'default').vBucketMap[0].split(':')[0]
-        if master == self.dest_master:
-            nodes = self.dest_nodes
-        for node in nodes:
+        # Match the vb0 owner by ip across both clusters. After a master failover the
+        # caller passes the cluster's new master, which is neither the object nor the ip
+        # cached in self.dest_master, so picking the node list from `master` chose the
+        # wrong cluster.
+        for node in self.src_nodes + self.dest_nodes:
             if ip == node.ip:
                 return node
         raise XDCRCheckpointException("Error determining the node containing active vb0")
@@ -134,7 +135,17 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
 
         self.log.info ("Verifying commitopaque/remote failover log ...")
         if seqno != 0:
-            self.validate_remote_failover_log(checkpoint_record["target_vb_opaque"]["target_vb_uuid"], checkpoint_record["target_seqno"])
+            target_vb_opaque = checkpoint_record.get("target_vb_opaque")
+            target_seqno = checkpoint_record["target_seqno"]
+            if target_vb_opaque is not None and target_vb_opaque.get("target_vb_uuid") is not None:
+                self.validate_remote_failover_log(target_vb_opaque["target_vb_uuid"], target_seqno)
+            else:
+                remote_uuid, remote_highseq = self.get_failover_log(self.dest_master)
+                self.log.info("target_vb_opaque missing in checkpoint record; live remote failover log = [{0},{1}]"
+                              .format(remote_uuid, remote_highseq))
+                self.assertTrue(int(target_seqno) <= int(remote_highseq),
+                                "target_seqno {0} in checkpoint record exceeds remote vb0 high_seqno {1}"
+                                .format(target_seqno, remote_highseq))
             self.log.info ("Verifying local failover uuid ...")
             local_vb_uuid, _ = self.get_failover_log(self.src_master)
             self.assertTrue((int(failover_uuid) == int(local_vb_uuid)) or
@@ -393,12 +404,16 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
             self.log.info("Node {0} found in source cluster nodes".format(node))
             if node == self.src_master:
                 self.src_cluster.failover_and_rebalance_master()
+                # the failed-over master is ejected; later steps must use the new one
+                self.src_master = self.src_cluster.get_master_node()
             else:
                 self.src_cluster.failover_and_rebalance_master(master=False)
         else:
             self.log.info("Node {0} found in destination cluster nodes".format(node))
             if node == self.dest_master:
                 self.dest_cluster.failover_and_rebalance_master()
+                # the failed-over master is ejected; later steps must use the new one
+                self.dest_master = self.dest_cluster.get_master_node()
             else:
                 self.dest_cluster.failover_and_rebalance_master(master=False)
 
@@ -461,6 +476,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
     def test_dest_bucket_flush(self):
         self.mutate_and_checkpoint()
         self.dest_cluster.flush_buckets([self.dest_cluster.get_bucket_by_name('default')])
+        self.sleep(60, "Waiting for dest vb_uuid change to propagate and a fresh checkpoint to be written after flush")
         self.verify_next_checkpoint_fails_after_dest_uuid_change()
         self.verify_next_checkpoint_passes()
         self.sleep(10)

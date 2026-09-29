@@ -722,14 +722,20 @@ class Lww(XDCRNewBaseTest):
         self._create_buckets(bucket='default', ramQuotaMB=256)
         self.setup_xdcr()
         gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
-        self.c2_cluster.async_load_all_buckets_from_generator(gen1)
+        # Finish C2's writes first: verify_results expects C1's later writes to win LWW,
+        # and loading both clusters at once let C2's write land last for some keys
+        self.c2_cluster.load_all_buckets_from_generator(gen1)
         gen2 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
         self.c1_cluster.async_load_all_buckets_from_generator(gen2)
         self.sleep(self._wait_timeout // 2)
 
         conn = RemoteMachineShellConnection(self.c1_cluster.get_master_node())
-        conn.pause_memcached()
-        conn.unpause_memcached()
+        # pause_memcached() needs killall (psmisc), which the test hosts do not have;
+        # stop/start_memcached send the same SIGSTOP/SIGCONT via pgrep
+        conn.stop_memcached()
+        self.sleep(30, "memcached paused on C1 master")
+        conn.start_memcached()
+        conn.disconnect()
         self.sleep(600, "Wait such that any replication happening should get completed after memcached restart.")
         self.verify_results()
 
@@ -1187,13 +1193,19 @@ class Lww(XDCRNewBaseTest):
         self._create_buckets(bucket='default', ramQuotaMB=256)
         self.log.info("Enabling auto failover on " + str(self.c1_cluster.get_master_node()))
         src_conn.update_autofailover_settings(enabled=True, timeout=30)
-        self.sleep(10)
-        self.setup_xdcr()
-        gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
-        self.c2_cluster.load_all_buckets_from_generator(gen1)
-        gen2 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
-        self.c1_cluster.load_all_buckets_from_generator(gen2)
-        self.verify_results()
+        try:
+            self.sleep(10)
+            self.setup_xdcr()
+            gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
+            self.c2_cluster.load_all_buckets_from_generator(gen1)
+            gen2 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
+            self.c1_cluster.load_all_buckets_from_generator(gen2)
+            self.verify_results()
+        finally:
+            # The next tests in the job reuse these nodes and cleanup does not reset this
+            # setting: left at 30s, a later master restart was auto-failed over and every
+            # following setUp inherited an inactiveFailed master. Restore the default.
+            src_conn.update_autofailover_settings(enabled=True, timeout=120)
 
     def test_lww_with_mixed_buckets(self):
         self._create_buckets(bucket='default', ramQuotaMB=256)

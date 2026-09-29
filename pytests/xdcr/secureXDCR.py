@@ -103,7 +103,12 @@ class XDCRSecurityTests(XDCRNewBaseTest):
         if random_setting:
             for cluster in self.get_cluster_objects_for_input(random_setting):
                 setting = random.choice(list(self.settings_values_map.keys()))
-                value = random.choice(self.settings_values_map.get(setting))
+                # strict refuses the plain-text connections the data loaders and
+                # verification use, so a random pick of it fails the test itself.
+                value = random.choice([v for v in self.settings_values_map.get(setting)
+                                       if v != "strict"])
+                self.log.info("random_setting on {0}: {1}={2}".format(
+                    cluster.get_name(), setting, value))
                 cluster.toggle_security_setting([cluster.get_master_node()], setting, value)
 
         if multiple_ca:
@@ -214,16 +219,17 @@ class XDCRSecurityTests(XDCRNewBaseTest):
         self.verify_results()
 
 
-def tearDown(self):
-        try:
-            # Restore defaults - Enable autofailover
-            for cluster in self.get_cluster_objects_for_input(self.disable_autofailover):
-                cluster.toggle_security_setting([cluster.get_master_node()], "autofailover", "enable")
-            # Disable n2n
-            for cluster in self.get_cluster_objects_for_input(self.enable_n2n):
-                cluster.toggle_security_setting([cluster.get_master_node()], "n2n")
-            # Disable multiple_ca
-            for cluster in self.get_cluster_objects_for_input(self.multiple_ca):
-                CbServer.x509.teardown_certs(servers=cluster.get_nodes())
-        except:
-            pass
+    def tearDown(self):
+        # Drop any cluster encryption level a test raised before the base cleanup
+        # runs. Under strict, 8091 only listens on loopback, so cleanup_cluster
+        # cannot reach the node and the cluster stays strict for every later test
+        # in the job. change_cluster_encryption_cli runs couchbase-cli against
+        # localhost over ssh, which strict still allows.
+        for cluster in self.get_cb_clusters():
+            try:
+                ntonencryptionBase().change_cluster_encryption_cli(
+                    [cluster.get_master_node()], 'control')
+            except Exception as e:
+                self.log.warning("Could not reset encryption level on {0}: {1}"
+                                 .format(cluster.get_name(), e))
+        super(XDCRSecurityTests, self).tearDown()

@@ -40,7 +40,8 @@ class CollectionsStats(object):
             cbstats = self.get_collection_stats(bucket)
         for stat in cbstats:
             stat = stat.replace(' ', '')
-            if ":scope_name:" + scope in stat:
+            # exact name, so that "scope_1" does not also match "scope_10"
+            if stat.endswith(":scope_name:" + scope):
                 return stat.split(":")[0]
         return None
 
@@ -50,7 +51,8 @@ class CollectionsStats(object):
         scope_id = self.get_scope_id(bucket, scope, cbstats)
         for stat in cbstats:
             stat = stat.replace(' ', '')
-            if ":name:" + collection in str(stat):
+            # exact name, so that "collection_1" does not also match "collection_10"
+            if str(stat).endswith(":name:" + collection):
                 if stat.split(":")[0] == scope_id.strip():
                     return stat.split(":name:")[0].split(":")[1]
         return None

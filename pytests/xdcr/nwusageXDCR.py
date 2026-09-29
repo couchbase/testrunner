@@ -51,6 +51,10 @@ class nwusage(XDCRNewBaseTest):
             self._num_items //= 10
         self._value_size *= self.num_src_nodes
         self._num_items *= self.num_src_nodes
+        # KV rejects values above its 20MiB item limit (memcached resets the
+        # connection), so a scaled-up size would never be stored and the later
+        # update/delete phase fails with 'Not found'.
+        self._value_size = min(self._value_size, 2 * 10 ** 7)
         self.log.info("Doc size = {0} bytes, Number of docs = {1}".format(self._value_size, self._num_items))
 
     def _extract_timestamp(self, logmsg):

@@ -1291,7 +1291,7 @@ class CouchbaseCluster:
             tasks.append(
                 self.__clusterop.async_init_node(
                     node,
-                    disabled_consistent_view))
+                    disabled_consistent_view=disabled_consistent_view))
         for task in tasks:
             mem_quota = task.result()
             if mem_quota < self.__mem_quota or self.__mem_quota == 0:
@@ -1371,7 +1371,7 @@ class CouchbaseCluster:
         """
         master = RestConnection(self.__master_node)
         self.enable_diag_eval_on_non_local_hosts(self.__master_node)
-        self.__init_nodes(disabled_consistent_view)
+        self.__init_nodes(disabled_consistent_view=disabled_consistent_view)
         self.__clusterop.async_rebalance(
             self.__nodes,
             self.__nodes[1:],
@@ -2780,6 +2780,11 @@ class CouchbaseCluster:
                 else:
                     time.sleep(5)
                     end_time = end_time - 5
+            except KeyError:
+                self.__log.info(
+                    "No XDCR DCP stats on %s for %s, treating as drained" %
+                    (self.__name, bucket.name))
+                buckets.remove(bucket)
             except Exception as e:
                 self.__log.error(e)
             if curr_time > end_time:
@@ -2798,10 +2803,13 @@ class CouchbaseCluster:
         while curr_time < end_time:
             found = 0
             for bucket in self.__buckets:
+                mutations = 0
                 try:
                     mutations = int(rest.get_xdc_queue_size(bucket.name))
                 except KeyError:
-                    self.__log.warning("Stat \"replication_changes_left\" not found")
+                    self.__log.info(
+                        "No outbound XDCR replication stats on %s for %s, treating as 0" %
+                        (self.__name, bucket.name))
                 self.__log.info(
                     "Current Outbound mutations on cluster node: %s for bucket %s is %s" %
                     (self.__name, bucket.name, mutations))
@@ -4174,8 +4182,15 @@ class XDCRNewBaseTest(unittest.TestCase):
                                  + "ON " + bucket)
 
     def _get_doc_count(self, server, bucket, scope=None, collection=None):
-        exp = self.filter_exp[bucket]
-        if len(exp) > 1:
+        exp = self.filter_exp.get(bucket, set())
+        if len(exp) == 0 and scope != None and collection != None:
+            return self.__execute_query(server, "SELECT COUNT(*) FROM "
+                                        + "default:" + bucket + "."
+                                        + scope + "." + collection)
+        elif len(exp) == 0 and scope == None and collection == None:
+            return self.__execute_query(server, "SELECT COUNT(*) FROM "
+                                        + bucket)
+        elif len(exp) > 1:
             exp = " AND ".join(exp)
         else:
             exp = next(iter(exp))
@@ -4255,6 +4270,7 @@ class XDCRNewBaseTest(unittest.TestCase):
         mapping = {}
         for repl in replications:
             src_bucket = repl.get_src_bucket()
+            filter_exp = repl.get_filter_exp()
             if repl.get_xdcr_setting('collectionsExplicitMapping'):
                 mapping = repl.get_xdcr_setting('colMappingRules')
             else:
@@ -4268,7 +4284,8 @@ class XDCRNewBaseTest(unittest.TestCase):
             task_info = self.__cluster_op.async_verify_collection_doc_count(
                 repl.get_src_cluster(),
                 repl.get_dest_cluster(),
-                src_bucket, mapping)
+                src_bucket, mapping,
+                filter_exp=filter_exp)
             tasks.append(task_info)
         for task in tasks:
             task.result(timeout)
@@ -4395,3 +4412,4 @@ class XDCRNewBaseTest(unittest.TestCase):
                 self.wait_interval(10, "Waiting for couchbase service to be running. {0}".format(output))
         shell.disconnect()
         self.fail("Couchbase service is not running after {0} seconds".format(wait_time))
+

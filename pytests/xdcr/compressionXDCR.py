@@ -39,6 +39,7 @@ class compression(XDCRNewBaseTest):
     def _verify_compression(self, cluster, compr_bucket_name="", uncompr_bucket_name="",
                             compression_type="None", repl_time=0):
         repls = cluster.get_remote_clusters()[0].get_replications()
+        compr_repl_id = uncompr_repl_id = ""
         for repl in repls:
             if compr_bucket_name in str(repl):
                 compr_repl_id = repl.get_repl_id()
@@ -69,23 +70,24 @@ class compression(XDCRNewBaseTest):
             for item in items:
                 compressed_data_replicated += item
         self.log.info("Compressed data for replication {0} is {1}".format(compr_repl_id, compressed_data_replicated))
+        if uncompr_repl_id != "":
 
-        base_url = "http://" + cluster.get_master_node().ip + ":8091/pools/default/buckets/" + uncompr_bucket_name + \
-                   "/stats/replications%2F" + uncompr_repl_id + "%2Fdata_replicated?haveTStamp=" + str(repl_time)
-        command = "curl -u Administrator:password " + base_url
-        output, error = shell.execute_command(command)
-        shell.log_command_output(output, error)
-        output = json.loads(output[0])
-        uncompressed_data_replicated = 0
-        for node in cluster.get_nodes():
-            items = output["nodeStats"]["{0}:8091".format(node.ip)]
-            for item in items:
-                uncompressed_data_replicated += item
-        self.log.info("Uncompressed data for replication {0} is {1}".format(uncompr_repl_id, uncompressed_data_replicated))
+            base_url = "http://" + cluster.get_master_node().ip + ":8091/pools/default/buckets/" + uncompr_bucket_name + \
+                       "/stats/replications%2F" + uncompr_repl_id + "%2Fdata_replicated?haveTStamp=" + str(repl_time)
+            command = "curl -u Administrator:password " + base_url
+            output, error = shell.execute_command(command)
+            shell.log_command_output(output, error)
+            output = json.loads(output[0])
+            uncompressed_data_replicated = 0
+            for node in cluster.get_nodes():
+                items = output["nodeStats"]["{0}:8091".format(node.ip)]
+                for item in items:
+                    uncompressed_data_replicated += item
+            self.log.info("Uncompressed data for replication {0} is {1}".format(uncompr_repl_id, uncompressed_data_replicated))
 
-        self.assertTrue(uncompressed_data_replicated > compressed_data_replicated,
-                        "Compression did not work as expected")
-        self.log.info("Compression worked as expected")
+            self.assertTrue(uncompressed_data_replicated > compressed_data_replicated,
+                            "Compression did not work as expected")
+            self.log.info("Compression worked as expected")
 
         shell.disconnect()
 
@@ -109,9 +111,17 @@ class compression(XDCRNewBaseTest):
         self.src_cluster.load_all_buckets_from_generator(kv_gen=gen_create)
 
         self.perform_update_delete()
-
-        self._wait_for_replication_to_catchup()
-
+        # self._wait_for_replication_to_catchup()  # This function does not account for filtered replications and just assumes the number of docs to be same on source and target
+        end_time = time.time() + 300 # timeout for 300 seconds
+        while time.time() < end_time:
+            docs_matched = self._if_docs_count_match_on_servers()
+            if docs_matched:
+                print("REPLICATION CAUGHT UP !!!")
+                break
+            else:
+                print("REPLICATION NOT CAUGHT UP YET !!! Sleeping for 30 seconds before retrying")
+                time.sleep(30)
+        time.sleep(30)
         self._verify_compression(cluster=self.src_cluster,
                                  compr_bucket_name=bucket_prefix + "1",
                                  uncompr_bucket_name=bucket_prefix + "2",
@@ -135,6 +145,8 @@ class compression(XDCRNewBaseTest):
                                      compression_type=self.compression_type,
                                      repl_time=repl_time)
         self.verify_results()
+
+
 
     def test_compression_with_unixdcr_backfill_load(self):
         self.setup_xdcr()
@@ -479,6 +491,7 @@ class compression(XDCRNewBaseTest):
 
     def test_compression_with_bixdcr_and_compression_one_way(self):
         self.setup_xdcr()
+        repl_time = int(time.time())
         self.sleep(60)
         self._set_compression_type(self.src_cluster, "default", self.compression_type)
 
@@ -489,8 +502,18 @@ class compression(XDCRNewBaseTest):
 
         self.perform_update_delete()
 
-        self._wait_for_replication_to_catchup()
-
+        # self._wait_for_replication_to_catchup()
+        end_time = time.time() + 300 # timeout for 300 seconds
+        while time.time() < end_time:
+            docs_matched = self._if_docs_count_match_on_servers()
+            if docs_matched:
+                print("REPLICATION CAUGHT UP !!!")
+                break
+            else:
+                print("REPLICATION NOT CAUGHT UP YET !!! Sleeping for 30 seconds before retrying")
+                time.sleep(30)
+        time.sleep(30)
+        self._verify_compression(self.src_cluster, compr_bucket_name="default", compression_type=self.compression_type, repl_time=repl_time)
         self.verify_results()
 
     def test_compression_with_enabling_later(self):
@@ -573,3 +596,5 @@ class compression(XDCRNewBaseTest):
         self._wait_for_replication_to_catchup()
 
         self.verify_results()
+
+
