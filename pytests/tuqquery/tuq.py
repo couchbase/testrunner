@@ -1,15 +1,19 @@
 import ast
 import boto3
+import concurrent.futures
 import copy
 import datetime
 import json
 import logging
 import os
 import pprint
+import random
 import re
 import socket
+import threading
 import time
 import traceback
+import urllib.parse
 import uuid
 
 from couchbase.cluster import Cluster
@@ -21,11 +25,13 @@ import collections
 from couchbase_helper.documentgenerator import JsonDocGenerator
 from couchbase_helper.documentgenerator import WikiJSONGenerator
 from couchbase_helper.documentgenerator import NapaDataLoader
+from couchbase_helper.documentgenerator import SDKDataLoader
 from subprocess import Popen, PIPE
 from remote.remote_util import RemoteMachineShellConnection
 from couchbase_helper.tuq_generators import JsonGenerator
 from basetestcase import BaseTestCase
-from membase.api.exception import CBQError, ReadDocumentException
+from membase.api.exception import (CBQError, InvalidArgumentException, ReadDocumentException,
+                                   ServerUnavailableException)
 from couchbase_helper.documentgenerator import DocumentGenerator
 from membase.api.rest_client import RestConnection
 from security.rbac_base import RbacBase
@@ -37,11 +43,52 @@ from pytests.fts.fts_base import FTSIndex
 from pytests.fts.random_query_generator.rand_query_gen import DATASET
 from pytests.fts.fts_base import CouchbaseCluster
 from collection.collections_n1ql_client import CollectionsN1QL
+from collection.collections_stats import CollectionsStats
+from membase.helper.cluster_helper import ClusterOperationHelper
 from lib.Cb_constants.CBServer import CbServer
 
 JOIN_INNER = "INNER"
 JOIN_LEFT = "LEFT"
 JOIN_RIGHT = "RIGHT"
+
+
+# EXPLAIN-plan vocabulary for the plan helpers in QueryTests.
+# Leaf scans; 'index' names the index ('#primary', '#sequentialscan' included).
+INDEX_SCAN_OPERATORS = frozenset([
+    'IndexScan3', 'IndexScan2', 'IndexScan', 'PrimaryScan3', 'PrimaryScan',
+    'IndexCountScan2', 'IndexCountScan', 'IndexCountDistinctScan2',
+])
+# Scans that combine leaf scans.
+COMPOSITE_SCAN_OPERATORS = frozenset([
+    'IntersectScan', 'OrderedIntersectScan', 'UnionScan', 'DistinctScan',
+])
+SCAN_OPERATORS = INDEX_SCAN_OPERATORS | COMPOSITE_SCAN_OPERATORS
+PRIMARY_INDEX = '#primary'
+SEQUENTIAL_SCAN = '#sequentialscan'
+# queryN1QLFeatCtrl bit that turns sequential scans off.
+SEQSCAN_OFF_BIT = 0x4000
+# A recovered panic ("Panic: ...").
+PANIC_ERROR_CODE = 5001
+# "code": 5001 in a query response, as JSON or as a Python dict repr.
+PANIC_CODE_RE = re.compile(r"""['"]code['"]\s*:\s*{}\b""".format(PANIC_ERROR_CODE))
+MIB = 1024 * 1024
+# cbq-engine resident memory (bytes) in admin/vitals.
+VITALS_RSS = 'process.rss'
+# Removed by normalize_plan(): values that differ between nodes or runs for the same plan.
+VOLATILE_KEYS = frozenset([
+    'optimizer_estimates', 'cost', 'cardinality', 'fr_cost', 'size',
+    'index_definition_checksum', 'index_id',
+    '#time', '#time_normal', '#time_absolute', '#stats',
+])
+_FORMAT_FIELDS = ('index', 'keyspace', 'as', 'covers', 'spans', 'condition', 'filter')
+_MAX_FIELD_LEN = 120
+
+# DocLoader PolymorphicDoc shapes and their weights (update if DocLoader changes them).
+POLYMORPHIC_DOC_TYPES = {
+    'transaction': 40, 'assignedProduct': 20, 'profile': 20,
+    'media_element': 12, 'mobile': 8, 'catalogItem': 6,
+}
+POLYMORPHIC_VALUE_TYPE = 'PolymorphicDoc'
 
 
 class QueryTests(BaseTestCase):
@@ -1259,6 +1306,9 @@ class QueryTests(BaseTestCase):
     ##############################################################################################
     def _create_server_groups(self):
         if self.server_grouping:
+            # ns_server refuses to change server groups while a rebalance runs.
+            if self.rest._rebalance_progress_status() == 'running':
+                self.rest.monitorRebalance(stop_if_loop=True)
             server_groups = self.server_grouping.split(":")
             self.log.info("server groups : %s", server_groups)
 
@@ -1311,6 +1361,813 @@ class QueryTests(BaseTestCase):
         except:
             rv = res["results"][0]["operator"]
         return rv
+
+    # ------------------------------------------------------------------
+    # Plan assertions, query-service restart and PolymorphicDoc dataset
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _walk_operators(plan):
+        """Every operator dict in the plan, depth-first, in plan order."""
+        if isinstance(plan, dict):
+            if '#operator' in plan:
+                yield plan
+            for v in plan.values():
+                yield from QueryTests._walk_operators(v)
+        elif isinstance(plan, list):
+            for item in plan:
+                yield from QueryTests._walk_operators(item)
+
+    @staticmethod
+    def find_all_operators(plan, op_name):
+        return [op for op in QueryTests._walk_operators(plan) if op.get('#operator') == op_name]
+
+    @staticmethod
+    def find_operators_using_index(plan, index_name):
+        """Every operator on index_name, whatever its type (IndexScan3, PrimaryScan3, ...)."""
+        return [op for op in QueryTests._walk_operators(plan) if op.get('index') == index_name]
+
+    @staticmethod
+    def find_scans(plan, include_composite=False):
+        """Leaf scans in plan order; include_composite adds UnionScan, IntersectScan, ..."""
+        wanted = SCAN_OPERATORS if include_composite else INDEX_SCAN_OPERATORS
+        return [op for op in QueryTests._walk_operators(plan) if op.get('#operator') in wanted]
+
+    @staticmethod
+    def used_index_names(plan):
+        return {op['index'] for op in QueryTests.find_scans(plan) if op.get('index')}
+
+    @staticmethod
+    def index_items_out(profile, index_name):
+        """#itemsOut of every scan on index_name in profile['executionTimings']."""
+        return [op.get('#stats', {}).get('#itemsOut')
+                for op in QueryTests.find_operators_using_index(profile, index_name)]
+
+    @staticmethod
+    def index_spans(plan, index_name):
+        """Spans of every scan on index_name, in plan order."""
+        return [span for op in QueryTests.find_operators_using_index(plan, index_name)
+                for span in op.get('spans') or []]
+
+    @staticmethod
+    def normalize_plan(plan):
+        """Deep copy without VOLATILE_KEYS, so equal plans compare equal across nodes."""
+        if isinstance(plan, dict):
+            return {k: QueryTests.normalize_plan(v) for k, v in plan.items() if k not in VOLATILE_KEYS}
+        if isinstance(plan, list):
+            return [QueryTests.normalize_plan(item) for item in plan]
+        return plan
+
+    @staticmethod
+    def format_plan(plan):
+        """One line per operator, indented, for assertion messages."""
+        lines = []
+
+        def short(value):
+            text = str(value)
+            return text if len(text) <= _MAX_FIELD_LEN else text[:_MAX_FIELD_LEN - 3] + '...'
+
+        def visit(node, depth):
+            if isinstance(node, dict):
+                if '#operator' in node:
+                    parts = [node['#operator']] + ['{}={}'.format(f, short(node[f]))
+                                                   for f in _FORMAT_FIELDS if f in node]
+                    lines.append('  ' * depth + ' '.join(parts))
+                    depth += 1
+                for key, value in node.items():
+                    if isinstance(value, (dict, list)) and key not in _FORMAT_FIELDS:
+                        visit(value, depth)
+            elif isinstance(node, list):
+                for item in node:
+                    visit(item, depth)
+
+        visit(plan, 0)
+        return '\n'.join(lines)
+
+    @staticmethod
+    def parse_polymorphic_value_type(value_type):
+        """{type: weight} for 'PolymorphicDoc', 'PolymorphicDoc:t1,t2' or
+        'PolymorphicDoc:t1=50,t2=50'. Raises ValueError on input DocLoader would silently
+        treat as "every type" (empty filter, stray comma, unknown type)."""
+        if value_type == POLYMORPHIC_VALUE_TYPE:
+            return dict(POLYMORPHIC_DOC_TYPES)
+        prefix = POLYMORPHIC_VALUE_TYPE + ':'
+        if not value_type.startswith(prefix):
+            raise ValueError("valueType must start with '{}': {!r}".format(prefix, value_type))
+        suffix = value_type[len(prefix):]
+        if ' ' in suffix:
+            raise ValueError("valueType must not contain spaces (passed to a shell): {!r}".format(value_type))
+        entries = suffix.split(',')
+        if not suffix or any(not e for e in entries):
+            raise ValueError("Empty type filter or stray comma in {!r}".format(value_type))
+        weights = {}
+        for entry in entries:
+            name, sep, weight = entry.partition('=')
+            if name not in POLYMORPHIC_DOC_TYPES:
+                raise ValueError("Unknown type {!r} in {!r}; valid: {}".format(
+                    name, value_type, sorted(POLYMORPHIC_DOC_TYPES)))
+            if name in weights:
+                raise ValueError("Type {!r} listed twice in {!r}".format(name, value_type))
+            if sep and (not weight.isdigit() or int(weight) == 0):
+                raise ValueError("Weight for {!r} must be a positive integer: {!r}".format(
+                    name, value_type))
+            weights[name] = int(weight) if sep else POLYMORPHIC_DOC_TYPES[name]
+        return weights
+
+    def get_n1ql_feat_ctrl(self):
+        """Cluster-wide queryN1QLFeatCtrl (/settings/querySettings)."""
+        status, settings = self.rest.get_query_settings(self.master)
+        self.assertTrue(status, "Could not read /settings/querySettings: {}".format(settings))
+        return int(settings['queryN1QLFeatCtrl'])
+
+    def set_n1ql_feat_ctrl(self, value):
+        """Set the cluster-wide queryN1QLFeatCtrl (every query node; survives a restart)."""
+        params = urllib.parse.urlencode({'queryN1QLFeatCtrl': value})
+        status, content, _ = self.rest._http_request(
+            self.rest.baseUrl + 'settings/querySettings', 'POST', params)
+        self.assertTrue(status, "Setting queryN1QLFeatCtrl={} failed: {}".format(value, content))
+        self.log.info("queryN1QLFeatCtrl set to %s", value)
+
+    def wait_feat_ctrl_bit(self, bit, enabled, timeout=60):
+        """Wait until every query node reports n1ql-feat-ctrl with `bit` set (enabled) or clear."""
+        deadline = time.time() + timeout
+        while True:
+            nodes = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True) or []
+            values = {n.ip: int(self.rest.get_query_admin_settings(n).get('n1ql-feat-ctrl', 0))
+                      for n in nodes}
+            if all(bool(v & bit) == enabled for v in values.values()):
+                return
+            if time.time() > deadline:
+                self.fail("n1ql-feat-ctrl bit {:#x} is not {} on every query node "
+                          "(per node: {})".format(bit, "set" if enabled else "clear", values))
+            time.sleep(2)
+
+    def set_feat_ctrl_bit(self, bit, enabled):
+        """Set or clear one queryN1QLFeatCtrl bit, keeping the others, and wait for every
+        query node to apply it."""
+        current = self.get_n1ql_feat_ctrl()
+        self.set_n1ql_feat_ctrl(current | bit if enabled else current & ~bit)
+        self.wait_feat_ctrl_bit(bit, enabled)
+
+    def disable_sequential_scan(self):
+        """Turn sequential scans off on every query node; returns the previous queryN1QLFeatCtrl."""
+        original = self.get_n1ql_feat_ctrl()
+        self.set_feat_ctrl_bit(SEQSCAN_OFF_BIT, True)
+        return original
+
+    def seeded_rng(self, label, param='seed'):
+        """random.Random from the `param` test parameter or a random seed (logged)."""
+        value = self.input.param(param, None)
+        if value is None and param != 'seed':
+            value = self.input.param('seed', None)   # one seed= replays every test
+        seed = int(value) if value is not None else random.randrange(1 << 30)
+        self.log.info("%s: %s=%s (rerun with %s=%s for the same inputs)",
+                      label, param, seed, param, seed)
+        return random.Random(seed), seed
+
+    @staticmethod
+    def n1ql_literal(value):
+        """A safe N1QL literal for a string or number."""
+        return json.dumps(value)
+
+    def get_query_nodes(self):
+        return self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True) or []
+
+    def get_index_nodes(self):
+        return self.get_nodes_from_services_map(service_type="index", get_all_nodes=True) or []
+
+    def assert_item_count(self, bucket, expected, scope='_default', collection='_default',
+                           timeout=120):
+        """The collection (not the bucket, which also counts _system) holds exactly
+        `expected` items, from KV collection stats summed over the data nodes."""
+        name = getattr(bucket, 'name', bucket)
+        kv_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+        stats = CollectionsStats(self.master)
+        deadline = time.time() + timeout
+        while True:
+            count = stats.get_collection_item_count_cumulative(name, scope, collection,
+                                                               node=kv_nodes)
+            self.log.info("%s.%s.%s item count: %s (expected %s)", name, scope, collection,
+                          count, expected)
+            if count == expected or time.time() > deadline:
+                break
+            time.sleep(5)
+        self.assertEqual(count, expected, "{}.{}.{} has {} items, expected {}".format(
+            name, scope, collection, count, expected))
+
+    def assert_index_plan(self, plan, index_name):
+        """index_name is used, and there is no sequential or primary scan."""
+        self.assert_index_used(plan, index_name)
+        self.assert_no_sequential_scan(plan)
+        self.assert_no_primary_scan(plan)
+
+    def assert_mutations(self, result, expected, statement):
+        count = result['metrics'].get('mutationCount')
+        self.assertEqual(count, expected, "{} changed {} of {} documents".format(
+            statement, count, expected))
+
+    def assert_cbo_planned(self, plan, what):
+        """CBO planned the query: its scans carry optimizer estimates (a rule-based plan has none)."""
+        self.assertTrue(any('optimizer_estimates' in op for op in self.find_scans(plan)),
+                        "{}: CBO did not plan the query (no optimizer_estimates):\n{}".format(
+                            what, self.format_plan(plan)))
+
+    def assert_cbo_estimates(self, profile, index_name, what, factor=10, slack=20):
+        """Every scan on index_name in a profiled CBO run (profile=timings): the optimizer's
+        row estimate (optimizer_estimates.cardinality) is within `factor` times the rows the
+        scan returned (#stats.#itemsOut) either way, or within `slack` rows of it (small
+        counts are noisy). Catches a bad selectivity estimate even when the index is right."""
+        scans = self.find_operators_using_index(profile, index_name)
+        self.assertTrue(scans, "{}: no scan on {} in the profile:\n{}".format(
+            what, index_name, self.format_plan(profile)))
+        for op in scans:
+            estimate = (op.get('optimizer_estimates') or {}).get('cardinality')
+            self.assertIsNotNone(estimate, "{}: scan on {} has no optimizer estimate:\n{}".format(
+                what, index_name, self.format_plan(profile)))
+            actual = op.get('#stats', {}).get('#itemsOut', 0)
+            ratio = max(estimate, 1.0) / max(actual, 1)
+            self.log.info("%s: %s estimated %.1f rows, returned %d", what, index_name, estimate, actual)
+            self.assertTrue(abs(estimate - actual) <= slack or 1.0 / factor <= ratio <= factor,
+                            "{}: CBO estimated {:.1f} rows from {}, the scan returned {} (more than "
+                            "{}x off):\n{}".format(what, estimate, index_name, actual, factor,
+                                                    self.format_plan(profile)))
+
+    def wait_cluster_healthy(self, after, timeout=300):
+        """All nodes_init nodes active and healthy, no rebalance running, the bucket
+        present; fails naming what came before, instead of breaking the next test."""
+        deadline = time.time() + timeout
+        while True:
+            # A new connection each time: it follows CbServer.use_https (strict encryption).
+            rest = RestConnection(self.master)
+            nodes = rest.get_nodes(get_all_nodes=True)
+            states = {n.ip: (n.clusterMembership, n.status) for n in nodes}
+            rebalance = rest._rebalance_progress_status()
+            buckets = [b.name for b in rest.get_buckets()]
+            if (len(nodes) == self.nodes_init and rebalance != 'running'
+                    and all(state == ('active', 'healthy') for state in states.values())
+                    and self.bucket_name in buckets):
+                return
+            if time.time() > deadline:
+                self.fail("After {}: the cluster is not {} active, healthy nodes with bucket {} "
+                          "(nodes {}, rebalance {}, buckets {})".format(
+                              after, self.nodes_init, self.bucket_name, states, rebalance, buckets))
+            time.sleep(5)
+
+    def failover_and_recover(self, node, recovery_type='delta', graceful=True):
+        """Fail node over (graceful by default) as a customer does for patching, then add
+        it back with recovery_type and rebalance; waits for a healthy cluster. Uses the
+        cluster failover/rebalance tasks. To keep queries running meanwhile, call it as the
+        action of run_query_workload."""
+        others = [s for s in self.servers[:self.nodes_init] if s.ip != node.ip]
+        self.assertTrue(others, "No node left to fail {} over to".format(node.ip))
+        rest = RestConnection(others[0])
+        otp = [n.id for n in rest.node_statuses() if n.ip == node.ip]
+        self.assertEqual(len(otp), 1, "Node {} not found in {}".format(
+            node.ip, [n.ip for n in rest.node_statuses()]))
+        def membership():
+            return {n.ip: n.clusterMembership for n in rest.get_nodes(get_all_nodes=True)}
+
+        self.cluster.failover(others, failover_nodes=[node], graceful=graceful)
+        try:
+            # The failover task only starts it: a graceful failover first moves the active
+            # vBuckets off the node (it runs as a rebalance), then the node is failed over.
+            self.assertTrue(rest.monitorRebalance(stop_if_loop=True),
+                            "Failover of {} did not complete".format(node.ip))
+            deadline = time.time() + 120
+            while membership().get(node.ip) != 'inactiveFailed' and time.time() < deadline:
+                time.sleep(2)
+            states = membership()
+            self.assertEqual(states.get(node.ip), 'inactiveFailed',
+                             "{} is not failed over: {}".format(node.ip, states))
+            self.log.info("%s failed over (graceful=%s)", node.ip, graceful)
+        finally:
+            # Also after a failed check: later tests need every node back in the cluster.
+            if membership().get(node.ip) == 'inactiveFailed':
+                rest.add_back_node(otp[0])
+                rest.set_recovery_type(otp[0], recovery_type)
+                try:
+                    rebalanced = self.cluster.rebalance(others + [node], [], [])
+                except InvalidArgumentException as ex:
+                    # ns_server refuses delta recovery when it cannot reuse the node's
+                    # data; a customer then adds the node back with full recovery.
+                    if recovery_type == 'full' or 'deltaRecoveryNotPossible' not in str(ex):
+                        raise
+                    self.log.warning("%s: delta recovery not possible, adding it back with "
+                                     "full recovery", node.ip)
+                    recovery_type = 'full'
+                    rest.set_recovery_type(otp[0], recovery_type)
+                    rebalanced = self.cluster.rebalance(others + [node], [], [])
+                self.assertTrue(rebalanced, "Rebalance after the {} recovery of {} failed".format(
+                    recovery_type, node.ip))
+                self.log.info("%s added back (%s recovery)", node.ip, recovery_type)
+        self.wait_cluster_healthy("the {} recovery of {}".format(recovery_type, node.ip))
+
+    def run_query_workload(self, action, run_query, what, nodes=None, allowed_codes=(),
+                           recover_timeout=120, settle=5, seed=None):
+        """Run action() (a restart, a kill, a failover, ...) while queries keep running in
+        the background: one thread per node in `nodes` (default: every query node) calls
+        run_query(server, n) in a loop, n = 0, 1, ...; run_query runs one query and checks
+        its result (a wrong result fails the test). An error whose code is in
+        allowed_codes is retried until that node's first success after action() returns;
+        that success must come within recover_timeout, then the workload runs `settle`
+        more seconds. Any other error, any error after the node recovered, a wrong result
+        or no recovery fails the test. Returns {node_ip: {'ok': passed runs, 'allowed':
+        Counter of allowed error codes, 'recovered': time of the first success after
+        action() returned}}."""
+        nodes = self.get_query_nodes() if nodes is None else nodes
+        self.assertTrue(nodes, "{}: no query node to run the workload on".format(what))
+        stop = threading.Event()
+        action_end = []
+        stats = {node.ip: {'ok': 0, 'allowed': collections.Counter(), 'recovered': None}
+                 for node in nodes}
+
+        def worker(server):
+            mine = stats[server.ip]
+            n = 0
+            while not stop.is_set():
+                try:
+                    run_query(server, n)
+                except CBQError as ex:
+                    code = self.process_CBQE(ex).get('code')
+                    if code not in allowed_codes or mine['recovered'] is not None:
+                        raise
+                    mine['allowed'][code] += 1
+                    time.sleep(1)
+                else:
+                    mine['ok'] += 1
+                    if action_end and mine['recovered'] is None:
+                        mine['recovered'] = time.time()
+                n += 1
+
+        pool = concurrent.futures.ThreadPoolExecutor(max_workers=len(nodes))
+        futures = {node.ip: pool.submit(worker, node) for node in nodes}
+        try:
+            action()
+            action_end.append(time.time())
+            while not any(f.done() for f in futures.values()):
+                pending = [ip for ip, s in stats.items() if s['recovered'] is None]
+                elapsed = time.time() - action_end[0]
+                if (not pending and elapsed >= settle) or (pending and elapsed > recover_timeout):
+                    break
+                time.sleep(1)
+        finally:
+            stop.set()
+            concurrent.futures.wait(list(futures.values()))
+            pool.shutdown()
+            for ip, future in futures.items():
+                if future.exception():
+                    self.log.error("%s: workload on %s failed: %s", what, ip, future.exception())
+        for future in futures.values():
+            future.result()
+        self.log.info("%s: workload %s (seed=%s)", what, {
+            ip: {'ok': s['ok'], 'allowed': dict(s['allowed']),
+                 'recovered_after_s': None if s['recovered'] is None else
+                 round(s['recovered'] - action_end[0], 1)} for ip, s in stats.items()}, seed)
+        not_recovered = sorted(ip for ip, s in stats.items() if s['recovered'] is None)
+        self.assertFalse(not_recovered, "{}: queries on {} did not succeed within {}s after it "
+                         "(allowed errors {}) (seed={})".format(
+                             what, not_recovered, recover_timeout,
+                             {ip: dict(stats[ip]['allowed']) for ip in not_recovered}, seed))
+        return stats
+
+    def reassert_queries(self, checks, what, seed=None, nodes=None):
+        """After a disturbance, on every node in `nodes` (default: every query node): the
+        query service answers, and each check's query uses its index (no primary or
+        sequential scan), has the same plan on every node and returns exactly its rows.
+        checks: [(sql, index_name, expected_rows, query_params or None)]."""
+        nodes = self.get_query_nodes() if nodes is None else nodes
+        self.assertTrue(nodes, "{}: no query node to check".format(what))
+        for node in nodes:
+            self._wait_for_query_service_ready(node, timeout=120)
+        for sql, index_name, expected, params in checks:
+            for node in nodes:
+                on_node = "{}: {} on {}".format(what, sql, node.ip)
+                self.assert_index_plan(self.explain(sql, server=node, query_params=params),
+                                       index_name)
+                rows = self.run_cbq_query(sql, server=node,
+                                          query_params=dict(params or {}))['results']
+                self.assert_same_rows(rows, expected, on_node, seed)
+            if len(nodes) > 1:
+                self.assert_same_plan_across_nodes(sql, nodes=nodes)
+        self.log.info("%s: %d queries re-checked (plan, rows) on %s", what, len(checks),
+                      [n.ip for n in nodes])
+
+    def restart_couchbase_server(self, node):
+        """Restart couchbase-server on node; wait for ns_server, bucket warmup and the
+        query service before the next node goes down."""
+        shell = RemoteMachineShellConnection(node)
+        try:
+            shell.restart_couchbase()
+        finally:
+            shell.disconnect()
+        ClusterOperationHelper.wait_for_ns_servers_or_assert([node], self)
+        for bucket in self.buckets:
+            self.assertTrue(ClusterOperationHelper._wait_warmup_completed(
+                self, [node], bucket.name), "Bucket {} on {} did not warm up after the "
+                "restart".format(bucket.name, node.ip))
+        self._wait_for_query_service_ready(node, timeout=300)
+        self.wait_cluster_healthy("restarting couchbase-server on {}".format(node.ip))
+        self.log.info("couchbase-server on %s restarted", node.ip)
+
+    def cbq_pids(self):
+        return {n.ip: self._cbq_engine_pid(n) for n in self.get_query_nodes()}
+
+    def assert_cbq_not_restarted(self, pids_before, what):
+        pids_after = self.cbq_pids()
+        self.assertEqual(pids_after, pids_before,
+                         "cbq-engine restarted (crashed) during {}: pids before {} after {}"
+                         .format(what, pids_before, pids_after))
+
+    def run_no_panic(self, query, step, **kwargs):
+        """run_cbq_query; error 5001 fails the test naming the step, other errors are raised.
+        The code is matched in the raw response: a request that panics mid-stream can return
+        a truncated (non-JSON) body, which process_CBQE cannot parse."""
+        try:
+            return self.run_cbq_query(query, **kwargs)
+        except CBQError as ex:
+            text = str(ex)
+            if PANIC_CODE_RE.search(text):
+                errors = text[text.find('errors'):][:500]
+                self.fail("{} panicked (error {}): {}".format(step, PANIC_ERROR_CODE, errors))
+            raise
+
+    def assert_union_scan(self, plan, index_names):
+        """A UnionScan over exactly index_names, and no primary or sequential scan."""
+        unions = self.find_all_operators(plan, 'UnionScan')
+        self.assertTrue(unions, "No UnionScan in the plan:\n{}".format(self.format_plan(plan)))
+        scanned = {op.get('index') for union in unions for op in self.find_scans(union)}
+        self.assertEqual(scanned, set(index_names),
+                         "UnionScan scans {} instead of {}. Plan:\n{}".format(
+                             sorted(scanned), sorted(index_names), self.format_plan(plan)))
+        self.assert_no_primary_scan(plan)
+        self.assert_no_sequential_scan(plan)
+
+    def require_two_nodes(self):
+        """2+ query nodes (cross-node checks) and 2+ index nodes (index replica)."""
+        query_nodes, index_nodes = self.get_query_nodes(), self.get_index_nodes()
+        self.assertTrue(len(query_nodes) >= 2 and len(index_nodes) >= 2,
+            "Needs 2+ query and 2+ index nodes (run with nodes_init=2 and "
+            "services_init=kv:index:n1ql-kv:index:n1ql); found {} query, {} index".format(
+                [n.ip for n in query_nodes], [n.ip for n in index_nodes]))
+
+    @staticmethod
+    def _canonical(value):
+        """value with integral floats as ints (12.0 -> 12), as the query service returns them."""
+        if isinstance(value, float) and value.is_integer():
+            return int(value)
+        if isinstance(value, dict):
+            return {k: QueryTests._canonical(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [QueryTests._canonical(v) for v in value]
+        return value
+
+    def assert_same_rows(self, got, expected, what, seed=None, ordered=False):
+        """got and expected hold the same rows (duplicates counted; in the same order
+        when ordered): the count first, for a clear message, then the rows as JSON."""
+        def dump(rows):
+            dumped = [json.dumps(self._canonical(row), sort_keys=True) for row in rows]
+            return dumped if ordered else sorted(dumped)
+        got, expected = dump(got), dump(expected)
+        suffix = " (seed={})".format(seed) if seed is not None else ""
+        self.assertEqual(len(got), len(expected), "{}: {} rows, expected {}{}".format(
+            what, len(got), len(expected), suffix))
+        self.assertEqual(got, expected, "{}: wrong rows{}".format(what, suffix))
+
+    def query_vitals(self, node):
+        """admin/vitals of the query service on node, as a dict."""
+        status, content = self.rest.get_query_vitals(node)
+        self.assertTrue(status, "GET admin/vitals on {} failed: {}".format(node.ip, content))
+        return json.loads(content)
+
+    def query_rss_mb(self, node):
+        """cbq-engine resident memory on node, in MB."""
+        vitals = self.query_vitals(node)
+        self.assertIn(VITALS_RSS, vitals, "admin/vitals on {} has no {}: {}".format(
+            node.ip, VITALS_RSS, sorted(vitals)))
+        return vitals[VITALS_RSS] / MIB
+
+    def set_query_admin_setting(self, node, key, value):
+        """POST {key: value} to the query service's admin/settings on one node
+        (RestConnection.set_query_servicers posts {servicers: setting} there)."""
+        response, content = self.rest.set_query_servicers(node, value, servicers=key)
+        self.assertEqual(response.status, 200, "POST admin/settings {}={} on {} failed: {}"
+                         .format(key, value, node.ip, content))
+
+    def set_query_setting(self, key, value):
+        """POST {key: value} to admin/settings on every query node; returns {ip: previous}
+        for restore_query_setting."""
+        before = {}
+        for node in self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True):
+            before[node.ip] = self.rest.get_query_admin_settings(node).get(key)
+            self.set_query_admin_setting(node, key, value)
+        return before
+
+    def restore_query_setting(self, key, before):
+        for node in self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True):
+            if before.get(node.ip) is not None:
+                self.set_query_admin_setting(node, key, before[node.ip])
+
+    def query_log_line_count(self, node):
+        """Number of lines in node's query.log, a mark for query_log_grep."""
+        shell = RemoteMachineShellConnection(node)
+        try:
+            out, _ = shell.execute_command("wc -l < {}/query.log".format(testconstants.LINUX_COUCHBASE_LOGS_PATH))
+        finally:
+            shell.disconnect()
+        return int(out[0].strip())
+
+    def query_log_grep(self, node, since, pattern):
+        """query.log lines after line `since` that match the extended regex `pattern`."""
+        shell = RemoteMachineShellConnection(node)
+        try:
+            out, _ = shell.execute_command("tail -n +{} {}/query.log | grep -E '{}' | head -5"
+                                           .format(since + 1, testconstants.LINUX_COUCHBASE_LOGS_PATH, pattern))
+        finally:
+            shell.disconnect()
+        return [line for line in out if line.strip()]
+
+    def assert_used_memory(self, result, quota_mb, what):
+        """With a request memory_quota the metrics report usedMemory: above 0, below it."""
+        used = result['metrics'].get('usedMemory')
+        self.assertTrue(isinstance(used, (int, float)) and not isinstance(used, bool)
+                        and 0 < used < quota_mb * MIB,
+                        "{}: usedMemory {} is not between 0 and the {} MB quota".format(
+                            what, used, quota_mb))
+
+    def explain(self, query, server=None, use_cbo=None, query_params=None):
+        """EXPLAIN plan (with CTE/subquery plans). Copies query_params: run_cbq_query
+        modifies the dict it gets."""
+        params = dict(query_params or {})
+        if use_cbo is not None:
+            params['use_cbo'] = use_cbo
+        result = self.run_cbq_query("EXPLAIN {}".format(query), server=server,
+                                    query_params=params)
+        return self.plan_with_subqueries(result)
+
+    def plan_with_subqueries(self, explain_result):
+        """The EXPLAIN plan plus its '~subqueries' (CTE and subquery plans, which the main
+        plan only shows as an ExpressionScan), so plan checks see their scans too."""
+        plan = self.ExplainPlanHelper(explain_result)
+        subqueries = explain_result["results"][0].get("~subqueries")
+        if subqueries and isinstance(plan, dict):
+            plan = dict(plan, **{"~subqueries": subqueries})
+        return plan
+
+    def assert_index_used(self, plan, index_name):
+        self.assertIn(index_name, self.used_index_names(plan),
+            "Expected index '{}' not used. Plan:\n{}".format(index_name, self.format_plan(plan)))
+
+    def assert_no_primary_scan(self, plan):
+        """No scan on '#primary' and no PrimaryScan (a sequential scan, also a
+        PrimaryScan3, is left to assert_no_sequential_scan)."""
+        primary = [op for op in self.find_scans(plan)
+                   if op.get('index') == PRIMARY_INDEX
+                   or (op['#operator'] in ('PrimaryScan3', 'PrimaryScan')
+                       and op.get('index') != SEQUENTIAL_SCAN)]
+        self.assertEqual(primary, [],
+            "Unexpected primary scan. Plan:\n{}".format(self.format_plan(plan)))
+
+    def assert_no_sequential_scan(self, plan):
+        # Matched on the index name: a sequential scan can be an IndexScan3 or a PrimaryScan3.
+        seqscans = self.find_operators_using_index(plan, SEQUENTIAL_SCAN)
+        self.assertEqual(seqscans, [],
+            "Unexpected sequential scan. Plan:\n{}".format(self.format_plan(plan)))
+
+    def assert_same_plan_across_nodes(self, query, nodes=None, use_cbo=None):
+        """Same normalized EXPLAIN plan on every query node (needs 2+ nodes)."""
+        nodes = nodes if nodes is not None else (
+            self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True) or [])
+        self.assertGreaterEqual(len(nodes), 2,
+            "assert_same_plan_across_nodes needs 2+ query nodes, found {}".format(
+                [n.ip for n in nodes]))
+        plans = [(node.ip, self.explain(query, server=node, use_cbo=use_cbo)) for node in nodes]
+        base_ip, base_plan = plans[0]
+        for ip, plan in plans[1:]:
+            self.assertEqual(self.normalize_plan(base_plan), self.normalize_plan(plan),
+                "Plan differs between query nodes {} and {}.\n{}:\n{}\n{}:\n{}".format(
+                    base_ip, ip, base_ip, self.format_plan(base_plan), ip, self.format_plan(plan)))
+        self.log.info("Same plan on %d query nodes: %s", len(plans), [ip for ip, _ in plans])
+
+    def assert_cbo_result_parity(self, sql, expected, what, seed=None, nodes=None,
+                                 query_params=None, profile_cbo=False):
+        """On every node in `nodes` (default: every query node), the query with use_cbo
+        true and with use_cbo false each returns exactly `expected` (rows computed from
+        the data), so CBO and rule-based planning give the same rows. profile_cbo adds
+        profile=timings to the CBO run. Returns {node_ip: result of the CBO run}."""
+        nodes = self.get_query_nodes() if nodes is None else nodes
+        cbo_results = {}
+        for node in nodes:
+            for use_cbo in (True, False):
+                params = dict(query_params or {}, use_cbo=use_cbo)
+                if use_cbo and profile_cbo:
+                    params['profile'] = 'timings'
+                result = self.run_cbq_query(sql, server=node, query_params=params)
+                self.assert_same_rows(result['results'], expected, "{} on {} (use_cbo={})".format(
+                    what, node.ip, use_cbo), seed)
+                if use_cbo:
+                    cbo_results[node.ip] = result
+        return cbo_results
+
+    def assert_no_cbo_index_regression(self, query):
+        """If the non-CBO plan uses a secondary index, the CBO plan must not fall back
+        to a primary or sequential scan."""
+        fallback = {PRIMARY_INDEX, SEQUENTIAL_SCAN}
+        plan_off = self.explain(query, use_cbo=False)
+        plan_on = self.explain(query, use_cbo=True)
+        off_idx, on_idx = self.used_index_names(plan_off), self.used_index_names(plan_on)
+        self.log.info("CBO off uses %s; CBO on uses %s", sorted(off_idx), sorted(on_idx))
+        if off_idx - fallback:
+            self.assertFalse((on_idx & fallback) or not (on_idx - fallback),
+                "CBO regressed to a primary/sequential scan (non-CBO used {}).\n"
+                "CBO off:\n{}\nCBO on:\n{}".format(
+                    sorted(off_idx - fallback), self.format_plan(plan_off), self.format_plan(plan_on)))
+
+    def _wait_for_query_service_ready(self, node, timeout=60):
+        """Wait for GET /admin/ping = 200 on node, then run SELECT 1 there. Only "port
+        refused" (ServerUnavailableException) and a non-200 answer are waited out."""
+        rest = RestConnection(node)
+        api = rest.query_baseUrl + 'admin/ping'
+        deadline = time.time() + timeout
+        last = None
+        while time.time() < deadline:
+            try:
+                ok, content, _ = rest._http_request(
+                    api, 'GET', timeout=10, connect_timeout=max(1, deadline - time.time()))
+            except ServerUnavailableException as ex:
+                last = ex
+                time.sleep(2)
+                continue
+            if ok:
+                self.run_cbq_query('SELECT 1', server=node)
+                return
+            last = content
+            time.sleep(2)
+        self.fail("Query service on {} not ready within {}s (last: {})".format(
+            node.ip, timeout, last))
+
+    def _cbq_engine_pid(self, node):
+        shell = RemoteMachineShellConnection(node)
+        try:
+            out, _ = shell.execute_command("pgrep -x cbq-engine")
+        finally:
+            shell.disconnect()
+        return out[0].strip() if out else None
+
+    def restart_query_service(self, node=None, timeout=120):
+        """Kill cbq-engine on node (only the query service) and wait for a new one."""
+        target = node or self.master
+        before = self._cbq_engine_pid(target)
+        if not before:
+            self.fail("cbq-engine is not running on {}".format(target.ip))
+        # kill -9 that pid: remote_util.terminate_process greps for the name and can kill its
+        # own shell first once pids wrap (pid_max 32768), leaving cbq-engine running.
+        shell = RemoteMachineShellConnection(target)
+        try:
+            shell.execute_command("kill -9 {}".format(before))
+        finally:
+            shell.disconnect()
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            after = self._cbq_engine_pid(target)
+            if after and after != before:
+                self.log.info("cbq-engine on %s restarted: pid %s -> %s", target.ip, before, after)
+                self._wait_for_query_service_ready(target, timeout=max(10, int(deadline - time.time())))
+                return
+            time.sleep(2)
+        shell = RemoteMachineShellConnection(target)
+        try:
+            procs, _ = shell.execute_command("pgrep -a cbq-engine")
+            babysitter, _ = shell.execute_command(
+                "grep -i -E 'cbq|n1ql' {}/babysitter.log | tail -20".format(
+                    testconstants.LINUX_COUCHBASE_LOGS_PATH))
+        finally:
+            shell.disconnect()
+        self.fail("cbq-engine on {} did not restart within {}s (pid before {}); running now: "
+                  "{}; babysitter.log: {}".format(target.ip, timeout, before, procs,
+                                                  "\n".join(babysitter)))
+
+    def _create_index(self, ddl, index_name, **options):
+        """With one replica (a copy on each index node) plus extra WITH options."""
+        ddl += ' WITH ' + json.dumps(dict({"num_replica": 1}, **options))
+        self.run_cbq_query(ddl)
+        self._wait_for_index_online(self.buckets[0], index_name)
+
+    # --- index validation: item count, scan, explain; again after a query restart ---
+
+    def _index_spec(self, name, scan_where, docs, entries=None, keyspace=None, replicas=1,
+                    stats_keyspace=None):
+        """What an index must hold, computed from the data: `docs` documents (what a scan
+        through it counts) and `entries` index items (= docs unless it has an array key).
+        scan_where selects every indexed document (leading key and partial condition)."""
+        bucket = self.buckets[0].name
+        return {'name': name, 'scan_where': scan_where, 'docs': docs,
+                'entries': docs if entries is None else entries,
+                'keyspace': keyspace or self.query_bucket, 'replicas': replicas,
+                'stats_keyspaces': [stats_keyspace] if stats_keyspace else
+                [bucket, 'default:{}._default._default'.format(bucket)]}
+
+    def _collection_index_spec(self, scope, collection, keyspace, name, scan_where, docs,
+                               entries=None, replicas=0):
+        """_index_spec for an index (no replica by default) on scope.collection of the
+        first bucket."""
+        return self._index_spec(name, scan_where, docs, entries, keyspace=keyspace,
+                                replicas=replicas,
+                                stats_keyspace='default:{}.{}.{}'.format(
+                                    self.buckets[0].name, scope, collection))
+
+    def _index_item_counts(self, spec):
+        """items_count of every instance (replica) of the index, summed over the index nodes
+        (a partitioned instance is spread over several nodes)."""
+        counts = {}
+        for stats in (self.get_index_stats(perNode=True) or {}).values():
+            stats = stats or {}
+            for keyspace in spec['stats_keyspaces']:
+                for name, index_stats in stats.get(keyspace, {}).items():
+                    if re.sub(r' \(replica \d+\)$', '', name) == spec['name']:
+                        counts[name] = counts.get(name, 0) + index_stats.get('items_count', 0)
+        return counts
+
+    def _check_indexes(self, specs, when):
+        for spec in specs:
+            what = "{} ({})".format(spec['name'], when)
+            # 1. Every instance holds exactly the expected items (stats can lag the build).
+            deadline = time.time() + 120
+            while True:
+                counts = self._index_item_counts(spec)
+                ok = (len(counts) == spec['replicas'] + 1
+                      and all(c == spec['entries'] for c in counts.values()))
+                if ok or time.time() > deadline:
+                    break
+                time.sleep(3)
+            self.assertTrue(ok, "{}: items_count per instance {}, expected {} on each of {} "
+                            "instances".format(what, counts, spec['entries'], spec['replicas'] + 1))
+            # 2. A scan through the index counts exactly the indexed documents.
+            scan = "SELECT COUNT(1) AS n FROM {} USE INDEX ({}) WHERE {}".format(
+                spec['keyspace'], spec['name'], spec['scan_where'])
+            rows = self.run_cbq_query(scan)['results']
+            self.assertEqual(rows, [{'n': spec['docs']}], "{}: scan counted {}, expected {} "
+                             "documents ({} items)".format(what, rows, spec['docs'], spec['entries']))
+            # 3. The scan is served by that index.
+            self.assert_index_plan(self.explain(scan), spec['name'])
+
+    def _validate_indexes(self, specs, restart=True):
+        """Item count, scan count and plan of each index; then restart the query service
+        on every query node and check them all again."""
+        self._check_indexes(specs, "after create")
+        if restart:
+            for node in self.get_query_nodes():
+                self.restart_query_service(node)
+            self._check_indexes(specs, "after query-service restart")
+
+    def load_polymorphic_docs(self, bucket, num_docs, value_type=POLYMORPHIC_VALUE_TYPE,
+                              key_prefix='doc_', scope='_default', collection='_default'):
+        """Load num_docs DocLoader PolymorphicDoc documents into one keyspace, through the
+        same SDKDataLoader + magma DocLoader path BaseSecondaryIndexingTests uses for
+        Hotel/Person. value_type is checked first (see parse_polymorphic_value_type)."""
+        self.parse_polymorphic_value_type(value_type)
+        if not self.use_magma_loader:
+            self.fail("PolymorphicDoc is only available in the magma DocLoader; run with "
+                      "use_magma_loader=True")
+        bucket_name = getattr(bucket, 'name', bucket)
+        self.log.info("Loading %s: bucket=%s scope=%s collection=%s keyPrefix=%s range=0..%d",
+                      value_type, bucket_name, scope, collection, key_prefix, num_docs)
+        gen = SDKDataLoader(num_ops=num_docs, percent_create=100, percent_update=0,
+                            percent_delete=0, scope=scope, collection=collection,
+                            json_template=value_type, output=True, key_prefix=key_prefix,
+                            username=self.master.rest_username,
+                            password=self.master.rest_password)
+        self.cluster.async_load_gen_docs(self.master, bucket=bucket_name, generator=gen,
+                                         use_magma_loader=True).result()
+
+    def verify_polymorphic_distribution(self, bucket, num_docs, value_type=POLYMORPHIC_VALUE_TYPE,
+                                        scope='_default', collection='_default',
+                                        share_tolerance=0.03):
+        """All num_docs documents have a requested _type and each type's share is near
+        its weight; returns {type: count}. Uses an index on _type, so documents without
+        _type are caught by the item count, not here."""
+        weights = self.parse_polymorphic_value_type(value_type)
+        keyspace = "`{}`.`{}`.`{}`".format(getattr(bucket, 'name', bucket), scope, collection)
+        rows = self.run_cbq_query(
+            "SELECT d._type AS t, COUNT(*) AS n FROM {} d WHERE d._type IS NOT MISSING "
+            "GROUP BY d._type".format(keyspace))['results']
+        counts = {row.get('t'): row['n'] for row in rows}
+        total = sum(counts.values())
+        self.log.info("PolymorphicDoc: %d docs with _type, counts per _type: %s", total, counts)
+        self.assertEqual(total, num_docs,
+            "Expected {} docs with a _type, found {}: {}. Stale DocLoader jar or failed "
+            "load?".format(num_docs, total, counts))
+        unexpected = set(counts) - set(weights)
+        self.assertFalse(unexpected,
+            "Unexpected _type values {} (requested {}). Is the jar built from DocLoader "
+            "main with PolymorphicDoc?".format(sorted(unexpected, key=str), sorted(weights)))
+        total_weight = float(sum(weights.values()))
+        for doc_type, weight in weights.items():
+            expected = weight / total_weight
+            actual = counts.get(doc_type, 0) / float(num_docs)
+            self.assertTrue(abs(actual - expected) <= share_tolerance,
+                "_type {} is {:.1%} of docs, expected {:.1%} +/- {:.0%}: {}".format(
+                    doc_type, actual, expected, share_tolerance, counts))
+        return counts
 
     def gen_docs(self, docs_per_day=1, type='default', values_type=None, name='tuq', start=0, end=0):
         json_generator = JsonGenerator()
