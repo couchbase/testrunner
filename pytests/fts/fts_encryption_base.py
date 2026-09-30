@@ -716,22 +716,6 @@ class EARUpgradeHelper:
             self.log.info(f"disable_bucket_encryption on '{bucket_name}' raised: {err}")
             return False, str(err)
 
-    def segments_encrypted_errors_settled(self, label="segments", timeout=600, poll=30):
-        """As segments_encrypted_errors, but allow obsolete segments to be cleaned up.
-
-        A merge writes new encrypted segments; the superseded plaintext ones stay
-        on disk until FTS removes them, so an immediate scan can still find
-        plaintext in files that are no longer in use.
-        """
-        deadline = time.time() + timeout
-        errors = self.segments_encrypted_errors(label=label)
-        while errors and time.time() < deadline:
-            self.log.info(f"[{label}] plaintext still on disk, waiting for obsolete "
-                          f"segments to be cleaned up ({int(deadline - time.time())}s left)")
-            time.sleep(poll)
-            errors = self.segments_encrypted_errors(label=label)
-        return errors
-
     def segments_encrypted_errors(self, label="segments", fts_nodes=None):
         """Errors if any FTS segment still holds sensitive data in plaintext."""
         nodes = fts_nodes or self.fts_nodes()
@@ -790,40 +774,110 @@ class EARUpgradeHelper:
         """GetInUseKeys datatype string for a bucket, e.g. "service_bucket <uuid>"."""
         return f"{self.encryption_helper.SERVICE_BUCKET_PREFIX}{self.bucket_uuid(bucket_name)}"
 
-    def has_unencrypted_marker(self, datatype=None):
-        """True while FTS still reports unencrypted data (an "" entry) in use."""
-        merged = self.encryption_helper.get_fts_in_use_keys(self.fts_nodes())
-        return self.encryption_helper.fts_has_unencrypted_marker(merged, datatype)
+                # cbauth drives FTS encryption and logs each callback into fts.log. These are
+    # the definitive signals -- re-encryption needs refreshKeys (a key was
+    # allocated) followed by dropKeys (FTS was told to re-encrypt). cbauth's poll
+    # can be as infrequent as hourly or daily, so a test waits for the log line,
+    # it does not wait for the rewrite to finish.
+    CBAUTH_INIT = "encryptionManager: encryption manager created and callbacks registered successfully"
+    CBAUTH_REFRESH = "encryptionManager: refreshKeys callback called for key data"
+    CBAUTH_DROP = "encryptionManager: dropKeys callback called for key data"
 
-    def trigger_data_reencryption(self, bucket_name="default"):
-        """Ask ns_server to drop the bucket DEKs, which drives re-encryption.
+    def force_reencrypt_and_wait(self, bucket_name="default", timeout=300, poll=15):
+        """Force re-encryption of a bucket and wait for FTS's in-use keys to change.
 
-        There is no retroactive re-encryption in FTS. cbauth polls FTS for the
-        keys it has in use; FTS answers with an empty key when it still holds
-        unencrypted data, and cbauth then drives the re-encryption. This POST
-        (controller/dropEncryptionAtRestDeks) is how a test kicks that cycle off
-        instead of waiting for the next natural poll.
+        cbauth's own poll can be hourly or daily, which is untestable in a
+        functional run. POSTing controller/dropEncryptionAtRestDeks makes it act
+        now: it drops the bucket DEKs, which drives the refreshKeys/dropKeys
+        callbacks into FTS. Mirrors
+        GSIQueryEncryptionAtRestUpgrade._force_reencrypt_bucket_and_wait -- take a
+        baseline first and wait for the key set to DIFFER, rather than waiting for
+        any particular end state.
+
+        Returns (changed, baseline_keys, new_keys).
         """
         try:
+            _, baseline = self.in_use_deks(bucket_name)
+        except Exception as err:
+            self.log.warning(f"could not read baseline DEKs for '{bucket_name}': {err}")
+            baseline = []
+        baseline_set = set(baseline)
+        self.log.info(f"Forcing re-encryption of '{bucket_name}' "
+                      f"(baseline DEKs: {sorted(baseline_set)})")
+
+        try:
             status, resp = RestConnection(self._master()).trigger_data_reencryption(bucket_name)
-            self.log.info(f"Triggered data re-encryption on '{bucket_name}': "
+            self.log.info(f"dropEncryptionAtRestDeks on '{bucket_name}': "
                           f"status={status}, resp={resp}")
-            return status
+            if not status:
+                return False, sorted(baseline_set), []
         except Exception as err:
             self.log.warning(f"could not trigger re-encryption on '{bucket_name}': {err}")
-            return False
+            return False, sorted(baseline_set), []
 
-    def force_merge_and_wait(self, index_name, timeout=600):
-        """Trigger an FTS segment merge and wait for it to finish.
+        deadline = time.time() + timeout
+        current = baseline_set
+        while time.time() < deadline:
+            try:
+                _, deks = self.in_use_deks(bucket_name)
+                current = set(deks)
+                if current and current != baseline_set:
+                    self.log.info(f"FTS in-use DEKs changed for '{bucket_name}': "
+                                  f"{sorted(baseline_set)} -> {sorted(current)}")
+                    return True, sorted(baseline_set), sorted(current)
+            except Exception as err:
+                self.log.info(f"waiting for new DEKs on '{bucket_name}': {err}")
+            time.sleep(poll)
+        self.log.warning(f"FTS in-use DEKs did not change for '{bucket_name}' within "
+                         f"{timeout}s (still {sorted(current)})")
+        return False, sorted(baseline_set), sorted(current)
 
-        FTS only rewrites segments on a merge or flush, so an index that was
-        already built before encryption was enabled keeps its existing segments
-        in plaintext until one happens. Mirrors
-        FTSEncryptionBaseTest._force_merge_and_wait.
+    def wait_for_keys_converged(self, bucket_name="default", timeout=300, poll=15):
+        """Poll keysInUse until the bucket reports real DEKs and no unencrypted marker.
+
+        This is the check the GSI suite asserts on
+        (validate_mixed_bucket_encrypted_keys): every encrypted bucket's
+        "service_bucket <uuid>" entry must end up with non-empty key IDs, with
+        the "" (unencrypted-data) marker gone. Grepping segment files for
+        plaintext is deliberately NOT the assertion -- FTS's own
+        _check_dek_in_segments is best-effort precisely because the on-disk
+        key-id encoding is not settled.
+
+        Returns (converged, deks, full_map).
+        """
+        datatype = self.bucket_datatype(bucket_name)
+        deadline = time.time() + timeout
+        deks, merged = [], {}
+        while time.time() < deadline:
+            try:
+                merged, deks = self.in_use_deks(bucket_name)
+                entry = merged.get(datatype, [])
+                has_marker = "" in entry
+                if deks and not has_marker:
+                    self.log.info(
+                        f"keysInUse converged for '{bucket_name}': {deks} "
+                        f"(no unencrypted marker)")
+                    return True, deks, merged
+                self.log.info(
+                    f"waiting for keysInUse to converge on '{bucket_name}': "
+                    f"deks={deks}, unencrypted_marker={has_marker}")
+            except Exception as err:
+                self.log.info(f"waiting for keysInUse on '{bucket_name}': {err}")
+            time.sleep(poll)
+        self.log.warning(
+            f"keysInUse did not converge for '{bucket_name}' within {timeout}s "
+            f"(deks={deks}, map={merged})")
+        return False, deks, merged
+
+    def force_merge_and_wait(self, index_name, timeout=300, poll=10):
+        """Trigger an FTS segment merge and wait for compaction to drain.
+
+        Rotating the DEK does not rewrite segments that are already on disk --
+        FTS only does that on a merge or flush. test_fts_ear_force_reencryption
+        calls this straight after the rotation for the same reason.
         """
         nodes = self.fts_nodes()
         if not nodes:
-            self.log.warning("no FTS node available to trigger a merge on")
             return False
         rest = RestConnection(nodes[0])
         try:
@@ -832,49 +886,48 @@ class EARUpgradeHelper:
         except Exception as err:
             self.log.warning(f"could not trigger a merge on '{index_name}': {err}")
             return False
-        # The compaction task list is empty for a moment after the request is
-        # accepted, so polling straight away reports "complete" in milliseconds
-        # without a merge ever having run. Give it time to appear, and require
-        # the task list to have been seen non-empty before trusting an empty one.
-        time.sleep(30)
-        started = time.time()
-        deadline = started + timeout
-        seen_running = False
+        deadline = time.time() + timeout
         while time.time() < deadline:
+            time.sleep(poll)
             try:
                 _, tasks = rest.get_fts_index_compactions(index_name)
-                running = bool(isinstance(tasks, dict) and tasks.get("tasks"))
-                if running:
-                    seen_running = True
-                elif seen_running:
-                    self.log.info(f"Merge complete on '{index_name}'")
-                    return True
-                elif time.time() - started > 60:
-                    # The merge can finish between the settle and the first poll,
-                    # so never seeing a running task is not an error -- stop
-                    # waiting rather than burning the whole timeout.
-                    self.log.info(f"no compaction task ever became visible for "
-                                  f"'{index_name}'; treating the merge as done")
+                if not (isinstance(tasks, dict) and tasks.get("tasks")):
+                    self.log.info(f"Merge drained on '{index_name}'")
                     return True
             except Exception as err:
                 self.log.info(f"waiting for merge on '{index_name}': {err}")
-            time.sleep(15)
-        self.log.warning(f"merge on '{index_name}' did not report completion within {timeout}s")
+        self.log.warning(f"merge on '{index_name}' still reported tasks after {timeout}s")
         return False
 
-    def wait_for_encryption_complete(self, bucket_name="default", timeout=900, poll=30):
-        """Poll until FTS stops reporting unencrypted data for the bucket."""
-        deadline = time.time() + timeout
-        deks = []
-        while time.time() < deadline:
+    def cbauth_callbacks_seen(self, fts_nodes=None):
+        """Which cbauth encryption callbacks appear in fts.log, per node.
+
+        Returns {node_ip: {'init': bool, 'refresh': bool, 'drop': bool}}.
+        """
+        results = {}
+        for node in (fts_nodes or self.fts_nodes()):
+            log_dir = self.encryption_helper._resolve_log_path(node)
+            shell = RemoteMachineShellConnection(node)
             try:
-                _, deks = self.in_use_deks(bucket_name)
-                if deks and not self.has_unencrypted_marker(self.bucket_datatype(bucket_name)):
-                    self.log.info(f"Re-encryption complete for '{bucket_name}': deks={deks}")
-                    return True, deks
+                found = {}
+                for key, needle in (('init', self.CBAUTH_INIT),
+                                    ('refresh', self.CBAUTH_REFRESH),
+                                    ('drop', self.CBAUTH_DROP)):
+                    out, _ = shell.execute_command(
+                        "grep -c '{0}' {1}/fts.log* 2>/dev/null | "
+                        "awk -F: '{{s+=$NF}} END {{print s+0}}'".format(needle, log_dir))
+                    text = "".join(out).strip() if isinstance(out, list) else str(out).strip()
+                    found[key] = text.isdigit() and int(text) > 0
+                results[node.ip] = found
+                self.log.info(f"cbauth callbacks on {node.ip}: {found}")
             except Exception as err:
-                self.log.info(f"waiting for re-encryption: {err}")
-            time.sleep(poll)
-        self.log.warning(
-            f"Re-encryption did not complete for '{bucket_name}' within {timeout}s (deks={deks})")
-        return False, deks
+                self.log.warning(f"could not read fts.log on {node.ip}: {err}")
+                results[node.ip] = {'init': None, 'refresh': None, 'drop': None}
+            finally:
+                try:
+                    shell.disconnect()
+                except Exception:
+                    pass
+        return results
+
+    

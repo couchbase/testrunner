@@ -818,7 +818,7 @@ class FTSCallable:
         index_body['planParams']['numReplicas'] = plans['numReplicas']
 
         try:
-            target = node if node is not None else self.servers[1]
+            target = node or self.variable_node or self.servers[1]
             status, result = RestConnection(target).create_fts_index(index_name, index_body, mode="upgrade")
             if status:
                 time.sleep(100)
@@ -837,7 +837,7 @@ class FTSCallable:
         self.store_in_xattr = xattr_flag
         self.encode_base64_vector = base64_flag
 
-        target = node if node is not None else self.servers[1]
+        target = node or self.variable_node or self.servers[1]
 
         uuid = ""
         try:
@@ -846,8 +846,11 @@ class FTSCallable:
             print(e)
 
         index_body_def = RestConnection(target).get_fts_index_definition(name=index_name)[1]['indexDef']
-        index_partition = index_body_def['planParams']['indexPartitions']
-        num_replicas = index_body_def['planParams']['numReplicas']
+        # The server omits planParams keys that are at their default, so read
+        # them defensively rather than assuming they are echoed back.
+        plan_params = index_body_def.get('planParams') or {}
+        index_partition = plan_params.get('indexPartitions', 1)
+        num_replicas = plan_params.get('numReplicas', 0)
 
         index_body = None
         try:
@@ -1023,7 +1026,10 @@ class FTSCallable:
     def run_fts_query(self, index_name, query_dict, bucket_name=None, scope_name=None, node=None, timeout=100,
                       rest=None):
         if not node:
-            node = self.servers[0]
+            # servers[0] is not necessarily an FTS node -- under a dedicated
+            # topology (kv-kv-fts-fts) it is KV-only and 8094 is closed there.
+            # Honour variable_node, which callers set to an actual FTS node.
+            node = self.variable_node or self.servers[0]
         if not rest:
             rest = RestConnection(node)
         try:
@@ -1177,8 +1183,22 @@ class FTSCallable:
 
         if neighbours is not None:
             query_vector = vector
+            # A failed query hands back None (or -1), not a list.
+            matches = matches if isinstance(matches, list) else []
+            if len(matches) < self.k:
+                # An index that is still building, or that has just come back from a
+                # rebalance, answers with fewer than k matches (often none at all).
+                # Indexing matches[i] blind raises IndexError here, and
+                # run_vector_queries_stats swallows it into a 0 accuracy / 0 recall
+                # result that reads like a recall collapse. Say what actually
+                # happened and score only the matches we got.
+                self.log.warning(
+                    f"kNN query on '{self.index_obj['name']}' returned "
+                    f"{len(matches)} match(es) for k={self.k} (hits={hits}) - the "
+                    f"index is not fully serving yet; recall below is measured on "
+                    f"the short result set and is not meaningful")
             fts_matches = []
-            for i in range(self.k):
+            for i in range(min(self.k, len(matches))):
                 fts_matches.append(int(matches[i]['id'][3:]) - 10000001)
 
             self.log.info("*" * 5 + f"Query RESULT # {self.count}" + "*" * 5)
@@ -1275,7 +1295,12 @@ class FTSCallable:
             else:
                 self.log.info(f"SUCCESS")
         except Exception as e:
-            self.log.error(e)
+            # index_stats is still the zeroed initialiser here, so callers see
+            # fts_accuracy=0/fts_recall=0 and report "poor recall" for what was
+            # really a crash. Log the traceback so the real cause is in the run.
+            self.log.error(
+                f"vector query run on '{index_name}' raised {type(e).__name__}: {e} "
+                f"- returning zeroed stats", exc_info=True)
             is_passed = False
 
         return is_passed, index_stats

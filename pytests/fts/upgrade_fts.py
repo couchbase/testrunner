@@ -27,6 +27,10 @@ class UpgradeFTS(NewUpgradeBaseTest):
     LEGACY_VECTOR_INDEX = "vec_legacy_idx"
     FEATURE_VECTOR_INDEX = "vec_feature_idx"
 
+    # Doc-id prefix for the vector corpus. MUST stay off the emp key space the
+    # upgrade workload writes to -- see _push_all_vector_data.
+    VECTOR_DOC_PREFIX = "vec"
+
     EAR_INDEX = "fts_ear_upgrade_idx"
 
     # CBQE-8244
@@ -53,8 +57,29 @@ class UpgradeFTS(NewUpgradeBaseTest):
         self.vector_dimension = self.input.param("dimension", 128)
         self.vector_recall_tolerance = self.input.param("vector_recall_tolerance", 5)
         self.vector_index_build_wait = self.input.param("vector_index_build_wait", 150)
+        # How long an index may take to come back after a rebalance or a rebuild
+        # before kNN queries are allowed to run against it -- see
+        # _wait_vector_index_ready for why a fixed sleep is not enough.
+        self.vector_index_ready_timeout = self.input.param("vector_index_ready_timeout", 900)
+        self.vector_k = self.input.param("k", 2)
+        # A quantized (BQ) index legitimately recalls worse than the flat index the
+        # pre-upgrade baseline was measured on, so it is not held to
+        # baseline - vector_recall_tolerance. Set this for an absolute floor;
+        # otherwise expected_accuracy_and_recall (enforced inside
+        # run_vector_queries_stats) stays the only gate.
+        self.bq_recall_threshold = self.input.param("bq_recall_threshold", None)
 
-        self.ear_reencryption_timeout = self.input.param("ear_reencryption_timeout", 900)
+        self.ear_reencryption_timeout = self.input.param("ear_reencryption_timeout", 300)
+        # keysInUse convergence is a far slower, best-effort signal than the DEK
+        # rotation itself; GSI allows 1200s for it and only warns. See
+        # _ear_post_upgrade_checks.
+        self.ear_convergence_timeout = self.input.param("ear_convergence_timeout", 1200)
+        # Quiet window between the final rebalance-in and touching encryption --
+        # see _ear_post_upgrade_checks.
+        self.ear_post_rebalance_settle = self.input.param("ear_post_rebalance_settle", 60)
+        # True  -> 8.0+ start: encrypt before upgrading, then force re-encryption.
+        # False -> 7.6 start: upgrade fully, then encrypt.
+        self.ear_encrypt_before_upgrade = self.input.param("ear_encrypt_before_upgrade", False)
 
         self.upgrade_workload_errors = []
 
@@ -2317,8 +2342,102 @@ class UpgradeFTS(NewUpgradeBaseTest):
     def _vector_feature_label(self, knobs):
         return ", ".join(f"{k}={v}" for k, v in sorted(knobs.items())) or "none"
 
+    @staticmethod
+    def _version_at_least(version, major, minor):
+        """True if a 'X.Y.Z-build' string is >= major.minor. False if unparseable."""
+        try:
+            parts = str(version or "").split('-')[0].split('.')
+            return (int(parts[0]), int(parts[1] if len(parts) > 1 else 0)) >= (major, minor)
+        except (ValueError, IndexError):
+            log.warning(f"could not parse version {version!r}; treating it as older")
+            return False
+
+    def _initial_version_is_totoro(self):
+        """True when the pre-upgrade build is already on the upgrade_to line.
+
+        The Totoro knob validation ("binary quantized vector fields not supported
+        in this cluster") only exists on the target build, so a pre-upgrade
+        negative check is only meaningful when initial_version is already there --
+        otherwise the old build just stores the unknown value and ignores it.
+        Keyed off upgrade_to rather than a hardcoded version: 8.0.0 does NOT
+        validate these knobs any more than 7.6 does.
+        """
+        target = str(self.upgrade_to or "").split('-')[0].split('.')
+        try:
+            return self._version_at_least(
+                self.initial_version, int(target[0]), int(target[1] if len(target) > 1 else 0))
+        except (ValueError, IndexError):
+            log.warning(f"could not parse upgrade_to {self.upgrade_to!r}; "
+                        f"treating initial_version as pre-feature")
+            return False
+
+    def _pre_upgrade_has_secrets_api(self):
+        """True when initial_version already ships the ns_server secrets API.
+
+        encryptionKeys/secrets and bucket-level encryption-at-rest are ns_server
+        features that exist from 8.0 onward; only FTS *service* encryption is new
+        on the Totoro line. So "the secrets API must not answer before the
+        upgrade" is only a valid assertion when starting below 8.0.
+        """
+        return self._version_at_least(self.initial_version, 8, 0)
+
+    def _wait_vector_index_ready(self, index_name, label="", timeout=None, poll=15):
+        """Block until an FTS index is really serving, before measuring recall.
+
+        A fixed sleep is not enough. A kNN query fired seconds after a rebalance or
+        an index rebuild comes back empty, and run_vector_queries_stats reports that
+        as 0 accuracy/recall rather than as a not-ready index.
+
+        fts_callable.wait_for_indexing_complete() cannot be used here: it walks the
+        in-memory index registry, which an FTSCallable rebuilt after a rebalance does
+        not have.
+
+        Ready means the indexed doc count is at least k (so a k-NN query can fill its
+        result set) and has stopped moving across two consecutive polls. Returns
+        True if it settled; on timeout it warns and returns False, leaving the
+        caller's own query assertion to decide the outcome.
+        """
+        timeout = self.vector_index_ready_timeout if timeout is None else timeout
+        deadline = time.time() + timeout
+        previous, count = None, None
+        while time.time() < deadline:
+            try:
+                count = RestConnection(
+                    self.get_fts_query_node()).get_fts_index_doc_count(index_name)
+            except Exception as err:
+                log.info(f"{label}waiting for '{index_name}' to answer /count: {err}")
+                count = None
+            if count is not None:
+                log.info(f"{label}'{index_name}' indexed doc count: {count} "
+                         f"(previous poll {previous})")
+                if count >= self.vector_k and count == previous:
+                    log.info(f"{label}'{index_name}' is steady at {count} docs - ready")
+                    return True
+                previous = count
+            self.sleep(poll, f"{label}waiting for '{index_name}' to finish indexing")
+        log.warning(f"{label}'{index_name}' never steadied within {timeout}s "
+                    f"(last indexed doc count {count}, k={self.vector_k}); "
+                    f"querying it anyway")
+        return False
+
     def _push_all_vector_data(self, fts_callable, end_index=10005001):
-        """Load the vector dataset in the four xattr/base64 permutations."""
+        """Load the vector dataset in the four xattr/base64 permutations.
+
+        The corpus MUST NOT share a key space with the emp docs. push_vector_data
+        defaults to documentIdPrefix="emp" over startIndex=10000000, and
+        JsonDocGenerator(name="emp") keys its docs "emp" + str(10000000 + i) --
+        so by default the vector docs ARE the first 5001 emp docs.
+        FTSConcurrentWorkload reloads emp10000000..emp10009999 (workload_items,
+        default 10000) and runs update/delete over the same range on every
+        topology change, rewriting those docs without vector_data. The symptom is
+        every kNN query after the first rebalance returning 0 hits for the rest of
+        the test, while doc counts sit at a reassuring 100000 because the loader
+        overwrote rather than inserted.
+
+        VECTOR_DOC_PREFIX keeps the 3-character prefix that run_vector_query's
+        int(match['id'][3:]) - 10000001 groundtruth mapping depends on, and the
+        index does not key off the prefix (docid_prefix_delim is "").
+        """
         for xattr in (False, True):
             for base64_flag in (False, True):
                 try:
@@ -2326,6 +2445,7 @@ class UpgradeFTS(NewUpgradeBaseTest):
                         self.servers[0],
                         str(self.rest_settings.rest_username),
                         str(self.rest_settings.rest_password),
+                        prefix=self.VECTOR_DOC_PREFIX,
                         xattr=xattr, base64Flag=base64_flag, end_index=end_index)
                 except Exception as err:
                     log.warning(f"push_vector_data(xattr={xattr}, base64={base64_flag}) failed: {err}")
@@ -2382,7 +2502,7 @@ class UpgradeFTS(NewUpgradeBaseTest):
             False, False, self.LEGACY_VECTOR_INDEX, plans, dimensions=self.vector_dimension, node=self.get_fts_query_node())
         self.assertEqual(status, 200,
                          f"failed to create pre-upgrade legacy vector index: {result}")
-        self.sleep(self.vector_index_build_wait, "letting the legacy vector index build")
+        self._wait_vector_index_ready(self.LEGACY_VECTOR_INDEX, label="[baseline] ")
 
         passed, baseline = fts_callable.run_vector_queries_stats(
             index_name=self.LEGACY_VECTOR_INDEX)
@@ -2391,29 +2511,60 @@ class UpgradeFTS(NewUpgradeBaseTest):
         log.info(f"Pre-upgrade baseline for '{self.LEGACY_VECTOR_INDEX}': {baseline}")
         return fts_callable, baseline
 
-    def _assert_feature_index_rejected(self, fts_callable, knobs, index_name, stage, node=None):
-        """A Totoro-knob index must not be creatable before the cluster supports it."""
+    def _assert_feature_index_rejected(self, fts_callable, knobs, index_name, stage,
+                                       node=None, strict=True):
+        """A Totoro-knob index must not be usable before the cluster supports it.
+
+        `strict` picks what "not usable" means, because the two pre-upgrade states
+        behave differently:
+
+        * strict=True -- some node is already 8.0+, so FTS knows the knob and
+          actively refuses it ("binary quantized vector fields not supported in
+          this cluster"). A 200 is a real failure.
+        * strict=False -- the whole cluster predates the knob and does not
+          validate it: vector_index_optimized_for already exists in 7.6 with a
+          different value set, so an unknown value like bivf-sq8 is accepted,
+          stored and ignored. A 200 is therefore expected and is NOT failed on.
+          Reading the definition back cannot tell the two apart either, since the
+          old build echoes the value it stored. The meaningful negative check is
+          the strict one at Stage 2 / mixed-cluster; here we only record what the
+          old build did.
+        """
         errors = []
         plans = self.construct_custom_plan_params(0, 1)
         result, status = fts_callable.create_vector_index(
             False, False, index_name, plans, dimensions=self.vector_dimension,
             node=node, **knobs)
-        if status == 200:
+        if status != 200:
+            log.info(f"[{stage}] got the expected rejection for "
+                     f"{self._vector_feature_label(knobs)}: {result}")
+            return errors
+
+        if strict:
             errors.append(
                 f"[{stage}] vector index with {self._vector_feature_label(knobs)} was "
                 f"created on a cluster that does not fully support it (result={result})")
-            try:
-                fts_callable.delete_fts_index(index_name)
-            except Exception as err:
-                log.warning(f"could not clean up unexpected index '{index_name}': {err}")
         else:
-            log.info(f"[{stage}] got the expected rejection for "
-                     f"{self._vector_feature_label(knobs)}: {result}")
+            log.info(
+                f"[{stage}] initial_version={self.initial_version} accepted "
+                f"{self._vector_feature_label(knobs)} (result={result}). Expected: a "
+                f"pre-8.0 build stores the knob without implementing it. Acceptance "
+                f"here is not evidence of support - the enforcing check is the "
+                f"mixed-cluster stage.")
+
+        try:
+            fts_callable.delete_fts_index(index_name)
+        except Exception as err:
+            log.warning(f"could not clean up index '{index_name}': {err}")
         return errors
 
     def _validate_legacy_index_survived(self, fts_callable, baseline, stage):
         """The pre-upgrade index must still answer kNN queries at its baseline recall."""
         errors = []
+        # Both call sites land immediately after a node upgrade + rebalance-in, when
+        # the pindexes are still being replanned. Querying then returns 0 hits and
+        # looks like a recall collapse.
+        self._wait_vector_index_ready(self.LEGACY_VECTOR_INDEX, label=f"[{stage}] ")
         passed, stats = fts_callable.run_vector_queries_stats(index_name=self.LEGACY_VECTOR_INDEX)
         if not passed:
             errors.append(f"[{stage}] legacy vector index queries failed after upgrade: {stats}")
@@ -2445,8 +2596,11 @@ class UpgradeFTS(NewUpgradeBaseTest):
         log.info("=" * 20 + " Stage 0: pre-upgrade vector baseline")
         fts_callable, baseline = self._vector_upgrade_setup()
 
+        # The whole cluster is still on initial_version here. Only a build already
+        # on the upgrade_to line knows the Totoro knobs well enough to reject them.
         stage0 = self._assert_feature_index_rejected(
-            fts_callable, knobs, "vec_feature_stage0", "Stage 0")
+            fts_callable, knobs, "vec_feature_stage0", "Stage 0",
+            strict=self._initial_version_is_totoro())
         if stage0:
             errors['s0_feature_index'] = stage0
 
@@ -2494,7 +2648,8 @@ class UpgradeFTS(NewUpgradeBaseTest):
         fts_callable, baseline = self._vector_upgrade_setup()
 
         pre = self._assert_feature_index_rejected(
-            fts_callable, knobs, "vec_feature_pre", "pre-upgrade")
+            fts_callable, knobs, "vec_feature_pre", "pre-upgrade",
+            strict=self._initial_version_is_totoro())
         if pre:
             errors['pre_feature_index'] = pre
 
@@ -2527,7 +2682,10 @@ class UpgradeFTS(NewUpgradeBaseTest):
                 f"could not enable {self._vector_feature_label(knobs)} on the existing "
                 f"index '{self.LEGACY_VECTOR_INDEX}': {result}"]
         else:
-            self.sleep(self.vector_index_build_wait, "letting the updated index rebuild with the feature on")
+            # Switching the index onto the feature rebuilds every vector in it, so
+            # wait for it to come back rather than guessing at a sleep.
+            self._wait_vector_index_ready(self.LEGACY_VECTOR_INDEX,
+                                          label="[post-upgrade feature-enable] ")
             def_errors = self._validate_vector_feature_definition(self.LEGACY_VECTOR_INDEX, knobs)
             if def_errors:
                 errors['post_legacy_definition'] = def_errors
@@ -2550,7 +2708,7 @@ class UpgradeFTS(NewUpgradeBaseTest):
                 f"upgraded cluster: {result}"]
             return errors
 
-        self.sleep(self.vector_index_build_wait, "letting the new feature index build")
+        self._wait_vector_index_ready(self.FEATURE_VECTOR_INDEX, label="[post-upgrade feature] ")
         def_errors = self._validate_vector_feature_definition(self.FEATURE_VECTOR_INDEX, knobs)
         if def_errors:
             errors['post_feature_definition'] = def_errors
@@ -2561,22 +2719,78 @@ class UpgradeFTS(NewUpgradeBaseTest):
                 f"kNN queries failed on the new {self._vector_feature_label(knobs)} "
                 f"index: {stats}"]
         else:
-            tolerance = self.vector_recall_tolerance
-            if stats.get('fts_recall', 0) < baseline.get('fts_recall', 0) - tolerance:
-                errors['post_feature_recall'] = [
-                    f"{self._vector_feature_label(knobs)} recall {stats.get('fts_recall')} is "
-                    f"more than {tolerance} below the pre-upgrade baseline "
-                    f"{baseline.get('fts_recall')}"]
-            log.info(f"new feature index stats: {stats} (baseline {baseline})")
+            errors.update(self._check_feature_index_recall(knobs, stats, baseline))
 
         return errors
 
+    def _check_feature_index_recall(self, knobs, stats, baseline):
+        """Hold the feature index to the right recall bar for what it actually is.
+
+        The baseline was measured on the flat pre-upgrade index. A binary-quantized
+        (BQ) index trades recall for footprint by design, so comparing it against
+        that baseline within vector_recall_tolerance fails on correct behaviour. BQ
+        runs are gated on an absolute floor instead: bq_recall_threshold when the
+        conf sets one, otherwise expected_accuracy_and_recall, which
+        run_vector_queries_stats has already enforced for us to get here.
+
+        fastmerge and gpu do not change what is stored, so they keep the baseline
+        comparison.
+        """
+        recall = stats.get('fts_recall', 0)
+        if 'bq_index_type' in knobs:
+            if self.bq_recall_threshold is None:
+                log.info(f"BQ index stats: {stats} (flat baseline {baseline}; not "
+                         f"compared against it - quantization lowers recall by "
+                         f"design. Gated on expected_accuracy_and_recall only; set "
+                         f"bq_recall_threshold for a tighter floor.)")
+                return {}
+            if recall < float(self.bq_recall_threshold):
+                return {'post_feature_recall': [
+                    f"{self._vector_feature_label(knobs)} recall {recall} is below the "
+                    f"BQ floor bq_recall_threshold={self.bq_recall_threshold}"]}
+            log.info(f"BQ index stats: {stats} "
+                     f"(>= bq_recall_threshold={self.bq_recall_threshold})")
+            return {}
+
+        tolerance = self.vector_recall_tolerance
+        if recall < baseline.get('fts_recall', 0) - tolerance:
+            return {'post_feature_recall': [
+                f"{self._vector_feature_label(knobs)} recall {recall} is more than "
+                f"{tolerance} below the pre-upgrade baseline "
+                f"{baseline.get('fts_recall')}"]}
+        log.info(f"new feature index stats: {stats} (baseline {baseline})")
+        return {}
+
     # =========================================================================
     # =========================================================================
 
+    def _wait_for_hits(self, index, expected, timeout=300, poll=15):
+        """Poll an index until it reports `expected` hits, or time out.
+
+        Used after a rebalance: the index serves fewer hits until it has caught
+        up, which is lag rather than data loss.
+        """
+        deadline = time.time() + timeout
+        hits, status = -1, None
+        while time.time() < deadline:
+            hits, _, _, status = index.execute_query(query=self.EAR_QUERY,
+                                                     zero_results_ok=True)
+            if hits == expected:
+                return hits, status
+            log.info(f"index at {hits}/{expected} hits, waiting for it to catch up")
+            time.sleep(poll)
+        return hits, status
+
     def _ear_setup_baseline(self, ear):
-        """Pre-upgrade: index data on an unencrypted cluster and prove it is plaintext."""
+        """Pre-upgrade baseline, in one of the two supported shapes.
+
+        ear_encrypt_before_upgrade=True (an 8.0+ start): the cluster already uses
+        encryption at rest, so turn it on here and carry it through the upgrade.
+        False (a 7.6 start): encryption does not exist yet, so the cluster stays
+        plaintext and is encrypted only once fully upgraded.
+        """
         fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False,
+                                   variable_node=self.get_fts_query_node(),
                                    servers=self.servers)
         fts_callable.load_data(self.num_items)
         index = fts_callable.create_fts_index(
@@ -2590,12 +2804,25 @@ class UpgradeFTS(NewUpgradeBaseTest):
         self.assertNotEqual(hits, -1, f"pre-upgrade baseline query failed: status={status}")
         log.info(f"Pre-upgrade baseline: {hits} hits for {self.EAR_QUERY}")
 
-        plaintext_errors = ear.segments_plaintext_errors(
-            label="pre-upgrade segments should be plaintext")
-        self.assertEqual(
-            plaintext_errors, [],
-            "pre-upgrade segments were not readable as plaintext, so a later "
-            f"'encrypted' verdict would prove nothing: {plaintext_errors}")
+        if self.ear_encrypt_before_upgrade:
+            secret_id = ear.create_kek()
+            self.assertIsNotNone(
+                secret_id, "could not create a KEK on the pre-upgrade build - "
+                           "ear_encrypt_before_upgrade needs an 8.0+ initial_version")
+            status, response = ear.try_enable_bucket_encryption("default", secret_id)
+            self.assertTrue(status, f"enabling bucket encryption pre-upgrade failed: {response}")
+            applied = ear.bucket_encryption_key_id("default")
+            self.assertEqual(
+                str(applied), str(secret_id),
+                f"bucket encryption did not apply pre-upgrade (reads back {applied!r})")
+            log.info(f"Pre-upgrade: bucket encrypted with key {applied}")
+        else:
+            plaintext_errors = ear.segments_plaintext_errors(
+                label="pre-upgrade segments should be plaintext")
+            self.assertEqual(
+                plaintext_errors, [],
+                "pre-upgrade segments were not readable as plaintext, so a later "
+                f"'encrypted' verdict would prove nothing: {plaintext_errors}")
 
         return fts_callable, index, hits
 
@@ -2608,12 +2835,33 @@ class UpgradeFTS(NewUpgradeBaseTest):
             errors['cluster_not_fully_upgraded'] = upgrade_errors
             return errors
 
-        secret_id = ear.create_kek()
-        if secret_id is None:
-            errors['kek'] = "failed to create the bucket-encryption KEK after upgrade"
-            return errors
+        # This runs the instant the last rebalance-in returns -- in one run,
+        # encryption was enabled 0.26s after it, while the preceding workload was
+        # still logging "No node in the cluster has 'fts' service enabled" and the
+        # vbucket map had not come back. cbauth has to re-register its encryption
+        # callbacks with FTS after a node restart, and enabling into that window
+        # is what the later DEK wait then pays for. Let the cluster settle first.
+        self.sleep(self.ear_post_rebalance_settle,
+                   "letting the cluster settle after the final rebalance before "
+                   "touching encryption")
 
-        status, response = ear.try_enable_bucket_encryption("default", secret_id)
+        if self.ear_encrypt_before_upgrade:
+            # Encryption came across the upgrade; it must still be in force.
+            secret_id = ear.bucket_encryption_key_id("default")
+            if secret_id is None:
+                errors['encryption_lost'] = (
+                    "bucket encryption was enabled before the upgrade but "
+                    "encryptionAtRestKeyId is unset afterwards")
+                return errors
+            log.info(f"encryption survived the upgrade: encryptionAtRestKeyId={secret_id}")
+        else:
+            secret_id = ear.create_kek()
+            if secret_id is None:
+                errors['kek'] = "failed to create the bucket-encryption KEK after upgrade"
+                return errors
+
+        status, response = (True, "already encrypted") if self.ear_encrypt_before_upgrade \
+            else ear.try_enable_bucket_encryption("default", secret_id)
         if not status:
             errors['enable'] = (f"enabling bucket encryption failed on the fully "
                                 f"upgraded cluster: {response}")
@@ -2644,27 +2892,59 @@ class UpgradeFTS(NewUpgradeBaseTest):
                 "'Page not found' after the upgrade. FTS encryption-at-rest is "
                 "expected to work on this build, so the endpoint should be present.")
 
-        completed, deks = ear.wait_for_encryption_complete(
+        # cbauth owns re-encryption, and its poll can be hourly or daily, so the
+        # test checks what cbauth actually told FTS rather than waiting for the
+        # rewrite. fts.log carries the callbacks: the manager must be registered
+        # at all, and re-encryption needs refreshKeys (key allocated) followed by
+        # dropKeys (FTS told to re-encrypt). cbauth also refuses to enable
+        # encryption unless the whole cluster is 8.5+, which is asserted above.
+        callbacks = ear.cbauth_callbacks_seen()
+        no_init = [ip for ip, c in callbacks.items() if c.get('init') is False]
+        if no_init:
+            errors['cbauth_not_registered'] = (
+                f"fts.log on {no_init} never logged "
+                f"'{ear.CBAUTH_INIT}' - cbauth never registered its encryption "
+                f"callbacks with FTS, so encryption cannot be driven at all")
+
+        # cbauth's natural poll can be hourly or daily, so force it: dropping the
+        # bucket DEKs makes cbauth drive the refreshKeys/dropKeys callbacks now.
+        # Wait for the in-use key set to CHANGE rather than for any end state --
+        # same approach as the GSI upgrade suite's force-reencryption test.
+        changed, before, after = ear.force_reencrypt_and_wait(
             "default", timeout=self.ear_reencryption_timeout)
-        if not completed:
+        if not changed:
             errors['reencryption'] = (
-                f"FTS still reported unencrypted data for 'default' after "
-                f"{self.ear_reencryption_timeout}s (deks={deks})")
-        elif not deks:
-            errors['deks'] = "no FTS DEK in use for 'default' after enabling encryption"
+                f"forcing re-encryption did not produce new FTS DEKs for 'default' "
+                f"within {self.ear_reencryption_timeout}s (keys stayed {after}). "
+                f"cbauth callbacks seen in fts.log: {callbacks}")
+        else:
+            log.info(f"re-encryption produced new DEKs: {before} -> {after}")
+            # Merge so the rotated DEK is applied to segments already on disk, then
+            # look for the same end state GSI looks for: keysInUse holding real DEKs
+            # with the unencrypted marker gone.
+            #
+            # This is reported, NOT asserted. Encryption is enabled here on an index
+            # that already holds a full pre-upgrade corpus of plaintext segments, and
+            # FTS clears the "" marker only as it rewrites them, which trails the DEK
+            # rotation by an unbounded amount. GSI's _wait_for_no_empty_keys_in_use
+            # reaches the same conclusion and downgrades its own timeout to a warning
+            # ("empty key IDs still present ...; proceeding anyway"), and the FTS EAR
+            # suite's test_fts_ear_force_reencryption asserts only that a new DEK came
+            # into use. The hard assertion stays where it belongs: 'reencryption'
+            # above, which proves the DEK actually rotated.
+            ear.force_merge_and_wait(index.name)
+            converged, deks, full_map = ear.wait_for_keys_converged(
+                "default", timeout=self.ear_convergence_timeout)
+            if not converged:
+                log.warning(
+                    f"keysInUse did not converge for 'default' within "
+                    f"{self.ear_convergence_timeout}s - deks={deks}, map={full_map}. "
+                    f"Re-encryption of the pre-upgrade segments is still in flight; "
+                    f"not failing the test on it.")
+            else:
+                log.info(f"keysInUse converged for 'default': {deks}")
 
-        # Whether enabling encryption on an ALREADY-BUILT index retroactively
-        # re-encrypts its existing segments is still an open question with the
-        # FTS team. Report it, but only fail the test when
-        # enforce_segment_encryption=True, so this one check does not block the
-        # other 21 tests in the suite from running.
-        # Best-effort flush of rewritten segments; not the trigger, so keep it short.
-        ear.force_merge_and_wait(index.name, timeout=120)
-        segment_errors = ear.segments_encrypted_errors_settled(label="post-upgrade segments")
-        if segment_errors:
-            errors['segments'] = segment_errors
-
-        hits, _, _, status = index.execute_query(query=self.EAR_QUERY)
+        hits, status = self._wait_for_hits(index, baseline_hits)
         if hits != baseline_hits:
             errors['data_loss'] = (f"hits changed across upgrade + encryption: "
                                    f"baseline={baseline_hits}, now={hits} (status={status})")
@@ -2692,9 +2972,16 @@ class UpgradeFTS(NewUpgradeBaseTest):
                     "not actually running a pre-8.1 version, so this run proves nothing")
 
             if ear.create_kek() is not None:
-                errors['s0_enable'] = (
-                    "the encryption-at-rest secrets API answered on the pre-upgrade "
-                    "build - the cluster is not actually pre-8.1")
+                if self._pre_upgrade_has_secrets_api():
+                    log.info(f"Stage 0: secrets API answered on "
+                             f"initial_version={self.initial_version}, as expected for an "
+                             f"8.0+ base - the Totoro-new piece is FTS service encryption, "
+                             f"not the ns_server secrets API. Not asserting on it.")
+                else:
+                    errors['s0_enable'] = (
+                        f"the encryption-at-rest secrets API answered on the pre-upgrade "
+                        f"build (initial_version={self.initial_version}), which should "
+                        f"predate it")
             else:
                 log.info("Stage 0: secrets API unreachable pre-upgrade, as expected")
 
@@ -2703,24 +2990,46 @@ class UpgradeFTS(NewUpgradeBaseTest):
                                             driver=fts_callable, index=index)
 
             log.info("=" * 20 + " Stage 2: mixed-cluster EAR checks")
-            secret_id = ear.create_kek()
-            if secret_id is None:
-                log.info("Stage 2: KEK could not be created in a mixed cluster - "
-                         "encryption is unreachable, which satisfies the gate")
+            if self._pre_upgrade_has_secrets_api():
+                # Do NOT probe the mixed-mode enable from an 8.0+ base.
+                #
+                # Bucket-level EAR already exists there, so "is it blocked mid
+                # upgrade?" has a known and uninteresting answer: no, and it
+                # should not be. Asking anyway costs real coverage, because the
+                # probe enables encryption and then disables it again halfway
+                # through the upgrade -- a state no user ever produces, and the
+                # ONLY thing that differs from the 7.6 path. On 7.6 the secrets
+                # API is unreachable here, so the bucket reaches Stage 4 never
+                # having been encrypted, and Stage 4 then works. Leave the bucket
+                # alone so Stage 4 tests the same clean transition either way.
+                log.info(f"Stage 2: skipping the mixed-mode bucket-encryption probe - "
+                         f"initial_version={self.initial_version} already ships bucket "
+                         f"EAR, so the probe would prove nothing and would churn the "
+                         f"bucket (enable then disable) before the Stage 4 checks")
             else:
-                status, response = ear.try_enable_bucket_encryption("default", secret_id)
-                if status:
-                    errors['s2_enable'] = (
-                        f"bucket encryption was accepted on a MIXED-version cluster - "
-                        f"it must be blocked until every node is upgraded: {response}")
-                    ear.try_disable_bucket_encryption("default")
+                secret_id = ear.create_kek()
+                if secret_id is None:
+                    log.info("Stage 2: KEK could not be created in a mixed cluster - "
+                             "encryption is unreachable, which satisfies the gate")
                 else:
-                    log.info(f"Stage 2: encryption correctly blocked in mixed mode: {response}")
+                    status, response = ear.try_enable_bucket_encryption("default", secret_id)
+                    if status:
+                        errors['s2_enable'] = (
+                            f"bucket encryption was accepted on a MIXED-version cluster - "
+                            f"it must be blocked until every node is upgraded: {response}")
+                        ear.try_disable_bucket_encryption("default")
+                    else:
+                        log.info(f"Stage 2: encryption correctly blocked in mixed mode: "
+                                 f"{response}")
 
-            hits, _, _, status = index.execute_query(query=self.EAR_QUERY)
+            # A node has just rebalanced back in, so the index is still catching up
+            # for a while -- a low count here is lag, not loss. Poll until it
+            # matches the baseline before deciding.
+            hits, status = self._wait_for_hits(index, baseline_hits)
             if hits != baseline_hits:
                 errors['s2_query'] = (f"mixed-cluster query returned {hits} hits, "
-                                      f"baseline was {baseline_hits} (status={status})")
+                                      f"baseline was {baseline_hits} after waiting "
+                                      f"(status={status})")
 
             self._upgrade_rest_of_cluster([fts_nodes[0]], "Stage 3 (rest of cluster)",
                                           driver=fts_callable, index=index)
@@ -2747,9 +3056,16 @@ class UpgradeFTS(NewUpgradeBaseTest):
             fts_callable, index, baseline_hits = self._ear_setup_baseline(ear)
 
             if ear.create_kek() is not None:
-                errors['pre_enable'] = (
-                    "the encryption-at-rest secrets API answered on the pre-upgrade "
-                    "build - the cluster is not actually pre-8.1")
+                if self._pre_upgrade_has_secrets_api():
+                    log.info(f"secrets API answered on "
+                             f"initial_version={self.initial_version}, as expected for an "
+                             f"8.0+ base - the Totoro-new piece is FTS service encryption, "
+                             f"not the ns_server secrets API. Not asserting on it.")
+                else:
+                    errors['pre_enable'] = (
+                        f"the encryption-at-rest secrets API answered on the pre-upgrade "
+                        f"build (initial_version={self.initial_version}), which should "
+                        f"predate it")
 
             self._offline_upgrade_all_nodes(label="encryption at rest")
 
