@@ -1201,3 +1201,79 @@ class QueryAdvisorTests(QueryTests):
         except Exception as e:
             self.log.error(f"Advisor session failed: {e}")
             self.fail()
+
+    def test_mb73772_advisor_session_injection(self):
+        """MB-73772: ADVISOR session actions must reject N1QL injection in the session
+        parameter with error 5010 ("not valid argument for 'session'").
+        On unfixed builds (pre-8.5.0-1124) a bare quote gives parse error 3000
+        (raw concatenation) and OR-1=1 bypasses the WHERE filter on system:tasks_cache.
+        Covers get and purge actions with two injection payloads.
+        After injected purge attempts the real session must still be present in list.
+        """
+        try:
+            result = self.run_cbq_query(
+                query="SELECT ADVISOR({'action':'start','duration':'60s','query_count':1})",
+                server=self.master)
+            session = result['results'][0]['$1']['session']
+            self.log.info("MB-73772: started session %s", session)
+
+            # Run a query so the session has something to analyze and report.
+            self.run_cbq_query(
+                query="SELECT * FROM `{}` WHERE join_day = 1 LIMIT 5".format(
+                    self.bucket_name),
+                server=self.master)
+
+            self.run_cbq_query(
+                query="SELECT ADVISOR({'action':'stop','session':'" + session + "'})",
+                server=self.master)
+
+            # Control: real UUID returns recommendations (proves the value is accepted).
+            get_real = self.run_cbq_query(
+                query="SELECT ADVISOR({'action':'get','session':'" + session + "'})",
+                server=self.master)
+            self.assertTrue(get_real['results'][0].get('$1'),
+                'ADVISOR get on real session returned no data: {}'.format(get_real))
+
+            # Each injection payload must raise CBQError with exactly error code 5010
+            # ("not valid argument for 'session'").  Any other outcome (no exception
+            # or a different code) means the fix is absent or incomplete.
+            for payload, label in [
+                (r'"a\"b"', 'bare-quote'),
+                (r'"x\" OR 1=1 OR name=\"x"', 'OR-1=1'),
+            ]:
+                for action in ('get', 'purge'):
+                    q = 'SELECT ADVISOR({{"action":"{}","session":{}}})'.format(
+                        action, payload)
+                    try:
+                        self.run_cbq_query(query=q, server=self.master)
+                        self.fail(
+                            'MB-73772 regression: {} {} did not raise CBQError — '
+                            'injection payload was accepted'.format(label, action))
+                    except CBQError as ex:
+                        error = self.process_CBQE(ex)
+                        self.assertEqual(
+                            5010, error['code'],
+                            'MB-73772 regression: {} {} raised unexpected error '
+                            '(expected 5010): {}'.format(label, action, error))
+                        self.assertIn(
+                            'session', error['msg'],
+                            'MB-73772 regression: {} {} error msg does not mention '
+                            '"session": {}'.format(label, action, error))
+
+            # The injected purge payloads must have been rejected; the real session
+            # must still appear in list.
+            list_result = self.run_cbq_query(
+                query="SELECT ADVISOR({'action':'list'})",
+                server=self.master)
+            results = list_result.get('results') or []
+            sessions = results[0].get('$1', []) if results else []
+            self.assertTrue(
+                any(s.get('tasks_cache', {}).get('name') == session for s in sessions),
+                'MB-73772 regression: real session {} missing after injected purge '
+                '— OR-1=1 may have bypassed WHERE filter: {}'.format(session, sessions))
+
+        finally:
+            try:
+                self.purge_all_sessions()
+            except Exception as e:
+                self.log.error("MB-73772: session cleanup failed: %s", e)
