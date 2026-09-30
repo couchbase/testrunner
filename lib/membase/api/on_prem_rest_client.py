@@ -1253,6 +1253,10 @@ class RestConnection(object):
     @not_for_capella
     def init_cluster(self, username='Administrator', password='password', port='8091'):
         log.info("--> in init_cluster...{},{},{}".format(username,password,port))
+        # New clusters default to a stricter password policy which short test
+        # passwords (e.g. "asdasd") don't satisfy, so restore the legacy one
+        # before settings/web validates the password against it.
+        self.set_legacy_password_policy()
         api = self.baseUrl + 'settings/web'
         params = urllib.parse.urlencode({'port': port,
                                    'username': username,
@@ -1260,6 +1264,20 @@ class RestConnection(object):
         log.info('settings/web params on {0}:{1}:{2}'.format(self.ip, self.port, params))
         status, content, header = self._http_request(api, 'POST', params=params)
         log.info("--> status:{}".format(status))
+        return status
+
+    @not_for_capella
+    def set_legacy_password_policy(self):
+        api = self.baseUrl + 'settings/passwordPolicy'
+        params = urllib.parse.urlencode({'minLength': 6,
+                                         'enforceUppercase': 'false',
+                                         'enforceLowercase': 'false',
+                                         'enforceDigits': 'false',
+                                         'enforceSpecialChars': 'false'})
+        log.info('settings/passwordPolicy params on {0}:{1}:{2}'.format(self.ip, self.port, params))
+        status, content, header = self._http_request(api, 'POST', params=params)
+        if not status:
+            log.error("failed to set legacy password policy: {0}".format(content))
         return status
 
     def init_node(self, set_node_services=None):
