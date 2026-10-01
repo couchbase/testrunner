@@ -1131,6 +1131,17 @@ def main():
                     launchStringBaseF = launchStringBaseF + '-' + options.jenkins
                 url = launchStringBaseF + url
 
+                # Apply job_params (e.g. the shell's baked-in tenant_id) before
+                # the capella-specific overrides below, not after -- otherwise
+                # this unconditional re-application clobbers back whatever
+                # per-job tenant_id/capella_user/capella_password the capella
+                # block below just set, since update_url_with_job_params does
+                # last-write-wins by key (confirmed causing RBACAccessDenied:
+                # a freshly-created tenant's own user was sent with the old,
+                # stale shared tenant_id instead of its own new one).
+                if options.job_params:
+                    url = update_url_with_job_params(url, options.job_params)
+
                 # For capella, invite new user for each test job to launch
                 if options.serverType in [
                     SERVERLESS_ONCLOUD, PROVISIONED_ONCLOUD, SERVERLESS_COLUMNAR]:
@@ -1176,8 +1187,6 @@ def main():
                             continue
                         url = update_url_with_job_params(url, f"capella_user={invited_user}&capella_password={invited_password}")
 
-                if options.job_params:
-                    url = update_url_with_job_params(url, options.job_params)
                 print('\n', time.asctime( time.localtime(time.time()) ), 'launching ', url)
 
                 if options.noLaunch or not dispatch_job:
