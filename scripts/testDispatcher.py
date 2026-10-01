@@ -512,6 +512,15 @@ def main():
     parser.add_option('--capella_password', dest='capella_password', default=None)
     parser.add_option('--capella_tenant', dest='capella_tenant', default=None)
     parser.add_option('--capella_token', dest='capella_token', default=None)
+    parser.add_option('--new_tenant_per_job', dest='new_tenant_per_job',
+                      action='store_true', default=False,
+                      help='Register a brand-new, isolated Capella tenant '
+                           'for each dispatched job instead of inviting the '
+                           'job into the shared --capella_tenant. Use when '
+                           'dispatched jobs may mutate tenant-scoped state '
+                           '(e.g. internal feature flags) that could '
+                           'otherwise affect other jobs sharing that tenant '
+                           'concurrently.')
     parser.add_option('--sleep_between_trigger', dest='sleep_between_trigger', default=0)
     parser.add_option('--columnar_version', dest='columnar_version', default=0)
     parser.add_option('--is_dynamic_vms', dest='is_dynamic_vms', default="false")
@@ -1132,6 +1141,30 @@ def main():
                         url = update_url_with_job_params(
                             url,
                             f"capella_user={options.capella_user}&capella_password={options.capella_password}")
+                    elif options.new_tenant_per_job:
+                        print(
+                            f"CAPELLA: Registering new isolated tenant for job "
+                            f"{testsToLaunch[i]['component']}/{testsToLaunch[i]['subcomponent']} "
+                            f"on {options.capella_url}")
+                        invited_user, invited_password, new_tenant_id = \
+                            capella.create_new_tenant(
+                                options.capella_token, options.capella_url,
+                                options.capella_user, options.capella_password)
+                        if invited_user is None or invited_password is None \
+                                or new_tenant_id is None:
+                            print("CAPELLA: We could not register a new tenant for this job. Skipping job.")
+                            job_index += 1
+                            testsToLaunch.pop(i)
+                            continue
+                        # New tenants need time to finish backend
+                        # provisioning (billing records, default resources,
+                        # etc.) before they're reliably usable for cluster
+                        # deployment / feature-flag calls.
+                        print(f"CAPELLA: waiting 10 minutes for new tenant {new_tenant_id} to finish provisioning")
+                        time.sleep(600)
+                        url = update_url_with_job_params(
+                            url,
+                            f"capella_user={invited_user}&capella_password={invited_password}&tenant_id={new_tenant_id}")
                     else:
                         print(f'CAPELLA: Inviting new user to capella tenant {options.capella_tenant} on {options.capella_url}')
                         invited_user, invited_password = capella.invite_user(
