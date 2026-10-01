@@ -106,3 +106,28 @@ def create_new_tenant(token, api_url, user, password):
     except Exception as err:
         print(str(err))
         return None, None, None
+
+
+def create_project(api_url, user, password, tenant_id):
+    """
+    Create a new project in `tenant_id`, authenticated as that tenant's own
+    user (e.g. the user_email/user_password returned by create_new_tenant()
+    above) -- same pattern as the proven create_project() action in
+    productivitynautomation's ServerQEPipeline/create_user/env_setup.py,
+    which authenticates as the newly signed-up tenant owner, not the
+    original caller.
+
+    A brand-new tenant has no projects of its own, so a job using
+    create_new_tenant() needs this too -- reusing an old project_id from a
+    different tenant fails with ErrClusterCreateTenantProjectConflict.
+
+    Returns the new project_id, or None on failure.
+    """
+    try:
+        api = CapellaAPI(api_url, None, None, user, password)
+        resp = api.create_project(tenant_id, str(uuid4()))
+        resp.raise_for_status()
+        return resp.json()["id"]
+    except Exception as err:
+        print(str(err))
+        return None

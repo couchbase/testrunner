@@ -1173,9 +1173,22 @@ def main():
                         # deployment / feature-flag calls.
                         print(f"CAPELLA: waiting 10 minutes for new tenant {new_tenant_id} to finish provisioning")
                         time.sleep(600)
+                        # A brand-new tenant has no projects of its own --
+                        # the project_id baked into job_params above belongs
+                        # to the OLD tenant and fails cluster creation with
+                        # ErrClusterCreateTenantProjectConflict. Create a
+                        # fresh project in the new tenant and override it too.
+                        new_project_id = capella.create_project(
+                            options.capella_url, invited_user, invited_password,
+                            new_tenant_id)
+                        if new_project_id is None:
+                            print("CAPELLA: We could not create a project in the new tenant for this job. Skipping job.")
+                            job_index += 1
+                            testsToLaunch.pop(i)
+                            continue
                         url = update_url_with_job_params(
                             url,
-                            f"capella_user={invited_user}&capella_password={invited_password}&tenant_id={new_tenant_id}")
+                            f"capella_user={invited_user}&capella_password={invited_password}&tenant_id={new_tenant_id}&project_id={new_project_id}")
                     else:
                         print(f'CAPELLA: Inviting new user to capella tenant {options.capella_tenant} on {options.capella_url}')
                         invited_user, invited_password = capella.invite_user(
