@@ -2267,13 +2267,18 @@ class ESRunQueryCompare(Task):
                     search_query["query"] = {"match_none": {}}
                     search_query["explain"] = True
                     search_query["knn"] = [self.fts_query]
+                # The SEARCH() "index" option names the index in the server's
+                # own namespace, which for a scoped index is
+                # '<bucket>.<scope>.<name>' - fts_index.name stays short there
+                # and the planner cannot resolve it ("Error evaluating filter").
+                search_index_name = self.fts_index.full_name
                 n1ql_queries = [f"select meta().id from {kv_container} where type='" + str(
                     query_type) + "' and search(default, " + str(
                     json.dumps(search_query, ensure_ascii=False)) + ")", f"select meta().id from {kv_container} where type='" + str(
                     query_type) + "' and search(default, " + str(
-                    json.dumps(search_query, ensure_ascii=False)) + ",{\"index\": \"" + self.fts_index.name + "\"})", f"select meta().id,* from {kv_container} where type='" + str(
+                    json.dumps(search_query, ensure_ascii=False)) + ",{\"index\": \"" + search_index_name + "\"})", f"select meta().id,* from {kv_container} where type='" + str(
                     query_type) + "' and search(default, " + str(
-                    json.dumps(search_query, ensure_ascii=False)) + ",{\"index\": \"" + self.fts_index.name + "\"})"]
+                    json.dumps(search_query, ensure_ascii=False)) + ",{\"index\": \"" + search_index_name + "\"})"]
                 for n1ql_query in n1ql_queries:
                     if ("disjuncts" not in n1ql_query and "-" not in n1ql_query) or "\"index\"" in n1ql_query:
                         self.log.info("Running N1QL query: " + str(n1ql_query))

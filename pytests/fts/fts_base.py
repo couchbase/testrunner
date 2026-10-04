@@ -3741,6 +3741,20 @@ class CouchbaseCluster:
         @return hit_list : list of docs that match the query
 
         """
+        if scope_name is None:
+            # Callers hand us a bare index name. An index created through the
+            # scoped endpoint keeps its short name, and legacy
+            # /api/index/<name>/query cannot resolve that ("rest_auth:
+            # preparePerms, err: index not found") - recover the bucket and
+            # scope from the index we already track so the query goes to the
+            # same scoped path that created and counted it.
+            for tracked in self.__indexes:
+                if (getattr(tracked, "name", None) == index_name
+                        and getattr(tracked, "scope", None)
+                        and tracked.scope != "_default"):
+                    bucket_name = bucket_name or tracked._source_name
+                    scope_name = tracked.scope
+                    break
         if variable_node:
             node = variable_node
         elif not node:

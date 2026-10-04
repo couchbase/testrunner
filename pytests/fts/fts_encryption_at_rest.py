@@ -992,7 +992,10 @@ class FTSEncryptionAtRest(FTSEncryptionBaseTest):
         # Compaction is an FTS (:8094) endpoint -> use an FTS node; re-encryption is an
         # ns_server (:8091) endpoint -> use master.
         self.log.info("Concurrent: segment merge + DEK rotation (drop DEKs)")
-        self._fts_rest().start_fts_index_compaction(index.name)
+        # Compaction has no scoped endpoint, so it needs the server's own name;
+        # test_fts_ear_collection_scoped_index runs with scope=scope1, where
+        # index.name stays short.
+        self._fts_rest().start_fts_index_compaction(index.full_name)
         status, resp = RestConnection(self.master).trigger_data_reencryption(bucket_name)
         self.assertTrue(status, f"trigger_data_reencryption failed: {resp}")
 
