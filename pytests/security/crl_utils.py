@@ -279,14 +279,25 @@ class CRLUtils:
 
     @staticmethod
     def perform_mtls_handshake(host, port, client_cert_path, client_key_path,
-                                ca_cert_path, path="/whoami", timeout=30):
+                                ca_cert_path=None, path="/whoami", timeout=30,
+                                auth=None):
         """
         Perform a real mTLS handshake using plain `requests` with a client cert.
 
         Args:
             host/port: target node, e.g. "18091" for the TLS mgmt port
             client_cert_path/client_key_path: filesystem paths to PEM files
-            ca_cert_path: filesystem path to the CA cert PEM to verify against
+            ca_cert_path: filesystem path to the CA cert PEM to verify the
+                SERVER against. Pass None to skip server verification, which is
+                required when the node still presents its own out-of-the-box
+                self-signed certificate: that cert lacks the CA:TRUE
+                constraint, so verifying aborts locally in the client's OpenSSL
+                binding before the server ever sees the client certificate.
+            auth: optional (username, password) sent as Basic auth alongside
+                the certificate. Leave as None to present the certificate
+                ALONE -- a request carrying an Authorization header is
+                authenticated by password, so passing auth here would mask
+                whether the certificate itself established any identity.
 
         Returns:
             requests.Response on a successful handshake, or raises
@@ -297,9 +308,39 @@ class CRLUtils:
         """
         url = "https://{0}:{1}{2}".format(host, port, path)
         return requests.get(
-            url, cert=(client_cert_path, client_key_path), verify=ca_cert_path,
-            timeout=timeout,
+            url, cert=(client_cert_path, client_key_path),
+            verify=ca_cert_path if ca_cert_path else False,
+            timeout=timeout, auth=auth,
         )
+
+    @classmethod
+    def get_identity_via_mtls(cls, host, port, client_cert_path,
+                              client_key_path, ca_cert_path=None, timeout=30,
+                              auth=None):
+        """
+        GET /whoami over mTLS and return the parsed identity JSON.
+
+        Proves genuine cert-based identity mapping -- the response's "id" field
+        is the account the server actually resolved -- rather than just a
+        TLS-layer pass followed by an unrelated response.
+
+        Note /whoami does NOT reject an unidentified caller: it answers 200
+        with {"roles": [], "id": "", "domain": "anonymous"}. That body is the
+        signal when a certificate is expected to confer no identity; waiting
+        for a non-2xx here would wait forever.
+
+        Raises:
+            requests.exceptions.SSLError: connection rejected at the TLS layer
+                (revoked/expired/untrusted client cert).
+            requests.exceptions.HTTPError: handshake succeeded but /whoami
+                itself returned a non-2xx status.
+        """
+        resp = cls.perform_mtls_handshake(
+            host, port, client_cert_path, client_key_path,
+            ca_cert_path=ca_cert_path, timeout=timeout, auth=auth,
+        )
+        resp.raise_for_status()
+        return resp.json()
 
     # ── Assert helpers ───────────────────────────────────────────────────────
 
