@@ -945,6 +945,12 @@ class RebalanceTask(Task):
                 new_vbuckets = RestHelper(self.rest)._get_vbuckets(non_swap_servers, None)
                 for vb_type in ["active_vb", "replica_vb"]:
                     for srv in non_swap_servers:
+                        # _get_vbuckets returns early, without this node, when a node
+                        # reports no buckets -- e.g. the bucket was deleted or the node
+                        # left the cluster -- which used to surface as a bare KeyError.
+                        if srv not in new_vbuckets or srv not in self.old_vbuckets:
+                            raise Exception("Cannot read the vbucket map of bucket on {0}: the bucket is "
+                                            "missing or the node has left the cluster".format(srv.ip))
                         if not (len(self.old_vbuckets[srv][vb_type]) + 1 >= len(new_vbuckets[srv][vb_type]) and \
                                 len(self.old_vbuckets[srv][vb_type]) - 1 <= len(new_vbuckets[srv][vb_type])):
                             msg = "Vbuckets were suffled! Expected %s for %s" % (vb_type, srv.ip) + \

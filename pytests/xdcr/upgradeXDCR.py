@@ -67,8 +67,18 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRNewBaseTest):
 
 
     def tearDown(self):
+        # BaseTestCase.setUp calls tearDown() as a pre-cleanup -- for the first test and after
+        # a failed one -- before this class's setUp body has run. No XDCR state exists yet then
+        # (XDCRNewBaseTest.setUp runs later, from create_buckets), and touching it raised
+        # AttributeError, failing the test in setUp.
+        if not hasattr(self, 'skip_this_version'):
+            self.cluster.shutdown(force=True)
+            return
         try:
-            if not self.skip_this_version:
+            # A test that failed before create_buckets() (a missing param, a failed
+            # install) never ran XDCRNewBaseTest.setUp, and its tearDown would add an
+            # AttributeError on top of the real failure.
+            if not self.skip_this_version and hasattr(self, 'validate_systemeventlog'):
                 XDCRNewBaseTest.tearDown(self)
         finally:
             self.cluster.shutdown(force=True)
@@ -997,11 +1007,40 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRNewBaseTest):
         online upgrade of all nodes. Verifies the pipeline recovers and
         replication completes after upgrade.
 
-        Requires upgrade_version param.
+        Requires initial_version: a build that can be upgraded in place to the
+        target and holds this row's collections. 8.1.x cannot be: 8.5.0-1257
+        refuses it ("offline upgrade from unsupported version {8,1}").
+        upgrade_version defaults to the build the job installed.
         """
         _inp = TestInputSingleton.input
         p = TenKCollectionHelper.read_10k_params(_inp)
         bucket_name = _inp.param("bucket_name", "default")
+
+        # Never fall back on the class defaults: initial_version 6.5.1 cannot hold
+        # these collections, upgrade_version 2.5.0-1059-rel is not a fetchable build,
+        # and an unfetchable build makes the installer kill the whole testrunner.
+        if "initial_version" not in _inp.test_params:
+            self.fail("test_rolling_upgrade_10k_collections needs initial_version in its conf "
+                      "row: a build that upgrades in place to the target and holds the row's "
+                      "collections (8.1.x cannot be upgraded to 8.5)")
+        if "upgrade_version" in _inp.test_params:
+            upgrade_versions = self.upgrade_versions
+        else:
+            shell = RemoteMachineShellConnection(self.servers[0])
+            try:
+                installed = shell.get_cbversion("linux")[0]
+            finally:
+                shell.disconnect()
+            if not installed:
+                self.fail("Cannot read the installed build on {}; set upgrade_version".format(
+                    self.servers[0].ip))
+            upgrade_versions = [installed]
+        if upgrade_versions[-1] == self.initial_version:
+            self.fail("initial_version and the upgrade target are both {}; nothing would be "
+                      "upgraded".format(self.initial_version))
+
+        self._install(self.servers[:self.src_init + self.dest_init])
+        self.create_buckets()
 
         src_cluster = self.get_cb_cluster_by_name('C1')
         dest_cluster = self.get_cb_cluster_by_name('C2')
@@ -1020,12 +1059,21 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRNewBaseTest):
         TenKCollectionHelper.select_and_load(
             src_master, bucket_name, p, run_id="preupgrade")
 
-        for upgrade_version in self.upgrade_versions:
+        for upgrade_version in upgrade_versions:
             self.log.info("Starting rolling upgrade to {}".format(upgrade_version))
-            for node in src_cluster.get_nodes():
-                self._upgrade(upgrade_version, [node])
-            for node in dest_cluster.get_nodes():
-                self._upgrade(upgrade_version, [node])
+            # _upgrade takes one server. Given a list it failed to connect and, with no
+            # queue, only printed the traceback, so no node was ever upgraded. The queue
+            # makes a failed upgrade raise.
+            for node in src_cluster.get_nodes() + dest_cluster.get_nodes():
+                self._upgrade(upgrade_version, node, queue=self.queue)
+
+        # couchbase_upgrade does not check what dpkg/rpm did, so a failed package
+        # install leaves the old build running and nothing above notices.
+        for node in src_cluster.get_nodes() + dest_cluster.get_nodes():
+            running = RestConnection(node).get_nodes_self().version
+            if not running.startswith(upgrade_versions[-1]):
+                self.fail("{} runs {} after the upgrade to {}".format(node.ip, running,
+                                                                        upgrade_versions[-1]))
 
         TenKCollectionHelper.select_and_load(
             src_master, bucket_name, p, run_id="postupgrade")

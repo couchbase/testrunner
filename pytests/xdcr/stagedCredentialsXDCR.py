@@ -44,6 +44,9 @@ class StagedCredentialsXDCR(XDCRNewBaseTest):
             "remote_cluster_C1-C2"
         )
 
+        # Start without a shadow "Administrator" user left by an earlier test or run.
+        self._remove_admin_shadow_user()
+
     def tearDown(self):
         try:
             # Restore XDCR user permissions if modified during test
@@ -149,13 +152,26 @@ class StagedCredentialsXDCR(XDCRNewBaseTest):
         RbacBase().add_user_role(role_list, RestConnection(node), 'builtin')
 
     def _restore_xdcr_user_permissions(self):
-        """Restore XDCR permissions to the admin user (cleanup helper)."""
-        try:
-            password = self.dest_master.rest_password
-            role_list = [{'id': 'Administrator', 'name': 'Administrator', 'roles': 'admin', 'password': password}]
-            RbacBase().add_user_role(role_list, self.dest_rest, 'builtin')
-        except Exception:
-            pass
+        """Undo the permission-strip tests (cleanup helper).
+
+        Those tests "strip" the primary user's permissions by creating a local RBAC
+        user named Administrator with a reduced role; the built-in admin itself is
+        never modified. Restoring therefore means deleting that local user.
+        Re-creating it with the admin role, as this used to after every test, left it
+        shadowing the cluster admin for the rest of the suite.
+        """
+        self._remove_admin_shadow_user()
+
+    def _remove_admin_shadow_user(self):
+        """Delete the local RBAC user named "Administrator", if present.
+
+        While it exists, REST keeps accepting its password after the cluster admin
+        password is changed, so a test that changes the admin password to invalidate
+        the primary credentials never actually invalidates them. RBAC users are
+        cluster-wide, so deleting through each cluster's master is enough.
+        """
+        for master in (self.src_master, self.dest_master):
+            self._delete_user(master, "Administrator")
 
     def _delete_user(self, node, username):
         """Delete a user from the cluster."""
@@ -580,34 +596,35 @@ class StagedCredentialsXDCR(XDCRNewBaseTest):
         self.log.info("Changing target cluster password to invalidate primary credentials")
         self._change_admin_password(self.dest_master, original_password, new_password)
         self.dest_master.rest_password = new_password
+        try:
+            # Kill goxdcr to force re-authentication with new credentials
+            self.log.info("Restarting goxdcr to force re-authentication")
+            self._kill_goxdcr(self.src_cluster, wait_to_recover=True)
 
-        # Kill goxdcr to force re-authentication with new credentials
-        self.log.info("Restarting goxdcr to force re-authentication")
-        self._kill_goxdcr(self.src_cluster, wait_to_recover=True)
+            # Load documents to force XDCR to attempt replication with invalid credentials
+            self.log.info("Loading 10000 documents to trigger replication attempts")
+            gen = BlobGenerator("trigger-", "trigger-", self._value_size, end=10000)
+            self.src_cluster.load_all_buckets_from_generator(gen)
 
-        # Load documents to force XDCR to attempt replication with invalid credentials
-        self.log.info("Loading 10000 documents to trigger replication attempts")
-        gen = BlobGenerator("trigger-", "trigger-", self._value_size, end=10000)
-        self.src_cluster.load_all_buckets_from_generator(gen)
+            # Wait for auth error to be detected
+            self.sleep(60, "Waiting for XDCR to detect auth failure")
 
-        # Wait for auth error to be detected
-        self.sleep(60, "Waiting for XDCR to detect auth failure")
+            # Check for auth error
+            has_error = self._wait_for_auth_error(timeout=120)
 
-        # Check for auth error
-        has_error = self._wait_for_auth_error(timeout=120)
+            # Log final status for debugging
+            statuses = self._get_replication_status()
+            self.log.info(f"Replication statuses after both creds invalid: {statuses}")
 
-        # Log final status for debugging
-        statuses = self._get_replication_status()
-        self.log.info(f"Replication statuses after both creds invalid: {statuses}")
-
-        # If we didn't get auth error status, check if replication is NOT OK
-        if not has_error:
-            has_error = all(s != "RC_OK" for s in statuses.values()) if statuses else False
-            self.log.info(f"Checking if replication is not OK: {has_error}")
-
-        # Restore original password before asserting (for cleanup)
-        self._change_admin_password(self.dest_master, new_password, original_password)
-        self.dest_master.rest_password = original_password
+            # If we didn't get auth error status, check if replication is NOT OK
+            if not has_error:
+                has_error = all(s != "RC_OK" for s in statuses.values()) if statuses else False
+                self.log.info(f"Checking if replication is not OK: {has_error}")
+        finally:
+            # Restore even if a step above failed: tearDown, and every later test,
+            # authenticate to this cluster with the original password.
+            self._change_admin_password(self.dest_master, new_password, original_password)
+            self.dest_master.rest_password = original_password
 
         self.assertTrue(has_error, "Replication should show error with invalid staged credentials")
 
@@ -667,39 +684,40 @@ class StagedCredentialsXDCR(XDCRNewBaseTest):
         new_password = "BothInvalidTest123!"
         self._change_admin_password(self.dest_master, original_password, new_password)
         self.dest_master.rest_password = new_password
+        try:
+            # Kill goxdcr to force re-authentication with new credentials
+            self.log.info("Restarting goxdcr to force re-authentication")
+            self._kill_goxdcr(self.src_cluster, wait_to_recover=True)
 
-        # Kill goxdcr to force re-authentication with new credentials
-        self.log.info("Restarting goxdcr to force re-authentication")
-        self._kill_goxdcr(self.src_cluster, wait_to_recover=True)
+            # Load documents to trigger replication with invalid credentials
+            self.log.info("Loading documents to trigger replication attempts")
+            gen = BlobGenerator("bothinvalid-", "bothinvalid-", self._value_size, end=5000)
+            self.src_cluster.load_all_buckets_from_generator(gen)
 
-        # Load documents to trigger replication with invalid credentials
-        self.log.info("Loading documents to trigger replication attempts")
-        gen = BlobGenerator("bothinvalid-", "bothinvalid-", self._value_size, end=5000)
-        self.src_cluster.load_all_buckets_from_generator(gen)
+            # Wait for failure to be detected
+            self.sleep(90, "Waiting for credential failures to be detected")
 
-        # Wait for failure to be detected
-        self.sleep(90, "Waiting for credential failures to be detected")
+            # Check status
+            statuses = self._get_replication_status()
+            self.log.info(f"Replication statuses with both creds invalid: {statuses}")
 
-        # Check status
-        statuses = self._get_replication_status()
-        self.log.info(f"Replication statuses with both creds invalid: {statuses}")
+            # Now fix by creating a valid user and staging correct credentials
+            self._create_xdcr_user(self.dest_master, "recovery_user", "recovery_pass",
+                                   roles="replication_target[*]")
+            self._stage_credentials("recovery_user", "recovery_pass", remote_name)
 
-        # Now fix by creating a valid user and staging correct credentials
-        self._create_xdcr_user(self.dest_master, "recovery_user", "recovery_pass",
-                               roles="replication_target[*]")
-        self._stage_credentials("recovery_user", "recovery_pass", remote_name)
+            # Load more docs to trigger credential rotation
+            gen = BlobGenerator("recovery-", "recovery-", self._value_size, end=1000)
+            self.src_cluster.load_all_buckets_from_generator(gen)
 
-        # Load more docs to trigger credential rotation
-        gen = BlobGenerator("recovery-", "recovery-", self._value_size, end=1000)
-        self.src_cluster.load_all_buckets_from_generator(gen)
-
-        # Replication should recover with the new staged credentials
-        self.sleep(30, "Waiting for credential rotation")
-        recovered = self._wait_for_replication_to_recover(timeout=120)
-
-        # Restore original password for cleanup
-        self._change_admin_password(self.dest_master, new_password, original_password)
-        self.dest_master.rest_password = original_password
+            # Replication should recover with the new staged credentials
+            self.sleep(30, "Waiting for credential rotation")
+            recovered = self._wait_for_replication_to_recover(timeout=120)
+        finally:
+            # Restore even if a step above failed: tearDown, and every later test,
+            # authenticate to this cluster with the original password.
+            self._change_admin_password(self.dest_master, new_password, original_password)
+            self.dest_master.rest_password = original_password
 
         self.assertTrue(recovered, "Replication should recover after staging correct credentials")
 

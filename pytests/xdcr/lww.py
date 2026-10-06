@@ -1116,10 +1116,21 @@ class Lww(XDCRNewBaseTest):
         self._create_buckets(bucket='default', ramQuotaMB=256)
         self.setup_xdcr()
 
+        # Hold replication while both clusters write the same keys, so a backlog of
+        # conflicting mutations is in flight across the reboots below. Load C2 first and
+        # then C1: verify_rev_ids compares cas, so C1's writes must be the later ones and
+        # win on C2 -- concurrent loads would leave the winner to scheduling. Wait for
+        # each load: the async loader records keys in the kvstore only once every child
+        # task finishes, and when a reboot interrupted it verify_results compared the
+        # bucket against an empty kvstore.
+        self.c1_cluster.pause_all_replications(verify=True)
         gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
-        self.c2_cluster.async_load_all_buckets_from_generator(gen1)
+        for task in self.c2_cluster.async_load_all_buckets_from_generator(gen1):
+            task.result()
         gen2 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
-        self.c1_cluster.async_load_all_buckets_from_generator(gen2)
+        for task in self.c1_cluster.async_load_all_buckets_from_generator(gen2):
+            task.result()
+        self.c1_cluster.resume_all_replications(verify=True)
 
         rebooted_node_src = self.c1_cluster.reboot_one_node(self)
         NodeHelper.wait_node_restarted(rebooted_node_src, self, wait_time=self._wait_timeout * 4, wait_if_warmup=True)
@@ -1188,15 +1199,46 @@ class Lww(XDCRNewBaseTest):
     def test_lww_with_auto_failover(self):
         src_conn = RestConnection(self.c1_cluster.get_master_node())
         self._create_buckets(bucket='default', ramQuotaMB=256)
+        # Auto-failover is a cluster setting that outlives this test. Left at 30s, a
+        # later test that stops the master for ~30s gets it failed over, and every
+        # test after that inherits a cluster with no initialised master.
+        original = src_conn.get_autofailover_settings()
         self.log.info("Enabling auto failover on " + str(self.c1_cluster.get_master_node()))
-        src_conn.update_autofailover_settings(enabled=True, timeout=30)
-        self.sleep(10)
-        self.setup_xdcr()
-        gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
-        self.c2_cluster.load_all_buckets_from_generator(gen1)
-        gen2 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
-        self.c1_cluster.load_all_buckets_from_generator(gen2)
-        self.verify_results()
+        if not src_conn.update_autofailover_settings(enabled=True, timeout=30):
+            self.fail("Could not enable auto-failover on {0}".format(
+                self.c1_cluster.get_master_node().ip))
+        body_passed = False
+        try:
+            self.sleep(10)
+            self.setup_xdcr()
+            gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
+            self.c2_cluster.load_all_buckets_from_generator(gen1)
+            gen2 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
+            self.c1_cluster.load_all_buckets_from_generator(gen2)
+            self.verify_results()
+            body_passed = True
+        finally:
+            # Raised only when the test itself passed: otherwise it would replace the
+            # test's own failure. Left unrestored, later tests in this job inherit a 30s
+            # auto-failover and fail in ways that look like product bugs.
+            restored = False
+            try:
+                if original is not None:
+                    restored = src_conn.update_autofailover_settings(
+                        enabled=original.enabled, timeout=original.timeout,
+                        enable_disk_failure=original.failoverOnDataDiskIssuesEnabled,
+                        disk_timeout=original.failoverOnDataDiskIssuesTimeout,
+                        maxCount=original.maxCount)
+                else:
+                    restored = src_conn.update_autofailover_settings(enabled=True, timeout=120)
+            except Exception as e:
+                self.log.error("Restoring auto-failover settings raised: {0}".format(e))
+            if not restored:
+                msg = "Could not restore auto-failover settings on {0}".format(
+                    self.c1_cluster.get_master_node().ip)
+                if body_passed:
+                    self.fail(msg)
+                self.log.error(msg)
 
     def test_lww_with_mixed_buckets(self):
         self._create_buckets(bucket='default', ramQuotaMB=256)

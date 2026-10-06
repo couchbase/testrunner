@@ -1,6 +1,7 @@
 from pytests.xdcr.xdcrnewbasetests import XDCRNewBaseTest
 from lib.remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
+from testconstants import WIN_TMP_PATH_RAW
 import yaml
 import os
 import time
@@ -24,9 +25,14 @@ class XDCRDifferTest(XDCRNewBaseTest):
         self.src_master = self.src_cluster.get_master_node()
         self.dest_master = self.dest_cluster.get_master_node()
         self.src_master_shell = RemoteMachineShellConnection(self.src_master)
+        # xdcrDiffer is a native binary: on a Windows node it reads a bare
+        # "/tmp/..." as C:\tmp\..., while sftp and the cygwin shell read it as
+        # cygwin's own /tmp. C:/tmp/ means the same directory to all three.
+        remote_tmp = WIN_TMP_PATH_RAW if self.src_master_shell.info.type.lower() == "windows" else "/tmp/"
         self.xdcr_differ_yaml_conf_path = "/tmp/xdcr_differ_params.yaml"
+        self.xdcr_differ_remote_yaml_conf_path = remote_tmp + "xdcr_differ_params.yaml"
 
-        outputFileDir = self._input.param("outputFileDir", "/tmp/xdcr_differ_outputs")
+        outputFileDir = self._input.param("outputFileDir", remote_tmp + "xdcr_differ_outputs")
 
         self.xdcr_differ_params = {
             "sourceUrl": self._input.param("sourceUrl", f"{self.src_master.ip}:8091"),
@@ -86,16 +92,16 @@ class XDCRDifferTest(XDCRNewBaseTest):
         }
 
         self.passphrase_value = self._input.param("encryptionPassphrase", "")
-        self.encryption_log_file = self._input.param("encryptedLogFile", "/tmp/xdcr_differ_encrypted.log")
+        self.encryption_log_file = self._input.param("encryptedLogFile", remote_tmp + "xdcr_differ_encrypted.log")
 
         with open(self.xdcr_differ_yaml_conf_path, "w") as f:
             yaml.dump(self.xdcr_differ_params, f)
         self.src_master_shell.copy_file_local_to_remote(
-            self.xdcr_differ_yaml_conf_path, self.xdcr_differ_yaml_conf_path
+            self.xdcr_differ_yaml_conf_path, self.xdcr_differ_remote_yaml_conf_path
         )
         self.log.info(f"XDCR Differ parameters written to {self.xdcr_differ_yaml_conf_path}")
 
-        self.xdcr_differ_bin_path = "/opt/couchbase/bin/xdcrDiffer"
+        self.xdcr_differ_bin_path = f"{self.src_master_shell.bin_path}xdcrDiffer{self.src_master_shell.cmd_ext}"
 
     def tearDown(self):
         if hasattr(self, 'src_master_shell'):
@@ -129,7 +135,7 @@ class XDCRDifferTest(XDCRNewBaseTest):
             if passphrase:
                 differ_cmd += f" -encryptionPassphrase -encryptedLogFile {encrypted_log_file}"
             if yaml_config:
-                differ_cmd += f" -yamlConfigFilePath {self.xdcr_differ_yaml_conf_path}"
+                differ_cmd += f" -yamlConfigFilePath {self.xdcr_differ_remote_yaml_conf_path}"
 
         if extra_flags:
             differ_cmd += f" {extra_flags}"
@@ -169,10 +175,14 @@ class XDCRDifferTest(XDCRNewBaseTest):
             # xdcrDiffer prompts:
             #   "Enter encryption passphrase:"
             #   "enter the same encryption passphrase again:"
+            # A run that reads files written by an earlier run (a resume with
+            # runDataGeneration=False) asks for the pair again when it first
+            # opens one of them, since they carry that run's salt. Unused
+            # entries are left alone by execute_command_with_pty.
             prompts_and_responses = [
                 ("enter encryption passphrase:", passphrase),
                 ("enter the same encryption passphrase again:", passphrase),
-            ]
+            ] * 2
             output, err, exit_code = self.src_master_shell.execute_command_with_pty(
                 cmd,
                 prompts_and_responses=prompts_and_responses,
@@ -356,9 +366,60 @@ class XDCRDifferTest(XDCRNewBaseTest):
         """Clean up output directory and encrypted log files."""
         cmd = f"rm -rf {self.xdcr_differ_params['outputFileDir']}"
         self.src_master_shell.execute_command(cmd)
-        # Also clean up encrypted log file if it exists
+        self._remove_encrypted_log()
+
+    def _remove_encrypted_log(self):
+        """Remove the encrypted log file. xdcrDiffer refuses to write a log
+        file that already exists, so a second run in the same test (a resume)
+        fails before doing anything unless the first run's log is gone."""
         cmd = f"rm -f {self.encryption_log_file} {self.encryption_log_file}.enc"
         self.src_master_shell.execute_command(cmd)
+
+    def _assert_resume_read_files(self, resume_cmd, output, err, exit_code):
+        """A same-passphrase resume must exit 0 AND read the earlier run's files:
+        xdcrDiffer logs a file it cannot decrypt and carries on, so the exit code
+        alone does not show they were read."""
+        if exit_code != 0:
+            self.fail("Resume failed. "
+                      + self._log_command_failure(resume_cmd, output, err, exit_code))
+        combined = ' '.join(output).lower()
+        if "decrypt error" in combined or "message authentication failed" in combined:
+            self.fail("Resume with the same passphrase could not decrypt the earlier run's files. "
+                      + self._log_command_failure(resume_cmd, output, err, exit_code))
+
+    def _assert_resume_rejected_passphrase(self, resume_cmd, passphrase, output, exit_code):
+        """Check that a resume with a passphrase other than the one the earlier
+        run's files were written with could not read those files.
+
+        xdcrDiffer logs each file it cannot decrypt ("Error when loading file
+        ...: decrypt error: cipher: message authentication failed") and carries
+        on. Its logger writes to stdout as well as to -encryptedLogFile, so the
+        rejection shows in the output whatever the exit code; on 8.5.0-1257 the
+        resume then crashes (exit 2), and a same-passphrase resume prints no such
+        line. The resume run's decrypted log is the fallback for a 0 exit.
+        """
+        combined = ' '.join(output).lower()
+        rejection_markers = ("decrypt error", "message authentication failed")
+        if "already exists" in combined:
+            self.fail("Resume run stopped on a leftover log file, not on the passphrase. "
+                      + self._log_command_failure(resume_cmd, output, [], exit_code))
+        if any(marker in combined for marker in rejection_markers):
+            return
+        if exit_code != 0:
+            self.fail("Resume run failed, but not with a decrypt failure. "
+                      + self._log_command_failure(resume_cmd, output, [], exit_code))
+
+        enc_log = f"{self.encryption_log_file}.enc"
+        decrypt_cmd = self._build_xdcr_differ_cmd(
+            passphrase=passphrase, decrypt_mode=True, decrypt_file=enc_log)
+        log_lines, _, decrypt_exit = self._run_xdcr_differ(decrypt_cmd, get_exit_code=True)
+        if decrypt_exit != 0:
+            self.fail("Could not decrypt the resume run's log with its own passphrase. "
+                      + self._log_command_failure(decrypt_cmd, log_lines, [], decrypt_exit))
+        log_text = ' '.join(log_lines).lower()
+        if not any(marker in log_text for marker in rejection_markers):
+            self.fail("Resume with a different passphrase exited 0 and its log shows no "
+                      "decrypt failure, so the earlier run's encrypted files were read anyway")
 
     def test_cli_encryption_passphrase_without_log_file(self):
         """TC-001: -encryptionPassphrase without -encryptedLogFile should exit with error."""
@@ -384,7 +445,7 @@ class XDCRDifferTest(XDCRNewBaseTest):
             f"export CBAUTH_REVRPC_URL=\"http://{self.xdcr_differ_params['sourceUsername']}:"
             f"{self.xdcr_differ_params['sourcePassword']}@{self.xdcr_differ_params['sourceUrl']}\" && "
             f"{self.xdcr_differ_bin_path} -encryptedLogFile {self.encryption_log_file} "
-            f"-yamlConfigFilePath {self.xdcr_differ_yaml_conf_path}"
+            f"-yamlConfigFilePath {self.xdcr_differ_remote_yaml_conf_path}"
         )
 
         output, err = self._run_xdcr_differ(cmd)
@@ -501,7 +562,7 @@ class XDCRDifferTest(XDCRNewBaseTest):
             f"{self.xdcr_differ_params['sourcePassword']}@{self.xdcr_differ_params['sourceUrl']}\" && "
             f'printf "\\n\\n" | {self.xdcr_differ_bin_path} -encryptionPassphrase '
             f"-encryptedLogFile {self.encryption_log_file} "
-            f"-yamlConfigFilePath {self.xdcr_differ_yaml_conf_path}"
+            f"-yamlConfigFilePath {self.xdcr_differ_remote_yaml_conf_path}"
         )
 
         output, err = self._run_xdcr_differ(cmd)
@@ -522,7 +583,7 @@ class XDCRDifferTest(XDCRNewBaseTest):
             f"{self.xdcr_differ_params['sourcePassword']}@{self.xdcr_differ_params['sourceUrl']}\" && "
             f'printf "secret1\\nsecret2\\n" | {self.xdcr_differ_bin_path} -encryptionPassphrase '
             f"-encryptedLogFile {self.encryption_log_file} "
-            f"-yamlConfigFilePath {self.xdcr_differ_yaml_conf_path}"
+            f"-yamlConfigFilePath {self.xdcr_differ_remote_yaml_conf_path}"
         )
 
         output, err = self._run_xdcr_differ(cmd)
@@ -858,42 +919,42 @@ class XDCRDifferTest(XDCRNewBaseTest):
         with open(self.xdcr_differ_yaml_conf_path, "w") as f:
             yaml.dump(self.xdcr_differ_params, f)
         self.src_master_shell.copy_file_local_to_remote(
-            self.xdcr_differ_yaml_conf_path, self.xdcr_differ_yaml_conf_path
+            self.xdcr_differ_yaml_conf_path, self.xdcr_differ_remote_yaml_conf_path
         )
 
         cmd = self._build_xdcr_differ_cmd(passphrase=passphrase)
-        self._run_xdcr_differ(cmd)
+        output, err, exit_code = self._run_xdcr_differ(cmd, get_exit_code=True)
+        if exit_code != 0:
+            self.fail(self._log_command_failure(cmd, output, err, exit_code))
 
-        # Find the actual checkpoint file
+        # Find the actual checkpoint file. xdcrDiffer names it <cluster>_<name>
+        # (source_test_checkpoint.json), so a bare '<name>*' never matched and the
+        # test skipped the resume with a warning, passing without testing anything.
         checkpoint_dir = self.xdcr_differ_params['checkpointFileDir']
-        find_cmd = f"find {checkpoint_dir} -type f -name '{checkpoint_name}*' 2>/dev/null"
+        find_cmd = f"find {checkpoint_dir} -type f -name '*{checkpoint_name}*' 2>/dev/null"
         ckpt_files, _ = self.src_master_shell.execute_command(find_cmd)
-
-        if ckpt_files and ckpt_files[0].strip():
-            self.log.info(f"Found checkpoint file: {ckpt_files[0].strip()}")
-
-            self.xdcr_differ_params['oldCheckpointFileName'] = checkpoint_name
-            self.xdcr_differ_params['runFileDiffer'] = True
-            self.xdcr_differ_params['runMutationDiffer'] = True
-            self.xdcr_differ_params['runDataGeneration'] = False
-
-            with open(self.xdcr_differ_yaml_conf_path, "w") as f:
-                yaml.dump(self.xdcr_differ_params, f)
-            self.src_master_shell.copy_file_local_to_remote(
-                self.xdcr_differ_yaml_conf_path, self.xdcr_differ_yaml_conf_path
-            )
-
-            resume_cmd = self._build_xdcr_differ_cmd(passphrase=passphrase)
-            output, err = self._run_xdcr_differ(resume_cmd)
-
-            if err:
-                combined = ' '.join(err).lower()
-                if "checkpoint" in combined and "error" in combined:
-                    self.fail(f"Checkpoint recovery failed: {err}")
-        else:
+        if not ckpt_files or not ckpt_files[0].strip():
             ls_cmd = f"ls -la {checkpoint_dir} 2>/dev/null"
             ls_out, _ = self.src_master_shell.execute_command(ls_cmd)
-            self.log.warning(f"No checkpoint file found. Directory contents: {ls_out}")
+            self.fail(f"No checkpoint file found matching '*{checkpoint_name}*' in "
+                      f"{checkpoint_dir}. Contents: {ls_out}")
+        self.log.info(f"Found checkpoint file: {ckpt_files[0].strip()}")
+
+        self.xdcr_differ_params['oldCheckpointFileName'] = checkpoint_name
+        self.xdcr_differ_params['runFileDiffer'] = True
+        self.xdcr_differ_params['runMutationDiffer'] = True
+        self.xdcr_differ_params['runDataGeneration'] = False
+
+        with open(self.xdcr_differ_yaml_conf_path, "w") as f:
+            yaml.dump(self.xdcr_differ_params, f)
+        self.src_master_shell.copy_file_local_to_remote(
+            self.xdcr_differ_yaml_conf_path, self.xdcr_differ_remote_yaml_conf_path
+        )
+
+        self._remove_encrypted_log()
+        resume_cmd = self._build_xdcr_differ_cmd(passphrase=passphrase)
+        output, err, exit_code = self._run_xdcr_differ(resume_cmd, get_exit_code=True)
+        self._assert_resume_read_files(resume_cmd, output, err, exit_code)
 
     def test_fault_tolerance_rebalance(self):
         """TC-032: Verify encryption behavior during rebalance."""
@@ -970,7 +1031,7 @@ class XDCRDifferTest(XDCRNewBaseTest):
         with open(self.xdcr_differ_yaml_conf_path, "w") as f:
             yaml.dump(self.xdcr_differ_params, f)
         self.src_master_shell.copy_file_local_to_remote(
-            self.xdcr_differ_yaml_conf_path, self.xdcr_differ_yaml_conf_path
+            self.xdcr_differ_yaml_conf_path, self.xdcr_differ_remote_yaml_conf_path
         )
 
         cmd = self._build_xdcr_differ_cmd(passphrase=passphrase)
@@ -1000,13 +1061,13 @@ class XDCRDifferTest(XDCRNewBaseTest):
         with open(self.xdcr_differ_yaml_conf_path, "w") as f:
             yaml.dump(self.xdcr_differ_params, f)
         self.src_master_shell.copy_file_local_to_remote(
-            self.xdcr_differ_yaml_conf_path, self.xdcr_differ_yaml_conf_path
+            self.xdcr_differ_yaml_conf_path, self.xdcr_differ_remote_yaml_conf_path
         )
 
+        self._remove_encrypted_log()
         resume_cmd = self._build_xdcr_differ_cmd(passphrase=passphrase)
         output, err, exit_code = self._run_xdcr_differ(resume_cmd, get_exit_code=True)
-        if exit_code != 0:
-            self.fail(self._log_command_failure(resume_cmd, output, err, exit_code))
+        self._assert_resume_read_files(resume_cmd, output, err, exit_code)
 
         self.log.info("PASS: Resumed from encrypted checkpoint with same passphrase successfully")
 
@@ -1024,7 +1085,7 @@ class XDCRDifferTest(XDCRNewBaseTest):
         with open(self.xdcr_differ_yaml_conf_path, "w") as f:
             yaml.dump(self.xdcr_differ_params, f)
         self.src_master_shell.copy_file_local_to_remote(
-            self.xdcr_differ_yaml_conf_path, self.xdcr_differ_yaml_conf_path
+            self.xdcr_differ_yaml_conf_path, self.xdcr_differ_remote_yaml_conf_path
         )
 
         cmd = self._build_xdcr_differ_cmd(passphrase=original_passphrase)
@@ -1041,15 +1102,13 @@ class XDCRDifferTest(XDCRNewBaseTest):
         with open(self.xdcr_differ_yaml_conf_path, "w") as f:
             yaml.dump(self.xdcr_differ_params, f)
         self.src_master_shell.copy_file_local_to_remote(
-            self.xdcr_differ_yaml_conf_path, self.xdcr_differ_yaml_conf_path
+            self.xdcr_differ_yaml_conf_path, self.xdcr_differ_remote_yaml_conf_path
         )
 
+        self._remove_encrypted_log()
         resume_cmd = self._build_xdcr_differ_cmd(passphrase=new_passphrase)
         output, err, exit_code = self._run_xdcr_differ(resume_cmd, get_exit_code=True)
-        combined = ' '.join(output + (err if err else [])).lower()
-
-        if exit_code == 0 and "error" not in combined and "fail" not in combined and "decrypt" not in combined:
-            self.fail("Resume with different passphrase should have failed but succeeded")
+        self._assert_resume_rejected_passphrase(resume_cmd, new_passphrase, output, exit_code)
         self.log.info("PASS: Resume with different passphrase failed as expected")
 
     def test_checkpoint_resume_wrong_passphrase(self):
@@ -1066,7 +1125,7 @@ class XDCRDifferTest(XDCRNewBaseTest):
         with open(self.xdcr_differ_yaml_conf_path, "w") as f:
             yaml.dump(self.xdcr_differ_params, f)
         self.src_master_shell.copy_file_local_to_remote(
-            self.xdcr_differ_yaml_conf_path, self.xdcr_differ_yaml_conf_path
+            self.xdcr_differ_yaml_conf_path, self.xdcr_differ_remote_yaml_conf_path
         )
 
         cmd = self._build_xdcr_differ_cmd(passphrase=correct_passphrase)
@@ -1095,15 +1154,13 @@ class XDCRDifferTest(XDCRNewBaseTest):
         with open(self.xdcr_differ_yaml_conf_path, "w") as f:
             yaml.dump(self.xdcr_differ_params, f)
         self.src_master_shell.copy_file_local_to_remote(
-            self.xdcr_differ_yaml_conf_path, self.xdcr_differ_yaml_conf_path
+            self.xdcr_differ_yaml_conf_path, self.xdcr_differ_remote_yaml_conf_path
         )
 
+        self._remove_encrypted_log()
         resume_cmd = self._build_xdcr_differ_cmd(passphrase=wrong_passphrase)
         output, err, exit_code = self._run_xdcr_differ(resume_cmd, get_exit_code=True)
-        combined = ' '.join(output + (err if err else [])).lower()
-
-        if exit_code == 0 and "error" not in combined and "fail" not in combined and "decrypt" not in combined:
-            self.fail("Resume with wrong passphrase should have failed but succeeded")
+        self._assert_resume_rejected_passphrase(resume_cmd, wrong_passphrase, output, exit_code)
         self.log.info("PASS: Resume with wrong passphrase failed as expected")
 
     def test_xdcr_differ(self):
@@ -1287,7 +1344,7 @@ class XDCRDifferTest(XDCRNewBaseTest):
         with open(self.xdcr_differ_yaml_conf_path, "w") as f:
             yaml.dump(self.xdcr_differ_params, f)
         self.src_master_shell.copy_file_local_to_remote(
-            self.xdcr_differ_yaml_conf_path, self.xdcr_differ_yaml_conf_path
+            self.xdcr_differ_yaml_conf_path, self.xdcr_differ_remote_yaml_conf_path
         )
 
         # Run xdcrDiffer

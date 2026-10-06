@@ -27,14 +27,20 @@ class StatsXDCR(XDCRNewBaseTest):
             self.fail("pipeline_type must be 'Main' or 'Backfill', got '{0}'".format(
                 self.pipeline_type))
 
-    def load_binary_docs_using_cbc_pillowfight(self, server, items, bucket, batch=1000, docsize=100, rate_limit=100000, scope="_default", collection="_default", command_timeout = 10):
+    def load_binary_docs_using_cbc_pillowfight(self, server, items, bucket, batch=1000, docsize=100, rate_limit=100000, scope="_default", collection="_default", command_timeout = 300):
         server_shell = RemoteMachineShellConnection(server)
-        cmd = f"/opt/couchbase/bin/cbc-pillowfight -u Administrator -P password -U couchbase://localhost/"\
+        cmd = f"{server_shell.bin_path}cbc-pillowfight{server_shell.cmd_ext} -u Administrator -P password -U couchbase://localhost/"\
             f"{bucket} -I {items} -m {docsize} -M {docsize} -B {batch} --rate-limit={rate_limit} --populate-only --collection {scope}.{collection}"
         self.log.info("Executing '{0}'...".format(cmd))
-        output, error  = server_shell.execute_command(cmd, timeout=command_timeout, use_channel=True)
-        if error :
-            self.log.info("Error: {0}".format(error))
+        # use_channel=True runs on a PTY, which merges stderr into stdout, so
+        # `error` stays empty even when the load fails (e.g. a missing binary).
+        # The exit status is echoed in-band because paramiko reports -1 when
+        # this path closes the channel before the status has arrived.
+        # command_timeout bounds each silent read: --populate-only prints nothing
+        # until it finishes, and 1M docs at the rate limit take longer than 10s.
+        output, error  = server_shell.execute_command(cmd + "; echo EXIT_CODE:$?", timeout=command_timeout, use_channel=True)
+        if error or not output or not output[-1].strip().endswith("EXIT_CODE:0"):
+            self.log.info("Output: {0} Error: {1}".format(output, error))
             self.fail(f"Failed to load docs in source cluster in {bucket}.{scope}.{collection}")
         server_shell.disconnect()
         self.log.info(f"Data loaded into {bucket}.{scope}.{collection} successfully")
@@ -98,10 +104,12 @@ class StatsXDCR(XDCRNewBaseTest):
         return peaks
 
     def _poll_until_below(self, server, stat_name, pipeline_types,
-                          threshold, timeout=120, interval=2):
+                          threshold, timeout=120, interval=2, floor=None):
         """Poll `stat_name` until the latest value for every pipelineType in
         `pipeline_types` is strictly less than `threshold`, or `timeout`
-        elapses. Returns the last sample dict {pipelineType: value}.
+        elapses. With `floor`, each value must also be strictly greater than
+        `floor`, so a missing series (read as 0) never satisfies the poll.
+        Returns the last sample dict {pipelineType: value}.
         """
         deadline = time.time() + timeout
         last = {}
@@ -109,7 +117,8 @@ class StatsXDCR(XDCRNewBaseTest):
             last = self._sample_pipeline_stat(server, stat_name)
             self.log.info("polling {0} (below {1}): cur={2}".format(
                 stat_name, threshold, last))
-            if all(last.get(pt, 0.0) < threshold for pt in pipeline_types):
+            values = [last.get(pt, 0.0) for pt in pipeline_types]
+            if all(v < threshold and (floor is None or v > floor) for v in values):
                 return last
             self.wait_interval(interval, "polling " + stat_name)
         return last
@@ -257,19 +266,28 @@ class StatsXDCR(XDCRNewBaseTest):
                 return s["value"]
         return None
 
-    def _setup_for_pipeline(self):
+    def _setup_for_pipeline(self, bandwidth_limit=5, compression_type=None):
         """Set up XDCR so that the requested pipelineType emits stats.
 
         Main: setup_xdcr, force optimisticReplicationThreshold=0, then load.
         Backfill: setup_xdcr, force optimisticReplicationThreshold=0,
                   create+load a new collection on src, then create the
                   matching collection on dest so a Backfill pipeline spins up.
+        bandwidth_limit (MB/s) bounds how fast that backfill drains. It counts
+        bytes on the wire, so with compression on pillowfight's repetitive values
+        shrink far enough that the backfill still finishes in seconds; pass
+        compression_type="None" to make the limit bind.
         """
         self.setup_xdcr()
         src_rest = RestConnection(self.src_master)
         src_rest.set_xdcr_param("default", "default",
                                 "optimisticReplicationThreshold", 0)
-        src_rest.set_xdcr_param("default", "default", "bandwidthLimit", 5)
+        # goxdcr's REST name is networkUsageLimit. "bandwidthLimit" was accepted with a
+        # 200 and silently ignored, so no stats test was ever actually throttled.
+        src_rest.set_xdcr_param("default", "default", "networkUsageLimit", bandwidth_limit)
+        if compression_type:
+            # set_xdcr_params: the singular helper lowercases values, and "none" is a 400
+            src_rest.set_xdcr_params("default", "default", {"compressionType": compression_type})
         src_rest.set_xdcr_param("default", "default", "sourceNozzlePerNode", 1)
         src_rest.set_xdcr_param("default", "default", "targetNozzlePerNode", 1)
 
@@ -370,11 +388,27 @@ class StatsXDCR(XDCRNewBaseTest):
         Note: this reset behaviour is documented ONLY for
         xdcr_sys_metadata_transferred_bytes. xdcr_metadata_transferred_bytes
         makes no such promise, so it is intentionally NOT exercised here.
+
+        A new pipeline counts its startup pre_replicate bytes straight away
+        (goxdcr's own pause/resume test expects non-zero right after a
+        restart), so a reset counter reads back that startup amount, not 0.
+        The test therefore lets a checkpoint push the counter past the
+        startup amount before pausing; a cumulative counter that is not
+        reset never goes down, so any non-zero value below the at-pause
+        value after resume is the reset.
         """
         stat = "xdcr_sys_metadata_transferred_bytes"
         ckpt_interval = int(self._input.param("checkpoint_interval", 60))
 
-        self._setup_for_pipeline()
+        # A Backfill pipeline is torn down as soon as it has caught the new
+        # collection up, and then there is nothing to resume. Unthrottled it
+        # finished in about 30s (runs 113357, 115407), before a checkpoint plus
+        # the pause could fit in. At 2 MB/s of uncompressed data (~400 MB) it
+        # runs for minutes.
+        backfill = self.pipeline_type == "Backfill"
+        self._setup_for_pipeline(
+            bandwidth_limit=int(self._input.param("bandwidth_limit", 2 if backfill else 5)),
+            compression_type=self._input.param("compression_type", "None" if backfill else None))
         doc_gen = BlobGenerator("resetmd", "seed", 512, end=1000)
         self.src_cluster.load_all_buckets_from_generator(kv_gen=doc_gen)
         self.dest_cluster.load_all_buckets_from_generator(kv_gen=doc_gen)
@@ -389,35 +423,62 @@ class StatsXDCR(XDCRNewBaseTest):
             self.src_master, stat,
             pipeline_type=self.pipeline_type,
             threshold=0.0, timeout=warmup_timeout, interval=2)
-        pre_pause = warmup_peaks.get(self.pipeline_type, 0.0)
-        self.log.info("pre-pause {0} {1} = {2}".format(
-            stat, self.pipeline_type, pre_pause))
-        self.assertGreater(pre_pause, 0.0,
+        self.assertGreater(warmup_peaks.get(self.pipeline_type, 0.0), 0.0,
             "pre-pause {0} {1} never went > 0 in {2}s warm-up — "
             "Backfill pipeline may have torn down or never ticked this metric".format(
                 stat, self.pipeline_type, warmup_timeout))
 
+        # The first non-zero sample can catch the startup accounting part-way.
+        self.wait_interval(10, "let the startup pre_replicate accounting settle")
+        startup = self._sample_pipeline_stat(self.src_master, stat).get(
+            self.pipeline_type, 0.0)
+        self.assertGreater(startup, 0.0,
+            "{0} {1} dropped back to 0 right after warm-up; the pipeline is no "
+            "longer running".format(stat, self.pipeline_type))
+
+        # New mutations give the next checkpoint something to commit, so it
+        # adds to the counter even if one already ran during the settle.
         self.src_cluster.load_all_buckets_from_generator(
             kv_gen=BlobGenerator("resumeload", "seed", 512, end=2000))
+        self._poll_until_peak_above(
+            self.src_master, stat, pipeline_type=self.pipeline_type,
+            threshold=startup, timeout=ckpt_interval * 2 + 30, interval=3)
+        at_pause = self._sample_pipeline_stat(self.src_master, stat).get(
+            self.pipeline_type, 0.0)
+        self.log.info("{0} {1}: startup={2} at_pause={3}".format(
+            stat, self.pipeline_type, startup, at_pause))
+        self.assertGreater(at_pause, startup,
+            "{0} {1} did not grow past its startup value before the pause "
+            "(startup={2} at_pause={3}), so a reset could not be told apart from "
+            "no reset. For Backfill, 0 here means the backfill finished before "
+            "the pause".format(stat, self.pipeline_type, startup, at_pause))
+
         self.src_cluster.pause_all_replications()
         pause_settle = self._input.param("pause_settle", 90)
         self.wait_interval(pause_settle,
                            "settle while paused (long enough to force tear-down)")
         self.src_cluster.resume_all_replications()
 
-        reset_threshold = max(pre_pause * 0.1, 1.0)
+        # Without a reset the counter carries on from at_pause (the pause's own
+        # checkpoint only adds to it). The first samples after resume can still
+        # be the old pipeline's, and floor=0 keeps a pipeline that is not
+        # running from passing.
         last = self._poll_until_below(
             self.src_master, stat,
             pipeline_types=(self.pipeline_type,),
-            threshold=reset_threshold,
-            timeout=ckpt_interval * 2, interval=3)
-        post_resume_zero = last.get(self.pipeline_type, 0.0)
-        self.assertLess(post_resume_zero, reset_threshold,
+            threshold=at_pause,
+            timeout=ckpt_interval * 2, interval=3, floor=0.0)
+        post_resume = last.get(self.pipeline_type, 0.0)
+        self.assertGreater(post_resume, 0.0,
+            "{0} {1} read 0 after resume: the pipeline is not running, so the "
+            "reset could not be observed (startup={2} at_pause={3})".format(
+                stat, self.pipeline_type, startup, at_pause))
+        self.assertLess(post_resume, at_pause,
             "{0} {1} did not reset on resume within poll window: "
-            "pre={2} last-sample={3}".format(
-                stat, self.pipeline_type, pre_pause, post_resume_zero))
-        self.log.info("reset confirmed: pre={0} dipped to {1} (threshold={2})".format(
-            pre_pause, post_resume_zero, reset_threshold))
+            "startup={2} at_pause={3} last-sample={4}".format(
+                stat, self.pipeline_type, startup, at_pause, post_resume))
+        self.log.info("reset confirmed: at_pause={0} came back to {1} "
+                      "(startup={2})".format(at_pause, post_resume, startup))
 
     def test_source_cluster_heartbeat_recv_bytes(self):
         """[MB-69383] target node sees > 0 heartbeat bytes from source.

@@ -12,6 +12,12 @@ from pytests.xdcr.tenK_collection_helper import TenKCollectionHelper
 
 
 class BackfillXDCR(XDCRNewBaseTest):
+    def _assert_loaded(self, result, phase):
+        if result.failed_pairs or not result.total_docs_loaded:
+            self.fail("{0} load failed: {1} docs loaded, failed pairs {2}".format(
+                phase, result.total_docs_loaded, result.failed_pairs[:5]))
+        return result.total_docs_loaded
+
     def setUp(self):
         super().setUp()
         self.src_cluster = self.get_cb_cluster_by_name('C1')
@@ -427,23 +433,31 @@ class BackfillXDCR(XDCRNewBaseTest):
             self.src_master, self.dest_master, bucket_name)
 
         self.log.info("Phase 1: loading into {} existing dest pairs".format(len(existing_pairs)))
-        TenKCollectionHelper.load_into_pairs(
+        phase1_loaded = self._assert_loaded(TenKCollectionHelper.load_into_pairs(
             self.src_master, bucket_name, existing_pairs,
-            p.get("docs_per_collection", 10), run_id="prog_phase1")
+            p.get("docs_per_collection", 10), run_id="prog_phase1"), "Phase 1")
 
-        self.sleep(15, "Allowing phase-1 replication")
+        # Phase 2 asserts the destination does not grow, so phase 1 must be fully
+        # replicated first; after a fixed 15s, phase-1 docs still in flight read as
+        # premature backfill (124570 -> 124675 in run 115158).
+        self._wait_for_dest_to_stabilize(self.dest_cluster, bucket_name, min_items=phase1_loaded,
+                                         stable_window_s=30, poll_interval_s=10,
+                                         timeout=self._input.param("wait_timeout", 900))
         phase1_dest = TenKCollectionHelper.get_bucket_item_count(self.dest_master, bucket_name)
         self.assertGreater(phase1_dest, 0,
-                           "Phase 1: dest should have replicated items for existing collections")
+                           "Phase 1: dest should have replicated items for existing collections "
+                           "(read {})".format(phase1_dest))
         self.log.info("Phase 1 verified: dest has {} items".format(phase1_dest))
 
         # Phase 2: load into missing collections -- should NOT replicate yet
         if missing_pairs:
             self.log.info("Phase 2: loading into {} missing dest pairs (expect no replication)".format(
                 len(missing_pairs)))
-            TenKCollectionHelper.load_into_pairs(
+            # A failed load leaves the missing collections empty, and "no growth" then
+            # holds without testing anything.
+            self._assert_loaded(TenKCollectionHelper.load_into_pairs(
                 self.src_master, bucket_name, missing_pairs,
-                p.get("docs_per_collection", 10), run_id="prog_phase2")
+                p.get("docs_per_collection", 10), run_id="prog_phase2"), "Phase 2")
             self.sleep(10, "Verifying missing-collection docs do NOT replicate")
             phase2_dest = TenKCollectionHelper.get_bucket_item_count(self.dest_master, bucket_name)
             self.assertEqual(phase2_dest, phase1_dest,
@@ -535,23 +549,31 @@ class BackfillXDCR(XDCRNewBaseTest):
             self.src_master, self.dest_master, bucket_name)
 
         self.log.info("Phase 1: loading into {} existing dest pairs".format(len(existing_pairs)))
-        TenKCollectionHelper.load_into_pairs(
+        phase1_loaded = self._assert_loaded(TenKCollectionHelper.load_into_pairs(
             self.src_master, bucket_name, existing_pairs,
-            p.get("docs_per_collection", 10), run_id="bulk_phase1")
+            p.get("docs_per_collection", 10), run_id="bulk_phase1"), "Phase 1")
 
-        self.sleep(15, "Allowing phase-1 replication")
+        # Phase 2 asserts the destination does not grow, so phase 1 must be fully
+        # replicated first; after a fixed 15s, phase-1 docs still in flight read as
+        # premature backfill (124570 -> 124675 in run 115158).
+        self._wait_for_dest_to_stabilize(self.dest_cluster, bucket_name, min_items=phase1_loaded,
+                                         stable_window_s=30, poll_interval_s=10,
+                                         timeout=self._input.param("wait_timeout", 900))
         phase1_dest = TenKCollectionHelper.get_bucket_item_count(self.dest_master, bucket_name)
         self.assertGreater(phase1_dest, 0,
-                           "Phase 1: dest should have replicated items for existing collections")
+                           "Phase 1: dest should have replicated items for existing collections "
+                           "(read {})".format(phase1_dest))
         self.log.info("Phase 1 verified: dest has {} items".format(phase1_dest))
 
         # Phase 2: load into missing collections -- should NOT replicate yet
         if missing_pairs:
             self.log.info("Phase 2: loading into {} missing dest pairs (expect no replication)".format(
                 len(missing_pairs)))
-            TenKCollectionHelper.load_into_pairs(
+            # A failed load leaves the missing collections empty, and "no growth" then
+            # holds without testing anything.
+            self._assert_loaded(TenKCollectionHelper.load_into_pairs(
                 self.src_master, bucket_name, missing_pairs,
-                p.get("docs_per_collection", 10), run_id="bulk_phase2")
+                p.get("docs_per_collection", 10), run_id="bulk_phase2"), "Phase 2")
             self.sleep(10, "Verifying missing-collection docs do NOT replicate")
             phase2_dest = TenKCollectionHelper.get_bucket_item_count(self.dest_master, bucket_name)
             self.assertEqual(phase2_dest, phase1_dest,

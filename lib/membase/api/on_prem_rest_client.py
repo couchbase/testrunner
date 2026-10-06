@@ -1560,7 +1560,7 @@ class RestConnection(object):
         retries = 5
         last_content = None
         while retries:
-            status, content, _ = self._http_request(api, 'POST', params)
+            status, content, response = self._http_request(api, 'POST', params)
             last_content = content
             # Sample success response:
             # [{"name":"two","uri":"/pools/default/remoteClusters/two", ...}]
@@ -1589,6 +1589,11 @@ class RestConnection(object):
                 "(status={1}, content={2!r}); retries left={3}".format(
                     op, status, content, retries - 1))
             retries -= 1
+            # A 5xx usually means ns_server could not reach goxdcr, e.g. while it
+            # restarts after a cluster encryption-level change (~2-3s). Back-to-back
+            # retries all land inside that window, so back off before the next one.
+            if retries and int(getattr(response, 'status', 0) or 0) >= 500:
+                time.sleep(min(2 ** (5 - retries), 10))
         raise Exception(
             "remoteCluster API '{0} remote cluster' failed after retries; "
             "last response: {1!r}".format(op, last_content))

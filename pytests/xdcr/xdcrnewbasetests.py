@@ -4,6 +4,7 @@ import logging
 import os
 import random
 import re
+import socket
 import time
 import unittest
 import uuid
@@ -302,6 +303,109 @@ class BUCKET_COLLECTIONS_DENSITY:
             self.num_collections = self.density_map[self.density]["num_collections_per_scope"]
             self.num_docs = self.density_map[self.density]["num_docs_per_collection"]
 
+
+# Returned by bucket_stat_total() when neither stats source can supply a
+# counter. -1 is safe as a sentinel because every counter these callers read is
+# a non-negative item count.
+STAT_UNAVAILABLE = -1
+
+# Consecutive polls without a complete count after which a catch-up wait stops: a
+# stats gap lasts seconds, while a dead node or a deleted bucket never recovers.
+MAX_UNAVAILABLE_STAT_POLLS = 3
+
+
+def _stat_shown(count):
+    return "unavailable" if count == STAT_UNAVAILABLE else count
+
+
+def bucket_stat_total(rest, bucket_name, stat="curr_items", zoom="minute",
+                      log=None, reasons=None):
+    """Cluster-wide total of a bucket counter, or STAT_UNAVAILABLE.
+
+    ns_server can answer a bucket stats request without the counter that was
+    asked for. A bucket whose stats collector has not produced a window yet
+    returns samples holding only "timestamp", and an established bucket drops
+    back to that shape for a few seconds when the stats subsystem is under load
+    (seen with 10K collections and a bulk load in flight). Per-node
+    "interestingStats" behaves the same way: a node that has not gossiped yet
+    carries a dict without the counter.
+
+    Callers here are polling for a condition, so a gap in one reading is not an
+    error - it just means this tick has nothing to compare. Returning
+    STAT_UNAVAILABLE instead of raising lets them retry on the next tick; the
+    previous inline `["op"]["samples"]["curr_items"][-1]` raised KeyError out of
+    the poll loop and failed the test on a transient gap.
+
+    `reasons`: optional list. When the answer is STAT_UNAVAILABLE a short phrase
+    saying WHY is appended, so a caller that eventually gives up can name the
+    real cause. "Stats never carried the counter" and "the node stopped
+    answering" both surface as STAT_UNAVAILABLE but call for opposite
+    investigations, and the distinction was being thrown away.
+    """
+    log = log or logger.Logger.get_logger()
+
+    def unavailable(reason):
+        if reasons is not None:
+            reasons.append(reason)
+        return STAT_UNAVAILABLE
+
+    # Aggregated endpoint first: it is the authoritative cluster-wide value.
+    try:
+        samples = rest.fetch_bucket_stats(bucket=bucket_name, zoom=zoom) \
+            .get("op", {}).get("samples", {})
+        series = samples.get(stat)
+        # A present-but-empty series is the same "no window yet" state as a
+        # missing key, and [-1] on it would raise IndexError. A null last
+        # sample is a gap too: two Nones would compare equal as "caught up".
+        if series and series[-1] is not None:
+            return series[-1]
+        log.info("bucket stats for {0} carry no '{1}' sample yet; trying "
+                 "per-node interestingStats".format(bucket_name, stat))
+    except ServerUnavailableException as e:
+        # Both sources live on this same RestConnection, so if the host is not
+        # answering the per-node fallback is guaranteed to burn another full
+        # _http_request timeout (120s by default) and fail identically. Two
+        # doomed calls per poll is how a 600s catch-up budget was spent on
+        # four REST timeouts.
+        log.warning("fetch_bucket_stats({0}) failed ({1}); host is "
+                    "unreachable, skipping the same-host per-node "
+                    "fallback".format(bucket_name, e))
+        return unavailable("{0} is not answering REST ({1})".format(
+            getattr(rest, "ip", "source"), e))
+    except Exception as e:
+        log.warning("fetch_bucket_stats({0}) failed ({1}); trying per-node "
+                    "interestingStats".format(bucket_name, e))
+
+    # Per-node fallback, all-or-nothing on purpose: callers compare source and
+    # destination totals for equality, and a sum that silently omits a node
+    # looks exactly like a real count. Refusing an incomplete reading keeps it
+    # from being mistaken for a converged one.
+    try:
+        nodes = rest.get_bucket_json(bucket_name).get("nodes") or []
+    except Exception as e:
+        log.warning("get_bucket_json({0}) failed ({1}); no reading this "
+                    "poll".format(bucket_name, e))
+        return unavailable("neither stats source could be read ({0})".format(e))
+
+    if not nodes:
+        log.warning("bucket {0} reported no nodes; no reading this "
+                    "poll".format(bucket_name))
+        return unavailable("bucket {0} reported no nodes".format(bucket_name))
+
+    total = 0
+    for node in nodes:
+        node_stats = node.get("interestingStats") or {}
+        if node_stats.get(stat) is None:
+            log.warning("node {0} has not reported '{1}' yet; discarding the "
+                        "partial total for bucket {2}".format(
+                            node.get("hostname", "?"), stat, bucket_name))
+            return unavailable(
+                "node {0} had not reported '{1}', so the per-node total was "
+                "incomplete".format(node.get("hostname", "?"), stat))
+        total += node_stats[stat]
+    return total
+
+
 class NodeHelper:
     _log = logger.Logger.get_logger()
 
@@ -347,11 +451,78 @@ class NodeHelper:
     def reboot_server(server, test_case, wait_timeout=60):
         remote_client = RemoteMachineShellConnection(server)
         remote_client.reboot_node()
-        # wait for restart and warmup on all node
-        ClusterOperationHelper.wait_for_ns_servers_or_assert([server], test_case, wait_if_warmup=True)
+        remote_client.disconnect()
+        # `reboot` returns before the node goes down, so a running-check made right
+        # away passes against the old ns_server. Wait for it to drop first.
+        if not NodeHelper.wait_for_node_to_go_down(server):
+            test_case.fail("{0} did not go down after reboot was issued".format(server.ip))
+        # Bound the boot by wall clock first: while the node is down every
+        # RestConnection takes ~105s to give up, but wait_node_restarted counts each
+        # such attempt as 10s, so on its own it would wait about two hours.
+        if not NodeHelper.wait_for_node_to_come_up(server, timeout=600):
+            test_case.fail("{0} did not come back within 600s of reboot".format(server.ip))
+        # wait for restart and warmup on all node; ns_server may still be starting
+        # behind the open port, which the wrapper retries.
+        NodeHelper.wait_node_restarted(server, test_case, wait_time=300, wait_if_warmup=True)
+        # ns_server answers before goxdcr is back, and until it is, replication
+        # lookups against this node report "not found".
+        if not NodeHelper.wait_for_goxdcr_rest(server):
+            test_case.fail("goxdcr on {0} did not come back after reboot".format(server.ip))
         # disable firewall on these nodes
+        remote_client = RemoteMachineShellConnection(server)
         remote_client.disable_firewall()
         remote_client.disconnect()
+
+    @staticmethod
+    def _rest_port_open(server):
+        # Either REST port counts: with strict cluster encryption the plain one is
+        # closed to remote clients, and probing it alone read a running node as down.
+        for port in (int(server.port), CbServer.ssl_port):
+            try:
+                socket.create_connection((server.ip, port), timeout=5).close()
+                return True
+            except OSError:
+                pass
+        return False
+
+    @staticmethod
+    def wait_for_node_to_go_down(server, timeout=300):
+        end_time = time.time() + timeout
+        while time.time() < end_time:
+            if not NodeHelper._rest_port_open(server):
+                return True
+            time.sleep(2)
+        NodeHelper._log.warning("{0}:{1} still accepting connections {2}s after reboot".format(
+            server.ip, server.port, timeout))
+        return False
+
+    @staticmethod
+    def wait_for_node_to_come_up(server, timeout=600):
+        end_time = time.time() + timeout
+        while time.time() < end_time:
+            if NodeHelper._rest_port_open(server):
+                return True
+            time.sleep(5)
+        return False
+
+    @staticmethod
+    def wait_for_goxdcr_rest(server, timeout=180):
+        """goxdcr opens its admin port only after it has loaded the replication
+        specs, so a goxdcr-proxied GET succeeding means replications are visible."""
+        end_time = time.time() + timeout
+        while time.time() < end_time:
+            try:
+                # Constructed per attempt: the constructor itself calls the node and
+                # raises ServerUnavailableException while it is still starting.
+                rest = RestConnection(server)
+                status, _, _ = rest._http_request(rest.baseUrl + "pools/default/remoteClusters",
+                                                  "GET", timeout=10)
+                if status:
+                    return True
+            except ServerUnavailableException:
+                pass
+            time.sleep(5)
+        return False
 
     @staticmethod
     def enable_firewall(
@@ -5239,32 +5410,52 @@ class XDCRNewBaseTest(unittest.TestCase):
             for remote_cluster in cb_cluster.get_remote_clusters():
                 rest2 = RestConnection(remote_cluster.get_dest_cluster().get_master_node())
                 for bucket in cb_cluster.get_buckets():
-                    while time.time() < end_time :
-                        try:
-                            _count1 = rest1.fetch_bucket_stats(bucket=bucket.name, zoom=fetch_bucket_stats_by)["op"]["samples"]["curr_items"][-1]
-                            _count2 = rest2.fetch_bucket_stats(bucket=bucket.name, zoom=fetch_bucket_stats_by)["op"]["samples"]["curr_items"][-1]
-                        except Exception as e:
-                            self.log.warning(e)
-                            self.log.info("Trying other method to fetch bucket current items")
-                            bucket_info1 = rest1.get_bucket_json(bucket.name)
-                            nodes = bucket_info1["nodes"]
-                            _count1 = 0
-                            for node in nodes:
-                                _count1 += node["interestingStats"]["curr_items"]
-
-                            bucket_info2 = rest2.get_bucket_json(bucket.name)
-                            nodes = bucket_info2["nodes"]
-                            _count2 = 0
-                            for node in nodes:
-                                _count2 += node["interestingStats"]["curr_items"]
+                    seen_reasons = []
+                    last_good = None
+                    unavailable_polls = 0
+                    # end_time is shared by every pair, so an earlier pair can use it up.
+                    # Read each pair at least once, or it would be judged on the previous
+                    # pair's counts.
+                    polled = False
+                    while not polled or time.time() < end_time:
+                        polled = True
+                        # A stats payload can omit curr_items for a few seconds (fresh
+                        # bucket, or the stats subsystem under load); that is a gap in
+                        # this poll, not a failure, so retry on the next tick. A gap that
+                        # lasts MAX_UNAVAILABLE_STAT_POLLS polls in a row means a node or
+                        # the bucket is gone, so stop instead of burning the timeout.
+                        reasons = []
+                        _count1 = bucket_stat_total(rest1, bucket.name, zoom=fetch_bucket_stats_by,
+                                                    log=self.log, reasons=reasons)
+                        _count2 = bucket_stat_total(rest2, bucket.name, zoom=fetch_bucket_stats_by,
+                                                    log=self.log, reasons=reasons)
+                        seen_reasons.extend(r for r in reasons if r not in seen_reasons)
 
                         self.wait_interval(60, "Bucket: {0}, count in one cluster : {1} items, another : {2}. "
                                        "Waiting for replication to catch up ..".
-                                   format(bucket.name, _count1, _count2))
+                                   format(bucket.name, _stat_shown(_count1), _stat_shown(_count2)))
+                        if STAT_UNAVAILABLE in (_count1, _count2):
+                            unavailable_polls += 1
+                            self.log.warning("No complete item count for bucket {0} this poll ({1} in a row): {2}".format(
+                                bucket.name, unavailable_polls, "; ".join(reasons)))
+                            if unavailable_polls >= MAX_UNAVAILABLE_STAT_POLLS:
+                                self.fail("Could not read a complete item count for bucket {0} in {1} consecutive "
+                                          "polls: {2}".format(bucket.name, unavailable_polls, "; ".join(seen_reasons)))
+                            continue
+                        unavailable_polls = 0
+                        last_good = (_count1, _count2)
                         if _count1 == _count2:
                             self.log.info("Replication caught up for bucket {0}: {1}".format(bucket.name, _count1))
                             break
                     else:
+                        if STAT_UNAVAILABLE in (_count1, _count2):
+                            if last_good is None:
+                                self.fail("Could not read a complete item count for bucket {0} within {1} sec: "
+                                          "{2}".format(bucket.name, timeout, "; ".join(seen_reasons)))
+                            # Only the final poll hit a gap; judge on the last complete reading.
+                            self.log.warning("Final poll for bucket {0} had no complete count; using the last "
+                                             "complete one, source:{1} dest:{2}".format(bucket.name, *last_good))
+                            _count1, _count2 = last_good
                         # SDKLoader loads docs in all collections including _system._query
                         # and _system._mobile, which are NOT replicated. Subtract them from
                         # both sides so we compare replicated-item totals. Nodes missing
@@ -5286,23 +5477,30 @@ class XDCRNewBaseTest(unittest.TestCase):
 
                         for path in exclude_paths:
                             self.log.info(f"Excluding {path} from count")
-                            if bucket.name in path.split(".")[1]:
+                            if bucket.name == path.split(".")[1]:
                                 self.log.info(f"Bucket {bucket.name} in path {path}")
                                 docs_to_exclude_src = 0
                                 docs_to_exclude_dest = 0
-                                cluster_nodes = cb_cluster.get_nodes() if path.split(".")[0] == "C1" else remote_cluster.get_dest_cluster().get_nodes()
+                                # The path names the cluster that holds the collection. Match it
+                                # against this pair's two ends: hardcoding C1 as the source put
+                                # C1's collection on the wrong side of the C2->C1 pair.
+                                path_cluster = path.split(".")[0]
+                                if path_cluster == cb_cluster.get_name():
+                                    on_src, cluster_nodes = True, cb_cluster.get_nodes()
+                                elif path_cluster == remote_cluster.get_dest_cluster().get_name():
+                                    on_src, cluster_nodes = False, remote_cluster.get_dest_cluster().get_nodes()
+                                else:
+                                    self.log.info(f"{path} is on neither end of this pair")
+                                    continue
                                 for node in cluster_nodes:
                                     self.log.info(f"Node {node.ip}")
                                     collections_info = self.get_collection_info(bucket, node)[0]
                                     self.log.info(f"Collections info for bucket {node.ip}: {collections_info}")
                                     if path.split(".")[-1] in collections_info:
-                                        print("Path: ", path.split(".")[-1])
-                                        print(path)
-                                        if path.split(".")[0] == "C1":
+                                        if on_src:
                                             docs_to_exclude_src += collections_info[path.split(".")[-1]]
                                             self.log.info(f"Docs to exclude src: {docs_to_exclude_src}")
-
-                                        if path.split(".")[0] == "C2":
+                                        else:
                                             docs_to_exclude_dest += collections_info[path.split(".")[-1]]
                                             self.log.info(f"Docs to exclude dest: {docs_to_exclude_dest}")
                                     else:
@@ -5316,7 +5514,9 @@ class XDCRNewBaseTest(unittest.TestCase):
                                 self.log.info(f"Docs to exclude dest: {docs_to_exclude_dest}")
                         if _count1 == _count2:
                             self.log.info("Replication caught up for bucket {0}: {1}".format(bucket.name, _count1))
-                            break
+                            # continue, not break: this else belongs to the while, so a break
+                            # here left the bucket loop and skipped every remaining bucket.
+                            continue
                         for node in cb_cluster.get_nodes():
                             self.log.info(f"Node {node.ip}")
                             collections_info = self.get_collection_info(bucket, node)[0]
@@ -5340,16 +5540,19 @@ class XDCRNewBaseTest(unittest.TestCase):
         end_time = time.time() + timeout
         last_count = -1
         last_change_time = time.time()
+        reasons = []
         while time.time() < end_time:
             rest = RestConnection(dest_cluster.get_master_node())
-            try:
-                count = rest.fetch_bucket_stats(
-                    bucket=bucket_name, zoom="minute"
-                )["op"]["samples"]["curr_items"][-1]
-            except Exception:
-                bucket_info = rest.get_bucket_json(bucket_name)
-                count = sum(node["interestingStats"]["curr_items"]
-                            for node in bucket_info["nodes"])
+            reasons = []
+            count = bucket_stat_total(rest, bucket_name, zoom="minute",
+                                      log=self.log, reasons=reasons)
+            if count == STAT_UNAVAILABLE:
+                # A gap in the stats is not a change in the count; keep the
+                # stability window running and read again next poll.
+                self.log.info("Dest stabilization poll: bucket={} no complete count "
+                              "this poll ({})".format(bucket_name, "; ".join(reasons)))
+                time.sleep(poll_interval_s)
+                continue
             self.log.info("Dest stabilization poll: bucket={} count={} last={}".format(
                 bucket_name, count, last_count))
             if count != last_count:
@@ -5361,7 +5564,8 @@ class XDCRNewBaseTest(unittest.TestCase):
                 return count
             time.sleep(poll_interval_s)
         raise Exception("Dest bucket {} did not stabilize within {}s "
-                        "(last count: {})".format(bucket_name, timeout, last_count))
+                        "(last count: {}{})".format(bucket_name, timeout, _stat_shown(last_count),
+                                                    "; " + "; ".join(reasons) if reasons else ""))
 
     def _wait_for_es_replication_to_catchup(self, timeout=300):
         from membase.api.esrest_client import EsRestConnection

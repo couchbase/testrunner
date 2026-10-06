@@ -2,7 +2,7 @@
 import time
 
 from .xdcrnewbasetests import XDCRNewBaseTest, NodeHelper, Utility
-from .xdcrnewbasetests import OPS
+from .xdcrnewbasetests import OPS, TOPOLOGY, REPLICATION_DIRECTION
 from membase.api.rest_client import RestConnection
 
 from pytests.xdcr.tenK_collection_helper import TenKCollectionHelper
@@ -279,6 +279,15 @@ class XDCRTopologyTest(XDCRNewBaseTest):
         Bidirectional between hub and all spokes.
         Requires chain_length=3, ctopology=star, rdirection=bidirection.
         """
+        # Without these the base class defaults to a unidirectional chain, which this
+        # test would then judge as if it were a star.
+        topology = self._input.param("ctopology", TOPOLOGY.CHAIN)
+        rdirection = self._input.param("rdirection", REPLICATION_DIRECTION.UNIDIRECTION)
+        self.assertTrue(
+            topology == TOPOLOGY.STAR and rdirection == REPLICATION_DIRECTION.BIDIRECTION,
+            "test_topology_star_10k_collections needs ctopology=star,rdirection=bidirection "
+            "in the conf, got ctopology={}, rdirection={}".format(topology, rdirection))
+
         p = TenKCollectionHelper.read_10k_params(self._input)
         bucket_name = self._input.param("bucket_name", "default")
 
@@ -286,45 +295,45 @@ class XDCRTopologyTest(XDCRNewBaseTest):
 
         self.setup_xdcr()
 
-        c1 = self.get_cb_cluster_by_name("C1")
-        TenKCollectionHelper.select_and_load(
-            c1.get_master_node(), bucket_name, p, run_id="star_hub")
-
+        # A failed pair may still have written some docs that total_docs_loaded does not
+        # count, after which no cluster can ever equal the expected total.
+        loaded = 0
         for cb_cluster in self.get_cb_clusters():
-            if cb_cluster.get_name() == "C1":
-                continue
-            TenKCollectionHelper.select_and_load(
-                cb_cluster.get_master_node(), bucket_name, p,
-                run_id="star_{}".format(cb_cluster.get_name()))
+            run_id = "star_hub" if cb_cluster.get_name() == "C1" else \
+                "star_{}".format(cb_cluster.get_name())
+            result = TenKCollectionHelper.select_and_load(
+                cb_cluster.get_master_node(), bucket_name, p, run_id=run_id)
+            self.assertFalse(result.failed_pairs,
+                             "Star: load on {} failed for {} collection pairs: {}".format(
+                                 cb_cluster.get_name(), len(result.failed_pairs), result.errors))
+            # No collections to load into gives no failed pairs and 0 docs, and every
+            # cluster then "converges" on 0.
+            self.assertGreater(result.total_docs_loaded, 0,
+                               "Star: nothing was loaded on {}".format(cb_cluster.get_name()))
+            loaded += result.total_docs_loaded
 
-        # Bidirectional star: hub accumulates own + each spoke's own load;
-        # each spoke accumulates own + hub's own load (no spoke<->spoke link).
-        # Therefore hub_count > any single spoke_count (for N>=2 spokes), so
-        # pairwise src==dest is impossible. Wait for each cluster's count to
-        # stabilize, then check the correct invariant.
+        # goxdcr forwards replicated mutations unless forwardLocalOnly is set, so in a
+        # bidirectional star the hub relays each spoke's docs to the other spokes and
+        # every cluster converges on the sum of all loads (run ids keep keys distinct).
+        # A hub >= spoke check passes even with no replication at all, so wait for
+        # every cluster to reach that total instead.
+        # Never below the 900s this check allowed before it compared exact totals.
+        timeout = max(self._input.param("wait_timeout", 900), 900)
         for cb_cluster in self.get_cb_clusters():
-            try:
-                self._wait_for_dest_to_stabilize(cb_cluster, bucket_name,
-                                                 min_items=1, timeout=900)
-            except Exception as e:
-                self.fail("Star: cluster {} did not stabilize: {}".format(
-                    cb_cluster.get_name(), e))
-
-        c1_count = TenKCollectionHelper.get_bucket_item_count(
-            c1.get_master_node(), bucket_name)
-        for cb_cluster in self.get_cb_clusters():
-            if cb_cluster.get_name() == "C1":
-                continue
-            count = TenKCollectionHelper.get_bucket_item_count(
-                cb_cluster.get_master_node(), bucket_name)
-            self.log.info("{}: {} items (hub C1: {})".format(
-                cb_cluster.get_name(), count, c1_count))
-            self.assertGreater(count, 0,
-                               "Spoke {} should have items".format(cb_cluster.get_name()))
-            self.assertGreaterEqual(c1_count, count,
-                                    "Star: hub should accumulate at least as many "
-                                    "items as any spoke: hub={}, spoke {}={}".format(
-                                        c1_count, cb_cluster.get_name(), count))
+            end_time = time.time() + timeout
+            count = None
+            while time.time() < end_time:
+                count = TenKCollectionHelper.get_bucket_item_count(
+                    cb_cluster.get_master_node(), bucket_name)
+                if count == loaded:
+                    break
+                self.sleep(30, "Star: {} has {} of {} items".format(
+                    cb_cluster.get_name(), count, loaded))
+            self.log.info("Star: {} has {} items, expected {}".format(
+                cb_cluster.get_name(), count, loaded))
+            self.assertEqual(count, loaded,
+                             "Star: {} did not converge on all {} loaded items within {}s "
+                             "(has {})".format(cb_cluster.get_name(), loaded, timeout, count))
 
         self.log.info("Star topology 10K collections test passed")
 

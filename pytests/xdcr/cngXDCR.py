@@ -372,6 +372,38 @@ class CNGXDCRBaseTest(XDCRNewBaseTest):
                 rc_name, timeout))
         return status
 
+    def _expect_staged_creds_promoted(self, src_rest, rc_name, staged_user,
+                                      timeout=180, interval=5):
+        """Wait for goxdcr to promote a ref's staged credentials to primary.
+
+        On an auth failure with the primary creds goxdcr retries with the
+        staged ones and, if that succeeds, promotes them and reports
+        codes.OK (metadata_svc/cngAgent/refresh.go) — connectivityStatus
+        never leaves RC_OK, so the promotion itself is the evidence: the
+        ref's username becomes the staged user and its 'stage' entry is
+        cleared. The promoted ref is persisted to metakv, so the source
+        master sees it even when another node did the promotion.
+        """
+        end_time = time.time() + timeout
+        state = None
+        while True:
+            ref = next((r for r in src_rest.get_remote_clusters_with_stage()
+                        if r.get("name") == rc_name), None)
+            if ref is not None:
+                state = {k: ref.get(k) for k in (
+                    "username", "stage", "connectivityStatus")}
+                if ref.get("username") == staged_user and not ref.get("stage"):
+                    log.info("Staged credentials promoted on ref '{0}': "
+                             "{1}".format(rc_name, state))
+                    return
+            if time.time() >= end_time:
+                break
+            self.sleep(interval, "Waiting for staged credentials on ref "
+                                 "'{0}' to be promoted".format(rc_name))
+        self.fail("Staged credentials on ref '{0}' were not promoted to "
+                  "primary (username={1}) within {2}s; last ref state: "
+                  "{3}".format(rc_name, staged_user, timeout, state))
+
     def _assert_checkpoints_progress(self, rest_src, ckpt_before, phase,
                                      timeout=None):
         """Wait for checkpoint count to increase; fail if it doesn't.
@@ -1636,7 +1668,10 @@ class XDCRCNGResiliencyTests(CNGXDCRBaseTest):
             self.sleep(30, "Role change propagation on target")
             self._replication.resume(rest_src, src_bucket, dest_bucket)
 
-            self._expect_error_connectivity(rest_src, rc_name, timeout=180)
+            # A successful staged retry never surfaces an error state, so
+            # assert the promotion rather than an error window.
+            self._expect_staged_creds_promoted(
+                rest_src, rc_name, staged_user, timeout=180)
             self._expect_connectivity(
                 rest_src, rc_name, CONNECTIVITY_STATUS.RC_OK, timeout=recovery_timeout)
 
@@ -1647,8 +1682,20 @@ class XDCRCNGResiliencyTests(CNGXDCRBaseTest):
                 task.result()
             self._wait_for_replication_to_catchup(timeout=300)
 
-            # Revert: restore primary user roles; rotate ref back to primary creds
-            self._set_user_roles(dest_cluster, primary_user, ROLE_REPL_TARGET_ALL)
+            # New keys written after the promotion must replicate on the promoted
+            # credentials (the stale-credentials class of MB-73151). load_async
+            # rewrites existing keys, which a count-based catch-up cannot tell apart
+            # from a stalled pipeline.
+            gen_post = BlobGenerator("post-promotion-", "post-promotion-", self._value_size,
+                                     end=items // 2)
+            src_cluster.load_all_buckets_from_generator(gen_post)
+            self._wait_for_replication_to_catchup(timeout=300)
+
+            # Revert: restore primary user roles; rotate ref back to primary creds.
+            # _set_user_roles defaults the password to the admin's (the strip
+            # already applied it), so set user_password explicitly.
+            self._set_user_roles(dest_cluster, primary_user, ROLE_REPL_TARGET_ALL,
+                                 password=user_password)
             self._refs.change_credentials(
                 src_cluster, dest_cluster, rc_name,
                 primary_user, user_password, lb_ip=infra.lb_ip)
@@ -2128,12 +2175,20 @@ class XDCRCNGResiliencyTests(CNGXDCRBaseTest):
 
             tasks = self._replication.load_async(src_cluster, count=items // 2)
             self._strip_xdcr_roles(dest_cluster, primary_user)
-            self._expect_error_connectivity(rest_src, rc_name, timeout=120)
+            self._expect_staged_creds_promoted(
+                rest_src, rc_name, staged_user, timeout=120)
             self._expect_connectivity(
                 rest_src, rc_name, CONNECTIVITY_STATUS.RC_OK, timeout=recovery_timeout)
 
             for task in tasks:
                 task.result()
+            self._wait_for_replication_to_catchup(timeout=300)
+
+            # New keys after the promotion, before the next goxdcr kill rebuilds the
+            # pipeline: they must replicate on the promoted credentials.
+            gen_post = BlobGenerator("post-promotion-", "post-promotion-", self._value_size,
+                                     end=items // 2)
+            src_cluster.load_all_buckets_from_generator(gen_post)
             self._wait_for_replication_to_catchup(timeout=300)
 
             self.kill_goxdcr_on_cluster(src_cluster, wait_to_recover=True)

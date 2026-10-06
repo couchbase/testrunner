@@ -105,7 +105,12 @@ class XDCRCollectionsTests(XDCRNewBaseTest):
                                                                                      bucket, scope_name,
                                                                                      collection_name
                                                                                      ))
-                tasks.append(cluster.load_all_buckets(1000))
+                # A cluster that only receives would add its own docs to the
+                # collection an explicit mapping writes into, and
+                # verify_results compares that collection one to one with the
+                # mapped source collection, so only load where data flows out.
+                if cluster.get_remote_clusters():
+                    tasks.append(cluster.load_all_buckets(1000))
 
         if drop_recreate_scope:
             for cluster in self.get_cluster_objects_for_input(drop_recreate_scope):

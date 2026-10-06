@@ -118,6 +118,8 @@ class ConflictLoggingTests(XDCRNewBaseTest):
         if not self.conflict_logging_params:
             self.log.warning("No conflict logging parameters found. Conflict logging will not be enabled.")
             return
+
+        enabled = []
             
         for cluster in self.get_cb_clusters():
             for remote_cluster in cluster.get_remote_clusters():
@@ -129,8 +131,60 @@ class ConflictLoggingTests(XDCRNewBaseTest):
                         settings = self.conflict_logging_params[bucket_name][cluster_name]
                         self.log.info(f"Setting conflict logging for {bucket_name}@{cluster_name}: {settings}")
                         self._set_conflict_logging(replication, settings)
+                        if not settings.get('disabled', False):
+                            enabled.append(replication)
                     else:
                         self.log.info(f"No conflict logging settings for {bucket_name}@{cluster_name}")
+        self._wait_until_conflict_loggers_running(enabled)
+
+    def _wait_until_conflict_loggers_running(self, replications, timeout=180):
+        """Poll xdcr_clog_status until each replication's Main pipeline reports its
+        conflict logger "Running".
+
+        Turning conflict logging on is a live settings change that goxdcr applies by
+        restarting the pipeline, and that restart can lag: on cbvm the logger came up
+        ~57s after the setting, by which time the test had already paused, written
+        and resumed, so the conflicts replicated unlogged (14 of ~50000 logged).
+        Each source node restarts its own part of the pipeline on its own
+        schedule, so every node has to report Running, not just one.
+        """
+        start = time.time()
+        pending = list(replications)
+        last_error = None
+        while pending and time.time() - start < timeout:
+            for repl in list(pending):
+                target_uuid, src_bucket, tgt_bucket = repl.get_repl_id().split("/")
+                src_cluster = repl.get_src_cluster()
+                try:
+                    series = self.query_prometheus_metric_series(src_cluster,
+                                                                 "xdcr_clog_status")
+                except Exception as e:
+                    last_error = e
+                    self.log.info(f"xdcr_clog_status not readable yet: {e}")
+                    continue
+                running_nodes = set()
+                for entry in series:
+                    labels = entry["labels"]
+                    if (labels.get("status") == "Running" and entry["value"] >= 1
+                            and labels.get("pipelineType", "Main") == "Main"
+                            and labels.get("sourceBucketName") == src_bucket
+                            and labels.get("targetBucketName") == tgt_bucket
+                            and labels.get("targetClusterUUID") == target_uuid):
+                        running_nodes.add(str(labels.get("nodes")))
+                if len(running_nodes) >= len(src_cluster.get_nodes()):
+                    pending.remove(repl)
+                else:
+                    self.log.info(f"Conflict logger for {repl.get_repl_id()} running on "
+                                  f"{len(running_nodes)} of {len(src_cluster.get_nodes())} "
+                                  f"source nodes")
+            if pending:
+                self.sleep(5, "waiting for the conflict loggers to start")
+        if pending:
+            self.fail(f"Conflict logger not running {timeout}s after enabling it for "
+                      f"{[r.get_repl_id() for r in pending]} (last metric read error: {last_error})")
+        if replications:
+            self.log.info(f"Conflict loggers running for {len(replications)} replication(s) "
+                          f"after {time.time() - start:.1f}s")
     
     def _set_conflict_logging(self, replication, settings):
         """
@@ -390,6 +444,48 @@ class ConflictLoggingTests(XDCRNewBaseTest):
             self.log.error(f"Destination {label} pillowfight failed for bucket {bucket}")
         return all(results.get(side) for side in ("source", "destination"))
 
+    def _run_pillowfight_isolated(self, bucket_names, pf_opts, label):
+        """Run `pf_opts` with cbc-pillowfight on both clusters for every bucket while
+        both replications are paused, then resume them.
+
+        The same keys written on a running pipeline mostly replicate before the other
+        side's write lands, so they never diverge and log no conflict (the high-volume
+        test logged 0, 6 and 15 that way). Paused, each side's write is independent,
+        and on resume every overlapping key is a true conflict.
+        Returns True only if every load succeeded on both sides.
+        """
+        self.log.info("Pausing both replications to isolate clusters for deterministic "
+                      "conflict generation")
+        self.src_cluster.pause_all_replications_by_id(verify=False)
+        self.dest_cluster.pause_all_replications_by_id(verify=False)
+        success = True
+        try:
+            # pauseRequested only asks for the pause; the pipeline stops a few seconds
+            # later. A load started at once landed on running pipelines and replicated
+            # as it went: the basic test then logged 0 conflicts on cbvm, while the same
+            # load with the pause in effect logged 940.
+            self._wait_until_replications_paused()
+            for bucket_name in bucket_names:
+                self.log.info(f"Generating {label} on bucket {bucket_name} on each (isolated) "
+                              f"cluster; pillowfight opts={pf_opts}")
+                if self._run_pillowfight_on_both(bucket_name, pf_opts, label):
+                    self.log.info(f"Divergent load completed on both clusters for bucket "
+                                  f"{bucket_name}")
+                else:
+                    success = False
+                    self.log.warning(f"Divergent load did not succeed on both clusters for "
+                                     f"bucket {bucket_name}; conflict generation may be incomplete")
+        finally:
+            self.log.info("Resuming both replications; XDCR will now detect the conflicts")
+            self.src_cluster.resume_all_replications_by_id(verify=False)
+            self.dest_cluster.resume_all_replications_by_id(verify=False)
+
+        # Confirm the manual resume cleared the pause BEFORE any auto-pause check, so a
+        # lingering manual pause is never mistaken for an auto-pause. Only on the success
+        # path - on a load exception the finally above still resumes and the error propagates.
+        self._wait_until_replications_resumed()
+        return success
+
     def _create_conflicts_with_pillowfight(self):
         """
         Create conflicts using cbc-pillowfight tool for reliable conflict generation
@@ -409,14 +505,9 @@ class ConflictLoggingTests(XDCRNewBaseTest):
         
         self.log.info(f"Creating conflicts with cbc-pillowfight for buckets: {bucket_names}")
 
-        # Run cbc-pillowfight on both clusters for each bucket
+        # Run cbc-pillowfight on both (isolated) clusters for each bucket
         pf_opts = ["-I", "1000", "-m", "100", "-M", "100", "-c", "10", "-t", "4", "-B", "100"]
-        success = True
-        for bucket_name in bucket_names:
-            if not self._run_pillowfight_on_both(bucket_name, pf_opts, "conflicts"):
-                success = False
-            elif success:
-                self.log.info(f"Successfully created potential conflicts for bucket {bucket_name}")
+        success = self._run_pillowfight_isolated(bucket_names, pf_opts, "conflicts")
     
         # Wait for replication to catch up
         self.log.info("Waiting for replication to catch up...")
@@ -471,8 +562,7 @@ class ConflictLoggingTests(XDCRNewBaseTest):
         success = self._create_conflicts_with_pillowfight()
         
         if not success:
-            self.log.error("Failed to create conflicts using cbc-pillowfight")
-            self.log.warning("No fallback method available - conflict testing may not work correctly")
+            self.fail("Failed to create conflicts using cbc-pillowfight on one or both clusters")
             
         self.log.info("Conflict creation process completed")
     
@@ -481,7 +571,7 @@ class ConflictLoggingTests(XDCRNewBaseTest):
         Verify that conflicts are logged in the specified collections
         """
         self.log.info("Verifying conflict logs")
-        
+        verified = 0
         for cluster in self.get_cb_clusters():
             for remote_cluster in cluster.get_remote_clusters():
                 for replication in remote_cluster.get_replications():
@@ -522,19 +612,23 @@ class ConflictLoggingTests(XDCRNewBaseTest):
                     # Using COUNT(*) without 'as count' to get the result in the expected format with '$1' key
                     query = f'SELECT COUNT(*) FROM `{bucket_name}`.`{scope_name}`.`{collection_name}` WHERE META().id LIKE "crd%"'
                     
-                    try:
-                        # Use the parent class's __execute_query method
-                        count = self._XDCRNewBaseTest__execute_query(src_master, query)
-                        self.log.info(f"Found {count} conflict logs in {bucket_name}.{scope_name}.{collection_name}")
-                        
-                        # In a bidirectional setup with updates on both sides, we expect conflicts
-                        if self._replication_direction == "bidirection":
-                            # We should have at least some conflicts
-                            self.assertGreater(count, 0, f"No conflict logs found in {bucket_name}.{scope_name}.{collection_name}")
-                        else:
-                            self.log.info(f"No conflicts expected in unidirectional setup, found: {count}")
-                    except Exception as e:
-                        self.log.error(f"Error querying conflict logs: {e}")
+                    # Not wrapped in try/except: that swallowed both a failed query and the
+                    # assertion below, so a run that logged no conflicts still passed.
+                    # __execute_query fails the test itself when the query cannot run.
+                    count = self._XDCRNewBaseTest__execute_query(src_master, query)
+                    verified += 1
+                    self.log.info(f"Found {count} conflict logs in {bucket_name}.{scope_name}.{collection_name}")
+
+                    # In a bidirectional setup with updates on both sides, we expect conflicts
+                    if self._replication_direction == "bidirection":
+                        # We should have at least some conflicts
+                        self.assertGreater(count, 0, f"No conflict logs found in {bucket_name}.{scope_name}.{collection_name}")
+                    else:
+                        self.log.info(f"No conflicts expected in unidirectional setup, found: {count}")
+        # Settings that could not be read come back {} and are skipped above, so a run
+        # could otherwise check nothing and pass.
+        if self.conflict_logging_params and not verified:
+            self.fail("No replication with conflict logging enabled was found to verify")
     
     def _get_conflict_logs(self, bucket_name, scope_name, collection_name, limit=10):
         """
@@ -576,6 +670,45 @@ class ConflictLoggingTests(XDCRNewBaseTest):
         """
         src_master = cluster.get_master_node()
         query = f'SELECT COUNT(*) FROM `{bucket_name}`.`{scope_name}`.`{collection_name}`'
+        return self._XDCRNewBaseTest__execute_query(src_master, query)
+
+    def _conflict_log_total(self):
+        """Conflict records over every configured conflict collection. The collection
+        lives on the replication's source cluster, the one the params are keyed by."""
+        total = 0
+        for bucket_params in self.conflict_logging_params.values():
+            for cluster_name, settings in bucket_params.items():
+                bucket_name, collection_path = settings.get('bucket'), settings.get('collection')
+                if not bucket_name or not collection_path:
+                    continue
+                scope_name, collection_name = (collection_path.split('.') if '.' in collection_path
+                                               else ('_default', collection_path))
+                total += self._get_conflict_log_count(self.get_cb_cluster_by_name(cluster_name),
+                                                      bucket_name, scope_name, collection_name)
+        return total
+
+    def _assert_conflict_logs_grew(self, before, context, timeout=120):
+        """Fail unless conflict records were added after `before` was read: a check
+        that nothing happened under conflict load proves nothing without the load."""
+        deadline = time.time() + timeout
+        while True:
+            after = self._conflict_log_total()
+            if after > before or time.time() >= deadline:
+                break
+            self.sleep(10, "waiting for conflict records to be written")
+        self.assertGreater(after, before, f"No new conflict records {context} "
+                                          f"(before={before}, after={after})")
+        self.log.info(f"{after - before} new conflict records {context}")
+
+    def _get_conflict_log_count(self, cluster, bucket_name, scope_name, collection_name):
+        """
+        Return the number of conflict-log records (keys "crd...") in `bucket.scope.collection`.
+        The conflict collection also holds the docs the setup loader wrote, so a plain COUNT(*)
+        is never zero and cannot show whether any conflict was logged.
+        """
+        src_master = cluster.get_master_node()
+        query = (f'SELECT COUNT(*) FROM `{bucket_name}`.`{scope_name}`.`{collection_name}` '
+                 f'WHERE META().id LIKE "crd%"')
         return self._XDCRNewBaseTest__execute_query(src_master, query)
     
     def _create_scopes_and_collections(self):
@@ -837,19 +970,23 @@ class ConflictLoggingTests(XDCRNewBaseTest):
         Returns:
             bool: True if the log has all required fields, False otherwise
         """
-        # Define required fields based on your conflict log structure
-        # Modify this list based on your actual conflict log format
-        required_fields = ['doc_id', 'rev_id', 'timestamp', 'conflict_type']
-        missing_fields = []
-        
-        for field in required_fields:
-            if field not in log:
-                missing_fields.append(field)
-                
+        # _get_conflict_logs selects `META().id AS id, *`, which nests the record under
+        # its collection's name. The fields are goxdcr's conflict record ("crd_..."); the
+        # placeholders checked here before matched no real record, so every sampled log
+        # was reported invalid and the check was only logged.
+        record = next((v for k, v in log.items() if k != 'id' and isinstance(v, dict)), log)
+        missing_fields = [f for f in ('id', 'timestamp', 'docId', 'replId', 'srcDoc', 'tgtDoc')
+                          if f not in record]
+        for side in ('srcDoc', 'tgtDoc'):
+            if isinstance(record.get(side), dict):
+                missing_fields += [f"{side}.{f}" for f in ('id', 'nodeId', 'clusterUUID', 'cas', 'revSeqno')
+                                   if f not in record[side]]
         if missing_fields:
             self.log.warning(f"Conflict log missing required fields: {missing_fields}")
             return False
-            
+        if not str(record['id']).startswith('crd'):
+            self.log.warning(f"Conflict log id {record['id']} is not a conflict record id")
+            return False
         return True
     
     def _generate_high_volume_conflicts(self, num_docs=10000, num_threads=8):
@@ -875,13 +1012,10 @@ class ConflictLoggingTests(XDCRNewBaseTest):
         
         self.log.info(f"Creating high-volume conflicts for buckets: {bucket_names}")
 
-        # Run cbc-pillowfight with high number of operations on both clusters in parallel
+        # Run cbc-pillowfight with high number of operations on both (isolated) clusters
         pf_opts = ["-I", str(num_docs), "-m", "200", "-M", "2000",
                    "-c", "10", "-t", str(num_threads), "-B", "500"]
-        success = True
-        for bucket_name in bucket_names:
-            if not self._run_pillowfight_on_both(bucket_name, pf_opts, "high-volume"):
-                success = False
+        success = self._run_pillowfight_isolated(bucket_names, pf_opts, "high-volume conflicts")
 
         # Wait for replication to catch up
         self.log.info("Waiting for replication to catch up...")
@@ -1090,12 +1224,12 @@ class ConflictLoggingTests(XDCRNewBaseTest):
                 # Get a sample of conflict logs
                 logs = self._get_conflict_logs(bucket_name, scope_name, collection_name, limit=10)
                 
-                if logs:
-                    self.log.info(f"Verifying structure of {len(logs)} conflict logs from {bucket_name}.{scope_name}.{collection_name}")
-                    for log in logs:
-                        # Call verification function for each log
-                        if not self._verify_conflict_log_structure(log):
-                            self.log.error(f"Invalid conflict log structure: {log}")
+                if not logs:
+                    self.fail(f"No conflict logs could be read from {bucket_name}.{scope_name}.{collection_name}")
+                self.log.info(f"Verifying structure of {len(logs)} conflict logs from {bucket_name}.{scope_name}.{collection_name}")
+                for log in logs:
+                    if not self._verify_conflict_log_structure(log):
+                        self.fail(f"Invalid conflict log structure: {log}")
                             
         # Verify log count is proportional to the number of conflicts generated
         for bucket_params in self.conflict_logging_params.values():
@@ -1113,8 +1247,9 @@ class ConflictLoggingTests(XDCRNewBaseTest):
                     scope_name = '_default'
                     collection_name = collection_path
                 
-                # Get count of conflict logs
-                collection_count = self._get_collection_doc_count(
+                # Count only conflict-log records: COUNT(*) over the collection read 1000
+                # (the setup loader's docs) even when no conflict had been logged.
+                collection_count = self._get_conflict_log_count(
                     self.get_cb_clusters()[0],
                     bucket_name,
                     scope_name,
@@ -1124,7 +1259,9 @@ class ConflictLoggingTests(XDCRNewBaseTest):
                 self.log.info(f"Total conflict logs in {bucket_name}.{scope_name}.{collection_name}: {collection_count}")
                 
                 # Assert that we have a significant number of conflict logs
-                self.assertGreater(collection_count, 1000, "Expected at least 1000 conflict logs from high-volume test")
+                self.assertGreaterEqual(collection_count, 1000,
+                                        "Expected at least 1000 conflict logs from high-volume test in "
+                                        f"{bucket_name}.{scope_name}.{collection_name}, found {collection_count}")
     
     def test_conflict_logging_performance(self):
         """
@@ -1178,7 +1315,9 @@ class ConflictLoggingTests(XDCRNewBaseTest):
         rebalance_task = self._start_rebalance(self.src_cluster)
         
         if not rebalance_task:
-            self.log.warning("Could not start rebalance, continuing test without rebalance")
+            # Carrying on would pass as a plain conflict-logging run (skipTest also reports
+            # a pass); the row needs a spare node in the INI.
+            self.fail("Could not start a source-cluster rebalance: no free node in the INI")
         
         # Create conflicts during rebalance
         self.log.info("Creating conflicts during rebalance...")
@@ -1193,11 +1332,14 @@ class ConflictLoggingTests(XDCRNewBaseTest):
         self._verify_conflict_logs()
         
         # Create more conflicts after rebalance
+        before = self._conflict_log_total()
         self.log.info("Creating more conflicts after rebalance...")
         self._create_conflicts()
         
-        # Verify additional conflicts are logged
+        # Verify additional conflicts are logged; the count was already > 0 from the
+        # first round, so only growth shows these were.
         self._verify_conflict_logs()
+        self._assert_conflict_logs_grew(before, "after the rebalance")
         
         # Get detailed conflict log statistics
         self.log.info("Getting conflict log statistics...")
@@ -1216,8 +1358,9 @@ class ConflictLoggingTests(XDCRNewBaseTest):
                     scope_name = '_default'
                     collection_name = collection_path
                 
-                # Get conflict log count
-                collection_count = self._get_collection_doc_count(
+                # Get conflict log count (conflict-log records only; the collection also
+                # holds loader docs, which made a plain COUNT(*) always positive)
+                collection_count = self._get_conflict_log_count(
                     self.get_cb_clusters()[0],
                     bucket_name,
                     scope_name,
@@ -1293,6 +1436,28 @@ class ConflictLoggingTests(XDCRNewBaseTest):
                 self.log.info(f"Replication {repl.get_repl_id()} is paused")
                 return True
         return False
+
+    def _wait_until_replications_paused(self, timeout=60):
+        """Poll each source master's tasks until every replication reports status
+        "paused", i.e. its pipeline has actually stopped. Fails on timeout: a load
+        written to a running pipeline cannot be relied on to diverge."""
+        expected = {}
+        for repl in self._get_all_replications():
+            expected[repl.get_repl_id()] = repl.get_src_cluster().get_master_node()
+        start = time.time()
+        pending = dict(expected)
+        while pending and time.time() - start < timeout:
+            for repl_id, master in list(pending.items()):
+                for task in self._rest_for(master).get_replications():
+                    if task.get("id") == repl_id and task.get("status") == "paused":
+                        del pending[repl_id]
+                        break
+            if pending:
+                self.sleep(1, "waiting for paused pipelines")
+        if pending:
+            self.fail(f"Replications {sorted(pending)} still not paused {timeout}s after "
+                      f"pauseRequested=true")
+        self.log.info(f"All {len(expected)} replications paused after {time.time() - start:.1f}s")
 
     def _wait_until_replications_resumed(self, timeout=60):
         """Poll until no replication reports pauseRequested.
@@ -1432,8 +1597,9 @@ class ConflictLoggingTests(XDCRNewBaseTest):
         failure surfaces in the logs instead of silently generating no conflicts.
         """
         if self._replication_direction != "bidirection":
-            self.log.info("Skipping conflict creation in unidirectional setup")
-            return
+            # The callers assert on (no) auto-pause, which without conflicts passes
+            # or fails for no reason.
+            self.fail("Conflict generation needs rdirection=bidirection")
 
         pf_opts = ["-I", str(num_items), "-m", "100", "-M", "100",
                    "-c", "10", "-t", str(threads), "-B", "100",
@@ -1441,34 +1607,10 @@ class ConflictLoggingTests(XDCRNewBaseTest):
         if rate_limit:
             pf_opts += ["--rate-limit", str(rate_limit)]
 
-        # Isolate the clusters so same-key writes on each side are independent and
-        # cannot be reconciled by in-flight replication.
-        self.log.info("Pausing both replications to isolate clusters for deterministic "
-                      "conflict generation")
-        self.src_cluster.pause_all_replications_by_id(verify=False)
-        self.dest_cluster.pause_all_replications_by_id(verify=False)
-        try:
-            bucket_names = list(self.conflict_logging_params.keys()) or ["default"]
-            for bucket_name in bucket_names:
-                self.log.info(f"Generating conflicts on bucket {bucket_name} with overlapping "
-                              f"keys [{key_prefix}*], {num_items} items x {threads} threads on "
-                              f"each (isolated) cluster; pillowfight opts={pf_opts}")
-                ok = self._run_pillowfight_on_both(bucket_name, pf_opts, "conflicts")
-                if ok:
-                    self.log.info(f"Divergent load completed on both clusters for bucket "
-                                  f"{bucket_name}")
-                else:
-                    self.log.warning(f"Divergent load did not succeed on both clusters for "
-                                     f"bucket {bucket_name}; conflict generation may be incomplete")
-        finally:
-            self.log.info("Resuming both replications; XDCR will now detect the conflicts")
-            self.src_cluster.resume_all_replications_by_id(verify=False)
-            self.dest_cluster.resume_all_replications_by_id(verify=False)
-
-        # Confirm the manual resume cleared the pause BEFORE any auto-pause check, so a
-        # lingering manual pause is never mistaken for an auto-pause. Only on the success
-        # path - on a load exception the finally above still resumes and the error propagates.
-        self._wait_until_replications_resumed()
+        bucket_names = list(self.conflict_logging_params.keys()) or ["default"]
+        if not self._run_pillowfight_isolated(bucket_names, pf_opts,
+                                              f"conflicts with overlapping keys [{key_prefix}*]"):
+            self.fail(f"Conflict generation [{key_prefix}*] failed on one or both clusters")
 
     def test_clog_pause_settings_validation(self):
         """
@@ -1564,8 +1706,10 @@ class ConflictLoggingTests(XDCRNewBaseTest):
         self.assertEqual(threshold, 0, "clog_pause_threshold must be 0 for default hibernation test")
         self.assertEqual(duration, 0, "clog_monitor_duration must be 0 for default hibernation test")
 
+        before = self._conflict_log_total()
         self._generate_conflicts_no_wait(num_items=self._num_items, threads=16)
         self._assert_no_autopause(observe_secs)
+        self._assert_conflict_logs_grew(before, "under the load that must not auto-pause")
 
     def test_clog_pause_settings_live_update(self):
         """
@@ -1584,9 +1728,11 @@ class ConflictLoggingTests(XDCRNewBaseTest):
 
         # Phase 1: high threshold -> conflicts must not pause the replication.
         self._set_clog_pause_settings(high_threshold, duration)
+        before = self._conflict_log_total()
         self._generate_conflicts_no_wait(num_items=self._num_items,
                                          key_prefix=CONFLICT_KEY_PREFIX + "p1_")
         self._assert_no_autopause(observe_secs)
+        self._assert_conflict_logs_grew(before, "under the high threshold")
 
         # Phase 2: lower the threshold, then generate a FRESH batch of conflicts.
         # _generate_conflicts_no_wait pauses+resumes the replications, which both
@@ -1637,6 +1783,7 @@ class ConflictLoggingTests(XDCRNewBaseTest):
                       f"~{drip_secs}s, threshold={threshold}, monitor_duration={duration}s; "
                       f"pillowfight opts={pf_opts}")
         threads = []
+        before = self._conflict_log_total()
         if self._replication_direction == "bidirection":
             for bucket_name in bucket_names:
                 for node in (self.src_master, self.dest_master):
@@ -1651,6 +1798,7 @@ class ConflictLoggingTests(XDCRNewBaseTest):
         finally:
             for t in threads:
                 t.join(timeout=drip_secs)
+        self._assert_conflict_logs_grew(before, "from the drip")
 
     def test_clog_resume_after_autopause(self):
         """
@@ -1668,6 +1816,10 @@ class ConflictLoggingTests(XDCRNewBaseTest):
 
         self.assertTrue(self._wait_for_autopause(timeout=autopause_timeout),
                         "Replication was not auto-paused")
+        # pauseRequested is also what a manual pause sets; the errors API entry is what
+        # tells an auto-pause apart.
+        found, _ = self._wait_for_autopause_error(self.src_cluster, timeout=autopause_timeout)
+        self.assertTrue(found, "Auto-pause reason not surfaced in XDCR errors API")
 
         # Resume and confirm the replication is running again. resume_all_replications is a
         # CouchbaseCluster method; in a bidirectional setup both clusters may have an
@@ -1699,7 +1851,7 @@ class ConflictLoggingTests(XDCRNewBaseTest):
         if not rebalance_task:
             # The conf entry promises "during rebalance"; without a spare node we cannot
             # honor that, so skip rather than give false confidence as a plain auto-pause run.
-            self.skipTest("No free node available to start a source-cluster rebalance")
+            self.fail("No free node available to start a source-cluster rebalance")
 
         self._generate_conflicts_no_wait(num_items=self._num_items, threads=16)
 

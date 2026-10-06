@@ -196,6 +196,27 @@ class XDCRPrioritization(XDCRNewBaseTest):
         self.async_perform_update_delete()
         self.verify_results()
 
+    def _replicated_item_count(self, cluster, bucket_name):
+        """Item count across the cluster's nodes, excluding the _system scope.
+
+        cbstats lists every collection, even an empty one, so a node with no counts
+        at all is a failed read; summing it as 0 let two failed reads compare equal.
+        """
+        total = 0
+        for node in cluster.get_nodes():
+            counts = TenKCollectionHelper.get_collection_doc_counts_on_node(node, bucket_name)
+            if not counts:
+                self.fail("No collection item counts from {0} for bucket {1}: cbstats "
+                          "returned nothing".format(node.ip, bucket_name))
+            total += sum(items for (scope, _), items in counts.items() if scope != "_system")
+        return total
+
+    def _assert_loaded(self, result, phase):
+        if result.failed_pairs or not result.total_docs_loaded:
+            self.fail("{0} load failed: {1} docs loaded, failed pairs {2}".format(
+                phase, result.total_docs_loaded, result.failed_pairs[:5]))
+        return result.total_docs_loaded
+
     # ---- 10K Collections Scale Tests ----
     def test_priority_change_10k_collections(self):
         """
@@ -227,20 +248,22 @@ class XDCRPrioritization(XDCRNewBaseTest):
         self.sleep(30, "Letting the new collections reach the target")
 
         src_conn = RestConnection(self.src_master)
-        src_conn.set_xdcr_param(bucket_name, bucket_name, 'priority', initial_priority)
+        # set_xdcr_param() lowercases the value, and goxdcr rejects priority=high
+        # with 400 "priority is invalid" -- the enum is case-sensitive (High/Medium/Low).
+        src_conn.set_xdcr_params(bucket_name, bucket_name, {'priority': initial_priority})
         self.log.info("Set initial priority to {}".format(initial_priority))
 
-        TenKCollectionHelper.select_and_load(
-            self.src_master, bucket_name, p, run_id="prio_phase1")
+        loaded = self._assert_loaded(TenKCollectionHelper.select_and_load(
+            self.src_master, bucket_name, p, run_id="prio_phase1"), "Phase 1")
 
         self.sleep(15, "Mid-replication pause before priority change")
 
-        src_conn.set_xdcr_param(bucket_name, bucket_name, 'priority', target_priority)
+        src_conn.set_xdcr_params(bucket_name, bucket_name, {'priority': target_priority})
         self.log.info("Switched priority from {} to {}".format(
             initial_priority, target_priority))
 
-        TenKCollectionHelper.select_and_load(
-            self.src_master, bucket_name, p, run_id="prio_phase2")
+        loaded += self._assert_loaded(TenKCollectionHelper.select_and_load(
+            self.src_master, bucket_name, p, run_id="prio_phase2"), "Phase 2")
 
         try:
             self._wait_for_replication_to_catchup(
@@ -248,8 +271,12 @@ class XDCRPrioritization(XDCRNewBaseTest):
         except Exception as e:
             self.fail("Priority change 10K catch-up failed: {}".format(e))
 
-        src_count = TenKCollectionHelper.get_bucket_item_count(self.src_master, bucket_name)
-        dest_count = TenKCollectionHelper.get_bucket_item_count(self.dest_master, bucket_name)
+        # _system collections are not replicated and the source's hold more docs than the
+        # destination's, so whole-bucket counts never match (src 29000 vs dest 28000 after a
+        # catch-up that agreed at 27000 once _system was excluded). Compare user collections.
+        src_count = self._replicated_item_count(self.src_cluster, bucket_name)
+        dest_count = self._replicated_item_count(self.dest_cluster, bucket_name)
+        self.assertGreater(src_count, 0, "Source holds no user docs after loading {0}".format(loaded))
         self.assertEqual(src_count, dest_count,
                          "Priority change mismatch: src={}, dest={}".format(
                              src_count, dest_count))

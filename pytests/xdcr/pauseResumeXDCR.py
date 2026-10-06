@@ -100,14 +100,25 @@ class PauseResumeTest(XDCRNewBaseTest):
                     self.dest_cluster.reboot_one_node(self, master=True)
                 if self.reboot == "dest_cluster":
                     from .xdcrnewbasetests import NodeHelper
+                    # A failure raised inside a thread is lost at join(), so a node
+                    # that never came back would look like a successful reboot.
+                    reboot_errors = []
+
+                    def reboot(node):
+                        try:
+                            NodeHelper.reboot_server(node, self)
+                        except BaseException as e:
+                            reboot_errors.append("{0}: {1}".format(node.ip, e))
                     threads = []
                     for node in self.dest_cluster.get_nodes():
-                        threads.append(Thread(target=NodeHelper.reboot_server,
-                                              args=(node, self)))
+                        threads.append(Thread(target=reboot, args=(node,)))
                     for thread in threads:
                         thread.start()
                     for thread in threads:
                         thread.join()
+                    if reboot_errors:
+                        self.fail("Rebooting the destination cluster failed: {0}".format(
+                            reboot_errors))
 
             self.sleep(self.pause_wait)
 

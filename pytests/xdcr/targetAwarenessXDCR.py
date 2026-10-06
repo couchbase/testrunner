@@ -534,6 +534,10 @@ class TargetAwarenessXDCR(XDCRNewBaseTest):
 
         self.setup_xdcr_and_load()
         self.speed_up_heartbeats(self.src_cluster, self.dest_cluster)
+        # goxdcr logs survive across tests in a job and the node IPs repeat, so only
+        # heartbeats logged from here on (on the shortened cadence) count.
+        hb_baseline = self._count_heartbeats_received(self.src_cluster, self.dest_cluster, timeout=0)
+        hb_wanted = hb_baseline + 2
         src_uuid = self.get_cluster_uuid(self.src_cluster)
         src_outgoing_repls = self.get_outgoing_replications(self.src_master_rest)
         dest_incoming_repls = self._wait_for_incoming_repl_specs(self.dest_master_rest)
@@ -550,11 +554,46 @@ class TargetAwarenessXDCR(XDCRNewBaseTest):
             for specs in replications["SourceClusterReplSpecs"]:
                 uuid = specs["id"].split('/')[0]
                 if uuid in src_target_cluster_uuid_list:
-                    search_str = f"GOXDCR.P2PManager: Heartbeats heard from - SrcUUID: {src_cluster_uuid_on_dest}"
-                    matches, count = NodeHelper.check_goxdcr_log(self.dest_master, search_str, timeout=30)
-                    if count == 0:
+                    # "Heartbeats heard from" is only a periodic summary (every
+                    # SrcHeartbeatSummaryInterval = 5 min after each goxdcr start), and
+                    # speed_up_heartbeats() itself restarts goxdcr, so it is not there to
+                    # find. Look for the received requests instead; the source sends each
+                    # one to a random target node, so check them all.
+                    count = self._count_heartbeats_received(self.src_cluster, self.dest_cluster,
+                                                            timeout=self.hb_timeout(), baseline=hb_wanted - 1)
+                    if count < hb_wanted:
                         self.fail(f"No heartbeat heard in dest cluster for source cluster UUID {src_cluster_uuid_on_dest}")
-                    self.log.info(f"Found logs for heartbeat in dest cluster with source cluster UUID {src_cluster_uuid_on_dest}")
+                    self.log.info(f"Found {count - hb_baseline} new heartbeat requests in dest cluster logs for source cluster UUID {src_cluster_uuid_on_dest}")
+
+    def _count_heartbeats_received(self, src_cluster, dest_cluster, timeout, baseline=0):
+        """Count ReqSrcHeartbeat requests from any source node logged by the
+        target cluster's goxdcr, polling until the count exceeds `baseline` or
+        `timeout` seconds pass. Counts with `zgrep -a -c`: goxdcr.log carries binary bytes,
+        and a line-printing grep then reports 'binary file matches' and no lines."""
+        src_ips = [node.ip for node in src_cluster.get_nodes()]
+        pattern = "|".join("ReqSrcHeartbeat from {0}:".format(ip.replace(".", "\\.")) for ip in src_ips)
+        end_time = time.time() + timeout
+        total = 0
+        while True:
+            total = 0
+            for node in dest_cluster.get_nodes():
+                shell = RemoteMachineShellConnection(node)
+                try:
+                    cmd = ("zgrep -a -c -E \"{0}\" {1}/goxdcr.log* 2>/dev/null | "
+                           "awk -F: '{{s+=$NF}} END {{print s+0}}'").format(
+                        pattern, NodeHelper.get_goxdcr_log_dir(node))
+                    output, _ = shell.execute_command(cmd)
+                    # A read that gave no number is an error, not 0: a 0 in the baseline
+                    # would let the node's whole log history count as new heartbeats.
+                    if not output or not output[0].strip().isdigit():
+                        self.fail("Could not count heartbeats in goxdcr.log on {0}: {1}".format(
+                            node.ip, output))
+                    total += int(output[0].strip())
+                finally:
+                    shell.disconnect()
+            if total > baseline or time.time() >= end_time:
+                return total
+            time.sleep(10)
 
     def test_non_kv_node_excluded_from_heartbeat(self):
         """A source node without the data service must never be advertised to a

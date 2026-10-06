@@ -40,7 +40,8 @@ class CollectionsStats(object):
             cbstats = self.get_collection_stats(bucket)
         for stat in cbstats:
             stat = stat.replace(' ', '')
-            if ":scope_name:" + scope in stat:
+            # endswith, not in: "scope_1" is a substring of "scope_10"
+            if stat.endswith(":scope_name:" + scope):
                 return stat.split(":")[0]
         return None
 
@@ -50,10 +51,21 @@ class CollectionsStats(object):
         scope_id = self.get_scope_id(bucket, scope, cbstats)
         for stat in cbstats:
             stat = stat.replace(' ', '')
-            if ":name:" + collection in str(stat):
+            if stat.endswith(":name:" + collection):
                 if stat.split(":")[0] == scope_id.strip():
                     return stat.split(":name:")[0].split(":")[1]
         return None
+
+    def _stats_for_node(self, bucket, node, nodes, cbstats):
+        if cbstats and len(nodes) == 1:
+            return cbstats
+        # KeepRefs holds a strong reference to every MemcachedClient, so __del__
+        # never closes it; without an explicit close each call leaks a socket.
+        client = MemcachedClientHelper.direct_client(node, bucket)
+        try:
+            return self.get_collection_stats(bucket, client)
+        finally:
+            client.close()
 
     def get_scope_item_count(self, bucket, scope, node=None, cbstats=None):
         count = 0
@@ -64,11 +76,13 @@ class CollectionsStats(object):
         else:
             nodes = [node]
         for node in nodes:
-            if not cbstats:
-                cbstats = self.get_collection_stats(bucket, MemcachedClientHelper.direct_client(node, bucket))
-            scope_id = self.get_scope_id(bucket, scope, cbstats)
+            # Collection stats are per node. A caller-supplied cbstats can only
+            # stand for a single node; reusing one node's stats for every node in
+            # the list multiplied that node's count by len(nodes).
+            node_stats = self._stats_for_node(bucket, node, nodes, cbstats)
+            scope_id = self.get_scope_id(bucket, scope, node_stats)
             id_counts = {}
-            for stat in cbstats:
+            for stat in node_stats:
                 if ":items:" in stat:
                     stat = stat.replace(' ', '')
                     id_counts[stat.split(":items:")[0]] = int(stat.split(":items:")[1])

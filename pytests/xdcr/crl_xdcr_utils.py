@@ -10,7 +10,9 @@ import tempfile
 import time
 
 from membase.api.rest_client import RestConnection
-from remote.remote_util import RemoteMachineShellConnection
+from remote.remote_util import RemoteMachineHelper, RemoteMachineShellConnection
+from security.x509_multiple_CA_util import x509main
+from testconstants import WIN_COUCHBASE_LOGS_PATH
 from xdcr.xdcrnewbasetests import NodeHelper
 
 INBOX_SUBDIR = "inbox"
@@ -95,8 +97,20 @@ def _line_is_at_or_after(line, since):
     return stamp >= since_stamp
 
 
+def _is_windows(shell):
+    """True when `shell` is connected to a Windows (cygwin) node."""
+    return shell.info.type.lower() == "windows"
+
+
 def _inbox_path(shell):
-    """Absolute inbox path on a Linux node."""
+    """Absolute inbox path on the node `shell` is connected to.
+
+    On Windows this is x509main.WININSTALLPATH + 'inbox', the spelling the
+    security suite (and crl_base) already hand to sftp there. It contains a
+    space, so a shell command built from it must quote it.
+    """
+    if _is_windows(shell):
+        return x509main.WININSTALLPATH + INBOX_SUBDIR
     return "/opt/couchbase/var/lib/couchbase/" + INBOX_SUBDIR
 
 
@@ -139,9 +153,11 @@ def install_internal_client_cert(server, chain_pem, key_pem, reload=True):
                     local.name, "{0}/{1}".format(inbox, filename))
             finally:
                 os.unlink(local.name)
-        shell.execute_command(
-            "chmod 600 {0}/{1} {0}/{2} && chown couchbase:couchbase "
-            "{0}/{1} {0}/{2}".format(inbox, CLIENT_CHAIN_FILE, CLIENT_KEY_FILE))
+        # Linux only: a Windows node has no `couchbase` account to chown to.
+        if not _is_windows(shell):
+            shell.execute_command(
+                "chmod 600 {0}/{1} {0}/{2} && chown couchbase:couchbase "
+                "{0}/{1} {0}/{2}".format(inbox, CLIENT_CHAIN_FILE, CLIENT_KEY_FILE))
     finally:
         shell.disconnect()
 
@@ -192,9 +208,11 @@ def install_ca_cert(server, ca_pem, load=True):
                 local.name, "{0}/{1}".format(ca_dir, CA_FILE))
         finally:
             os.unlink(local.name)
-        shell.execute_command(
-            "chmod 644 {0}/{1} && chown couchbase:couchbase {0}/{1}".format(
-                ca_dir, CA_FILE))
+        # Linux only: a Windows node has no `couchbase` account to chown to.
+        if not _is_windows(shell):
+            shell.execute_command(
+                "chmod 644 {0}/{1} && chown couchbase:couchbase {0}/{1}".format(
+                    ca_dir, CA_FILE))
     finally:
         shell.disconnect()
 
@@ -244,9 +262,11 @@ def delete_inbox_contents(server):
     try:
         inbox = _inbox_path(shell)
         ca_dir = "{0}/{1}".format(inbox, CA_SUBDIR)
+        # shlex.quote leaves the Linux path as-is; the Windows one has a space.
         shell.execute_command(
             "rm -f {0}/{1} {0}/{2}; rm -rf {3}/*".format(
-                inbox, CLIENT_CHAIN_FILE, CLIENT_KEY_FILE, ca_dir))
+                shlex.quote(inbox), CLIENT_CHAIN_FILE, CLIENT_KEY_FILE,
+                shlex.quote(ca_dir)))
     finally:
         shell.disconnect()
 
@@ -283,18 +303,40 @@ def goxdcr_log_count(server, pattern, since=None):
     """
     shell = RemoteMachineShellConnection(server)
     try:
-        log_dir = NodeHelper.get_goxdcr_log_dir(server)
+        windows = _is_windows(shell)
+        if windows:
+            # The diag/eval log dir is a native path with a space in it, which
+            # splits the unquoted glob below; use the cygwin spelling
+            # NodeHelper.check_goxdcr_log uses on Windows. stderr is kept, not
+            # discarded, so a missing zgrep or log file raises below instead
+            # of reading as 0 matches.
+            log_dir = WIN_COUCHBASE_LOGS_PATH.rstrip("/")
+            discard_stderr = ""
+        else:
+            log_dir = NodeHelper.get_goxdcr_log_dir(server)
+            discard_stderr = " 2>/dev/null"
+            # stderr is discarded below, so an unreadable log or a bad log dir from
+            # diag/eval would read as 0 matches and pass every "must not appear" check.
+            readable, _ = shell.execute_command(
+                "test -r {0}/goxdcr.log && echo GOXDCR_LOG_READABLE".format(log_dir))
+            if not readable or "GOXDCR_LOG_READABLE" not in str(readable[-1]):
+                raise RuntimeError("goxdcr.log is not readable at {0} on {1}".format(
+                    log_dir, server.ip))
         if since is None:
-            cmd = ("zgrep -c -- {0} {1}/goxdcr.log* 2>/dev/null "
+            cmd = ("zgrep -c -- {0} {1}/goxdcr.log*{2} "
                    "| awk -F: '{{s += $NF}} END {{print s + 0}}'").format(
-                       shlex.quote(pattern), log_dir)
-            output, _ = shell.execute_command(cmd)
-            if not output:
-                return 0
+                       shlex.quote(pattern), log_dir, discard_stderr)
+            output, error = shell.execute_command(cmd)
+            if windows and error:
+                raise RuntimeError(
+                    "goxdcr.log search failed on Windows node {0}: {1}".format(
+                        server.ip, error))
+            # awk always prints a number, so no output or a non-number is a failed read.
             try:
                 return int(str(output[0]).strip())
-            except ValueError:
-                return 0
+            except (IndexError, ValueError):
+                raise RuntimeError("goxdcr.log count on {0} returned {1}".format(
+                    server.ip, output))
 
         # `since` needs each matching line's own leading timestamp, not just
         # a count, so this greps for lines rather than -c. Two of zgrep's
@@ -317,9 +359,13 @@ def goxdcr_log_count(server, pattern, since=None):
                 "could not parse `since` value {0!r} as an ISO-8601 "
                 "timestamp".format(since))
 
-        cmd = "zgrep -h --text -- {0} {1}/goxdcr.log* 2>/dev/null".format(
-            shlex.quote(pattern), log_dir)
-        output, _ = shell.execute_command(cmd)
+        cmd = "zgrep -h --text -- {0} {1}/goxdcr.log*{2}".format(
+            shlex.quote(pattern), log_dir, discard_stderr)
+        output, error = shell.execute_command(cmd)
+        if windows and error:
+            raise RuntimeError(
+                "goxdcr.log search failed on Windows node {0}: {1}".format(
+                    server.ip, error))
         if not output:
             return 0
         count = 0
@@ -369,6 +415,11 @@ def goxdcr_pid(server):
     """
     shell = RemoteMachineShellConnection(server)
     try:
+        if _is_windows(shell):
+            # cygwin's pgrep cannot see the native goxdcr.exe, so it would
+            # always answer None; use remote_util's tasklist lookup instead.
+            process = RemoteMachineHelper(shell).is_process_running("goxdcr")
+            return int(process.pid) if process else None
         output, _ = shell.execute_command("pgrep -f '[g]oxdcr'")
         if not output:
             return None

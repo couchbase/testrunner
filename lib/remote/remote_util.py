@@ -3730,11 +3730,17 @@ class RemoteMachineShellConnection(KeepRefs):
 
         Args:
             command: The command to execute on the remote machine
-            prompts_and_responses: List of tuples (prompt_pattern, response) for interactive input.
-                                   Example: [("passphrase:", "secret"), ("passphrase:", "secret")]
+            prompts_and_responses: List of tuples (prompt_pattern, response) for interactive input,
+                                   answered in order. Each prompt is looked for only in output that
+                                   arrived after the previous one was answered, so a prompt the
+                                   command asks again later is answered by listing it again.
+                                   Entries whose prompt never appears are left unused.
+                                   Example: [("passphrase:", "secret"), ("again:", "secret")]
             env_vars: Dictionary of environment variables to set before running the command.
                       Example: {"CBAUTH_REVRPC_URL": "http://user:pass@host:8091"}
-            timeout: Timeout in seconds for the command (default: 600)
+            timeout: Timeout in seconds for the command (default: 600). A command still running
+                     after this (for example, waiting on a prompt nobody answers) has its
+                     channel closed and returns exit code -1.
             debug: Whether to log debug information (default: True)
 
         Returns:
@@ -3773,8 +3779,12 @@ class RemoteMachineShellConnection(KeepRefs):
             channel.settimeout(timeout)
             channel.exec_command(full_command)
 
-            # Track which prompts we've responded to
+            # Track which prompts we've responded to, and where in the output
+            # the last answered prompt ended
             prompt_index = 0
+            search_from = 0
+            deadline = time.time() + timeout
+            timed_out = False
 
             # Read output and respond to prompts
             while True:
@@ -3788,14 +3798,15 @@ class RemoteMachineShellConnection(KeepRefs):
                     # Check for prompts to respond to
                     while prompt_index < len(prompts_and_responses):
                         prompt_pattern, response = prompts_and_responses[prompt_index]
-                        if prompt_pattern.lower() in output_data.lower():
-                            if debug:
-                                log.info(f"Got prompt matching '{prompt_pattern}', sending response")
-                            channel.send(response + "\n")
-                            prompt_index += 1
-                            time.sleep(0.1)  # Small delay after sending
-                        else:
+                        pos = output_data.lower().find(prompt_pattern.lower(), search_from)
+                        if pos == -1:
                             break
+                        if debug:
+                            log.info(f"Got prompt matching '{prompt_pattern}', sending response")
+                        channel.send(response + "\n")
+                        search_from = pos + len(prompt_pattern)
+                        prompt_index += 1
+                        time.sleep(0.1)  # Small delay after sending
 
                 # Check if channel is closed
                 if channel.exit_status_ready():
@@ -3805,9 +3816,18 @@ class RemoteMachineShellConnection(KeepRefs):
                         output_data += chunk
                     break
 
+                if time.time() > deadline:
+                    timed_out = True
+                    break
+
                 time.sleep(0.1)
 
-            exit_code = channel.recv_exit_status()
+            if timed_out:
+                log.error(f"Command with PTY on {self.ip} did not finish within {timeout}s, "
+                          f"closing the channel")
+                output_data += f"\nPTY_TIMEOUT: command did not finish within {timeout}s"
+            else:
+                exit_code = channel.recv_exit_status()
             channel.close()
 
         except Exception as e:
