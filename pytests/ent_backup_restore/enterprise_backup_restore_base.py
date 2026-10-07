@@ -2958,9 +2958,14 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 self.fail(f"Total keys do not match. Expected: {len(bk_file_data[bucket.name])}  Found: {restore_buckets_items[bucket.name]}")
             items_info = rest.get_items_info(list(bk_file_data[bucket.name].keys()), bucket.name)
             ttl_matched = True
+            # ttl_set is an absolute timestamp computed by the test, while the
+            # expiry is stamped by cbbackupmgr during the restore, so the two can
+            # differ by a second or so. Allow a small tolerance for non-zero values.
+            ttl_tolerance = self.input.param("ttl-tolerance", 5) \
+                if int(ttl_set) > 0 else 0
             for key in list(bk_file_data[bucket.name].keys()):
                 if key in items_info:
-                    if items_info[key]['meta']['expiration'] != int(ttl_set):
+                    if abs(items_info[key]['meta']['expiration'] - int(ttl_set)) > ttl_tolerance:
                         if self.replace_ttl == "all":
                             ttl_matched = False
                         if self.replace_ttl == "expired" and self.bk_with_ttl is not None:
