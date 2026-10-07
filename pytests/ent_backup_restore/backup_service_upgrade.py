@@ -101,7 +101,9 @@ class BackupServiceUpgradeTest(NewUpgradeBaseTest):
 
         # Create the default bucket and update the list of buckets
         rest_conn = RestConnection(self.servers[2])
-        rest_conn.create_bucket(bucket='default', ramQuotaMB=512, compressionMode=self.compression_mode)
+        rest_conn.create_bucket(bucket='default',
+                                ramQuotaMB=self.input.param('default-bucket-ram-quota', 512),
+                                compressionMode=self.compression_mode)
         self.buckets = rest_conn.get_buckets()
 
         # Populate the buckets with data

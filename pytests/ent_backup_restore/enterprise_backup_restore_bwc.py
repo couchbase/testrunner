@@ -5,6 +5,7 @@ from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator
 from ent_backup_restore.enterprise_backup_restore_base import EnterpriseBackupRestoreBase
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
+from membase.helper.rebalance_helper import RebalanceHelper
 from remote.remote_util import RemoteUtilHelper, RemoteMachineShellConnection
 from upgrade.newupgradebasetest import NewUpgradeBaseTest
 
@@ -12,6 +13,8 @@ from upgrade.newupgradebasetest import NewUpgradeBaseTest
 class EnterpriseBackupRestoreBWCTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTest):
     def setUp(self):
         super(EnterpriseBackupRestoreBWCTest, self).setUp()
+        # Used by validate_backup_data(); other test classes set it in their setUp
+        self.document_type = self.input.param("document_type", "json")
         """ This test needs latest_bkrs_version and bwc_version params to run """
         """ Get cb version of cluster """
         self.bk_cluster_version = \
@@ -168,6 +171,17 @@ class EnterpriseBackupRestoreBWCTest(EnterpriseBackupRestoreBase, NewUpgradeBase
             else:
                 self.backup_cluster()
 
+    def _wait_for_persistence(self):
+        """ A backup only contains persisted mutations, so a backup taken right
+            after a load can miss documents. Wait for the disk queue to drain.
+        """
+        for bucket in self.buckets:
+            ready = RebalanceHelper.wait_for_stats_on_all(self.backupset.cluster_host,
+                                                          bucket.name, 'ep_queue_size',
+                                                          0, timeout_in_seconds=120)
+            if not ready:
+                self.fail("Bucket {0} did not persist all items".format(bucket.name))
+
     def test_merge_backup_from_old_and_new_bucket_bwc(self):
         """
             1. Create a bucket A
@@ -183,6 +197,7 @@ class EnterpriseBackupRestoreBWCTest(EnterpriseBackupRestoreBase, NewUpgradeBase
         self._load_all_buckets(self.master, gen, "create", 0)
         self.log.info("Start doing backup")
         self.backup_create()
+        self._wait_for_persistence()
         self.backup_cluster()
         if self.bucket_delete:
             self.log.info("Start to delete bucket")
@@ -194,6 +209,7 @@ class EnterpriseBackupRestoreBWCTest(EnterpriseBackupRestoreBase, NewUpgradeBase
         gen = BlobGenerator("ent-backup2_", "ent-backup-", self.value_size, end=self.num_items)
         self.log.info("Start to load bucket again with different key")
         self._load_all_buckets(self.master, gen, "create", 0)
+        self._wait_for_persistence()
         self.backup_cluster()
         self.backupset.number_of_backups += 1
         status, output, message = self.backup_list()
@@ -236,7 +252,7 @@ class EnterpriseBackupRestoreBWCTest(EnterpriseBackupRestoreBase, NewUpgradeBase
             gen = BlobGenerator(key_name, "ent-backup-", self.value_size,
                                 end=self.num_items)
         else:
-            gen = DocumentGenerator('random_keys', '{{"age": {0}}}', xrange(100),
+            gen = DocumentGenerator('random_keys', '{{"age": {0}}}', range(100),
                                     start=0, end=self.num_items)
 
         self._load_all_buckets(self.master, gen, "create", 0)

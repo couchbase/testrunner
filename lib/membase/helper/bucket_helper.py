@@ -106,14 +106,17 @@ class BucketOperationHelper:
     def create_bucket(serverInfo, name='default', replica=1, test_case=None, bucket_ram=-1, password=None):
         log = logger.Logger.get_logger()
         rest = RestConnection(serverInfo)
+        info = rest.get_nodes_self()
         if bucket_ram < 0:
-            info = rest.get_nodes_self()
             bucket_ram = info.memoryQuota * 2 // 3
 
+        # A custom vbucket count is only supported from 8.0; older servers
+        # (e.g. backward-compat runs against 7.x) reject numVBuckets with a 400
+        num_vbuckets = 128 if int(info.version.split(".")[0]) >= 8 else None
         rest.create_bucket(bucket=name,
                            ramQuotaMB=bucket_ram,
                            replicaNumber=replica,
-                           numVBuckets=128)
+                           numVBuckets=num_vbuckets)
         msg = 'create_bucket succeeded but bucket "{0}" does not exist'
         bucket_created = BucketOperationHelper.wait_for_bucket_creation(name, rest)
         if not bucket_created:

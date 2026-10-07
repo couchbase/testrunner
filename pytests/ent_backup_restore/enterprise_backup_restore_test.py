@@ -2486,11 +2486,14 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             if "admin" == self.cluster_new_role:
                 if error or not self._check_output("Restore completed successfully", rst_output):
                     self.fail("Restoring backup failed: {0}".format(rst_output))
-                elif not self._check_output(
-                "Restore has skipped some users and/or groups. Please check the logs for more information", rst_output):
-                    self.fail("Expected conflict resolution message not found: {0}".format(rst_output))
+                # cbbackupmgr 7.6.x and 8.5 skip conflicting users silently, so assert the
+                # resulting state rather than a stdout message: the removed user is recreated
+                # and the user that was not removed (a conflict) is still present.
                 elif not users_post_restore.__contains__("cbadminbucket"):
                     self.fail("User 'cbadminbucket' not recreated from backup as expected.")
+                elif self.cluster_new_user not in users_post_restore:
+                    self.fail("Conflicting user '{0}' missing after restore: {1}"
+                              .format(self.cluster_new_user, users_post_restore))
             elif not self._check_output("Error restoring cluster:", rst_output):
                 self.fail("User {0} performed restore with --enable-users flag.\n"
                             .format(self.cluster_new_role)) + \
@@ -3448,7 +3451,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                                  [])
         rebalance.result()
         self.add_built_in_server_user()
-        RestConnection(self.master).create_bucket(bucket='default', ramQuotaMB=512)
+        RestConnection(self.master).create_bucket(bucket='default', ramQuotaMB=self.input.param('default-bucket-ram-quota', 512))
         self.buckets = RestConnection(self.master).get_buckets()
         self.total_buckets = len(self.buckets)
         self._load_all_buckets(self.master, gen, "create", 0)
@@ -3460,15 +3463,31 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         """ Start to upgrade """
         if self.force_version_upgrade:
             upgrade_version = self.force_version_upgrade
+        upgrade_servers = self.servers[:2]
+        if self.input.param("upgrade-backup-host", False):
+            """ The backup host runs cbbackupmgr and is not part of the cluster.
+                Upgrade it too so that restore uses the upgrade_version cbbackupmgr
+            """
+            if self.backupset.backup_host.ip not in [s.ip for s in upgrade_servers]:
+                upgrade_servers = upgrade_servers + [self.backupset.backup_host]
         upgrade_threads = self._async_update(upgrade_version=upgrade_version,
-                                             servers=self.servers[:2])
+                                             servers=upgrade_servers)
         for th in upgrade_threads:
             th.join()
         self.log.info("Upgraded to: {ver}".format(ver=upgrade_version))
         self.sleep(30)
+        if self.input.param("upgrade-backup-host", False):
+            shell = RemoteMachineShellConnection(self.backupset.backup_host)
+            output, error = shell.execute_command(
+                "{0}/cbbackupmgr --version".format(self.cli_command_location))
+            shell.disconnect()
+            self.log.info("cbbackupmgr on backup host: {0}".format(output))
+            self.assertIn(upgrade_version.split("-")[0], " ".join(output),
+                          "cbbackupmgr on backup host is not {0}: {1}"
+                          .format(upgrade_version, output))
 
         """ Re-create default bucket on upgrade cluster """
-        RestConnection(self.master).create_bucket(bucket='default', ramQuotaMB=512)
+        RestConnection(self.master).create_bucket(bucket='default', ramQuotaMB=self.input.param('default-bucket-ram-quota', 512))
         self.sleep(5)
 
         # Create a backup node and perform a backup service import repository and restore
@@ -3505,11 +3524,18 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 new_backupset = copy.deepcopy(self.backupset)
                 new_backupset.restore_cluster_host_username = user.replace('[', '_').replace(']', '_')
                 backupsets.append(new_backupset)
-        for backupset in backupsets:
+        for index, backupset in enumerate(backupsets):
             self.backupset = backupset
             self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
             BucketOperationHelper().delete_bucket_or_assert(self.backupset.cluster_host,
                                                        "default", self)
+            if index < len(backupsets) - 1:
+                """ Re-create the bucket for the next restore.  A missing bucket
+                    makes backup_restore() call _create_restore_cluster(), which
+                    resets the cluster and drops the users created above
+                """
+                RestConnection(self.master).create_bucket(bucket='default', ramQuotaMB=self.input.param('default-bucket-ram-quota', 512))
+                self.sleep(5)
 
     def test_backup_restore_after_online_upgrade(self):
         """
