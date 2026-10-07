@@ -1608,24 +1608,32 @@ def az_terminate(name):
     compute_client = ComputeManagementClient(credential, subscription_id)
     network_client = NetworkManagementClient(credential, subscription_id)
 
-    vms = compute_client.virtual_machines.list(resource_group)
-    matched_vms = [vm.name for vm in vms if vm.name.startswith(name)]
-
-    for vm_name in matched_vms:
-        nic_name = vm_name + '_nic'
-        ip_name = vm_name + '_ip'
-
-        log.info("delete vm {0}".format(vm_name))
-        compute_client.virtual_machines.begin_delete(
-            resource_group, vm_name).result()
-
-        log.info("delete network of vm {0}".format(vm_name))
-        network_client.network_interfaces.begin_delete(
-            resource_group, nic_name).result()
-
-        log.info("delete public ip of vm {0}".format(vm_name))
-        network_client.public_ip_addresses.begin_delete(
-            resource_group, ip_name).result()
+    phases = [
+        ("vm", compute_client.virtual_machines,
+         compute_client.virtual_machines.list(resource_group)),
+        ("nic", network_client.network_interfaces,
+         network_client.network_interfaces.list(resource_group)),
+        ("public ip", network_client.public_ip_addresses,
+         network_client.public_ip_addresses.list(resource_group)),
+    ]
+    for kind, operations, resources in phases:
+        pollers = []
+        for resource in resources:
+            if not resource.name.startswith(name):
+                continue
+            log.info("delete {0} {1}".format(kind, resource.name))
+            try:
+                pollers.append((resource.name, operations.begin_delete(
+                    resource_group, resource.name)))
+            except Exception as e:
+                log.error("Failed to delete {0} {1}: {2}".format(
+                    kind, resource.name, e))
+        for resource_name, poller in pollers:
+            try:
+                poller.result()
+            except Exception as e:
+                log.error("Failed to delete {0} {1}: {2}".format(
+                    kind, resource_name, e))
 
 
 if __name__ == "__main__":
