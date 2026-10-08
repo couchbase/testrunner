@@ -4994,6 +4994,7 @@ class _ScanPlusHashMap:
         self._map = {}
         self._insertion_order = []
         self._inflight_inserts = set()
+        self._deleted = set()
 
     def insert(self, doc_id, val=1):
         with self._lock:
@@ -5012,6 +5013,7 @@ class _ScanPlusHashMap:
             if doc_id not in self._map:
                 return False
             del self._map[doc_id]
+            self._deleted.add(doc_id)
             try:
                 self._insertion_order.remove(doc_id)
             except ValueError:
@@ -5064,9 +5066,9 @@ class _ScanPlusHashMap:
             return dict(self._map)
 
     def snapshot_with_inflight(self):
-        """Atomically return (snapshot, pending_inserts) under the same lock."""
+        """Atomically return (snapshot, pending_inserts, deleted) under the same lock."""
         with self._lock:
-            return dict(self._map), set(self._inflight_inserts)
+            return dict(self._map), set(self._inflight_inserts), set(self._deleted)
 
     def size(self):
         with self._lock:
@@ -10706,11 +10708,12 @@ class FTSBaseTest(unittest.TestCase):
         """
         if isinstance(hashmaps, _ScanPlusHashMap):
             hashmaps = [hashmaps]
-        pre_snapshot, pre_pending = {}, set()
+        pre_snapshot, pre_pending, pre_deleted = {}, set(), set()
         for hm in hashmaps:
-            s, p = hm.snapshot_with_inflight()
+            s, p, d = hm.snapshot_with_inflight()
             pre_snapshot.update(s)
             pre_pending.update(p)
+            pre_deleted.update(d)
         try:
             hits, matches, _, status = index.execute_query(
                 {"match_all": {}},
@@ -10726,25 +10729,38 @@ class FTSBaseTest(unittest.TestCase):
         if hits == -1 or status == 'fail' or not isinstance(matches, list):
             self.log.warning(f"[scan_plus] query returned error (tolerated): status={status}")
             return
-        post_snapshot, post_pending = {}, set()
+        post_snapshot, post_pending, post_deleted = {}, set(), set()
         for hm in hashmaps:
-            s, p = hm.snapshot_with_inflight()
+            s, p, d = hm.snapshot_with_inflight()
             post_snapshot.update(s)
             post_pending.update(p)
+            post_deleted.update(d)
         self.log.info(f"[scan_plus] hits={hits}, snapshot_size={len(pre_snapshot)}")
         if not matches:
             return
+        # A doc whose insert started after the pre-snapshot and whose delete was
+        # acked before the post-snapshot existed inside the query window;
+        # scan_plus only guarantees a lower bound, so it may return it.
+        deleted_in_window = post_deleted - pre_deleted
+        exempted = 0
         for match in matches:
             doc_id = match.get('id')
             result_val = int(match.get('fields', {}).get('val', -1))
             if result_val == -1:
                 continue
             if doc_id not in pre_snapshot:
-                if doc_id not in pre_pending:
+                if doc_id in deleted_in_window:
+                    exempted += 1
+                elif doc_id in pre_deleted:
+                    violations.append(
+                        f"Deleted doc '{doc_id}' (delete acked before query) "
+                        f"returned by scan_plus — stale index entry"
+                    )
+                elif doc_id not in pre_pending:
                     if doc_id not in post_snapshot and doc_id not in post_pending:
                         violations.append(
-                            f"Deleted doc '{doc_id}' (absent from snapshot) "
-                            f"returned by scan_plus — stale index entry"
+                            f"Untracked doc '{doc_id}' (never in hashmap) "
+                            f"returned by scan_plus"
                         )
                 continue
             if result_val < pre_snapshot[doc_id]:
@@ -10752,6 +10768,9 @@ class FTSBaseTest(unittest.TestCase):
                     f"Stale read: doc '{doc_id}' result.val={result_val} "
                     f"< snapshot.val={pre_snapshot[doc_id]}"
                 )
+        if exempted:
+            self.log.info(f"[scan_plus] {exempted} hit(s) inserted and deleted "
+                          f"inside the query window (not violations)")
 
     def _scan_plus_fire_and_validate_functional(self, index, hashmaps,
                                                  collection=None, knn=None):
