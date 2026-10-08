@@ -167,7 +167,7 @@ class EventingVectorSearchSupport(EventingBaseTest):
             {"value": "QUERY_VECTOR", "literal": json.dumps(list(query_vector))},
             {"value": "K", "literal": str(self.k)},
             {"value": "VECTOR_FIELD", "literal": json.dumps(self.vector_field_path)},
-            {"value": "INDEX_NAME", "literal": json.dumps(f"{scope}.{self.vector_index_name}")}
+            {"value": "INDEX_NAME", "literal": json.dumps(f"{bucket}.{scope}.{self.vector_index_name}")}
         ]
         self.rest.delete_single_function(body['appname'], self.function_scope)
         self.rest.create_function(body['appname'], body, self.function_scope)

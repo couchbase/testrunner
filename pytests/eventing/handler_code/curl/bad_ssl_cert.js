@@ -3,7 +3,7 @@ function OnUpdate(doc, meta) {
 	path : '/'
     };
     try {
-    	var response = curl("GET", server, request);
+    	var response = curlWithRetry(request);
     	log('response body received from server:', response.body);
     	log('response headers received from server:', response.headers);
     	log('response status received from server:', response.status);
@@ -23,7 +23,7 @@ function OnDelete(meta) {
 	path : '/'
     };
     try {
-    	var response = curl("GET", server, request);
+    	var response = curlWithRetry(request);
     	log('response body received from server:', response.body);
     	log('response headers received from server:', response.headers);
     	log('response status received from server:', response.status);
@@ -38,4 +38,19 @@ function OnDelete(meta) {
     	    delete dst_bucket[meta.id];
     	}
     }
+}
+
+function curlWithRetry(request) {
+    var lastError;
+    for (var i = 0; i < 3; i++) {
+        try {
+            return curl("GET", server, request);
+        } catch (e) {
+            lastError = e;
+            if (e["message"] == "Unable to perform the request: SSL peer certificate or SSH remote key was not OK") {
+                break;
+            }
+        }
+    }
+    throw lastError;
 }
