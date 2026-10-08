@@ -128,6 +128,15 @@ class rbacmain:
                 response = rest.delete_builtin_user(temp['id'])
 
 
+    def _get_permission_set(self, role):
+        master, expected, expected_neg = rbacRoles()._return_permission_set(role)
+        # From 8.0, security visibility moved out of ro_admin into the
+        # ro_security_admin role (MB-69632)
+        if role == "roadmin" and \
+                RestConnection(self.master_ip).check_cluster_compatibility("8.0"):
+            expected['permissionSet']['cluster.admin.security!read'] = False
+        return master, expected, expected_neg
+
     def _check_role_permission_validate_multiple(self,user_id,user_role,bucket_name,final_user_role,no_bucket_access=None,no_access_bucket_name=None):
         failure_list = []
         result = True
@@ -136,7 +145,7 @@ class rbacmain:
         payload = "name=" + user_details[0] + "&roles=" + final_roles
         rbacmain(self.master_ip, self.auth_type)._set_user_roles(user_name=user_details[0], payload=payload)
 
-        master, expected, expected_neg = rbacRoles()._return_permission_set(final_user_role)        
+        master, expected, expected_neg = self._get_permission_set(final_user_role)
 
         if no_bucket_access:
             temp_dict =  expected_neg['permissionSet']
@@ -276,7 +285,7 @@ class rbacmain:
         final_roles = self._return_roles(user_role)
         payload = "name=" + user_details[0] + "&roles=" + final_roles
         status, content, header =  rbacmain(self.master_ip, self.auth_type)._set_user_roles(user_name=user_details[0], payload=payload)
-        master, expected, expected_neg = rbacRoles()._return_permission_set(final_user_role)
+        master, expected, expected_neg = self._get_permission_set(final_user_role)
 
 
         if no_bucket_access:

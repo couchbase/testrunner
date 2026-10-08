@@ -496,19 +496,29 @@ class rbacTest(ldaptest, AutoFailoverBaseTest):
         try:
             rest.update_password("non_existent_user", newpassword)
         except Exception as ex:
-            self.assertTrue("User was not found" in str(ex),
+            # 8.0+ returns "Unknown user." (MB-65487), older builds "User was not found"
+            self.assertTrue("Unknown user" in str(ex) or "User was not found" in str(ex),
                             msg="Unexpected exception {0}".format(ex))
             self.log.info("Update password failed as expected with invalid user name")
         else:
             self.fail("Password updated for a non-existent user")
 
         # Verify users with only certain roles authorized to update password
+        # security_admin_local/external were replaced by security_admin,
+        # user_admin_local and user_admin_external. test_user has the admin
+        # role, and only admin can change an admin user's password
+        # (user_admin_local needs cluster.admin.users.admin!write)
         roles = ['admin', 'cluster_admin', 'ro_admin', 'bucket_admin[*]', 'bucket_full_access[*]',
-                 'data_backup[*]', 'security_admin_local', 'security_admin_external',
+                 'data_backup[*]', 'security_admin', 'user_admin_local', 'user_admin_external',
                  'data_reader[*]', 'data_writer[*]', 'data_dcp_reader[*]', 'data_monitoring[*]']
-        allowed_roles = ['admin', 'security_admin_local', 'security_admin_external']
+        allowed_roles = ['admin']
+        current_password = newpassword
         for role in roles:
-            rest.update_password(user_id, password)  # Reset password
+            # 8.0+ rejects a PATCH with the user's current password (MB-31823),
+            # so only reset it if the previous role changed it
+            if current_password != password:
+                rest.update_password(user_id, password)  # Reset password
+                current_password = password
             user_name = "user_" + role.split("[", 1)[0]
             user_role = role
             password = "password"
@@ -526,6 +536,7 @@ class rbacTest(ldaptest, AutoFailoverBaseTest):
                     self.log.info("User: {0} unauthorized to update password as expected"
                                   .format(user_name))
             else:
+                current_password = newpassword
                 if role in allowed_roles:
                     self.log.info("User: {0} authorized to update password as expected"
                                   .format(user_name))
@@ -539,8 +550,9 @@ class rbacTest(ldaptest, AutoFailoverBaseTest):
                                'user_bucket_full_access': ['bucket_full_access[*]'],
                                'user_cluster_admin': ['cluster_admin'],
                                'user_bucket_admin': ['bucket_admin[*]'],
-                               'user_security_admin_external': ['security_admin_external'],
-                               'user_security_admin_local': ['security_admin_local'],
+                               'user_security_admin': ['security_admin'],
+                               'user_user_admin_local': ['user_admin_local'],
+                               'user_user_admin_external': ['user_admin_external'],
                                'user_data_reader': ['data_reader[*]'],
                                'user_data_writer': ['data_writer[*]'],
                                'user_data_monitoring': ['data_monitoring[*]'],
@@ -575,7 +587,8 @@ class rbacTest(ldaptest, AutoFailoverBaseTest):
         self.log.info("All user roles after password update is intact")
 
         user_id = "test_user"
-        rest.update_password(user_id, password)  # Reset password
+        if current_password != password:
+            rest.update_password(user_id, password)  # Reset password
         
         # no password provided
         try:
@@ -607,20 +620,22 @@ class rbacTest(ldaptest, AutoFailoverBaseTest):
         else:
             self.fail("Should fail as weak password(< 6 chars) provided")
 
-        # new passwd same as old password
+        # new passwd same as old password, rejected from 8.0 (MB-31823)
         try:
             rest.update_password(user_id, password)
         except Exception as ex:
-            self.fail("Fails when new password provided same as old password with exception: {0}"
-                      .format(ex))
+            self.assertTrue("Password has already been used" in str(ex),
+                            msg="Unexpected exception {0}".format(ex))
+            self.log.info("Failed as expected as new password is same as old password")
         else:
-            self.log.info("Works when new password provided same as old password")
+            self.fail("Should fail as new password is same as old password")
 
         self.cluster.async_rebalance(self.servers,
                                      self.servers_to_add,
                                      self.servers_to_remove)
         self.sleep(5)
         #  update password during rebalance
+        #  Each step uses a new password, as reusing the current one is rejected
         try:
             rest.update_password(user_id, newpassword)
         except Exception as ex:
@@ -633,7 +648,7 @@ class rbacTest(ldaptest, AutoFailoverBaseTest):
         self.failover_actions[self.failover_action](self)
         #  update password when a node is down
         try:
-            rest.update_password(user_id, newpassword)
+            rest.update_password(user_id, newpassword + "_nodedown")
         except Exception as ex:
             self.fail("Update password fails when a node is down with exception: {0}".format(ex))
         else:
@@ -642,7 +657,7 @@ class rbacTest(ldaptest, AutoFailoverBaseTest):
         self.sleep(300)
         # update password after autofailover
         try:
-            rest.update_password(user_id, newpassword)
+            rest.update_password(user_id, newpassword + "_failover")
         except Exception as ex:
             self.fail("Update password fails after autofailover with exception: {0}".format(ex))
         else:
