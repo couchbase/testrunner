@@ -2388,13 +2388,22 @@ class OnPremBaseTestCase(unittest.TestCase):
         servers = self.get_kv_nodes(servers)
         if self.std_vbucket_dist != None:
             std = self.std_vbucket_dist
-        if self.vbuckets != None and self.vbuckets != self.total_vbuckets:
-            self.total_vbuckets = self.vbuckets
         active, replica = self.get_vb_distribution_active_replica(servers=servers, buckets=buckets)
+        rest = RestConnection(self.master)
+        expected_vbuckets = total_vbuckets
         for bucket in list(active.keys()):
             self.log.info(" Begin Verification for Bucket {0}".format(bucket))
             active_result = active[bucket]
             replica_result = replica[bucket]
+            # Expected vbucket count depends on the bucket's storage backend
+            # (magma defaults to 128, couchstore to 1024), so take it from
+            # the cluster's vbucket map instead of a single global value
+            bucket_name = getattr(bucket, "name", bucket)
+            vb_map = rest.get_vbuckets(bucket_name)
+            total_vbuckets = len(vb_map) if vb_map else expected_vbuckets
+            if total_vbuckets != expected_vbuckets:
+                self.log.info("Bucket {0} has {1} vbuckets, using it instead of {2}"
+                              .format(bucket_name, total_vbuckets, expected_vbuckets))
             if graceful or type == "rebalance":
                 self.assertTrue(active_result["total"] == total_vbuckets,
                                 "total vbuckets do not match for active data set (= criteria), actual {0} expectecd {1}".format(
@@ -2404,7 +2413,6 @@ class OnPremBaseTestCase(unittest.TestCase):
                                 "total vbuckets do not match for active data set  (<= criteria), actual {0} expectecd {1}".format(
                                     active_result["total"], total_vbuckets))
             if type == "rebalance":
-                rest = RestConnection(self.master)
                 nodes = rest.node_statuses()
                 if (len(nodes) - self.num_replicas) >= 1:
                     self.assertTrue(replica_result["total"] == self.num_replicas * total_vbuckets,
