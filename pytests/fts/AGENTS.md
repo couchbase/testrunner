@@ -25,6 +25,7 @@ pytests/fts/
 ├── upgrade_fts.py                      # Offline upgrade and version compatibility
 ├── fts_pause_resume.py                 # Pause / resume indexing operations
 ├── fts_server_groups.py                # Server groups and partition topology
+├── fts_throttling.py                   # Index builds under KV rate-limiting (8.5+)
 ├── fts_free_tier_limits.py             # Serverless free-tier quota enforcement
 ├── fts_reclaimable_disk_space.py       # Compaction and disk-space reclamation
 ├── tenant_management_fts.py            # Serverless multi-tenant limits
@@ -54,6 +55,7 @@ BaseTestCase  (lib/)
     ├── FTSServerGroups                      # fts_server_groups.py
     ├── FtsFreeTierLimits                    # fts_free_tier_limits.py
     ├── FTSReclaimableDiskSpace              # fts_reclaimable_disk_space.py
+    ├── FTSThrottling                        # fts_throttling.py
     └── TenantManagementFTS                  # tenant_management_fts.py
 
 NewUpgradeBaseTest  (pytests/)
@@ -319,6 +321,18 @@ Utility (not a TestCase):
   - Cross-tenant isolation
   - Admin override of tenant limits
 
+### `fts_throttling.py`
+- **Purpose:** FTS coverage for KV rate-limiting (8.5+, Totoro). Per MB-70229 there are no blanket throttling exemptions, so an FTS index build — a DCP consumer — should be subject to its bucket's KV rate limit. This suite checks whether it actually is, and that the index is still complete when it is.
+- **Key class:** `FTSThrottling`
+- **Shape:** two runs of the same index build — a reference run with throttling off, then a run under fixed limits taken from the conf (`node_capacity`, `bucket_throttle_reserved`, `bucket_throttle_hard_limit`, TAF's names). The limit counts as enforced if `throttle_count_total` moves or the build is at least `throttle_slowdown_factor` slower. This follows every other throttling suite in both repos (TAF `epengine/rate_limiting_tests`, testrunner `fts|gsi/serverless/throttling`, `tuqquery/tuq_throttling`): set a known limit, drive work past it, assert counters or elapsed time.
+- **Why not a measured baseline:** the original ask was "record your RU/WU footprint, then limit to 10–20% of it". That cannot work here — on 8.5.0-1257 a complete 100k-doc index build moved `ru_total` by 0, in the same window where the client load moved `wu_total` by exactly 100000. FTS's DCP reads are not metered into the bucket's read units, so there is no footprint to derive a limit from. Elapsed time needs no meters.
+- **Key test areas:**
+  - Index completeness under a rate limit — `validate_index_count(equal_bucket_doc_count=True)` catches silently dropped mutations
+  - Stalled DCP streams, distinguished from merely slow builds by `index_stall_window`
+  - Per-bucket reservations drawn from a single node capacity pool, with the oversubscription constraint (`Σ reserved ≤ node_capacity`) validated before the cluster rejects it
+- **Helper:** `KVRateLimiting`, in `lib/metering_throttling.py` alongside the serverless `metering` / `throttling` classes — not a suite-local helper — KV rate-limiting is generic cluster config and XDCR, backup, GSI and mobile face the same question. It wraps the `RestConnection` throttle methods (from change 252274) with explicit-value fan-out across KV nodes, reads the counters from **cbstats**, and restores the cluster in teardown.
+- **Guard rail:** if neither the counters nor the build time move, the test fails and says so as a *server* result — FTS's DCP traffic passing through a bucket limit untouched is what MB-70229 says must not happen. It is explicitly not reported as "FTS survived throttling".
+
 ### `fts_callable.py`
 - **Purpose:** `FTSCallable` — a non-TestCase utility class for invoking FTS operations from other test modules (e.g., upgrade or backup tests that need to verify FTS as part of a broader scenario).
 
@@ -348,6 +362,7 @@ All FTS conf files live under `conf/fts/`:
 | `py-fts-custmap-rqg-queries.conf` | Custom mapping RQG-driven queries |
 | `py-fts-vector-custmap-rqg-queries.conf` | Vector custom-mapping RQG queries |
 | `py-fts-compaction-api.conf` | Compaction API and disk reclamation |
+| `py-fts-throttling.conf` | Index builds under KV rate-limiting (MB-70229) |
 
 ---
 
@@ -373,6 +388,10 @@ make test-fts
 ./testrunner -i b/resources/4-nodes-template.ini \
   -t pytests.fts.fts_flex_features.FlexFeaturesFTS.test_flex_pushdown_fts_vs_gsi
 
+# KV rate-limiting (throttling) tests
+./testrunner -i b/resources/4-nodes-template.ini \
+  -t pytests.fts.fts_throttling.FTSThrottling.test_fts_index_build_under_throttling,items=100000,node_capacity=500,bucket_throttle_reserved=100,bucket_throttle_hard_limit=200
+
 # Full conf suite
 ./testrunner -i b/resources/4-nodes-template.ini -c conf/fts/py-fts-simpletopology.conf
 ```
@@ -389,6 +408,7 @@ make test-fts
 | `RemoteMachineShellConnection` | `lib/remote/remote_util.py` |
 | `BlobGenerator` / `DocumentGenerator` | `lib/couchbase_helper/documentgenerator.py` |
 | `FTSCallable` | `pytests/fts/fts_callable.py` |
+| `KVRateLimiting` | `lib/metering_throttling.py` |
 | `SearchServiceEvents` | `lib/SystemEventLogLib/fts_service_events.py` |
 | `faiss` | Vector ground-truth validation (optional, installed separately) |
 | `numpy` | Vector data generation and recall computation |
@@ -435,6 +455,7 @@ make test-fts
 6. **Conf coverage:** Register new test methods in the appropriate `conf/fts/*.conf` file.
 7. **Python 3.10+:** All code must be Python 3.10 compatible.
 8. **Cleanup:** Always delete FTS indexes in `tearDown`; leaked indexes can pollute subsequent tests sharing the same cluster.
+9. **Throttling conf rows:** `bucket_throttle_reserved` / `bucket_throttle_hard_limit` are inert on their own — the node-level `throttle_enabled` toggle is the master switch. A row that sets only the bucket limits builds its indexes against an *unthrottled* cluster and passes, so any row parameterizing an existing suite for throttling must also set `throttle_enabled=True` and `node_capacity`. `FTSThrottling` sidesteps this by setting the toggle itself, and fails unless the limit demonstrably bit (counters moved, or the build got materially slower).
 
 ---
 
