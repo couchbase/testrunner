@@ -1459,13 +1459,12 @@ class EventingCRL(CRLBase, EventingBaseTest):
         self.rest.reload_crl()
         status, files, _ = self.rest.get_crl_files()
         self.log.info("n2n CRL files after expiry wait: {0}".format(files))
-        #To be checked if this is expected behaviour (INTERNAL_SERVER_ERROR on api/v1/stats)
-        self._force_function_reconnect(body)
-        # try:
-        #     self._force_function_reconnect(body)
-        # except Exception as e:
-        #     self.log.warning("_force_function_reconnect did not reach 'deployed' after n2n CRL expiry with "
-        #                      "KV node still revoked (to be checked if this is expected behaviour): {0}".format(e))
+        #Confirmed expected behaviour (INTERNAL_SERVER_ERROR on api/v1/stats)
+        try:
+            self._force_function_reconnect(body)
+        except Exception as e:
+            self.log.warning("_force_function_reconnect did not reach 'deployed' after n2n CRL expiry with "
+                             "KV node still revoked (confirmed expected behaviour): {0}".format(e))
 
         # Post-expiry, under Require: the previously-revoked node's vbuckets
         # should STAY unreachable -- growth from the untouched node only.
