@@ -1,4 +1,5 @@
 import contextlib
+import gc
 import logging
 import json
 import time
@@ -30,8 +31,15 @@ class UpgradeFTS(NewUpgradeBaseTest):
     # Doc-id prefix for the vector corpus. MUST stay off the emp key space the
     # upgrade workload writes to -- see _push_all_vector_data.
     VECTOR_DOC_PREFIX = "vec"
+    # The field vec_legacy_idx maps; the vector corpus is worthless without it.
+    VECTOR_FIELD = "vector_data"
 
     EAR_INDEX = "fts_ear_upgrade_idx"
+    # FTS only encrypts segments written at this version or later. An index built
+    # before the upgrade carries older segments and is left unencrypted by design
+    # (Search team: "any indexes with <v17 segments will not be encrypted").
+    EAR_MIN_SEGMENT_VERSION = 17
+    EAR_POST_UPGRADE_INDEX = "fts_ear_post_upgrade_idx"
 
     # CBQE-8244
     CHAINED_INDEX = "chained_upgrade_idx"
@@ -61,6 +69,10 @@ class UpgradeFTS(NewUpgradeBaseTest):
         # before kNN queries are allowed to run against it -- see
         # _wait_vector_index_ready for why a fixed sleep is not enough.
         self.vector_index_ready_timeout = self.input.param("vector_index_ready_timeout", 900)
+        # A quantized index can report a steady doc count while its quantizer is
+        # still training -- see _wait_vector_recall_stable.
+        self.vector_recall_settle_timeout = self.input.param(
+            "vector_recall_settle_timeout", 600)
         self.vector_k = self.input.param("k", 2)
         # A quantized (BQ) index legitimately recalls worse than the flat index the
         # pre-upgrade baseline was measured on, so it is not held to
@@ -68,6 +80,9 @@ class UpgradeFTS(NewUpgradeBaseTest):
         # otherwise expected_accuracy_and_recall (enforced inside
         # run_vector_queries_stats) stays the only gate.
         self.bq_recall_threshold = self.input.param("bq_recall_threshold", None)
+        # Only automatic BQ bar when no threshold is stated: how many times random
+        # a quantized index must beat before it counts as returning noise.
+        self.bq_chance_multiple = float(self.input.param("bq_chance_multiple", 5))
 
         self.ear_reencryption_timeout = self.input.param("ear_reencryption_timeout", 300)
         # keysInUse convergence is a far slower, best-effort signal than the DEK
@@ -89,6 +104,8 @@ class UpgradeFTS(NewUpgradeBaseTest):
             self.log.info("Building docker image with java sdk client")
             JavaSdkSetup()
 
+        self.log.info(f"[mem] {self._testMethodName}: RSS at start "
+                      f"{self._rss_mb():.0f}MB")
         self.__setup_for_test()
 
     def setup_es(self):
@@ -153,7 +170,36 @@ class UpgradeFTS(NewUpgradeBaseTest):
     def __cleanup_previous(self):
         self.cluster.cleanup_cluster(self, cluster_shutdown=False)
 
+    def _rss_mb(self):
+        """Resident set size of THIS testrunner process, in MB (-1 if unavailable)."""
+        try:
+            with open("/proc/self/status") as handle:
+                for line in handle:
+                    if line.startswith("VmRSS:"):
+                        return int(line.split()[1]) / 1024.0
+        except Exception:
+            pass
+        return -1.0
+
     def tearDown(self):
+        # Every test in a conf runs in ONE testrunner process, so anything retained
+        # accumulates. The suite has been OOM-killed mid-run repeatedly (4.8GB RSS
+        # when the kernel took it), and two rounds of guessing at the cause were
+        # wrong, so measure it: this prints the growth curve across the run, and
+        # how much a forced collection gives back.
+        #
+        # 30 FTSCallable objects are constructed across this file and none is ever
+        # closed; each builds a CouchbaseCluster that its indexes point back at, so
+        # they are reference cycles that only the cyclic collector can free.
+        # Separating "true leak" from "uncollected cycles" from "allocator never
+        # returns it" is exactly what the before/after pair shows.
+        before = self._rss_mb()
+        collected = gc.collect()
+        after = self._rss_mb()
+        self.log.info(
+            f"[mem] {self._testMethodName}: RSS {before:.0f}MB -> {after:.0f}MB "
+            f"after gc.collect() freed {collected} object(s)")
+
         self.upgrade_servers = self.servers
         super(UpgradeFTS, self).tearDown()
 
@@ -2332,7 +2378,13 @@ class UpgradeFTS(NewUpgradeBaseTest):
         knobs = {}
         bq_index_type = self.input.param("bq_index_type", None)
         if bq_index_type:
-            knobs['bq_index_type'] = bq_index_type
+            # A value containing a comma has to be written """ivf,rabitq""" in the
+            # conf so the parser does not split it on the comma, but testrunner
+            # hands the quotes through verbatim. Unstripped, FTS rejects it:
+            #   invalid vector index optimization: '"""ivf,rabitq"""',
+            #   valid optimizations are: [bivf-sq8 ivf,rabitq ...]
+            # -- i.e. the value is right and only the quoting is wrong.
+            knobs['bq_index_type'] = str(bq_index_type).strip().strip('"').strip("'")
         if self.input.param("fastmerge", False):
             knobs['fastmerge'] = True
         if self.input.param("gpu_index", False):
@@ -2420,7 +2472,52 @@ class UpgradeFTS(NewUpgradeBaseTest):
                     f"querying it anyway")
         return False
 
-    def _push_all_vector_data(self, fts_callable, end_index=10005001):
+    # Load the WHOLE base set. The loader starts at id 10000000 and
+    # run_vector_query maps a hit back to a dataset index with
+    # int(id[3:]) - 10000001, so end_index 10005001 covered only indices 0..4999 --
+    # half of siftsmall's 10000 base vectors. The groundtruth is computed over all
+    # 10000 (observed references up to index 9814), so ~half of every query's true
+    # neighbours were never in the index and recall was capped near 50% by
+    # construction. That ceiling is why the baseline measured ~52% and why
+    # expected_accuracy_and_recall was set to 50 -- a threshold calibrated to the
+    # bug, which made the gate both vacuous and razor-thin at once.
+    VECTOR_END_INDEX = 10010001
+
+    def _wait_vector_recall_stable(self, fts_callable, index_name, label="",
+                                   timeout=None, poll=30, delta=1.0):
+        """Re-measure recall until it stops moving, for index types that train.
+
+        _wait_vector_index_ready only proves the DOC COUNT is steady. A quantized
+        (BQ/IVF) index can report every document while its quantizer is still
+        training, and it answers happily with a full k results that are close to
+        random -- which is indistinguishable from "BQ is broken" in a single
+        measurement.
+
+        So sample recall repeatedly and watch the trajectory. A flat one rules out
+        "queried too early" and makes a low number worth reporting; a climbing one
+        means the wait was needed. Either way the trajectory is logged, so the next
+        run answers the question instead of leaving it to be argued.
+        """
+        timeout = self.vector_recall_settle_timeout if timeout is None else timeout
+        deadline = time.time() + timeout
+        trajectory, previous = [], None
+        while time.time() < deadline:
+            _, stats = fts_callable.run_vector_queries_stats(index_name=index_name)
+            recall = stats.get('fts_recall', 0)
+            trajectory.append(recall)
+            if previous is not None and abs(recall - previous) <= delta:
+                break
+            previous = recall
+            self.sleep(poll, f"{label}re-measuring '{index_name}' recall "
+                             f"(trajectory so far: {trajectory})")
+        verdict = ("flat - not a training/timing artefact"
+                   if len(trajectory) > 1 and max(trajectory) - min(trajectory) <= delta
+                   else "moved while settling")
+        self.log.info(f"{label}'{index_name}' recall trajectory {trajectory} "
+                      f"({verdict})")
+        return trajectory
+
+    def _push_all_vector_data(self, fts_callable, end_index=None):
         """Load the vector dataset in the four xattr/base64 permutations.
 
         The corpus MUST NOT share a key space with the emp docs. push_vector_data
@@ -2438,17 +2535,82 @@ class UpgradeFTS(NewUpgradeBaseTest):
         int(match['id'][3:]) - 10000001 groundtruth mapping depends on, and the
         index does not key off the prefix (docid_prefix_delim is "").
         """
+        end_index = self.VECTOR_END_INDEX if end_index is None else end_index
         for xattr in (False, True):
             for base64_flag in (False, True):
+                # Only the FIRST pass creates the documents. All four passes write
+                # the same key range, and a loader run with provideDefaultDocs=True
+                # writes a whole document rather than adding a field to one -- so
+                # asking every pass to create left the final doc shaped by the last
+                # pass (xattr+base64) with no plain `vector_data` left in the body,
+                # which is the field vec_legacy_idx maps. The historical emp-prefix
+                # behaviour was exactly this: create once (by load_data), then layer
+                # the three variants on top.
+                create_docs = (not xattr) and (not base64_flag)
                 try:
                     fts_callable.push_vector_data(
                         self.servers[0],
                         str(self.rest_settings.rest_username),
                         str(self.rest_settings.rest_password),
                         prefix=self.VECTOR_DOC_PREFIX,
+                        provide_default_docs=create_docs,
                         xattr=xattr, base64Flag=base64_flag, end_index=end_index)
                 except Exception as err:
                     log.warning(f"push_vector_data(xattr={xattr}, base64={base64_flag}) failed: {err}")
+
+        # GoVectorLoader.load_data turns a failed container into a printed message
+        # and returns normally, so the try/except above catches nothing: in one run
+        # all 28 invocations failed with "Upsert operation failed. Retrying." and
+        # the suite carried on to a baseline reporting 0 recall for what was really
+        # "no vectors were ever loaded".
+        #
+        # A bucket item count cannot answer this -- basicStats.itemCount lags behind
+        # the load, and 5k vector docs are lost in the noise of 100k emp docs, so a
+        # delta can pass while nothing landed. Fetch real documents and look for the
+        # field the index actually maps.
+        self._assert_vector_corpus_landed()
+
+    def _assert_vector_corpus_landed(self, sample=3, timeout=120, poll=10):
+        """Fail unless sampled vector docs exist AND carry the indexed field."""
+        keys = [f"{self.VECTOR_DOC_PREFIX}{10000001 + i}" for i in range(sample)]
+        deadline = time.time() + timeout
+        found, with_field, shapes = {}, [], {}
+        while time.time() < deadline:
+            try:
+                found = RestConnection(self.master).get_items_info(keys, "default") or {}
+            except Exception as err:
+                log.warning(f"could not fetch vector docs {keys}: {err}")
+                found = {}
+            with_field, shapes = [], {}
+            for key, doc in found.items():
+                body = doc.get("json", doc) if isinstance(doc, dict) else doc
+                if isinstance(body, (str, bytes)):
+                    try:
+                        body = json.loads(body)
+                    except ValueError:
+                        body = {}
+                if isinstance(body, dict):
+                    shapes[key] = sorted(body.keys())
+                    if body.get(self.VECTOR_FIELD):
+                        with_field.append(key)
+            if with_field:
+                break
+            self.sleep(poll, f"waiting for '{self.VECTOR_DOC_PREFIX}' docs to land")
+
+        # Log the shape either way -- if this ever fails again the log says exactly
+        # what the loader wrote instead of leaving it to be inferred.
+        log.info(f"vector corpus sample {keys}: fetched={sorted(found)}, "
+                 f"carrying '{self.VECTOR_FIELD}'={with_field}, bodies={shapes}")
+        if not found:
+            self.fail(
+                f"the vector corpus did not load: none of {keys} exist in 'default'. "
+                f"Check the govectorloader output above for 'Upsert operation failed'.")
+        if not with_field:
+            self.fail(
+                f"the vector corpus loaded but carries no '{self.VECTOR_FIELD}': "
+                f"{shapes}. vec_legacy_idx maps that field, so kNN would return 0 "
+                f"hits. A later loader pass has most likely replaced the document "
+                f"written by the first.")
 
     def _validate_vector_feature_definition(self, index_name, knobs, node=None):
         """Confirm the requested Totoro knobs survived a round trip through FTS."""
@@ -2558,6 +2720,25 @@ class UpgradeFTS(NewUpgradeBaseTest):
             log.warning(f"could not clean up index '{index_name}': {err}")
         return errors
 
+    def _metric_tolerance(self, metric):
+        """Allowed drop for a recall/accuracy comparison.
+
+        fts_accuracy is the mean of a per-query 0/1 outcome over
+        vector_queries_count queries, so it can ONLY move in steps of
+        100/vector_queries_count -- with the default 10 queries that is 10 points.
+        vector_recall_tolerance defaults to 5, which is finer than one step, so a
+        single borderline query flipping (70.0 -> 50.0 is two of them) is reported
+        as a regression when it is quantisation noise. Never allow a tolerance
+        below one query's worth.
+
+        fts_recall is a continuous percentage, so it keeps the configured value.
+        """
+        tolerance = self.vector_recall_tolerance
+        if metric == 'fts_accuracy':
+            queries = max(1, int(self.input.param("vector_queries_count", 10)))
+            tolerance = max(tolerance, 100.0 / queries)
+        return tolerance
+
     def _validate_legacy_index_survived(self, fts_callable, baseline, stage):
         """The pre-upgrade index must still answer kNN queries at its baseline recall."""
         errors = []
@@ -2570,8 +2751,8 @@ class UpgradeFTS(NewUpgradeBaseTest):
             errors.append(f"[{stage}] legacy vector index queries failed after upgrade: {stats}")
             return errors
 
-        tolerance = self.vector_recall_tolerance
         for metric in ('fts_recall', 'fts_accuracy'):
+            tolerance = self._metric_tolerance(metric)
             before, after = baseline.get(metric, 0), stats.get(metric, 0)
             if after < before - tolerance:
                 errors.append(
@@ -2686,15 +2867,25 @@ class UpgradeFTS(NewUpgradeBaseTest):
             # wait for it to come back rather than guessing at a sleep.
             self._wait_vector_index_ready(self.LEGACY_VECTOR_INDEX,
                                           label="[post-upgrade feature-enable] ")
+            trajectory = []
+            if 'bq_index_type' in knobs:
+                trajectory = self._wait_vector_recall_stable(
+                    fts_callable, self.LEGACY_VECTOR_INDEX,
+                    label="[post-upgrade feature-enable] ")
             def_errors = self._validate_vector_feature_definition(self.LEGACY_VECTOR_INDEX, knobs)
             if def_errors:
                 errors['post_legacy_definition'] = def_errors
             passed, stats = fts_callable.run_vector_queries_stats(
                 index_name=self.LEGACY_VECTOR_INDEX)
-            if not passed:
+            if 'bq_index_type' in knobs:
+                # `passed` here is the flat bar; judge BQ on a BQ bar instead.
+                errors.update(self._check_bq_recall(
+                    knobs, stats, baseline, trajectory, self.LEGACY_VECTOR_INDEX))
+            elif not passed:
                 errors['post_legacy_feature_query'] = [
-                    f"kNN queries failed after switching the existing index onto "
-                    f"{self._vector_feature_label(knobs)}: {stats}"]
+                    self._vector_query_failure_detail(
+                        knobs, stats, baseline, trajectory, self.LEGACY_VECTOR_INDEX,
+                        "after switching the existing index onto")]
             else:
                 log.info(f"in-place feature enable on the legacy index: {stats}")
 
@@ -2709,19 +2900,103 @@ class UpgradeFTS(NewUpgradeBaseTest):
             return errors
 
         self._wait_vector_index_ready(self.FEATURE_VECTOR_INDEX, label="[post-upgrade feature] ")
+        trajectory = []
+        if 'bq_index_type' in knobs:
+            trajectory = self._wait_vector_recall_stable(
+                fts_callable, self.FEATURE_VECTOR_INDEX,
+                label="[post-upgrade feature] ")
         def_errors = self._validate_vector_feature_definition(self.FEATURE_VECTOR_INDEX, knobs)
         if def_errors:
             errors['post_feature_definition'] = def_errors
 
         passed, stats = fts_callable.run_vector_queries_stats(index_name=self.FEATURE_VECTOR_INDEX)
-        if not passed:
+        if 'bq_index_type' in knobs:
+            errors.update(self._check_bq_recall(
+                knobs, stats, baseline, trajectory, self.FEATURE_VECTOR_INDEX))
+        elif not passed:
             errors['post_feature_query'] = [
-                f"kNN queries failed on the new {self._vector_feature_label(knobs)} "
-                f"index: {stats}"]
+                self._vector_query_failure_detail(
+                    knobs, stats, baseline, trajectory, self.FEATURE_VECTOR_INDEX,
+                    "on a new index created with")]
         else:
             errors.update(self._check_feature_index_recall(knobs, stats, baseline))
 
         return errors
+
+    def _vector_query_failure_detail(self, knobs, stats, baseline, trajectory,
+                                     index_name, what):
+        """Make a low-recall result self-explanatory in the failure report.
+
+        "fts_recall: 3.5" on its own says nothing about whether that is bad. Carry
+        the three numbers that make it readable without opening the log: what the
+        SAME data recalls on the flat index, what pure chance would give, and
+        whether the figure was still moving when sampled.
+        """
+        recall = stats.get('fts_recall', 0)
+        flat = baseline.get('fts_recall', 0)
+        corpus = max(1, self.VECTOR_END_INDEX - 10000001)
+        chance = 100.0 * min(self.vector_k, corpus) / corpus
+        detail = (f"kNN queries failed {what} {self._vector_feature_label(knobs)} "
+                  f"('{index_name}'): {stats}. For comparison the same data recalls "
+                  f"{flat}% on the flat index, and chance at k={self.vector_k} over "
+                  f"{corpus} vectors is ~{chance:.1f}%.")
+        if trajectory:
+            settled = (len(trajectory) > 1
+                       and max(trajectory) - min(trajectory) <= 1.0)
+            detail += (f" Recall was re-measured until stable: {trajectory} - "
+                       + ("flat, so this is a settled index and not one still "
+                          "training." if settled else
+                          "still moving when sampled, so treat it as provisional."))
+        return detail
+
+    def _check_bq_recall(self, knobs, stats, baseline, trajectory=None, index_name=""):
+        """Gate a quantized index on a BQ-appropriate bar, never the flat one.
+
+        expected_accuracy_and_recall is calibrated for the FLAT index (it recalls
+        ~93% here). A quantized index is lossy by design, so judging it with that
+        number says nothing except "it is quantized". Worse, run_vector_queries_stats
+        bakes that threshold into its own pass/fail, which meant the BQ branch below
+        used to be unreachable -- every BQ run failed on the flat bar before any
+        BQ-aware check ran.
+
+        So: if the conf states a bar (bq_recall_threshold), enforce it. If it does
+        not, do NOT invent one -- fail only on a result indistinguishable from
+        noise (bq_chance_multiple x random) and report the measurement so somebody
+        who knows the expected figure can set it.
+        """
+        recall = stats.get('fts_recall', 0)
+        corpus = max(1, self.VECTOR_END_INDEX - 10000001)
+        chance = 100.0 * min(self.vector_k, corpus) / corpus
+        floor = chance * self.bq_chance_multiple
+        context = (f"{self._vector_feature_label(knobs)} recall {recall}% "
+                   f"(flat index on the same data: {baseline.get('fts_recall')}%, "
+                   f"chance ~{chance:.1f}%)")
+        if trajectory:
+            context += f", stable across re-measurement {trajectory}"
+
+        if self.bq_recall_threshold is not None:
+            if recall < float(self.bq_recall_threshold):
+                return {'post_feature_recall': [
+                    f"{context} is below bq_recall_threshold="
+                    f"{self.bq_recall_threshold}"]}
+            # self.log, not the module logger: `log` stops reaching the console
+            # after the first test in a suite run, and these two lines exist
+            # specifically to be read.
+            self.log.info(f"BQ recall OK: {context} "
+                          f">= bq_recall_threshold={self.bq_recall_threshold}")
+            return {}
+
+        if recall < floor:
+            return {'post_feature_recall': [
+                f"{context} is within {self.bq_chance_multiple}x of random - the "
+                f"index is returning noise, not degraded results. (No "
+                f"bq_recall_threshold is set, so this is the only automatic bar.)"]}
+        self.log.warning(
+            f"BQ recall UNASSERTED: {context}. Above the {self.bq_chance_multiple}x "
+            f"chance floor but no bq_recall_threshold is set, so nothing is being "
+            f"enforced. Set bq_recall_threshold per bq_index_type once the expected "
+            f"figure is known.")
+        return {}
 
     def _check_feature_index_recall(self, knobs, stats, baseline):
         """Hold the feature index to the right recall bar for what it actually is.
@@ -2738,19 +3013,7 @@ class UpgradeFTS(NewUpgradeBaseTest):
         """
         recall = stats.get('fts_recall', 0)
         if 'bq_index_type' in knobs:
-            if self.bq_recall_threshold is None:
-                log.info(f"BQ index stats: {stats} (flat baseline {baseline}; not "
-                         f"compared against it - quantization lowers recall by "
-                         f"design. Gated on expected_accuracy_and_recall only; set "
-                         f"bq_recall_threshold for a tighter floor.)")
-                return {}
-            if recall < float(self.bq_recall_threshold):
-                return {'post_feature_recall': [
-                    f"{self._vector_feature_label(knobs)} recall {recall} is below the "
-                    f"BQ floor bq_recall_threshold={self.bq_recall_threshold}"]}
-            log.info(f"BQ index stats: {stats} "
-                     f"(>= bq_recall_threshold={self.bq_recall_threshold})")
-            return {}
+            return self._check_bq_recall(knobs, stats, baseline)
 
         tolerance = self.vector_recall_tolerance
         if recall < baseline.get('fts_recall', 0) - tolerance:
@@ -2764,20 +3027,43 @@ class UpgradeFTS(NewUpgradeBaseTest):
     # =========================================================================
     # =========================================================================
 
-    def _wait_for_hits(self, index, expected, timeout=300, poll=15):
+    def _workload_hit_tolerance(self, expected):
+        """How far below `expected` a hit count may legitimately fall.
+
+        FTSConcurrentWorkload reloads the first `workload_items` emp docs on every
+        topology change, and when the job passes deletes=True
+        async_perform_update_delete removes the top 70% of that range
+        (__populate_delete_gen starts at 30% of create_gen.end). It is the SAME key
+        range every round, so the corpus can lose at most 0.7 * workload_items docs
+        however many changes run. EAR_QUERY matches a subset of the corpus, so that
+        bound is scaled by the share of it the query represents.
+
+        Returns 0 when the workload is not deleting, keeping the strict
+        exact-match behaviour for jobs that do not pass deletes=True.
+        """
+        if not self.input.param("deletes", False):
+            return 0
+        corpus = max(1, int(self.num_items))
+        removable = 0.7 * min(int(self.input.param("workload_items", 10000)), corpus)
+        return int(expected * removable / corpus) + 1
+
+    def _wait_for_hits(self, index, expected, timeout=300, poll=15, tolerance=0):
         """Poll an index until it reports `expected` hits, or time out.
 
         Used after a rebalance: the index serves fewer hits until it has caught
-        up, which is lag rather than data loss.
+        up, which is lag rather than data loss. `tolerance` additionally allows
+        for a concurrent workload having genuinely deleted documents out from
+        under the baseline -- see _workload_hit_tolerance.
         """
         deadline = time.time() + timeout
         hits, status = -1, None
         while time.time() < deadline:
             hits, _, _, status = index.execute_query(query=self.EAR_QUERY,
                                                      zero_results_ok=True)
-            if hits == expected:
+            if hits >= expected - tolerance:
                 return hits, status
-            log.info(f"index at {hits}/{expected} hits, waiting for it to catch up")
+            log.info(f"index at {hits}/{expected} hits (tolerance {tolerance}), "
+                     f"waiting for it to catch up")
             time.sleep(poll)
         return hits, status
 
@@ -2826,6 +3112,65 @@ class UpgradeFTS(NewUpgradeBaseTest):
 
         return fts_callable, index, hits
 
+    def _assert_post_upgrade_index_encrypts(self, ear, bucket="default"):
+        """A brand-new index on the upgraded cluster MUST get a DEK.
+
+        The carried index is exempt from encryption because of its segment version,
+        so this is what actually proves encryption at rest works after an upgrade.
+        A fresh index writes segments at the current version, which is >=
+        EAR_MIN_SEGMENT_VERSION, so FTS has no reason not to encrypt it.
+        """
+        errors = {}
+        fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False,
+                                   servers=self.servers)
+        new_index = None
+        try:
+            new_index = fts_callable.create_fts_index(
+                self.EAR_POST_UPGRADE_INDEX, source_type='couchbase', source_name=bucket,
+                index_type='fulltext-index', index_params=None, plan_params=None,
+                source_params=None, source_uuid=None, collection_index=False,
+                _type=None, analyzer="standard", no_check=False, cluster=self.cb_cluster)
+            fts_callable.wait_for_indexing_complete(self.num_items)
+
+            segver = self._fts_index_segment_version(self.EAR_POST_UPGRADE_INDEX)
+            if segver is not None and int(segver) < self.EAR_MIN_SEGMENT_VERSION:
+                errors['post_upgrade_index_segver'] = (
+                    f"an index created on the fully upgraded cluster still reports "
+                    f"segmentVersion {segver}, below v{self.EAR_MIN_SEGMENT_VERSION} - "
+                    f"it can never be encrypted")
+                return errors
+            log.info(f"post-upgrade index '{self.EAR_POST_UPGRADE_INDEX}' is on "
+                     f"segmentVersion {segver}")
+
+            deadline = time.time() + self.ear_reencryption_timeout
+            deks = []
+            while time.time() < deadline:
+                _, deks = ear.in_use_deks(bucket)
+                if deks:
+                    break
+                self.sleep(15, "waiting for the post-upgrade index to pick up a DEK")
+            if not deks:
+                errors['post_upgrade_index_not_encrypted'] = (
+                    f"a NEW index created on the fully upgraded cluster "
+                    f"(segmentVersion {segver}) did not get a DEK for '{bucket}' within "
+                    f"{self.ear_reencryption_timeout}s. The carried index is exempt "
+                    f"because of its segment version, but this one is not - encryption "
+                    f"at rest is not working on the upgraded cluster.")
+            else:
+                log.info(f"post-upgrade index encrypted: DEK(s) {deks} in use for "
+                         f"'{bucket}'")
+        except Exception as err:
+            errors['post_upgrade_index_error'] = (
+                f"could not build/validate the post-upgrade encryption index: {err}")
+        finally:
+            if new_index is not None:
+                try:
+                    fts_callable.delete_fts_index(self.EAR_POST_UPGRADE_INDEX)
+                except Exception as err:
+                    log.warning(f"could not clean up "
+                                f"'{self.EAR_POST_UPGRADE_INDEX}': {err}")
+        return errors
+
     def _ear_post_upgrade_checks(self, ear, index, baseline_hits):
         """Enable encryption on the fully upgraded cluster and verify it took effect."""
         errors = {}
@@ -2844,6 +3189,26 @@ class UpgradeFTS(NewUpgradeBaseTest):
         self.sleep(self.ear_post_rebalance_settle,
                    "letting the cluster settle after the final rebalance before "
                    "touching encryption")
+
+        # Checkpoint: prove FTS is serving BEFORE anything touches encryption.
+        #
+        # Without this the suite cannot answer the first question anyone asks of a
+        # run where the index later goes unqueryable ("pindex: could not get wanted
+        # nodeDefs, err: unexpected EOF"): did the UPGRADE break FTS, or did
+        # enabling encryption / dropping the DEKs break it? Both land in the same
+        # place otherwise, and the test goes straight from the settle to creating a
+        # KEK, so there is no evidence either way.
+        tolerance = self._workload_hit_tolerance(baseline_hits)
+        pre_hits, pre_status = self._wait_for_hits(index, baseline_hits,
+                                                   tolerance=tolerance)
+        if pre_status == 'fail' or pre_hits < 0:
+            errors['unqueryable_before_encryption'] = (
+                f"the index was already unqueryable after the upgrade and BEFORE any "
+                f"encryption change (hits={pre_hits}, status={pre_status}). The "
+                f"upgrade broke FTS, not encryption at rest.")
+            return errors
+        log.info(f"pre-encryption checkpoint: index serving {pre_hits} hits "
+                 f"(baseline {baseline_hits}) - FTS is healthy before EAR is touched")
 
         if self.ear_encrypt_before_upgrade:
             # Encryption came across the upgrade; it must still be in force.
@@ -2910,12 +3275,71 @@ class UpgradeFTS(NewUpgradeBaseTest):
         # bucket DEKs makes cbauth drive the refreshKeys/dropKeys callbacks now.
         # Wait for the in-use key set to CHANGE rather than for any end state --
         # same approach as the GSI upgrade suite's force-reencryption test.
+        # An index carried across the upgrade still has PRE-UPGRADE segments, and
+        # FTS does not encrypt segments below EAR_MIN_SEGMENT_VERSION -- confirmed
+        # by the Search team: "any indexes with <v17 segments will not be
+        # encrypted". So for the carried index the correct end state is the
+        # unencrypted marker staying put and NO DEK ever appearing. Demanding a DEK
+        # here asserted the pre-MB-74454 behaviour, which is why this went red the
+        # moment that bug was fixed.
+        carried_segver = self._fts_index_segment_version(index.name)
+        carried_can_encrypt = (carried_segver is not None
+                               and int(carried_segver) >= self.EAR_MIN_SEGMENT_VERSION)
+        log.info(f"carried index '{index.name}' segmentVersion={carried_segver}; "
+                 f"{'eligible for' if carried_can_encrypt else 'NOT eligible for'} "
+                 f"encryption (needs >= v{self.EAR_MIN_SEGMENT_VERSION})")
+
+        # When the carried index cannot be encrypted we are confirming a negative,
+        # so still issue the drop but do not sit out the full timeout waiting for a
+        # DEK that is never coming -- that was 300s burned twice per run.
+        reencrypt_timeout = (self.ear_reencryption_timeout if carried_can_encrypt
+                             else min(60, self.ear_reencryption_timeout))
         changed, before, after = ear.force_reencrypt_and_wait(
-            "default", timeout=self.ear_reencryption_timeout)
-        if not changed:
+            "default", timeout=reencrypt_timeout)
+        if not changed and not carried_can_encrypt:
+            log.info(
+                f"no DEK appeared for 'default', as expected - the carried index is "
+                f"on segmentVersion {carried_segver} (< v{self.EAR_MIN_SEGMENT_VERSION}) "
+                f"so FTS leaves it unencrypted. Encryption is proven instead on a "
+                f"post-upgrade index below.")
+            # OPEN QUESTION, deliberately observed and NOT asserted: does a merge
+            # rewrite those old segments at the current version and pull the index
+            # into encryption? The Search team confirmed <v17 is never encrypted in
+            # place; they did not say whether a merge changes that. Asserting
+            # either way would repeat the mistake that put this check wrong in the
+            # first place, so record what actually happens and let the next run
+            # settle it. Previously the merge lived in the `changed` branch below,
+            # which a carried index can no longer reach -- without this the merge
+            # path would be silently untested.
+            try:
+                ear.force_merge_and_wait(index.name)
+                merged_segver = self._fts_index_segment_version(index.name)
+                _, post_merge_deks = ear.in_use_deks("default")
+                verdict = ("a merge DOES bring the carried index into encryption - "
+                           "this suite should start asserting that"
+                           if post_merge_deks else
+                           "a merge does NOT bring it into encryption")
+                log.info(
+                    f"[observation] force-merged '{index.name}': segmentVersion "
+                    f"{carried_segver} -> {merged_segver}, DEKs for 'default' now "
+                    f"{post_merge_deks or 'none'}. Reading: {verdict}.")
+            except Exception as err:
+                log.warning(f"[observation] could not probe the merge path: {err}")
+        elif not changed:
+            # Say whether FTS actually reported this bucket. "keys stayed []" reads
+            # like a product failure but is identical to the output we produce when
+            # the bucket uuid we look up is not one FTS mentions at all.
+            datatype = ear.bucket_datatype("default")
+            try:
+                merged, _ = ear.in_use_deks("default")
+            except Exception as err:
+                merged = f"<could not re-read GetInUseKeys: {err}>"
+            where = ("present in" if isinstance(merged, dict) and datatype in merged
+                     else "ABSENT from")
             errors['reencryption'] = (
                 f"forcing re-encryption did not produce new FTS DEKs for 'default' "
                 f"within {self.ear_reencryption_timeout}s (keys stayed {after}). "
+                f"Datatype '{datatype}' is {where} FTS's response {merged}. "
                 f"cbauth callbacks seen in fts.log: {callbacks}")
         else:
             log.info(f"re-encryption produced new DEKs: {before} -> {after}")
@@ -2944,12 +3368,30 @@ class UpgradeFTS(NewUpgradeBaseTest):
             else:
                 log.info(f"keysInUse converged for 'default': {deks}")
 
-        hits, status = self._wait_for_hits(index, baseline_hits)
-        if hits != baseline_hits:
-            errors['data_loss'] = (f"hits changed across upgrade + encryption: "
-                                   f"baseline={baseline_hits}, now={hits} (status={status})")
+        # Positive coverage. The carried index legitimately stays unencrypted, so
+        # without this the suite would no longer prove encryption works AT ALL on an
+        # upgraded cluster. A fresh index writes segments at the current version, so
+        # this one must pick up a DEK.
+        errors.update(self._assert_post_upgrade_index_encrypts(ear))
+
+        hits, status = self._wait_for_hits(index, baseline_hits, tolerance=tolerance)
+        if status == 'fail' or hits < 0:
+            # execute_query returns hits=-1/status='fail' when the QUERY ERRORED.
+            # Reporting that as "hits dropped" reads like document loss and sends
+            # the reader hunting for missing data; the real cause is in the FTS
+            # error above (e.g. "pindex: could not get wanted nodeDefs").
+            errors['index_unqueryable_after_encryption'] = (
+                f"the index served {pre_hits} hits before encryption was touched but "
+                f"cannot be queried at all now (hits={hits}, status={status}). This is "
+                f"a query failure, not missing documents - see the FTS error in the "
+                f"log above.")
+        elif hits < baseline_hits - tolerance:
+            errors['data_loss'] = (f"hits dropped across upgrade + encryption beyond what "
+                                   f"the workload can account for: baseline={baseline_hits}, "
+                                   f"now={hits}, tolerance={tolerance} (status={status})")
         else:
-            log.info(f"Post-upgrade query still returns {hits} hits - no data loss")
+            log.info(f"Post-upgrade query returns {hits} hits "
+                     f"(baseline {baseline_hits}, tolerance {tolerance}) - no data loss")
 
         return errors
 
@@ -3024,12 +3466,15 @@ class UpgradeFTS(NewUpgradeBaseTest):
 
             # A node has just rebalanced back in, so the index is still catching up
             # for a while -- a low count here is lag, not loss. Poll until it
-            # matches the baseline before deciding.
-            hits, status = self._wait_for_hits(index, baseline_hits)
-            if hits != baseline_hits:
-                errors['s2_query'] = (f"mixed-cluster query returned {hits} hits, "
-                                      f"baseline was {baseline_hits} after waiting "
-                                      f"(status={status})")
+            # reaches the baseline before deciding, allowing for the documents the
+            # concurrent workload has legitimately deleted since the baseline was
+            # taken (deletes=True in the dispatcher's params).
+            tolerance = self._workload_hit_tolerance(baseline_hits)
+            hits, status = self._wait_for_hits(index, baseline_hits, tolerance=tolerance)
+            if hits < baseline_hits - tolerance:
+                errors['s2_query'] = (f"mixed-cluster query returned {hits} hits, baseline "
+                                      f"was {baseline_hits} and the workload can only "
+                                      f"account for {tolerance} of that (status={status})")
 
             self._upgrade_rest_of_cluster([fts_nodes[0]], "Stage 3 (rest of cluster)",
                                           driver=fts_callable, index=index)
@@ -3381,7 +3826,13 @@ class UpgradeFTS(NewUpgradeBaseTest):
                 "fields": [{"docvalues": True, "include_term_vectors": True,
                             "index": True, "name": field, "type": ftype}],
             }
-        mapping = index.index_definition['params']['mapping']
+        # A plain create_fts_index leaves params == {} locally -- 'mapping' only
+        # appears once something puts it there (custom map, synonym source,
+        # scoring model). Indexing straight into it raises KeyError: 'mapping'.
+        # add_child_field_to_default_mapping, which the scan_plus test uses for
+        # the same job, guards it the same way; supplying only default_mapping
+        # is fine, the server fills in the rest of the mapping defaults.
+        mapping = index.index_definition['params'].setdefault('mapping', {})
         mapping['default_mapping'] = {"dynamic": False, "enabled": True, "properties": properties}
         mapping['docvalues_dynamic'] = True
         index.index_definition['uuid'] = index.get_uuid()
@@ -3400,8 +3851,15 @@ class UpgradeFTS(NewUpgradeBaseTest):
             return [f"[{label}] {err}"]
 
         cluster = index.get_cluster()
+        # The scan only has to go deep enough to anchor the page and check it: the
+        # deepest row touched below is all_ids[start_index + partial_size], which
+        # with the conf's values is row 5 or 7. Asking for self.num_items pulled
+        # back all 100,000 documents WITH fields:["*"] on every call, for three
+        # calls per sort type -- a large contributor to the testrunner reaching
+        # 4.8GB RSS and being OOM-killed mid-suite.
+        scan_size = start_index + partial_size + 5
         base_query = {"explain": False, "fields": ["*"], "highlight": {},
-                      "query": {"match_all": {}}, "size": self.num_items, "sort": sort_mode}
+                      "query": {"match_all": {}}, "size": scan_size, "sort": sort_mode}
         all_hits, all_matches, _, _ = cluster.run_fts_query(index.name, base_query)
         if not all_matches or len(all_matches) <= start_index + partial_size:
             return [f"[{label}/{sort_type}] full scan returned too few rows to paginate "

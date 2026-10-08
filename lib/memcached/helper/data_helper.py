@@ -774,12 +774,18 @@ class VBucketAwareMemcached(object):
 
     def reset_vbuckets(self, rest, vbucketids_set, forward_map=None, admin_user=None, admin_pass=None):
         if not forward_map:
-            forward_map = rest.get_bucket(self.bucket, num_attempt=2).forward_map
+            # get_bucket can return None while a rebalance is in flight, and
+            # dereferencing it raised "'NoneType' object has no attribute
+            # 'forward_map'" out of KV workloads driven through a topology change.
+            # Fall through to the reset/get_vbuckets path already written for an
+            # empty map rather than blowing up the caller's task.
+            bucket_info = rest.get_bucket(self.bucket, num_attempt=2)
+            forward_map = getattr(bucket_info, "forward_map", None)
             if not forward_map:
                 self.reset(rest)
                 forward_map = rest.get_vbuckets(self.bucket)
         nodes = rest.get_nodes()
-        for vBucket in forward_map:
+        for vBucket in forward_map or []:
             if vBucket.id in vbucketids_set:
                 self.vBucketMap[vBucket.id] = vBucket.master
                 masterIp = vBucket.master.rsplit(":", 1)[0]

@@ -270,6 +270,36 @@ Utility (not a TestCase):
   doc counts and never issued a query, so an index that built but could not serve
   traffic would have passed.
 
+- **Encryption at rest and segment versions (the v17 rule).** FTS does **not**
+  encrypt segments written below v17. Confirmed by the Search team: *"any
+  indexes with <v17 segments will not be encrypted."* An index built before the
+  upgrade therefore stays unencrypted after it, forever — `keysInUse` reports
+  `{"service_bucket <uuid>": [""]}` and no DEK ever appears. **That is the
+  correct end state, not a failure.**
+
+  `UpgradeFTS.EAR_MIN_SEGMENT_VERSION` encodes the threshold.
+  `_ear_post_upgrade_checks` reads the carried index's `segmentVersion` and only
+  demands a DEK when it is eligible; below the threshold it logs the expectation
+  and moves on. Because that makes the carried index prove nothing about
+  encryption, `_assert_post_upgrade_index_encrypts` creates a **fresh** index on
+  the upgraded cluster — new segments, current version — and requires *that* one
+  to pick up a DEK. Old index must not be encrypted; new index must be.
+
+  History worth keeping: this check originally demanded a DEK unconditionally.
+  It passed on 8.5.0-1257, then went red on every build from 1323 onward — not
+  because of a regression but because MB-74454's fix made FTS stop encrypting
+  <v17 segments. The suite had been asserting the bug. Two separate EAR
+  assertions have now had to be inverted after the Search team stated the real
+  contract (this one, and the mixed-cluster bucket-encryption probe). **Confirm
+  the expected behaviour with the Search team before encoding an EAR assertion.**
+
+  Still open: whether a merge rewrites <v17 segments at the current version and
+  brings the carried index into encryption. `_ear_post_upgrade_checks` force
+  merges and **logs** the resulting `segmentVersion` and DEK state under
+  `[observation]` rather than asserting, precisely because that is unconfirmed.
+  If the log shows the version moving and a DEK appearing, turn it into an
+  assertion.
+
 - **Encryption at rest across upgrades** uses `EARUpgradeHelper`
   (`fts_encryption_base.py`), which wraps the same `EncryptionUtil` /
   `EncryptionAtRestHelper` primitives as `FTSEncryptionBaseTest` for the upgrade

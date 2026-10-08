@@ -766,8 +766,23 @@ class EARUpgradeHelper:
     def in_use_deks(self, bucket_name="default"):
         """Return (merged_in_use_map, dek_ids_for_bucket) from FTS GetInUseKeys."""
         merged = self.encryption_helper.get_fts_in_use_keys(self.fts_nodes())
-        deks = self.encryption_helper.fts_dek_ids_for_bucket(merged, self.bucket_uuid(bucket_name))
-        self.log.info(f"FTS in-use DEKs for '{bucket_name}': {deks} | full map: {merged}")
+        uuid = self.bucket_uuid(bucket_name)
+        prefix = self.encryption_helper.SERVICE_BUCKET_PREFIX
+        datatype = f"{prefix}{uuid}"
+        deks = self.encryption_helper.fts_dek_ids_for_bucket(merged, uuid)
+        # fts_dek_ids_for_bucket is merged.get(datatype, []), so "FTS holds no keys
+        # for this bucket" and "we asked about a bucket FTS never mentioned" both
+        # come back as []. Those mean completely different things -- the second is a
+        # uuid mismatch on our side, not a product problem -- and conflating them
+        # has already cost one wrong diagnosis. Say which it is.
+        if datatype in merged:
+            detail = f"datatype present, raw value {merged[datatype]!r}"
+        else:
+            reported = [k for k in merged if k.startswith(prefix)]
+            detail = (f"datatype ABSENT from FTS's response - FTS reported these "
+                      f"buckets instead: {reported}")
+        self.log.info(f"FTS in-use DEKs for '{bucket_name}' (uuid={uuid}): {deks} "
+                      f"[{detail}] | full map: {merged}")
         return merged, deks
 
     def bucket_datatype(self, bucket_name="default"):

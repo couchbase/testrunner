@@ -53,6 +53,7 @@ from lib.SystemEventLogLib.fts_service_events import SearchServiceEvents
 from scripts.collect_server_info import cbcollectRunner
 from couchbase_helper.documentgenerator import *
 from tasks.taskmanager import TaskManager
+from tasks.future import TimeoutError as TaskTimeoutError
 from collection.collections_rest_client import CollectionsRest
 from couchbase_helper.documentgenerator import JsonDocGenerator, get_sentence_encoder
 from lib.membase.api.exception import FTSException
@@ -5104,6 +5105,12 @@ class FTSConcurrentWorkload:
         self._vbucket_wait = int(
             TestInputSingleton.input.param("vbucket_map_wait", 180)
             if TestInputSingleton.input is not None else 180)
+        # Upper bound on draining the KV tasks once the change is done -- see stop().
+        # A task wedged against a removed node never finishes, so this is dead
+        # wall-clock on every topology change -- keep it short.
+        self._task_drain_timeout = int(
+            TestInputSingleton.input.param("workload_drain_timeout", 120)
+            if TestInputSingleton.input is not None else 120)
 
     def _start_kv_workload(self):
         tasks = []
@@ -5154,8 +5161,14 @@ class FTSConcurrentWorkload:
                 try:
                     tasks += fn(**kwargs) or []
                 except Exception as err:
-                    self.errors.append(
-                        f"[{self._label}] could not start the update/delete workload: {err}")
+                    # Starting mutations against a cluster whose vbucket map is
+                    # still settling is a known transient, the same class the
+                    # create workload above retries on. The create tasks carry
+                    # the change on their own, so warn rather than failing the
+                    # upgrade on it.
+                    self.log.warning(
+                        f"[{self._label}] could not start the update/delete workload "
+                        f"({type(err).__name__}: {err}); the create workload still ran")
         return tasks
 
     def _query_loop(self):
@@ -5205,16 +5218,55 @@ class FTSConcurrentWorkload:
         transient_kv_errors = ("_ssl.c", "[SYS] unknown error",
                                "connection_closed", "socket closed",
                                "shutdown in progress")
+        # Drain the KV tasks, but BOUND the wait. task.result() with no timeout
+        # blocks forever when a task is stuck retrying against the node the
+        # rebalance just removed: one run sat here for three hours with the
+        # rebalance already logged complete and the "finished concurrent
+        # workload" line below never printed. The workload exists to put load
+        # through the change, not to gate it.
+        #
+        # A KV task failing part way through is expected for the same reason a
+        # query is: vbuckets are moving under it. So apply the rule the query
+        # side already uses below -- report only if NOTHING got through.
+        # A task that HANGS is treated separately from one that RAISES. Rebalancing
+        # a KV node out leaves the loader retrying against an address that no longer
+        # answers, and since the data_helper None-guard it retries instead of
+        # crashing -- so the hang is the normal shape of that transient, not a
+        # finding. The upgrade is not what the workload is asserting: FTS query
+        # behaviour during the change is checked below, and the post-change
+        # validator checks the data. So hangs warn, and only genuine exceptions
+        # across EVERY task (i.e. no load was applied at all) are reported.
+        deadline = time.time() + self._task_drain_timeout
+        kv_failures, hung = [], 0
         for task in self._tasks:
             try:
-                task.result()
+                task.result(timeout=max(5, deadline - time.time()))
+            except TaskTimeoutError:
+                hung += 1
             except Exception as err:
                 if any(marker in str(err) for marker in transient_kv_errors):
                     self.log.warning(
                         f"[{self._label}] KV workload task hit transient connection "
                         f"churn while the topology was changing: {err}")
                 else:
-                    self.errors.append(f"[{self._label}] KV workload task failed: {err}")
+                    kv_failures.append(f"{type(err).__name__}: {err}")
+        if hung:
+            # A RUNNING future cannot be cancelled, so be honest: it was
+            # abandoned and may still be mutating the bucket.
+            self.log.warning(
+                f"[{self._label}] abandoned {hung}/{len(self._tasks)} KV workload "
+                f"task(s) still running after {self._task_drain_timeout}s - they "
+                f"cannot be cancelled once started and may keep mutating the bucket")
+        if kv_failures and len(kv_failures) == len(self._tasks):
+            self.errors.append(
+                f"[{self._label}] every one of the {len(self._tasks)} KV workload "
+                f"task(s) raised during the change - no mutations were applied: "
+                f"{kv_failures[:3]}")
+        elif kv_failures:
+            self.log.warning(
+                f"[{self._label}] {len(kv_failures)}/{len(self._tasks)} KV workload "
+                f"task(s) raised during the change (expected while vbuckets move): "
+                f"{kv_failures[:3]}")
         self._tasks = []
 
         # A rolling upgrade takes FTS nodes out and back in, so queries failing

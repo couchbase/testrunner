@@ -877,10 +877,20 @@ class FTSCallable:
 
     def push_vector_data(self, node, username, password, bucket="default", scope="_default", collection="_default",
                          vector_dataset="siftsmall", xattr=False, prefix="emp", start_index=10000000,
-                         end_index= 10005001, base64Flag=False):
+                         end_index= 10005001, base64Flag=False, provide_default_docs=False):
+        """Load the vector dataset through the govectorloader container.
 
+        provide_default_docs tells the loader to write a base document body as
+        well as the vector field. It MUST be True whenever `prefix` names keys
+        that do not already exist: with the default False the loader only adds
+        the vector to an existing doc, so every write comes back "Upsert
+        operation failed. Retrying." and the container exits non-zero. The
+        historical prefix "emp" happens to hit docs that load_data already
+        created, which is why False has worked until now.
+        """
         goloader_object = GoVectorLoader(node, username,password, bucket,scope,collection,vector_dataset,xattr,prefix,
-                                         start_index,end_index,base64Flag)
+                                         start_index,end_index,base64Flag,
+                                         provideDefaultDocs=provide_default_docs)
         goloader_object.load_data("upgrade")
 
     def delete_doc_by_key(self,node,start,end,percent,bucket_name = "default",scope_name="_default",collection_name="_default"):
