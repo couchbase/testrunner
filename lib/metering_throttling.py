@@ -1,6 +1,9 @@
 import re
 import requests
 from lib.Cb_constants.CBServer import CbServer
+from cb_tools.cbstats import Cbstats
+from membase.api.rest_client import RestConnection
+from remote.remote_util import RemoteMachineShellConnection
 import logger
 
 class metering(object):
@@ -230,3 +233,229 @@ class throttling(object):
                     reject_count_total += int(reject_count_pattern.findall(response.text)[0])
         self.log.info(f'{service.upper()} THROTTLE REJECTION for {bucket}: {reject_count_total} count')
         return reject_count_total
+
+
+class KVRateLimiting(object):
+    """Drive and observe KV rate-limiting on one cluster.
+
+    The REST surface itself is on RestConnection:
+
+        set_node_throttle_settings()   get_node_throttle_settings()
+        set_bucket_throttle_limits()   get_bucket_throttle_limits()
+
+    plus apply_conf_node_throttle_settings() / apply_bucket_throttle_params()
+    for the conf driven path. This class is what sits on top of those and is
+    not REST:
+
+      - fan-out of *explicit* values across the KV nodes of a cluster. The
+        conf driven entry point already fans out, but a test that changes
+        limits mid-run has values in hand rather than in the conf, and node
+        settings have to land on every data node.
+      - the throttle counters, which come from cbstats. They are not on the
+        REST API, and they are not the Prometheus meter_* series either -
+        those belong to the serverless metering feature above and are not
+        published on an on-prem (configProfile "default") cluster. Verified
+        on 8.5.0-1257: 224 metric families exposed, not one of them a meter.
+        TAF's reference suite, pytests/epengine/rate_limiting_tests.py, reads
+        cbstats, and the feature spec's observability section is headed
+        "KV STATS" and names ru_total rather than meter_ru_total.
+      - counter deltas, the counter-to-rate conversion any limit derived from
+        an observed workload needs, and a teardown that puts the cluster back
+        the way it was found.
+
+    `kv_nodes` must be the data service nodes: both the global memcached
+    settings and the throttle counters are per node, so settings are fanned
+    out across all of them and counters summed across all of them.
+    """
+
+    NODE_PARAMS = ("throttle_enabled", "node_capacity", "read_unit_size",
+                   "write_unit_size")
+
+    COUNTERS = {
+        "ru_total": "ru",
+        "wu_total": "wu",
+        "throttle_count_total": "throttle_count",
+        "reject_count_total": "reject_count",
+        "throttle_duration": "throttle_duration",
+        "throttle_seconds_total": "throttle_duration",
+    }
+
+    ZERO_COUNTERS = {"ru": 0, "wu": 0, "throttle_count": 0,
+                     "reject_count": 0, "throttle_duration": 0}
+
+    # What an unlimited 8.5 bucket reports for throttle_hard_limit (2^64 - 1),
+    # and therefore what clearing a limit has to put back. Clearing it to 0
+    # instead would pin the bucket at no throughput at all
+    UNLIMITED_UNITS = 18446744073709551615
+
+    # Used only to explain a zero reading: if the expected counters are
+    # missing, the throttle-shaped names that *are* present are worth more
+    # than a bare zero
+    _COUNTER_HINT = re.compile(
+        r"throttle|reject|_ru_|_wu_|ru_total|wu_total|unit", re.IGNORECASE)
+
+    def __init__(self, kv_nodes, log=None):
+        if not kv_nodes:
+            raise ValueError("KVRateLimiting needs at least one KV node")
+        self.kv_nodes = list(kv_nodes)
+        self.log = log or logger.Logger.get_logger()
+
+    # -- configuration ----------------------------------------------------
+
+    def set_node_settings(self, throttle_enabled=None, node_capacity=None,
+                          read_unit_size=None, write_unit_size=None):
+        """Set node level throttle params, with explicit values, on every KV
+        node of the cluster."""
+        params = dict()
+        if throttle_enabled is not None:
+            params["throttle_enabled"] = throttle_enabled
+        if node_capacity is not None:
+            params["node_capacity"] = int(node_capacity)
+        if read_unit_size is not None:
+            params["read_unit_size"] = int(read_unit_size)
+        if write_unit_size is not None:
+            params["write_unit_size"] = int(write_unit_size)
+        if not params:
+            return
+
+        for node in self.kv_nodes:
+            RestConnection(node).set_node_throttle_settings(**params)
+        self.log.info("Node throttle params {0} set on {1} KV node(s)"
+                      .format(params, len(self.kv_nodes)))
+
+    def get_node_settings(self):
+        """Node level throttle params as the first KV node reports them"""
+        return RestConnection(self.kv_nodes[0]).get_node_throttle_settings()
+
+    def set_bucket_limits(self, bucket, throttle_reserved=None,
+                          throttle_hard_limit=None, throttle_enabled=None):
+        """Set the throttle limits of an existing bucket.
+
+        0 is a legal value for both limits and means something quite
+        different from 'unset', hence 'is not None' on the way in.
+        """
+        RestConnection(self.kv_nodes[0]).set_bucket_throttle_limits(
+            bucket, throttle_reserved=throttle_reserved,
+            throttle_hard_limit=throttle_hard_limit,
+            throttle_enabled=throttle_enabled)
+        self.log.info("Bucket {0} throttle limits set: reserved={1} "
+                      "hard_limit={2}".format(bucket, throttle_reserved,
+                                              throttle_hard_limit))
+
+    def get_bucket_limits(self, bucket='default'):
+        """Throttle limits the cluster reports for a bucket"""
+        return RestConnection(
+            self.kv_nodes[0]).get_bucket_throttle_limits(bucket)
+
+    def reset(self, bucket_names=(), restore=None):
+        """Put the cluster back: clear bucket limits, restore node settings.
+
+        `restore` is a get_node_settings() snapshot taken before the test
+        touched anything; without one the master toggle is simply turned off.
+
+        Meant for tearDown, so it never raises - a cluster left throttled
+        slows down every suite that runs on it next and is worth a loud log,
+        but it must not mask the failure that brought us here.
+        """
+        for bucket_name in bucket_names:
+            try:
+                self.set_bucket_limits(
+                    bucket_name, throttle_reserved=0,
+                    throttle_hard_limit=self.UNLIMITED_UNITS)
+            except Exception as err:
+                self.log.error("Could not clear throttle limits on bucket "
+                               "{0}: {1}".format(bucket_name, err))
+
+        settings = dict(restore or {})
+        # Never leave the feature on because it was found on by accident; an
+        # explicit snapshot value is honoured, anything else defaults to off
+        settings.setdefault("throttle_enabled", False)
+        if settings.get("throttle_enabled"):
+            self.log.warning("Restoring throttle_enabled=true: this cluster "
+                             "already had KV throttling on before the test")
+        if restore is not None and "node_capacity" not in restore:
+            self.log.warning("node_capacity was unset before this test and "
+                             "cannot be unset again through this API; it is "
+                             "left at the value the test configured")
+        try:
+            self.set_node_settings(**settings)
+        except Exception as err:
+            self.log.error("Could not restore node throttle settings - this "
+                           "cluster may be left throttled: {0}".format(err))
+
+    def get_counters(self, bucket_name):
+        """Throttle counters for one bucket, summed over the KV nodes.
+
+        Returns ru, wu, throttle_count, reject_count and throttle_duration.
+        A counter the build does not expose reads as 0, so a caller asserting
+        on a delta is asserting on something it actually observed.
+        """
+        totals = dict(self.ZERO_COUNTERS)
+        for stats in self._all_stats(bucket_name):
+            for key, value in self._parse_stats(stats).items():
+                totals[key] += value
+        self.log.info("KV throttle counters for bucket {0}: {1}"
+                      .format(bucket_name, totals))
+        return totals
+
+    def available_counters(self, bucket_name):
+        """Throttle-shaped stat names cbstats actually returns for a bucket.
+
+        Only used to explain a zero reading, so that the real names can be
+        read off one failure instead of costing a separate investigation.
+        """
+        seen = dict()
+        for stats in self._all_stats(bucket_name):
+            for name, value in stats.items():
+                if self._COUNTER_HINT.search(name):
+                    seen[name] = value
+        return seen
+
+    def _all_stats(self, bucket_name):
+        """cbstats 'all' for the bucket, once per KV node.
+
+        One shell connection per node per call, always closed.
+        """
+        for node in self.kv_nodes:
+            shell = RemoteMachineShellConnection(node)
+            try:
+                yield Cbstats(shell).all_stats(bucket_name)
+            finally:
+                shell.disconnect()
+
+    @classmethod
+    def _parse_stats(cls, stats):
+        found = dict(cls.ZERO_COUNTERS)
+        for name, key in cls.COUNTERS.items():
+            if name not in stats:
+                continue
+            try:
+                value = float(str(stats[name]).strip())
+            except (TypeError, ValueError):
+                continue
+            # Everything but throttle_duration is a whole-unit counter; keep
+            # those as ints so the logs read as counts rather than floats
+            found[key] += int(value) if value.is_integer() else value
+        return found
+
+    @staticmethod
+    def counters_delta(before, after):
+        """after - before, per counter.
+
+        Clamped at 0: memcached restarting mid-window resets the counters,
+        and a negative 'consumption' would silently poison a derived limit.
+        """
+        return dict((key, max(0, after.get(key, 0) - before.get(key, 0)))
+                    for key in set(before) | set(after))
+
+    @staticmethod
+    def units_per_sec(delta, elapsed_secs):
+        """Observed RU+WU rate over a window, in units/sec.
+
+        throttle_reserved and throttle_hard_limit are rates while ru_total
+        and wu_total are monotonic counters, so this is the conversion any
+        limit derived from an observed workload has to go through.
+        """
+        if elapsed_secs <= 0:
+            return 0
+        return (delta.get("ru", 0) + delta.get("wu", 0)) / float(elapsed_secs)
