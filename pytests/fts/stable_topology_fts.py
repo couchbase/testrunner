@@ -416,7 +416,7 @@ class StableTopFTS(FTSBaseTest):
         self.run_query_and_compare(index, n1ql_executor=n1ql_executor)
 
         if self.search_history:
-            self.validate_search_history(index_name=index.name)
+            self.validate_search_history(index_name=index.full_name)
 
         if self.index_insights:
             self.validate_index_insights(index.full_name, field="name",

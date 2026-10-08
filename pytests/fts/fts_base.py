@@ -1409,15 +1409,23 @@ class FTSIndex:
 
     @property
     def full_name(self):
-        """The name the server knows this index by: '<bucket>.<scope>.<name>'.
+        """The name the server knows this index by.
 
         An index created through the scoped endpoint keeps its short name
-        locally, because every call there carries bucket and scope separately.
-        Anything crossing into the server's own namespace - backup index keys,
-        the targets of a global alias, index stats - has to use this rather
-        than self.name, which is only meaningful alongside bucket and scope.
+        locally - every call there carries bucket and scope separately - while
+        the server registers it as '<bucket>.<scope>.<name>'. Anything crossing
+        into the server's own namespace (backup index keys, the targets of a
+        global alias, index stats, a N1QL SEARCH index option) needs that form.
+
+        An index created through the legacy endpoint is registered under
+        exactly the name we gave it, so self.name is already what the server
+        calls it: never invent a '<bucket>._default.' prefix the server did not
+        use, or the name stops resolving ("PrepareAlias, scoped index target
+        ... not found").
         """
-        return self._build_full_index_name()
+        if self.index_type != "fulltext-alias" and self._uses_scoped_endpoint():
+            return self._build_full_index_name()
+        return self.name
 
     def _uses_scoped_endpoint(self):
         """Mirrors RestConnection._fts_scoped_endpoint. An index created there
