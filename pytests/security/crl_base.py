@@ -1,4 +1,5 @@
 import os
+import shlex
 import tempfile
 
 from basetestcase import BaseTestCase
@@ -86,7 +87,7 @@ class CRLBase(BaseTestCase):
 
         shell = RemoteMachineShellConnection(server)
         try:
-            shell.execute_command("mkdir -p {0}".format(ca_dir))
+            shell.execute_command("mkdir -p {0}".format(shlex.quote(ca_dir)))
             with tempfile.NamedTemporaryFile(
                 delete=False, suffix=".pem", mode="wb"
             ) as tmp_file:

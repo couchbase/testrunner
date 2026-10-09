@@ -15,9 +15,10 @@ def _is_transient_query_log(shell, file_path):
     rlstream.* and local_request_log.* files are rotated/recycled continuously;
     an empty or missing file means we hit it between truncation and the next
     write and should skip rather than flag as 'not encrypted'."""
+    qp = shlex.quote(file_path) if ' ' in file_path else file_path
     out, _ = shell.execute_command(
-        f"if [ ! -e {file_path} ]; then echo MISSING; "
-        f"elif [ ! -s {file_path} ]; then echo EMPTY; else echo OK; fi"
+        f"if [ ! -e {qp} ]; then echo MISSING; "
+        f"elif [ ! -s {qp} ]; then echo EMPTY; else echo OK; fi"
     )
     token = ''.join(out).strip() if out else ""
     return token in ("MISSING", "EMPTY")
