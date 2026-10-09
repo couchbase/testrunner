@@ -86,11 +86,16 @@ class GSIEncryptionHelpers:
             return WIN_COUCHBASE_LOGS_PATH
         return LINUX_COUCHBASE_LOGS_PATH
 
+    @staticmethod
+    def _shell_quote(path):
+        """Quote a path for remote shell commands if it contains spaces (Windows paths)."""
+        return shlex.quote(path) if ' ' in path else path
+
     def _log_directory_tree(self, node, root_dir, maxdepth=4, cap=60):
         """Log the filesystem tree under root_dir for diagnostics."""
         shell = RemoteMachineShellConnection(node, verbose=False)
         out, _ = shell.execute_command(
-            f"find {root_dir} -maxdepth {maxdepth} 2>/dev/null | head -{cap}"
+            f"find {self._shell_quote(root_dir)} -maxdepth {maxdepth} 2>/dev/null | head -{cap}"
         )
         shell.disconnect()
         lines = [l.strip() for l in out if l.strip()]
@@ -137,13 +142,14 @@ class GSIEncryptionHelpers:
             tuple: (header_read: bool, decoded_header: str, printable_header: str)
         """
         shell = RemoteMachineShellConnection(node, verbose=False)
-        cmd = f"xxd -l {bytes_to_read} -p {file_path} 2>/dev/null"
+        qp = self._shell_quote(file_path)
+        cmd = f"xxd -l {bytes_to_read} -p {qp} 2>/dev/null"
         output, _ = shell.execute_command(cmd)
 
         if not output:
-            ls_out, _ = shell.execute_command(f"ls -la {file_path} 2>&1")
-            xxd_err_out, _ = shell.execute_command(f"xxd -l 64 {file_path} 2>&1")
-            file_type_out, _ = shell.execute_command(f"file {file_path} 2>&1")
+            ls_out, _ = shell.execute_command(f"ls -la {qp} 2>&1")
+            xxd_err_out, _ = shell.execute_command(f"xxd -l 64 {qp} 2>&1")
+            file_type_out, _ = shell.execute_command(f"file {qp} 2>&1")
             shell.disconnect()
             ls_str = ' '.join(ls_out).strip() if ls_out else "no ls output"
             xxd_err_str = ' '.join(xxd_err_out).strip() if xxd_err_out else "(xxd also silent with stderr)"
@@ -229,7 +235,7 @@ class GSIEncryptionHelpers:
         """
         search_patterns = search_patterns or ["password", "username", "bucket", "secret"]
         shell = RemoteMachineShellConnection(node, verbose=False)
-        cmd = f"strings {file_path} 2>/dev/null | head -100"
+        cmd = f"strings {self._shell_quote(file_path)} 2>/dev/null | head -100"
         output, _ = shell.execute_command(cmd)
         shell.disconnect()
         
@@ -253,7 +259,7 @@ class GSIEncryptionHelpers:
         """
         shell = RemoteMachineShellConnection(node, verbose=False)
         # Use find to get files, handle both Linux and macOS/BSD
-        cmd = f"find {directory} -type f -name '{file_pattern}' 2>/dev/null | head -20"
+        cmd = f"find {self._shell_quote(directory)} -type f -name '{file_pattern}' 2>/dev/null | head -20"
         output, _ = shell.execute_command(cmd)
         shell.disconnect()
         
