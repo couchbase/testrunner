@@ -24,7 +24,12 @@ class RestConnection(OnPremRestConnection):
                       lww=False,
                       maxTTL=None,
                       compressionMode='passive',
-                      storageBackend='couchstore'):
+                      storageBackend='couchstore',
+                      **kwargs):
+        # Capella bucket creation goes through the control-plane API, which only
+        # uses a subset of the on-prem params. Accept and ignore any on-prem-only
+        # kwargs (numVBuckets, throttleReserved, throttleHardLimit, ...) so this
+        # stays compatible as BucketCreateTask adds new on-prem parameters.
 
         if ramQuotaMB == 0:
             ramQuotaMB = 100

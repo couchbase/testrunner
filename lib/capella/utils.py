@@ -11,10 +11,8 @@ from testconstants import CAPELLA_AWS_COMPUTES_ORDER
 
 urllib3.disable_warnings()
 import logger
-import requests, base64
+import requests
 import json
-import subprocess
-import time
 import re
 from table_view import TableView
 
@@ -29,7 +27,14 @@ class CapellaCredentials:
         self.project_id = config["project_id"]
         self.token_for_internal_support = config.get("token_for_internal_support")
         self.override_token = config.get("override_token")
-        self.dataplane_id = config["dataplane_id"]
+        # DEPRECATED: dataplane_id is a remnant of Capella Serverless, which is no longer
+        # released. Kept only so existing serverless code paths still load; do not use it
+        # in new code. TODO: remove along with the remaining serverless/dataplane usages.
+        self.dataplane_id = config.get("dataplane_id")
+        if self.dataplane_id:
+            logger.Logger.get_logger().warning(
+                "[capella] dataplane_id is deprecated (Capella Serverless is no longer "
+                "released) and will be removed")
 
 class ServerlessDatabase:
     def __init__(self, database_id, doc_count=0, namespaces=None):
@@ -124,14 +129,14 @@ class CapellaAPI:
     def __init__(self, credentials):
         self.tenant_id = credentials.tenant_id
         self.project_id = credentials.project_id
-        self.dataplane_id = credentials.dataplane_id
+        self.dataplane_id = credentials.dataplane_id  # DEPRECATED, see CapellaCredentials
         self.api = CapellaAPIDedicated(credentials.pod, credentials.secret_key, credentials.access_key, credentials.capella_user, credentials.capella_pwd, credentials.token_for_internal_support)
         self.serverless_api = CapellaAPIServerless(credentials.pod, credentials.capella_user, credentials.capella_pwd, credentials.token_for_internal_support)
         self.log = logger.Logger.get_logger()
         self.override_token = credentials.override_token
 
     def get_cluster_info(self, cluster_id):
-        resp = self.api.get_cluster_info(cluster_id)
+        resp = self.api.get_cluster_info(self.tenant_id, self.project_id, cluster_id)
         resp.raise_for_status()
         return resp.json()
 
@@ -142,11 +147,25 @@ class CapellaAPI:
 
     def get_cluster_srv(self, cluster_id):
         info = self.get_cluster_info(cluster_id)
-        return info["endpointsSrv"]
+        # v2 internal responses wrap the object in a "data" envelope; the SRV lives at
+        # data.connect.srv (confirmed against the live v2 cluster response).
+        data = info.get("data", info) if isinstance(info, dict) else info
+        return data["connect"]["srv"]
 
     def get_cluster_state(self, cluster_id):
         info = self.get_cluster_info(cluster_id)
-        return info["status"]
+        # v2 internal responses wrap the object in a "data" envelope (see get_nodes/jobs);
+        # status may be a plain string or a nested {"state": ...}.
+        data = info.get("data", info) if isinstance(info, dict) else info
+        status = data.get("status") if isinstance(data, dict) else None
+        if status is None and isinstance(data, dict):
+            status = data.get("currentState")
+        if isinstance(status, dict):
+            status = status.get("state")
+        if status is None:
+            raise Exception("Could not determine cluster status from "
+                            "get_cluster_info response: %s" % info)
+        return status
 
     def get_database_state(self, database_id):
         info = self.get_database_info(database_id)
@@ -166,8 +185,15 @@ class CapellaAPI:
                 if "ErrClusterInvalidCIDRNotUnique" in resp.text:
                     continue
                 else:
-                    self.log.info(f"config: {config}")
-                    raise e
+                    # Surface the API response BODY, not just the status line —
+                    # raise_for_status() hides it, but the body carries the real reason
+                    # (e.g. ErrDiskIopsInvalid: "...between 5740 and 16000").
+                    self.log.error(
+                        f"Cluster deploy failed: {resp.status_code} {resp.reason} "
+                        f"for {resp.url}\nresponse body: {resp.text}\nconfig: {config}")
+                    raise Exception(
+                        f"Cluster deploy failed ({resp.status_code} {resp.reason}): "
+                        f"{resp.text}") from e
         raise Exception("Timeout trying to create cluster")
 
     def create_cluster_and_wait(self, config, timeout=1800):
@@ -750,7 +776,12 @@ def spec_options_from_input(input):
         return option or default_value
 
     provider = get_option("provider", "aws")
+    # DEPRECATED: dataplane_id is a Capella Serverless remnant, see CapellaCredentials.
     dataplane_id = get_option("dataplane_id", None)
+    if dataplane_id:
+        logger.Logger.get_logger().warning(
+            "dataplane_id is deprecated (Capella Serverless is no longer released) "
+            "and will be removed")
     default_region = "us-east-2" if provider == "aws" else "us-east-1"
     region = get_option("region", default_region)
 

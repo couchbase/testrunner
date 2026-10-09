@@ -9,10 +9,10 @@ class ClusterConfig:
     def update_servers(self, servers):
         for server in self.servers:
             server.dummy = True
-        for i, server in enumerate(servers):
+        for server in servers:
             server.dummy = False
-            self.servers[i] = server
-        
+        self.servers = list(servers)
+
         self.master = self.servers[0]
         self.indexManager = self.servers[0]
         self.cbas_servers = []

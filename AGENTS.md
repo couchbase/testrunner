@@ -44,6 +44,8 @@ make init-submodules   # java_sdk_client, lib/capellaAPI, magma_loader/DocLoader
 
 **Test inheritance:** `pytests/basetestcase.py` -> service base (e.g., `gsi/base_gsi.py`) -> test module
 
+**Unified tests (on-prem + Capella):** one test body for both targets, selected by `-p capella_run=True`. Use `self.target` (`lib/testops/run_target.py`) for topology, node-shell and N1QL; never fork a `*_capella` copy. See `pytests/capella/AGENTS.md`.
+
 ## Development Constraints
 
 - **Python:** 3.10.13 (migrated from Python 3.7.6)
@@ -102,6 +104,8 @@ Before completing changes:
 - `docs/elastic_search/AGENTS.md` -- Elasticsearch integration for FTS query validation
 - `pytests/upgrade/AGENTS.md` -- upgrade test framework detailed context
 - `pytests/eventing/AGENTS.md` -- eventing test framework detailed context
+- `pytests/capella/AGENTS.md` -- how to add unified (dual-run) tests that run on both on-prem and Capella via `self.target`
+- `docs/capella/dual_run_test_design.md` -- design of the `lib/testops` RunTarget seam
 
 ## Submodule Orchestration Logic
 

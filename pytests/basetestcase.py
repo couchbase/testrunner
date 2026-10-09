@@ -61,6 +61,27 @@ except ImportError:
 
 
 class OnPremBaseTestCase(unittest.TestCase):
+
+    @property
+    def target(self):
+        """Dual-run facade (on-prem + Capella), built lazily on first access and
+        cached on the instance. Non-dual-run tests never read self.target, so nothing
+        is constructed for them (zero impact). CapellaBaseTestCase inherits this, so
+        both targets get self.target without any setUp changes.
+        """
+        run_target = getattr(self, "_run_target", None)
+        if run_target is None:
+            if not hasattr(self, "log"):
+                raise RuntimeError("self.target was accessed before BaseTestCase.setUp(); "
+                                   "call super().setUp() first")
+            from testops.run_target import RunTarget
+            # TODO: remove the temporary DUALRUN-FLOW logging once all components have tested the dual-run flow.
+            self.log.info("DUALRUN-FLOW: self.target first access -> constructing RunTarget")
+            run_target = RunTarget(self)
+            self._run_target = run_target
+            self.addCleanup(run_target.close)
+        return run_target
+
     def setUp(self):
         start_time = time.time()
         self.log = logger.Logger.get_logger()

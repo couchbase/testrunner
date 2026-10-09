@@ -153,6 +153,35 @@ and logs:
     $ ls  tmp-12-11-47/
     report-12-11-47.xml-setgettests.MembaseBucket.xml	value_100b.log
 
+Unified Tests (On-Prem + Capella)
+---------------------------------
+
+A unified (dual-run) test is a single test body that runs on both on-prem
+clusters and Capella. The target is selected at runtime with
+`-p capella_run=True`; the same conf file is used for both.
+
+Tests do not branch on `capella_run`. They call neutral verbs on `self.target`
+(a `RunTarget` from `lib/testops/`), which picks the implementation:
+
+    from lib.testops.capabilities import Capability
+
+    def test_rebalance_out_indexer(self):
+        if self.target.supports(Capability.NODE_SHELL):   # SSH-only step
+            self.target.install_packages(["sysstat"])
+        out = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[:1]
+        self.target.resize_cluster(remove=out, services=["index"]).result()  # rebalance / scale
+        self.target.refresh_cluster_nodes()               # re-sync nodes after a Capella scale
+
+Run it on both targets:
+
+    $ ./testrunner -i <onprem.ini> -c conf/gsi/<suite>.conf
+    $ ./testrunner -i b/resources/capella/3-nodes-template.ini -c conf/gsi/<suite>.conf \
+        -p capella_run=True,cluster_id=<CLUSTER_ID>
+
+To add one, follow the step-by-step guide and rules in
+[pytests/capella/AGENTS.md](pytests/capella/AGENTS.md). The design rationale is
+in [docs/capella/dual_run_test_design.md](docs/capella/dual_run_test_design.md).
+
 Development
 -----------
 
