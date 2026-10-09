@@ -217,7 +217,7 @@ class Scan_Report(FileBasedRebalance):
         self.fail(f"Indexes stuck in 'Created' state after {max_attempts} build "
                   f"attempts: {sorted(pending)}")
 
-    def _create_vector_indexes(self, namespace, prefix, query_node, num_replica=1):
+    def _create_vector_indexes(self, namespace, prefix, query_node, num_replica=1, index_names=None):
         """Create composite vector indexes"""
         self.log.info(f"Creating vector indexes with prefix '{prefix}' in namespace '{namespace}' with num_replica={num_replica}")
         definitions = self.gsi_util_obj.get_index_definition_list(
@@ -236,6 +236,8 @@ class Scan_Report(FileBasedRebalance):
             bhive_index=False,
             description_dimension=self.dimension
         )
+        if index_names:
+            definitions = [d for d in definitions if d.index_name in index_names]
         queries = self.gsi_util_obj.get_create_index_list(
             definition_list=definitions,
             namespace=namespace,
@@ -263,7 +265,7 @@ class Scan_Report(FileBasedRebalance):
         return definitions, queries, select_queries
 
     def _create_bhive_indexes(self, namespace, prefix, query_node, num_replica=0, 
-                              similarity="L2_SQUARED", train_list=None):
+                              similarity="L2_SQUARED", train_list=None, index_names=None):
         """
         Create BHIVE vector indexes on Hotel dataset.
         
@@ -303,6 +305,8 @@ class Scan_Report(FileBasedRebalance):
             bhive_index=True,
             description_dimension=self.dimension
         )
+        if index_names:
+            definitions = [d for d in definitions if d.index_name in index_names]
         queries = self.gsi_util_obj.get_create_index_list(
             definition_list=definitions,
             namespace=namespace,
@@ -978,15 +982,18 @@ class Scan_Report(FileBasedRebalance):
             prefix = ''.join(namespace.split(':')[1].split('.'))
             self.log.info("Creating Vector indexes")
             vector_defs, _, vector_selects = self._create_vector_indexes(
-                namespace, prefix, query_node, num_replica=1
+                namespace, prefix, query_node, num_replica=1,
+                index_names=[f"vector_{prefix}colorRGBVector"]
             )
             all_definitions.extend(vector_defs)
             self.log.info("Creating BHIVE indexes")
             bhive_defs, _, bhive_selects = self._create_bhive_indexes(
                 namespace, prefix, query_node, num_replica=0,
-                similarity=self.similarity
+                similarity=self.similarity,
+                index_names=[f"bhive_{prefix}colorRGBVectorBhive"]
             )
             all_definitions.extend(bhive_defs)
+            self.assertTrue(vector_defs and bhive_defs, "Expected one vector and one BHIVE index definition")
         self.log.info("waiting for indexes to be ready")
         self.wait_until_indexes_online(timeout=3600)
         self.log.info("validating all indexes are created and in ready state")
@@ -1003,7 +1010,6 @@ class Scan_Report(FileBasedRebalance):
             {"name": "vector", "queries": vector_selects , "index_names": vector_index_names },
             {"name": "bhive", "queries": bhive_selects , "index_names": bhive_index_names },
         ]
-        self.sleep(7200)
         for group in query_groups:
             self.log.info(f"Validating scan reports for {group['name']} indexes (concise) ")
             self._run_scans_and_validate(group['queries'], runDetailed=False,
@@ -1099,7 +1105,11 @@ class Scan_Report(FileBasedRebalance):
         for each AT_PLUS scan.
         """
         buckets = self.create_test_buckets(num_buckets=1)
+        self.buckets = self.rest.get_buckets()
         num_of_docs = 10 ** 3
+        # Scan vectors are read from java_sdk_loader.log, so the initial load must use the
+        # Java SDK even when the job passes use_magma_loader=True globally
+        self.use_magma_loader = False
         self.prepare_collection_for_indexing(
             bucket_name=buckets[0],
             num_of_docs_per_collection=num_of_docs,
@@ -1405,7 +1415,8 @@ class Scan_Report(FileBasedRebalance):
 
             self.assertTrue(len(result) > 0,
                             "scan_doc_1 which was inserted before scan request with request_plus is not in result")
-            self.assertEqual(len(meta_id_result_after_new_inserts), 2,
+            expected_new_matches = sum(1 for seq in range(10 ** 3) if str(seq).startswith('100'))
+            self.assertEqual(len(meta_id_result_after_new_inserts), expected_new_matches,
                              "request plus scan is not able to wait for new inserted docs")
             self.assertEqual(count_result, num_of_docs, "Docs count not matching.")
         except Exception as err:
