@@ -589,10 +589,12 @@ class QueryUpdateStatsTests(QueryTests):
         explain_query = f"explain select airportname from {self.keyspace} where city = 'Lyon'"
         try:
             explain_before = self.run_cbq_query(query=explain_query, server=node2)
+            self.log.info(f"explain before update statistics on {node2.ip}: {explain_before['results'][0]}")
             self.assertEqual(list(explain_before['results'][0].keys()), ['plan', 'text'])
             # run update statistics
             self.run_cbq_query(query=update_stats, server=node1)
             explain_after = self.run_cbq_query(query=explain_query, server=node2)
+            self.log.info(f"explain after update statistics on {node2.ip}: {explain_after['results'][0]}")
             self.assertTrue(explain_after['results'][0]['cost'] > 0 and explain_after['results'][0]['cardinality'] > 0)
         except Exception as e:
             self.log.error(f"Update statistics failed: {e}")
@@ -603,11 +605,13 @@ class QueryUpdateStatsTests(QueryTests):
         explain_query = f"explain SELECT DISTINCT  MIN(aport.airportname) AS Airport__Name, MIN(lmark.name) AS Landmark_Name, MIN(aport.tz) AS Landmark_Time FROM `travel-sample`.inventory.airport aport LEFT JOIN `travel-sample`.inventory.landmark lmark ON aport.city = lmark.city WHERE lmark.country = 'United States' GROUP BY lmark.name ORDER BY lmark.name LIMIT 3"
         try:
             explain_before = self.run_cbq_query(query=explain_query)
-            fetch_operator = explain_before['results'][0]['plan']['~children'][0]['~children'][1] 
+            self.log.info(f"explain before update statistics: {explain_before['results'][0]}")
+            fetch_operator = explain_before['results'][0]['plan']['~children'][0]['~children'][1]
             self.assertEqual(list(fetch_operator.keys()), ['#operator', 'as', 'bucket', 'early_projection', 'keyspace', 'namespace', 'scope'])
             # run update statistics
             self.run_cbq_query(query=update_stats)
             explain_after = self.run_cbq_query(query=explain_query)
+            self.log.info(f"explain after update statistics: {explain_after['results'][0]}")
             fetch_operator = explain_after['results'][0]['plan']['~children'][0]['~children'][1]['optimizer_estimates']
             self.assertTrue(fetch_operator['cost'] > 0 and fetch_operator['cardinality'] > 0)
         except Exception as e:
@@ -1129,7 +1133,10 @@ class QueryUpdateStatsTests(QueryTests):
 
         # Step 5: Validate stats inside indexStats list for each index.
         # All stat fields must be non-zero; resRatio must be 0 (confirms 0%-residency scenario).
+        # A restart does not guarantee 0% residency (plasma recovery warms pages back in), so
+        # the resRatio CBO recorded decides whether the MB-73586 scenario was exercised.
         stat_fields = ['numPages', 'numItems', 'avgPageSize', 'avgItemSize']
+        zero_residency_indexes = []
         for idx in indexes:
             index_name = idx.get('indexName', 'unknown')
             stats_list = idx.get('indexStats', [])
@@ -1141,11 +1148,8 @@ class QueryUpdateStatsTests(QueryTests):
                 self.log.info("MB-73586: index={0} indexStats={1}".format(index_name, stats_entry))
                 self.assertIn('resRatio', stats_entry,
                     "MB-73586: 'resRatio' missing from indexStats for index '{0}'".format(index_name))
-                self.assertEqual(
-                    stats_entry['resRatio'], 0,
-                    "MB-73586: resRatio={0} for index '{1}' -- expected 0 (0%% residency not achieved)".format(
-                        stats_entry['resRatio'], index_name)
-                )
+                if stats_entry['resRatio'] == 0:
+                    zero_residency_indexes.append(index_name)
                 for field in stat_fields:
                     self.assertIn(
                         field, stats_entry,
@@ -1154,13 +1158,19 @@ class QueryUpdateStatsTests(QueryTests):
                     )
                     self.assertNotEqual(
                         stats_entry[field], 0,
-                        "MB-73586: '{0}'=0 for index '{1}' at resRatio=0 -- "
-                        "pre-fix: CBO ignores stats at 0%% residency. Full entry: {2}".format(
-                            field, index_name, stats_entry)
+                        "MB-73586: '{0}'=0 for index '{1}' at resRatio={2} -- "
+                        "pre-fix: CBO ignores stats at 0% residency. Full entry: {3}".format(
+                            field, index_name, stats_entry['resRatio'], stats_entry)
                     )
 
+        if not zero_residency_indexes:
+            self.skipTest(
+                "MB-73586: no route index was at 0% residency when UPDATE STATISTICS ran "
+                "(index stats are non-zero, but the 0% residency scenario was not exercised)"
+            )
         self.log.info(
-            "MB-73586: All route indexes have non-zero stats at 0%% memory residency -- fix verified"
+            "MB-73586: non-zero stats captured at 0% memory residency for {0} -- fix verified".format(
+                zero_residency_indexes)
         )
 
 

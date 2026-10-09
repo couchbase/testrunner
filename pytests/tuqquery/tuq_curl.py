@@ -241,7 +241,7 @@ class QueryCurlTests(QueryTests):
     '''Test if you can join using curl as one of the buckets to be joined'''
 
     def test_curl_join(self):
-        url = "'http://%s:%s/api/bucket/beer-sample/scope/_default/index/beers/query'" % (self.master.ip, self.api_port)
+        url = "'http://%s:%s/api/index/beers/query'" % (self.master.ip, self.api_port)
         select_query = "select ARRAY x.id for x in b1.result.hits end as hits, b1.result.total_hits as total," \
                        "array_length(b1.result.hits), b "
         from_query = "from (select curl(" + url + ", "
@@ -358,7 +358,7 @@ class QueryCurlTests(QueryTests):
     '''Test a n1ql curl query containing the use of FTS'''
 
     def test_basic_fts_curl(self):
-        url = "'http://%s:%s/api/bucket/beer-sample/scope/_default/index/beers/query'" % (self.master.ip, self.api_port)
+        url = "'http://%s:%s/api/index/beers/query'" % (self.master.ip, self.api_port)
         select_query = "select result.total_hits, array_length(result.hits) "
         from_query = "from curl(" + url + ", "
         options = "{'header':'Content-Type: application/json', " \
