@@ -1752,9 +1752,13 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                     self.log.info(
                         f"No of results are not same as k=({self.k} \n || FTS hits = {hits}")
                     failed_queries.append(count)
-            except Exception:
+            except Exception as err:
+                # Swallowing this silently leaves "N out of M queries failed"
+                # with no way to tell why - which is all the report carries.
                 fail_count += 1
                 failed_queries.append(count)
+                self.log.error(f"Vector query # {count} on index {index.name} "
+                               f"raised {type(err).__name__}: {err}")
 
         if fail_count:
             return ("%s out of %s queries failed! - %s" % (fail_count,
@@ -2306,8 +2310,10 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         vect_index_containers = self.create_vect_index_containers(vect_bucket_containers,
                                                                   self.index_per_vect_bucket)
 
-        non_master_nodes = list(set(self._cb_cluster.get_nodes()) -
-                                {self._master})
+        # get_nodes() order is meaningful here; set() arithmetic randomised it,
+        # so which pair got ejected below varied from run to run.
+        non_master_nodes = [node for node in self._cb_cluster.get_nodes()
+                            if node != self._master]
 
         from lib.membase.api.rest_client import RestConnection
         rest = RestConnection(self._master)
@@ -2334,7 +2340,28 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         stopped = rest.stop_rebalance()
         self.assertTrue(stopped, msg="unable to stop rebalance")
 
-        eject_nodes = non_master_nodes[:2]
+        # Ejecting an arbitrary pair can strip every fts (or kv) node from the
+        # cluster, which breaks everything this test does afterwards. Pick a
+        # pair that leaves at least one of each behind.
+        fts_set = set(self._cb_cluster.get_fts_nodes())
+        kv_set = set(self._cb_cluster.get_kv_nodes())
+
+        def keeps_services(candidates):
+            survivors = [self._master] + [n for n in non_master_nodes
+                                          if n not in candidates]
+            return (any(n in fts_set for n in survivors)
+                    and any(n in kv_set for n in survivors))
+
+        eject_nodes = []
+        for node in non_master_nodes:
+            if len(eject_nodes) == 2:
+                break
+            if keeps_services(eject_nodes + [node]):
+                eject_nodes.append(node)
+        if len(eject_nodes) < 2:
+            self.log.warning(
+                "only %s node(s) can be ejected without stripping kv or fts "
+                "from the cluster; ejecting those" % len(eject_nodes))
         ejected_nodes = []
 
         for eject in eject_nodes:

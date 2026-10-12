@@ -2545,8 +2545,10 @@ class MovingTopFTS(FTSBaseTest):
         """
         self.load_data()
 
-        non_master_nodes = list(set(self._cb_cluster.get_nodes())-
-                           {self._master})
+        # get_nodes() order is meaningful here; set() arithmetic randomised it,
+        # so which pair got ejected below varied from run to run.
+        non_master_nodes = [node for node in self._cb_cluster.get_nodes()
+                            if node != self._master]
 
         rest = RestConnection(self._master)
         nodes = rest.node_statuses()
@@ -2572,7 +2574,30 @@ class MovingTopFTS(FTSBaseTest):
         stopped = rest.stop_rebalance()
         self.assertTrue(stopped, msg="unable to stop rebalance")
 
-        eject_nodes = non_master_nodes[:2]
+        # The docstring assumes a cluster where every node runs kv+fts. On a
+        # split layout (D,D,F,F) ejecting an arbitrary pair can take out every
+        # fts node, and the create_fts_indexes_all_buckets() below then dies
+        # with "No node in the cluster has 'fts' service enabled". Pick a pair
+        # that leaves at least one kv and one fts node behind.
+        fts_set = set(self._cb_cluster.get_fts_nodes())
+        kv_set = set(self._cb_cluster.get_kv_nodes())
+
+        def keeps_services(candidates):
+            survivors = [self._master] + [n for n in non_master_nodes
+                                          if n not in candidates]
+            return (any(n in fts_set for n in survivors)
+                    and any(n in kv_set for n in survivors))
+
+        eject_nodes = []
+        for node in non_master_nodes:
+            if len(eject_nodes) == 2:
+                break
+            if keeps_services(eject_nodes + [node]):
+                eject_nodes.append(node)
+        if len(eject_nodes) < 2:
+            self.log.warning(
+                "only %s node(s) can be ejected without stripping kv or fts "
+                "from the cluster; ejecting those" % len(eject_nodes))
         ejected_nodes = []
 
         for eject in eject_nodes:

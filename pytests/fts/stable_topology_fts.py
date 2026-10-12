@@ -794,10 +794,16 @@ class StableTopFTS(FTSBaseTest):
                                   scope=index_scope, collections=index_collections)
         self.wait_for_indexing_complete()
         self.validate_index_count(equal_bucket_doc_count=True)
-        hits, _, _, _ = index.execute_query(self.sample_query,
+        # A dgm run loads only sized filler docs to reach its resident ratio,
+        # so the employee dataset sample_query matches was never loaded: the
+        # query returns nothing and zero_results_ok=False trips before this
+        # test makes its actual assertion, that an alias returns the same hits
+        # as the index it points at. Query whatever this run did load instead.
+        query = self.sample_query if self.sample_dataset_loaded else {"match_all": {}}
+        hits, _, _, _ = index.execute_query(query,
                                      zero_results_ok=False)
         alias = self.create_alias([index], bucket)
-        hits2, _, _, _ = alias.execute_query(self.sample_query,
+        hits2, _, _, _ = alias.execute_query(query,
                                       zero_results_ok=False)
         if hits != hits2:
             self.fail("Index query yields {0} hits while alias on same index "
@@ -912,14 +918,28 @@ class StableTopFTS(FTSBaseTest):
                     self._cb_cluster._drop_collection(bucket=bucket, scope=self.scope, collection=c, cli_client=self.cli_client)
             else:
                 self._cb_cluster._drop_collection(bucket=bucket, scope=self.scope, collection=self.collection, cli_client=self.cli_client)
+        # FTS drops an index asynchronously once its source container goes
+        # away, and on a loaded cluster that takes well over the 20s this used
+        # to sleep before sampling the count exactly once. Poll until the index
+        # is gone, and only fail if it is still being served at the deadline.
+        cleanup_timeout = self._input.param("index_cleanup_timeout", 180)
         self.sleep(20, "waiting for bucket deletion to be known by fts")
-        try:
-            count = index.get_indexed_doc_count()
-        except Exception as e:
-            self.log.info("Expected exception: {0}".format(e))
-            # at this point, index has been deleted,
-            # remove index from list of indexes
-            self._cb_cluster.get_indexes().remove(index)
+        deadline = time.time() + cleanup_timeout
+        while True:
+            try:
+                count = index.get_indexed_doc_count()
+            except Exception as e:
+                self.log.info("Expected exception: {0}".format(e))
+                # at this point, index has been deleted,
+                # remove index from list of indexes
+                self._cb_cluster.get_indexes().remove(index)
+                count = 0
+                break
+            if time.time() >= deadline:
+                break
+            self.sleep(10, "index still served {0}s after the source was "
+                           "dropped; waiting for fts to clean it up"
+                           .format(int(cleanup_timeout - (deadline - time.time()))))
         if count:
             self.fail("Able to retrieve index json from index "
                       "built on bucket that was deleted")
@@ -5120,6 +5140,11 @@ class StableTopFTS(FTSBaseTest):
                 self._fill_collection(bucket=bucket, scope=scope_name, collection=collection_name)
 
         self._fill_collection(bucket=bucket, scope=test_scope, collection=test_collection, num_docs=1000, start_seq_num=1)
+
+        # _fill_collection only waits for the KV load to finish; FTS indexes
+        # asynchronously, so querying straight afterwards races the indexer and
+        # returns a short count (seen as 1920 != 2000).
+        self.wait_for_indexing_complete_simple(item_count=2000, index=test_index)
 
         test_query = {"match": "emp", "field": "type"}
         hits, _, _, _ = test_index.execute_query(test_query)

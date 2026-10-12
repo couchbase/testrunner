@@ -5195,11 +5195,26 @@ class FTSConcurrentWorkload:
             self._query_thread.join(timeout=60)
             self._query_thread = None
 
+        # Connection churn is expected while the topology is deliberately being
+        # changed - these tests cancel rebalances mid-flight, which tears down
+        # live sockets - and over TLS the SDK reports that as an opaque
+        # "[SYS] unknown error (_ssl.c:...)". Treat it the way the query loop
+        # below and the vbucket-map wait in _start_kv_workload already treat
+        # their own expected churn: warn, keep the finding visible in the log,
+        # but do not fail the change. Anything else is still a real error.
+        transient_kv_errors = ("_ssl.c", "[SYS] unknown error",
+                               "connection_closed", "socket closed",
+                               "shutdown in progress")
         for task in self._tasks:
             try:
                 task.result()
             except Exception as err:
-                self.errors.append(f"[{self._label}] KV workload task failed: {err}")
+                if any(marker in str(err) for marker in transient_kv_errors):
+                    self.log.warning(
+                        f"[{self._label}] KV workload task hit transient connection "
+                        f"churn while the topology was changing: {err}")
+                else:
+                    self.errors.append(f"[{self._label}] KV workload task failed: {err}")
         self._tasks = []
 
         # A rolling upgrade takes FTS nodes out and back in, so queries failing
@@ -5290,6 +5305,26 @@ class FTSPostChangeValidator:
                               f"'{bucket.name}' after CRUD: {err}")
         return errors
 
+    def _source_doc_count(self, index):
+        """How many docs this index is actually meant to hold.
+
+        A bucket-level index with the default mapping only indexes
+        _default._default, so measuring it against the bucket-wide key count
+        charges it for docs in scopes it was never going to index - reported as
+        "indexed 100000 docs but the source holds 1100000" on a vector bucket
+        whose 1M vectors live in another scope. wait_for_indexing_complete
+        already resolves the source this way; match it rather than disagreeing.
+        """
+        if getattr(index, 'collections', None):
+            return index.get_src_collections_doc_count()
+        cluster = self._cluster()
+        if cluster is None:
+            return index.get_src_bucket_doc_count()
+        src_scope, src_collections = (
+            index.resolve_source_collections() or ("_default", ["_default"]))
+        return cluster.get_doc_count_in_collections(
+            index.source_bucket, src_scope, src_collections)
+
     def validate_index_end_to_end(self, index, expected_count=None, query=None,
                                   timeout=600, poll=10):
         """Confirm a newly created index both indexes data and serves a query."""
@@ -5302,9 +5337,7 @@ class FTSPostChangeValidator:
         while time.time() < deadline:
             try:
                 indexed = index.get_indexed_doc_count()
-                source = (index.get_src_collections_doc_count()
-                          if getattr(index, 'collections', None)
-                          else index.get_src_bucket_doc_count())
+                source = self._source_doc_count(index)
                 if indexed and (expected_count is None or indexed >= expected_count) \
                         and indexed == source:
                     break
@@ -6496,6 +6529,10 @@ class FTSBaseTest(unittest.TestCase):
         self.index_per_bucket = self._input.param("index_per_bucket", 1)
         self.dataset = self._input.param("dataset", "emp")
         self.sample_query = {"match": "Safiya Morgan", "field": "name"}
+        # Set by load_data(): False when the run only loaded DGM filler docs,
+        # in which case sample_query (which matches the employee dataset) has
+        # nothing to find. Callers that assert on specific hits must check it.
+        self.sample_dataset_loaded = False
         # Hierarchical search mode - uses hs_validator instead of ES
         self.hierarchical = self._input.param("hierarchical", False)
 
@@ -8744,6 +8781,9 @@ class FTSBaseTest(unittest.TestCase):
         load_tasks = self.async_load_data(generator=generator, data_loader_output=data_loader_output)
         for task in load_tasks:
             task.result()
+        # Only this path loads the suite's actual dataset; the dgm branches
+        # above fill the bucket with sized filler docs and return early.
+        self.sample_dataset_loaded = True
         self.log.info("Loading phase complete!")
 
     def _run_hierarchical_validation(self):
