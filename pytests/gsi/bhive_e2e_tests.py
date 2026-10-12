@@ -1806,10 +1806,11 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
                 is_failover = True
                 self.log.info(f"Starting {service_type} failover operation (graceful: {use_graceful})")
 
-                failover_node = self.get_nodes_from_services_map(
-                    service_type=service_type,
-                    get_all_nodes=True
-                )[-1]
+                # Skip servers[0] (self.rest, rebalance/failover tasks use it) and the current orchestrator (self.master)
+                protected_ips = {self.servers[0].ip, self.master.ip}
+                candidates = [n for n in self.get_nodes_from_services_map(service_type=service_type, get_all_nodes=True)
+                              if n.ip not in protected_ips]
+                failover_node = candidates[-1]
                 nodes_out_list = [failover_node]
                 self.log.info(f"Failing over node: {failover_node.ip}")
 
