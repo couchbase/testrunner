@@ -16,6 +16,7 @@ from lib.membase.helper.cluster_helper import ClusterOperationHelper
 from lib.remote.remote_util import RemoteMachineShellConnection
 from lib.testconstants import EVENTING_QUOTA
 from pytests.query_tests_helper import QueryHelperTests
+from pytests.gsi.gsi_throttle_helpers import GSIThrottleHelpers
 from lib.Cb_constants.CBServer import CbServer
 from collection.collections_stats import CollectionsStats
 
@@ -69,6 +70,9 @@ class EventingBaseTest(QueryHelperTests):
                                             full_docs_list=self.full_docs_list, log=self.log, input=self.input,
                                             master=self.master, use_rest=True)
             self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_server)
+        if self.input.param("collect_throttle_stats", False):
+            self.throttle_helper = GSIThrottleHelpers(self)
+            self.throttle_helper.setup()
         log.info("==============  EventingBaseTest setup has completed ==============")
 
     def tearDown(self):
@@ -79,8 +83,16 @@ class EventingBaseTest(QueryHelperTests):
             self.check_eventing_logs_for_panic()
         if self.hostname == 'local':
             self.teardown_curl()
-        super(EventingBaseTest, self).tearDown()
+        try:
+            if getattr(self, "throttle_helper", None) is not None:
+                self.throttle_helper.teardown()
+        finally:
+            super(EventingBaseTest, self).tearDown()
         log.info("==============  EventingBaseTest tearDown has completed ==============")
+
+    def _scaled_timeout(self, timeout):
+        """Fixed waits stretch under an aggressive limit; default 1 changes nothing"""
+        return GSIThrottleHelpers.scaled_timeout(timeout)
 
     def _init_params(self):
         self.use_single_bucket = self.input.param('use_single_bucket', False)
@@ -257,6 +269,7 @@ class EventingBaseTest(QueryHelperTests):
         return body
 
     def wait_for_bootstrap_to_complete(self, name, iterations=120):
+        iterations = self._scaled_timeout(iterations)
         result = self.rest.get_deployed_eventing_apps()
         count = 0
         while name not in result and count < iterations:
@@ -268,6 +281,7 @@ class EventingBaseTest(QueryHelperTests):
                 'Eventing took lot of time to come out of bootstrap state or did not successfully bootstrap')
 
     def wait_for_undeployment(self, name, iterations=120):
+        iterations = self._scaled_timeout(iterations)
         self.sleep(5, message="Waiting for undeployment of function...")
         result = self.rest.get_running_eventing_apps()
         count = 0
@@ -280,6 +294,7 @@ class EventingBaseTest(QueryHelperTests):
 
     def verify_eventing_results(self, name, expected_dcp_mutations, doc_timer_events=False, on_delete=False,
                                 skip_stats_validation=False, bucket=None, timeout=1800,expected_duplicate=False):
+        timeout = self._scaled_timeout(timeout)
         # This resets the rest server as the previously used rest server might be out of cluster due to rebalance
         rest = RestConnection(self.master)
         num_nodes = self.refresh_rest_server()
@@ -737,7 +752,8 @@ class EventingBaseTest(QueryHelperTests):
         eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
         count=0
         result=0
-        while count <= 20 and doc_count != result:
+        max_polls = self._scaled_timeout(20)
+        while count <= max_polls and doc_count != result:
             self.sleep(timeout // 20, message="Waiting for eventing to process all dcp mutations...")
             if deletes:
                     query="select raw(count(*)) from {} where doc_deleted = 1".format(bucket)
@@ -751,7 +767,7 @@ class EventingBaseTest(QueryHelperTests):
                 self.log.info("updated docs:{}  expected doc: {}".format(result, doc_count))
             count=count+1
 
-        if count > 20 and doc_count != result:
+        if count > max_polls and doc_count != result:
             total_dcp_backlog = 0
             timers_in_past = 0
             lcb = {}
@@ -780,6 +796,7 @@ class EventingBaseTest(QueryHelperTests):
 
 
     def wait_for_handler_state(self, name,status,iterations=240):
+        iterations = self._scaled_timeout(iterations)
         self.sleep(5, message="Waiting for {} to {}...".format(name, status))
         result = self.rest.get_composite_eventing_status()
         count = 0
@@ -1140,7 +1157,10 @@ class EventingBaseTest(QueryHelperTests):
         keyspace = namespace.split(".")
         count=0
         compacted=False
-        end_time = time.time() + timeout
+        # only the hard deadline is scaled. The stagnation window (20 polls of
+        # timeout//20) is left alone so a genuinely stalled stream still fails
+        scaled_timeout = self._scaled_timeout(timeout)
+        end_time = time.time() + scaled_timeout
         actual_count = self.stat.get_collection_item_count_cumulative(keyspace[0], keyspace[1],
                                                                       keyspace[2], self.get_kv_nodes())
         while actual_count != expected_count and count < 20 and time.time() < end_time:
@@ -1151,7 +1171,7 @@ class EventingBaseTest(QueryHelperTests):
             ### compact buckets when mutation count not progressing. Helpful for expiry events.
             ### also compact once we are halfway through the timeout, since a count that keeps
             ### drifting (magma/DGM eviction, compaction) never trips the stagnation counter below
-            if not compacted and (count==10 or time.time() >= end_time - timeout//2):
+            if not compacted and (count==10 or time.time() >= end_time - scaled_timeout//2):
                 compacted=True
                 self.rest = RestConnection(self.master)
                 self.bucket_compaction()
@@ -1165,7 +1185,7 @@ class EventingBaseTest(QueryHelperTests):
                 break
         if actual_count != expected_count and time.time() >= end_time:
             log.info("Timed out after {0}s waiting for mutation processing to complete on {1}. "
-                     "Current count : {2} Expected count : {3}".format(timeout, namespace, actual_count,
+                     "Current count : {2} Expected count : {3}".format(scaled_timeout, namespace, actual_count,
                                                                        expected_count))
         if actual_count != expected_count:
             self.print_eventing_stats_from_all_eventing_nodes()
