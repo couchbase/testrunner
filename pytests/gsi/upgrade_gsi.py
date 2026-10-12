@@ -3469,6 +3469,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 if self.upgrade_to >= "8.0":
                     scalar_indexes = self.get_all_indexes_in_the_cluster()
                     if self.isSparse:
+                        self.use_magma_loader = True  # javaclient can't load sparse dataset; cluster is EE now
                         self.post_upgrade_validate_sparse_index(services=services_in, existing_bucket=existing_bucket, index_list_before=scalar_indexes)
                     else:
                         self.post_upgrade_validate_vector_index(services=services_in, existing_bucket=existing_bucket, index_list_before=scalar_indexes)
