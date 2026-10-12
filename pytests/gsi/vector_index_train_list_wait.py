@@ -1985,8 +1985,7 @@ class VectorIndexTrainListWait(BaseSecondaryIndexingTests):
             "train_list_wait auto-retry may not be working"
         )
         self._verify_indexes_online(wait_index_names)
-        self._run_vector_scans(wait_select_queries)
-        self.log.info("idxwait indexes are online and returning scan results")
+        self.log.info("idxwait indexes are online")
 
         # Step 9: Verify idxnowait indexes are still in error state (no auto-retry occurred)
         self.log.info("Verifying idxnowait indexes have NOT auto-recovered")
@@ -2012,6 +2011,10 @@ class VectorIndexTrainListWait(BaseSecondaryIndexingTests):
         )
         self._verify_indexes_online(nowait_index_names)
         self.log.info("idxnowait indexes are now online after manual BUILD INDEX re-issue")
+
+        # Scan only once both groups are built: each idxnowait index is an equivalent of its
+        # idxwait twin, and the GSI client may route a scan to the errored twin (noHost).
+        self._run_vector_scans(wait_select_queries)
 
         # Cleanup
         self._cleanup(namespace)
