@@ -2014,30 +2014,36 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
         self.log.info("Performing index lifecycle operations")
         queries = []
         for op in lifecycle_ops:
-            if op == "create":
-                if "few" in op:
+            # ops are "<action>" or "<action>_few" (e.g. drop_few); match on the action
+            # so the _few variants don't fall through and re-run the previous op's queries
+            action, few = op.split("_")[0], op.endswith("_few")
+            queries = []
+            if action == "create":
+                if few:
                     queries = create_queries[:5]
                     create_queries = create_queries[5:]
                 else:
                     queries = create_queries
-            elif op == "drop":
-                if "few" in op:
+            elif action == "drop":
+                if few:
                     queries = drop_queries[:5]
                     drop_queries = drop_queries[5:]
                 else:
                     queries = drop_queries
-            elif op == "build":
-                if "few" in op:
+            elif action == "build":
+                if few:
                     queries = build_queries[:5]
                     build_queries = build_queries[5:]
                 else:
                     queries = build_queries
-            elif op == "alter":
-                if "few" in op:
+            elif action == "alter":
+                if few:
                     queries = alter_queries[:5]
                     alter_queries = alter_queries[5:]
                 else:
                     queries = alter_queries
+            else:
+                self.log.warning(f"Unknown index lifecycle op '{op}', skipping")
             for query in queries:
                 try:
                     self.run_cbq_query(query=query, server=query_node)
@@ -2047,6 +2053,11 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
 
         workload_stop_event.set()
         self._finish_mutations_workload(bucket_0_thread, bucket_1_thread)
+        # Let in-flight training/builds finish before dropping. A vector index dropped mid-training
+        # can't be cancelled: the drop is deferred until training completes, and with
+        # max_parallel_training=1 the backlog keeps a core busy long after the drop, failing the
+        # CPU-normalized check. defer_build=True treats never-built (Created) indexes as settled.
+        self.wait_until_indexes_online(defer_build=True)
         # DROP of a vector index is deferred while it trains (indexer.go:4746) and retried by
         # the janitor; max_parallel_training=1 and there is no training timeout, so poll for
         # the shards to drain instead of sleeping a fixed guess.

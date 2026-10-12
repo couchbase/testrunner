@@ -4965,7 +4965,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         Gets all indexes and their definitions using N1QL system:indexes
         Returns a list of dictionaries containing index name and actual count from executing query
         """
-        query = "SELECT bucket_id, scope_id, keyspace_id, name, index_key, `condition`, `with` FROM system:indexes"
+        query = "SELECT bucket_id, scope_id, keyspace_id, name, index_key, is_primary, `condition`, `with` FROM system:indexes"
         query_node = self.get_nodes_from_services_map(service_type="n1ql")
         result = self.n1ql_helper.run_cbq_query(query=query, server=query_node)
         primary_indexes = self.get_all_primary_index_names()
@@ -4988,7 +4988,12 @@ class BaseSecondaryIndexingTests(QueryTests):
                 where_clause = f" WHERE {index['condition']}"
 
 
-            if (index['name'] not in primary_indexes and (index['index_key'][0] == "`colorRGBVector` DENSE VECTOR" or index['index_key'][0] == '((meta().`xattrs`).`colorVector`) DENSE VECTOR') and "similarity" in index['with']
+            # index_key is absent for primary indexes and can be [] for an index that isn't fully
+            # created (e.g. creation retried in background, or its node was failed over), so don't
+            # assume a leading key exists
+            index_keys = index.get('index_key') or []
+            is_primary = index.get('is_primary', False) or index['name'] in primary_indexes
+            if (not is_primary and index_keys and (index_keys[0] == "`colorRGBVector` DENSE VECTOR" or index_keys[0] == '((meta().`xattrs`).`colorVector`) DENSE VECTOR') and "similarity" in index.get('with', {})
                 and index['with']['similarity'] == "cosine"):
                 condition = "colorRGBVector != [0, 0, 0]"
                 if where_clause:
@@ -4996,15 +5001,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                 else:
                     where_clause = f" WHERE {condition}"
 
-            count_query = f"SELECT COUNT(*) FROM {keyspace} {where_clause}"
-
-            # Execute the count query
-            try:
-                count_result = self.n1ql_helper.run_cbq_query(query=count_query, server=query_node)
-                count = count_result['results'][0]['$1']
-            except Exception as e:
-                self.log.error(f"Error executing count query for index {index['name']}: {str(e)}")
-                count = 0
+            count = self._get_kv_count(keyspace, where_clause, query_node, index['name'])
 
             # Add only name and count to results
             if 'bucket_id' not in index:
@@ -5019,6 +5016,26 @@ class BaseSecondaryIndexingTests(QueryTests):
                 })
 
         return simplified_results
+
+    def _get_kv_count(self, keyspace, where_clause, query_node, index_name, retries=3, retry_sleep=30):
+        """
+        KV-side document count for an index (keyspace + the index's WHERE condition).
+        Errors are retried and then raised - never reported as a count of 0, which would
+        show up as a misleading count mismatch.
+        """
+        count_query = f"SELECT COUNT(*) FROM {keyspace} {where_clause}"
+        last_err = None
+        for attempt in range(1, retries + 1):
+            try:
+                count_result = self.n1ql_helper.run_cbq_query(query=count_query, server=query_node)
+                return count_result['results'][0]['$1']
+            except Exception as e:
+                last_err = e
+                self.log.warning(f"Count query for index {index_name} failed (attempt {attempt}/{retries}): "
+                                 f"{count_query} : {str(e)}")
+            if attempt < retries:
+                self.sleep(retry_sleep, f"retrying KV count query for index {index_name}")
+        raise Exception(f"KV count query for index {index_name} failed after {retries} attempts: {last_err}")
 
     def get_item_counts_from_index_stats(self):
         """

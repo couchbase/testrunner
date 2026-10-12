@@ -84,6 +84,10 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         self.test_name_prefix = self.input.param("test_name_prefix", "test")
         self.start_test_with_fbr = self.input.param("start_test_with_fbr", False)
         self.dcp_rebalance = self.input.param("dcp_rebalance", False)
+        # Serialize deferred index builds in create_index_in_batches (separate BUILDs for
+        # non-vector and vector indexes, each waited on). Workaround for MB-74549 - set to
+        # False to reproduce/verify the MB (see create_index_in_batches).
+        self.serialize_index_builds = self.input.param("serialize_index_builds", True)
         # When enabled, index definition generators return a single index of
         # each type per namespace, reducing the overall index count while still
         # exercising every index type (scalar/composite/bhive/sparse/primary).
@@ -3840,16 +3844,71 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                                                                   bhive_index=bhive, defer_build=defer_build)
                 self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace,
                                                      query_node=query_node)
-                # Build the deferred indexes with a single BUILD so their builds are
-                # queued together instead of each CREATE triggering its own immediate
-                # build. Concurrent builds on the same keyspace return "Build Already
-                # In Progress" and leave vector indexes stuck in Error/Retrying.
-                if defer_build:
+                # Build the deferred indexes with explicit BUILDs instead of each CREATE
+                # triggering its own immediate build. Concurrent builds on the same keyspace
+                # return "Build Already In Progress" and leave vector indexes stuck in
+                # Error/Retrying.
+                if not defer_build:
+                    continue
+                if self.serialize_index_builds:
+                    # MB-74549: when a BUILD batch mixing vector and non-vector indexes goes
+                    # through training and the post-training build hits "Build Already In
+                    # Progress", only the vector indexes are retried - the non-vector ones
+                    # (primary/scalar/array) stay in Created forever. Avoid that by building
+                    # non-vector and vector indexes in separate BUILDs and waiting for each to
+                    # come online, so no BUILD on this keyspace overlaps a running one.
+                    #
+                    # To verify the MB-74549 fix: run any test_online_offline_swap_upgrade_file_based_rebalance
+                    # line from conf/gsi/gsi_file_based_rebalance_upgrade_test.conf (it restores the
+                    # Cars vector backup, so vector_backup_filename=backup_zips/100K_car_bc.zip is needed)
+                    # with serialize_index_builds=False and initial_version=<build with the fix>.
+                    # That sends one mixed vector/non-vector BUILD per batch a few seconds apart - the
+                    # original repro. Without the fix the test's first wait_until_indexes_online times
+                    # out with non-vector instances (e.g. #primary_scalar_*) still in Created; with the
+                    # fix every index goes Ready.
+                    non_vector_defs = [d for d in query_definitions if not getattr(d, 'dimension', None)]
+                    vector_defs = [d for d in query_definitions if getattr(d, 'dimension', None)]
+                    for defs in (non_vector_defs, vector_defs):
+                        if not defs:
+                            continue
+                        build_query = self.gsi_util_obj.get_build_indexes_query(definition_list=defs,
+                                                                                namespace=namespace)
+                        self.gsi_util_obj.create_gsi_indexes(create_queries=[build_query], database=namespace,
+                                                             query_node=query_node)
+                        self._wait_for_named_indexes_ready([d.index_name for d in defs])
+                else:
                     build_query = self.gsi_util_obj.get_build_indexes_query(definition_list=query_definitions,
                                                                             namespace=namespace)
                     self.gsi_util_obj.create_gsi_indexes(create_queries=[build_query], database=namespace,
                                                          query_node=query_node)
         return select_queries
+
+    def _wait_for_named_indexes_ready(self, index_names, timeout=3600):
+        """Wait until every instance (all replicas) of the given indexes is Ready. Unlike
+        wait_until_indexes_online, other indexes that are deferred and not yet built don't
+        block it, and these indexes sitting in Created don't count as done."""
+        rest = RestConnection(self.master)
+        index_names = set(index_names)
+        end_time = time.time() + timeout
+        pending = {}
+        while time.time() < end_time:
+            pending = {}
+            seen = set()
+            for bucket_indexes in rest.get_index_status().values():
+                for name, state in bucket_indexes.items():
+                    # replica instances are reported as "<name> (replica N)"
+                    base_name = name.split(" (replica")[0]
+                    if base_name not in index_names:
+                        continue
+                    seen.add(base_name)
+                    if state["status"] != "Ready":
+                        pending[name] = state["status"]
+            for name in index_names - seen:
+                pending[name] = "not in index status"
+            if not pending:
+                return
+            time.sleep(10)
+        raise Exception(f"Indexes did not come online within {timeout} seconds: {pending}")
 
     def upgrade_and_downgrade_and_validate_single_node(self, node_to_upgrade, select_queries, scan_results_check=True, downgrade=False):
         try:

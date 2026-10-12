@@ -6670,6 +6670,12 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
         self.wait_until_indexes_online(defer_build=True)
+        # Indexes are created deferred; build them so replica repair runs on populated indexes
+        # (and so the Ready-only waits below can succeed)
+        for namespace, definitions in namespace_index_map.items():
+            build_query = self.gsi_util_obj.get_build_indexes_query(definition_list=definitions, namespace=namespace)
+            self.run_cbq_query(query=build_query, server=self.n1ql_node)
+            self.wait_until_indexes_online()
 
         index_metadata = self.index_rest.get_indexer_metadata()['status']
         for index in index_metadata:
