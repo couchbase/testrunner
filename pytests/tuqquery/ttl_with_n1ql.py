@@ -1,3 +1,4 @@
+import json
 import sys
 import time
 
@@ -279,8 +280,6 @@ class QueryExpirationTests(QueryTests):
         self.wait_for_buckets_status({self.sample_bucket: 'healthy'}, 5, 120)
         self.wait_for_bucket_docs({self.sample_bucket: result_count}, 5, 120)
         self._wait_for_index_online(self.sample_bucket, self.sample_bucket_index)
-        num_docs = self.get_item_count(self.master, bucket)
-        self.log.info(f'num_docs is {num_docs}')
         get_doc_ids_query = 'SELECT META().id FROM {0}'.format(query_sample_bucket)
         result = self.run_cbq_query(get_doc_ids_query)
         doc_ids_for_new_insertion = ['k00', 'k01', 'k02', 'k03']
@@ -307,11 +306,18 @@ class QueryExpirationTests(QueryTests):
         for item in result['results']:
             if item['id'] in doc_ids_for_new_insertion:
                 self.assertEqual(item['expiration'], 0, "Expiration is not set to 0 for new insertions")
-        self.run_cbq_query('select * from {0}'.format(query_default_bucket))
-        self.sleep(10)
-        new_num_docs = self.get_item_count(self.master, bucket)
-        self.assertEqual(new_num_docs, num_docs + len(query_with_zero_ttl) - 1 + result_count,
-                         "Some of newly inserted docs are missing")
+        self._assert_new_docs_present(query_default_bucket, query_sample_bucket,
+                                      doc_ids_for_new_insertion)
+
+    def _assert_new_docs_present(self, default_keyspace, sample_keyspace, doc_ids):
+        # Count via a request_plus query rather than bucket stats: the stats endpoint
+        # lags and can still include the expired doc, which made the item-count diff flaky.
+        extra_ids = [doc_id for doc_id in doc_ids if doc_id.startswith('k0')]
+        count_query = 'SELECT RAW COUNT(*) FROM {0} AS d WHERE META(d).id IN {1}' \
+                      ' OR META(d).id IN (SELECT RAW META(t).id FROM {2} AS t)'.format(
+                          default_keyspace, json.dumps(extra_ids), sample_keyspace)
+        result = self.run_cbq_query(count_query)
+        self.assertEqual(result['results'][0], len(doc_ids), "Some of newly inserted docs are missing")
 
     def test_upsert_with_ttl(self):
         """
@@ -531,7 +537,6 @@ class QueryExpirationTests(QueryTests):
         self.wait_for_buckets_status({self.sample_bucket: 'healthy'}, 5, 120)
         self.wait_for_bucket_docs({self.sample_bucket: result_count}, 5, 120)
         self._wait_for_index_online(self.sample_bucket, self.sample_bucket_index)
-        num_docs = self.get_item_count(self.master, bucket)
         get_doc_ids_query = 'SELECT META().id FROM {0}'.format(query_sample_bucket)
         result = self.run_cbq_query(get_doc_ids_query)
         doc_ids_for_new_insertion = ['k00', 'k01', 'k02', 'k03']
@@ -560,11 +565,8 @@ class QueryExpirationTests(QueryTests):
             if item['id'] in doc_ids_for_new_insertion:
                 self.assertEqual(item['expiration'], 0, "Expiration is not set to 0 for new insertions")
 
-        self.run_cbq_query('select * from {0}'.format(query_default_bucket))
-        self.sleep(10)
-        new_num_docs = self.get_item_count(self.master, bucket)
-        self.assertEqual(new_num_docs, num_docs + len(query_with_zero_ttl) - 1 + result_count,
-                         "Some of newly inserted docs are missing")
+        self._assert_new_docs_present(query_default_bucket, query_sample_bucket,
+                                      doc_ids_for_new_insertion)
 
     def test_update_scenarios_for_ttl(self):
         """
