@@ -14,6 +14,42 @@ class TenKCollectionHelper:
     Provides functions to create, manage, and verify collections at scale.
     """
 
+    # Above this share of failed pairs the failure is systemic (a bulk load that
+    # failed, a node that is down), and reloading pair by pair would not help.
+    MAX_RETRY_FRACTION = 0.05
+
+    @staticmethod
+    def retry_failed_pairs(server, bucket_name, result, docs_per_collection,
+                           docid_prefix="xdcr10k", run_id=None):
+        """Reload, once, the pairs whose loader failed, and fold the outcome into
+        `result`.
+
+        With 10K collections on small VMs a few of the hundreds of loader JVMs time
+        out ("Did not observe any item or terminal signal within 10000ms"), which
+        left those collections empty. Keys carry the run id and the pair, so a
+        reload upserts the same docs.
+        """
+        failed = list(result.failed_pairs)
+        if not failed:
+            return result
+        log = logger.Logger.get_logger()
+        if len(failed) > max(10, TenKCollectionHelper.MAX_RETRY_FRACTION * result.total_attempted):
+            log.warning("{} of {} pairs failed to load; not retrying a systemic failure".format(
+                len(failed), result.total_attempted))
+            return result
+        log.warning("Reloading {} pair(s) whose loader failed: {}".format(len(failed), failed[:10]))
+        again = XDCRNewBaseTest.load_collections_with_sdk(
+            server=server, bucket=bucket_name, pairs=failed,
+            docs_per_collection=docs_per_collection,
+            docid_prefix=docid_prefix, run_id=run_id)
+        for pair in again.success_pairs:
+            result.failed_pairs.remove(pair)
+            result.errors.pop(pair, None)
+            result.success_pairs.append(pair)
+        result.total_docs_loaded += again.total_docs_loaded
+        result.errors.update(again.errors)
+        return result
+
     @staticmethod
     def create_10k_collections(server_info, bucket_name, num_scopes=100, collections_per_scope=100,
                                 scope_prefix="scope_", collection_prefix="col_",
@@ -434,6 +470,9 @@ class TenKCollectionHelper:
                 docid_prefix=params.get("docid_prefix", "xdcr10k"),
                 run_id=run_id,
             )
+        result = TenKCollectionHelper.retry_failed_pairs(
+            server, bucket_name, result, dpc,
+            docid_prefix=params.get("docid_prefix", "xdcr10k"), run_id=run_id)
         log.info("Load result: {}/{} succeeded, {} docs in {:.1f}s".format(
             len(result.success_pairs), result.total_attempted,
             result.total_docs_loaded, result.elapsed_seconds))
@@ -473,6 +512,9 @@ class TenKCollectionHelper:
             docid_prefix=docid_prefix,
             run_id=run_id,
         )
+        result = TenKCollectionHelper.retry_failed_pairs(
+            server, bucket_name, result, docs_per_collection,
+            docid_prefix=docid_prefix, run_id=run_id)
         log.info("load_into_pairs result: {}/{} succeeded, {} docs in {:.1f}s".format(
             len(result.success_pairs), result.total_attempted,
             result.total_docs_loaded, result.elapsed_seconds))

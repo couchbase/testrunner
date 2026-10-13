@@ -266,7 +266,7 @@ class StatsXDCR(XDCRNewBaseTest):
                 return s["value"]
         return None
 
-    def _setup_for_pipeline(self, bandwidth_limit=5, compression_type=None):
+    def _setup_for_pipeline(self, bandwidth_limit=5, compression_type=None, backfill_docs=1000000):
         """Set up XDCR so that the requested pipelineType emits stats.
 
         Main: setup_xdcr, force optimisticReplicationThreshold=0, then load.
@@ -276,7 +276,8 @@ class StatsXDCR(XDCRNewBaseTest):
         bandwidth_limit (MB/s) bounds how fast that backfill drains. It counts
         bytes on the wire, so with compression on pillowfight's repetitive values
         shrink far enough that the backfill still finishes in seconds; pass
-        compression_type="None" to make the limit bind.
+        compression_type="None" to make the limit bind. backfill_docs is how many
+        docs the new collection gets, which is what the Backfill pipeline drains.
         """
         self.setup_xdcr()
         src_rest = RestConnection(self.src_master)
@@ -317,7 +318,7 @@ class StatsXDCR(XDCRNewBaseTest):
         if not src_rest.create_collection("default", new_scope, new_collection):
             self.fail("Failed to create collection on src")
         self.load_binary_docs_using_cbc_pillowfight(
-            self.src_master, 1000000, "default", 100, 300,
+            self.src_master, backfill_docs, "default", 100, 300,
             scope=new_scope, collection=new_collection)
         self.wait_interval(15, "let docs settle on src before backfill trigger")
 
@@ -403,12 +404,17 @@ class StatsXDCR(XDCRNewBaseTest):
         # A Backfill pipeline is torn down as soon as it has caught the new
         # collection up, and then there is nothing to resume. Unthrottled it
         # finished in about 30s (runs 113357, 115407), before a checkpoint plus
-        # the pause could fit in. At 2 MB/s of uncompressed data (~400 MB) it
-        # runs for minutes.
+        # the pause could fit in. Throttled to 2 MB/s it outlived the first
+        # checkpoint on a 1+1 cbvm cluster, but on the 2+2 CI cluster each node
+        # still drained its 500K docs (184.5 MB) in 54s, ~3.4 MB/s against its
+        # 1 MB/s share (run 115990, throttle_latency 0), and the counter read 0
+        # at the pause.
+        # 2.5M docs keep it running well past the first checkpoint (~60s in).
         backfill = self.pipeline_type == "Backfill"
         self._setup_for_pipeline(
             bandwidth_limit=int(self._input.param("bandwidth_limit", 2 if backfill else 5)),
-            compression_type=self._input.param("compression_type", "None" if backfill else None))
+            compression_type=self._input.param("compression_type", "None" if backfill else None),
+            backfill_docs=int(self._input.param("backfill_docs", 2500000 if backfill else 1000000)))
         doc_gen = BlobGenerator("resetmd", "seed", 512, end=1000)
         self.src_cluster.load_all_buckets_from_generator(kv_gen=doc_gen)
         self.dest_cluster.load_all_buckets_from_generator(kv_gen=doc_gen)

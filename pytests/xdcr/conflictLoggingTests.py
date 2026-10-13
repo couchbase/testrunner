@@ -456,6 +456,8 @@ class ConflictLoggingTests(XDCRNewBaseTest):
         """
         self.log.info("Pausing both replications to isolate clusters for deterministic "
                       "conflict generation")
+        stop_targets = self._pipeline_stop_targets(self._get_all_replications())
+        stop_baseline = self._pipeline_stop_counts(stop_targets)
         self.src_cluster.pause_all_replications_by_id(verify=False)
         self.dest_cluster.pause_all_replications_by_id(verify=False)
         success = True
@@ -463,8 +465,10 @@ class ConflictLoggingTests(XDCRNewBaseTest):
             # pauseRequested only asks for the pause; the pipeline stops a few seconds
             # later. A load started at once landed on running pipelines and replicated
             # as it went: the basic test then logged 0 conflicts on cbvm, while the same
-            # load with the pause in effect logged 940.
+            # load with the pause in effect logged 940. The "paused" status itself comes
+            # before the pipeline has stopped, so also wait for the stop.
             self._wait_until_replications_paused()
+            self._wait_until_pipelines_stopped(stop_targets, stop_baseline)
             for bucket_name in bucket_names:
                 self.log.info(f"Generating {label} on bucket {bucket_name} on each (isolated) "
                               f"cluster; pillowfight opts={pf_opts}")
@@ -477,14 +481,149 @@ class ConflictLoggingTests(XDCRNewBaseTest):
                                      f"bucket {bucket_name}; conflict generation may be incomplete")
         finally:
             self.log.info("Resuming both replications; XDCR will now detect the conflicts")
-            self.src_cluster.resume_all_replications_by_id(verify=False)
-            self.dest_cluster.resume_all_replications_by_id(verify=False)
+            self._resume_logged_direction_first(bucket_names)
 
         # Confirm the manual resume cleared the pause BEFORE any auto-pause check, so a
         # lingering manual pause is never mistaken for an auto-pause. Only on the success
         # path - on a load exception the finally above still resumes and the error propagates.
         self._wait_until_replications_resumed()
         return success
+
+    def _resume_logged_direction_first(self, bucket_names=None, timeout=180):
+        """Resume the replications whose source cluster logs conflicts, wait until
+        they are running, have logged conflicts for every bucket in `bucket_names`
+        (the buckets that were just loaded on both sides) and have drained the
+        divergent load, then resume the rest.
+
+        Resumed together, the unlogged direction can win the race: its writes into
+        the logging cluster replace that cluster's own versions in DCP before the
+        logged pipeline reads them, and the logged pipeline then skips every doc as
+        target-originated. Run 116204 (8.5.0-1308): target_docs_skipped 1000,
+        true_conflicts_detected 0, no conflict records in either bucket.
+        """
+        first, rest = self._split_by_conflict_logging()
+        first_names = [c.get_name() for c in first]
+        # A replication that has not restarted yet still reports changes_left 0, so a
+        # zero backlog alone let the other direction go early for the second bucket of
+        # the two-bucket row (116331: default logged 634, standard_bucket_1 none).
+        # New conflict records per bucket are the proof that each logged pipeline has
+        # read its side's divergent docs.
+        try:
+            watch = {key: count for key, count
+                     in self._conflict_log_counts(bucket_names, enabled_only=True).items()
+                     if key[0] in first_names}
+        except Exception as e:
+            self.log.warning(f"Cannot read conflict-record counts ({e}); waiting on "
+                             f"changes_left only")
+            watch = {}
+        self.log.info(f"Resuming replications from {first_names} first so the logged "
+                      f"direction sees the divergent docs before the other side's writes")
+        for cluster in first:
+            cluster.resume_all_replications_by_id(verify=False)
+        try:
+            self._wait_for_resumed_backlog(first_names, timeout, watch)
+        finally:
+            for cluster in rest:
+                cluster.resume_all_replications_by_id(verify=False)
+
+    def _collections_without_new_records(self, watch):
+        """The keys of `watch` ({conflict collection: baseline count}) whose conflict
+        record count has not risen above the baseline yet, or None when the counts
+        cannot be read."""
+        try:
+            return sorted(key for key, baseline in watch.items()
+                          if self._get_conflict_log_count(self.get_cb_cluster_by_name(key[0]),
+                                                          *key[1:]) <= baseline)
+        except Exception as e:
+            self.log.warning(f"Cannot read conflict-record counts ({e})")
+            return None
+
+    def _split_by_conflict_logging(self):
+        """([clusters whose replications log conflicts], [the other clusters]).
+        Falls back to the source cluster as the logged one when nothing is set."""
+        logging_clusters = set()
+        for bucket_params in self.conflict_logging_params.values():
+            for cluster_name, settings in bucket_params.items():
+                if not settings.get('disabled'):
+                    logging_clusters.add(cluster_name)
+        clusters = [self.src_cluster, self.dest_cluster]
+        logged = [c for c in clusters if c.get_name() in logging_clusters] or clusters[:1]
+        return logged, [c for c in clusters if c not in logged]
+
+    def _replication_statuses(self, cluster_names):
+        """{repl_id: tasks status} for every replication sourced from `cluster_names`."""
+        statuses = {}
+        for repl in self._get_all_replications():
+            if repl.get_src_cluster().get_name() not in cluster_names:
+                continue
+            master = repl.get_src_cluster().get_master_node()
+            statuses[repl.get_repl_id()] = None
+            for task in self._rest_for(master).get_replications():
+                if task.get("id") == repl.get_repl_id():
+                    statuses[repl.get_repl_id()] = task.get("status")
+                    break
+        return statuses
+
+    def _wait_for_replication_status(self, cluster_names, status, timeout=60):
+        """Wait until every replication sourced from `cluster_names` reports `status`
+        in its tasks. Returns the replication ids that never did."""
+        end_time = time.time() + timeout
+        pending = set(self._replication_statuses(cluster_names))
+        while pending and time.time() < end_time:
+            current = self._replication_statuses(cluster_names)
+            pending = {repl_id for repl_id in pending if current.get(repl_id) != status}
+            if pending:
+                self.sleep(1, f"waiting for {sorted(pending)} to be {status}")
+        return pending
+
+    def _wait_for_resumed_backlog(self, cluster_names, timeout, watch=None):
+        """Wait until every replication sourced from `cluster_names` reports status
+        "running", every conflict collection in `watch` ({key: baseline count}) holds
+        new records, and replication_changes_left is 0. Stops early when one of them
+        reports "paused" again: an auto-pause test's burst pauses the logged
+        direction, and its backlog then never drains. Non-fatal: the caller's own
+        assertions report the outcome."""
+        end_time = time.time() + timeout
+        pending = self._wait_for_replication_status(cluster_names, "running", timeout)
+        # changes_left can still read the pre-pause 0 for a moment after the pipeline
+        # starts, so let it report the backlog before trusting a 0.
+        self.sleep(10, "letting the resumed pipelines report their backlog")
+        backlog = None
+        no_records = sorted(watch) if watch else []
+        read_failures = 0
+        while time.time() < end_time:
+            paused_again = sorted(repl_id for repl_id, status
+                                  in self._replication_statuses(cluster_names).items()
+                                  if status == "paused")
+            if paused_again:
+                self.log.info(f"{paused_again} paused again (auto-pause); not waiting for "
+                              f"the logged direction to drain")
+                return
+            if watch:
+                missing = self._collections_without_new_records(watch)
+                if missing is not None:
+                    no_records, read_failures = missing, 0
+                else:
+                    # A transient query failure keeps the last answer; only repeated
+                    # failures give up on the records and wait on changes_left alone.
+                    read_failures += 1
+                    if read_failures >= 3:
+                        self.log.warning("Conflict-record counts unreadable 3 times in a row; "
+                                         "waiting on changes_left only")
+                        watch, no_records = None, []
+            backlog = sum(self.get_total_changes_left(cluster)
+                          for cluster in (self.src_cluster, self.dest_cluster)
+                          if cluster.get_name() in cluster_names)
+            if backlog == 0 and not no_records:
+                break
+            self.sleep(5, f"waiting for the logged direction to drain (changes_left={backlog}, "
+                          f"no new conflict records yet in {no_records})")
+        if pending or backlog or no_records:
+            self.log.warning(f"Logged direction not settled within {timeout}s: not running "
+                             f"{sorted(pending)}, changes_left={backlog}, no new conflict "
+                             f"records in {no_records}; resuming the other direction anyway")
+        else:
+            self.log.info(f"Logged direction from {cluster_names} drained; resuming the rest")
 
     def _create_conflicts_with_pillowfight(self):
         """
@@ -672,20 +811,31 @@ class ConflictLoggingTests(XDCRNewBaseTest):
         query = f'SELECT COUNT(*) FROM `{bucket_name}`.`{scope_name}`.`{collection_name}`'
         return self._XDCRNewBaseTest__execute_query(src_master, query)
 
-    def _conflict_log_total(self):
-        """Conflict records over every configured conflict collection. The collection
-        lives on the replication's source cluster, the one the params are keyed by."""
-        total = 0
-        for bucket_params in self.conflict_logging_params.values():
+    def _conflict_log_counts(self, src_buckets=None, enabled_only=False):
+        """{(cluster, bucket, scope, collection): conflict records} for every configured
+        conflict collection, optionally only those of the replications from `src_buckets`.
+        The collection lives on the replication's source cluster, the one the params are
+        keyed by."""
+        counts = {}
+        for src_bucket, bucket_params in self.conflict_logging_params.items():
+            if src_buckets is not None and src_bucket not in src_buckets:
+                continue
             for cluster_name, settings in bucket_params.items():
                 bucket_name, collection_path = settings.get('bucket'), settings.get('collection')
                 if not bucket_name or not collection_path:
                     continue
+                if enabled_only and settings.get('disabled'):
+                    continue
                 scope_name, collection_name = (collection_path.split('.') if '.' in collection_path
                                                else ('_default', collection_path))
-                total += self._get_conflict_log_count(self.get_cb_cluster_by_name(cluster_name),
-                                                      bucket_name, scope_name, collection_name)
-        return total
+                key = (cluster_name, bucket_name, scope_name, collection_name)
+                counts[key] = self._get_conflict_log_count(
+                    self.get_cb_cluster_by_name(cluster_name), *key[1:])
+        return counts
+
+    def _conflict_log_total(self):
+        """Conflict records over every configured conflict collection."""
+        return sum(self._conflict_log_counts().values())
 
     def _assert_conflict_logs_grew(self, before, context, timeout=120):
         """Fail unless conflict records were added after `before` was read: a check
@@ -1425,9 +1575,13 @@ class ConflictLoggingTests(XDCRNewBaseTest):
         self._set_clog_pause_settings(threshold, duration)
         return threshold, duration
 
-    def _is_any_replication_paused(self):
-        """Return True if any replication currently reports pauseRequested."""
+    def _is_any_replication_paused(self, cluster_names=None):
+        """Return True if any replication currently reports pauseRequested.
+        `cluster_names` limits the check to replications sourced from those clusters."""
         for repl in self._get_all_replications():
+            if cluster_names is not None and \
+                    repl.get_src_cluster().get_name() not in cluster_names:
+                continue
             src_bucket = repl.get_src_bucket().name
             dst_bucket = repl.get_dest_bucket().name
             src_master = repl.get_src_cluster().get_master_node()
@@ -1458,6 +1612,69 @@ class ConflictLoggingTests(XDCRNewBaseTest):
             self.fail(f"Replications {sorted(pending)} still not paused {timeout}s after "
                       f"pauseRequested=true")
         self.log.info(f"All {len(expected)} replications paused after {time.time() - start:.1f}s")
+
+    def _pipeline_stop_targets(self, replications):
+        """{(node "ip:port", repl id): node} for each replication on every active KV
+        node of its own source cluster. A node never logs a stop for a replication it
+        does not source (116397), and a node a rebalance is still adding has no
+        pipeline yet, so neither is waited for."""
+        targets = {}
+        for repl in replications:
+            cluster = repl.get_src_cluster()
+            active = {(node.ip, str(node.port))
+                      for node in RestConnection(cluster.get_master_node()).get_nodes()}
+            matched = [node for node in cluster.get_nodes()
+                       if (node.ip, str(node.port)) in active and
+                       "kv" in str(getattr(node, "services", None) or "kv")]
+            if not matched:
+                self.log.warning(f"No active source node of {repl.get_repl_id()} matches "
+                                 f"{sorted(active)}; not waiting for its pipelines to stop")
+            for node in matched:
+                targets[(f"{node.ip}:{node.port}", repl.get_repl_id())] = node
+        return targets
+
+    def _pipeline_stop_counts(self, targets):
+        """{target: times goxdcr finished a stop request for it}, one zgrep per node.
+        Every stop request ends in one of these lines (pipeline_manager.go): stopped,
+        stopped with errors, not in a stoppable state, or not running."""
+        counts = {key: 0 for key in targets}
+        nodes = {key[0]: node for key, node in targets.items()}
+        pattern = (r'Pipeline [^ ]+ (has been stopped|is not running|is not in the right '
+                   r'state to be stopped)|Received error\(s\) when stopping pipeline [^ ]+')
+        for node_key, node in nodes.items():
+            log_dir = NodeHelper.get_goxdcr_log_dir(node)
+            shell = RemoteMachineShellConnection(node)
+            try:
+                output, _ = shell.execute_command(
+                    f'zgrep -E -h -o "{pattern}" {log_dir}/goxdcr.log*')
+            finally:
+                shell.disconnect()
+            for line in output:
+                parts = line.split()
+                if len(parts) < 2:
+                    continue
+                repl_id = parts[-1] if parts[0] == "Received" else parts[1]
+                if (node_key, repl_id) in counts:
+                    counts[(node_key, repl_id)] += 1
+        return counts
+
+    def _wait_until_pipelines_stopped(self, targets, baseline, timeout=200):
+        """Wait until every target has finished a stop request since `baseline` was
+        read. goxdcr reports "paused" as soon as a pipeline starts to stop, but the
+        stop first waits for an ongoing periodic checkpoint (up to 180s; about one
+        checkpoint interval in practice) and keeps replicating meanwhile. Run 116390:
+        paused at 06:13:58, C2->C1 stopped at 06:14:46, so the divergent load written
+        at 06:14:03 replicated and no conflict was logged."""
+        start = time.time()
+        pending = set(baseline)
+        while pending and time.time() - start < timeout:
+            current = self._pipeline_stop_counts(targets)
+            pending = {key for key in pending if current.get(key, 0) <= baseline[key]}
+            if pending:
+                self.sleep(5, f"waiting for {len(pending)} pipeline(s) to finish stopping")
+        if pending:
+            self.fail(f"Pipelines {sorted(pending)} still running {timeout}s after the pause")
+        self.log.info(f"Pipelines stopped on every source node after {time.time() - start:.1f}s")
 
     def _wait_until_replications_resumed(self, timeout=60):
         """Poll until no replication reports pauseRequested.
@@ -1495,12 +1712,13 @@ class ConflictLoggingTests(XDCRNewBaseTest):
         self.log.warning(f"No auto-pause observed after {timeout}s")
         return False
 
-    def _assert_no_autopause(self, observe_secs):
-        """Fail if any replication becomes paused within observe_secs."""
+    def _assert_no_autopause(self, observe_secs, cluster_names=None):
+        """Fail if any replication (of `cluster_names`, when given) becomes paused
+        within observe_secs."""
         self.log.info(f"Observing {observe_secs}s to confirm no auto-pause...")
         start = time.time()
         while time.time() - start < observe_secs:
-            if self._is_any_replication_paused():
+            if self._is_any_replication_paused(cluster_names):
                 self.fail(f"Replication auto-paused unexpectedly after {time.time() - start:.1f}s")
             self.sleep(AUTOPAUSE_POLL_INTERVAL)
         self.log.info("No auto-pause observed, as expected")
@@ -1761,7 +1979,10 @@ class ConflictLoggingTests(XDCRNewBaseTest):
         duration = self._input.param("clog_monitor_duration", 10)
         threshold = self._input.param("clog_pause_threshold", 1000)
         rate_limit = self._input.param("clog_rate_limit", 50)  # ops/sec per cluster, << threshold
-        observe_secs = self._input.param("observe_secs", duration * 3)
+        # Long enough that the drip's conflicts summed over the observation clearly exceed
+        # the threshold (~35/s measured on 8.5.0-1308), so a window that never resets
+        # would auto-pause inside it.
+        observe_secs = self._input.param("observe_secs", duration * 6)
 
         self._create_scopes_and_collections()
         self.setup_xdcr_and_load()
@@ -1772,32 +1993,68 @@ class ConflictLoggingTests(XDCRNewBaseTest):
         # Rate-limited, steady conflict drip well under the per-cycle threshold. Launch it in
         # the background so it runs *concurrently* with the observation window spanning several
         # cLogMonitorDuration windows. No single cycle's running sum should breach the threshold.
-        # Both clusters use the shared key prefix so the drip produces real (overlapping-key)
-        # conflicts, and timeout_secs self-terminates each pillowfight at the end of the window.
+        # timeout_secs self-terminates each pillowfight at the end of the window.
+        # Both sides update the same few keys (no population phase, single-op batches) for
+        # the whole window. With both directions running, each side's write has usually
+        # seen the other's last one, so nothing is concurrent: on 8.5.0-1308 CI the logged
+        # pipeline wrote half the drip, skipped the other half as target-originated and
+        # detected 0 true conflicts (run 116270). So the unlogged direction is paused for
+        # the drip and the logged pipeline keeps running: a logged-side update is then a
+        # true conflict whenever the other side wrote the key since the previous one. The
+        # other side drips faster, so that holds for nearly every update, while its own
+        # writes cannot conflict (their replications are paused). --rate-limit is per
+        # thread, so the logged pipeline sees at most rate_limit conflicts per second:
+        # under threshold / duration in any one window, yet over the threshold summed
+        # across the observation, which is what makes a missing window reset visible.
+        logged, unlogged = self._split_by_conflict_logging()
+        logged_names = [c.get_name() for c in logged]
+        unlogged_names = [c.get_name() for c in unlogged]
         bucket_names = list(self.conflict_logging_params.keys()) or ["default"]
         drip_secs = observe_secs + duration
-        num_items = rate_limit * drip_secs
-        pf_opts = ["-I", str(num_items), "-m", "100", "-M", "100", "-c", "10", "-t", "2",
-                   "-B", "100", "--rate-limit", str(rate_limit), "--key-prefix", CONFLICT_KEY_PREFIX]
-        self.log.info(f"Starting rate-limited conflict drip: {rate_limit} ops/sec/cluster for "
-                      f"~{drip_secs}s, threshold={threshold}, monitor_duration={duration}s; "
-                      f"pillowfight opts={pf_opts}")
+        drip_keys = self._input.param("clog_drip_keys", 10)
+        unlogged_rate = rate_limit * self._input.param("clog_drip_unlogged_factor", 4)
+
+        def drip_opts(rate):
+            return ["-I", str(drip_keys), "--no-population", "-r", "100", "-c", "-1",
+                    "-m", "100", "-M", "100", "-t", "1", "-B", "1",
+                    "--rate-limit", str(rate), "--key-prefix", CONFLICT_KEY_PREFIX]
+
+        drips = [(master, drip_opts(rate_limit if cluster in logged else unlogged_rate))
+                 for cluster, master in ((self.src_cluster, self.src_master),
+                                         (self.dest_cluster, self.dest_master))]
+        self.log.info(f"Starting rate-limited conflict drip for ~{drip_secs}s: {rate_limit} "
+                      f"ops/sec on {logged_names}, {unlogged_rate} ops/sec on {unlogged_names}, "
+                      f"threshold={threshold}, monitor_duration={duration}s")
+        self.log.info(f"Pausing replications from {unlogged_names} for the drip; "
+                      f"{logged_names} keep running")
+        unlogged_repls = [repl for repl in self._get_all_replications()
+                          if repl.get_src_cluster().get_name() in unlogged_names]
+        stop_targets = self._pipeline_stop_targets(unlogged_repls)
+        stop_baseline = self._pipeline_stop_counts(stop_targets)
+        for cluster in unlogged:
+            cluster.pause_all_replications_by_id(verify=False)
         threads = []
-        before = self._conflict_log_total()
-        if self._replication_direction == "bidirection":
+        try:
+            not_paused = self._wait_for_replication_status(unlogged_names, "paused")
+            if not_paused:
+                self.fail(f"Replications {sorted(not_paused)} did not pause for the drip")
+            self._wait_until_pipelines_stopped(stop_targets, stop_baseline)
+            before = self._conflict_log_total()
             for bucket_name in bucket_names:
-                for node in (self.src_master, self.dest_master):
+                for node, pf_opts in drips:
                     t = threading.Thread(
                         target=self._run_pillowfight,
                         args=(node, bucket_name, pf_opts, f"window-reset drip {node.ip}"),
                         kwargs={"timeout_secs": drip_secs}, daemon=True)
                     t.start()
                     threads.append(t)
-        try:
-            self._assert_no_autopause(observe_secs)
+            # Only the logged direction can auto-pause; the other one is paused by hand.
+            self._assert_no_autopause(observe_secs, cluster_names=logged_names)
         finally:
             for t in threads:
                 t.join(timeout=drip_secs)
+            for cluster in unlogged:
+                cluster.resume_all_replications_by_id(verify=False)
         self._assert_conflict_logs_grew(before, "from the drip")
 
     def test_clog_resume_after_autopause(self):

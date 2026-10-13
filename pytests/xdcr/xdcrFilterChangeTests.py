@@ -285,12 +285,17 @@ class XDCRFilterChangeTests(XDCRNewBaseTest):
     
     def _verify_document_increase(self, expected_increase):
         """Verify that documents were actually loaded"""
-        # Wait a moment for the documents to be indexed
-        self.sleep(5, "Waiting for documents to be indexed")
-        
-        # Get current count and compare with before count
-        src_count_after, _ = self.get_document_counts()
-        
+        # curr_items comes from the latest stats sample (every ~10s), so one read 5s after
+        # the load can still show the old count (run 115617: 100000 -> 100000 for 40 docs
+        # pillowfight had written). Poll until the increase shows up or 60s pass.
+        end_time = time.time() + 60
+        while True:
+            self.sleep(5, "Waiting for the new documents to show in the bucket stats")
+            src_count_after, _ = self.get_document_counts()
+            if not hasattr(self, 'src_count_before_pause') or time.time() >= end_time or \
+                    src_count_after - self.src_count_before_pause >= expected_increase:
+                break
+
         if hasattr(self, 'src_count_before_pause'):
             actual_increase = src_count_after - self.src_count_before_pause
             self.log.info(f"Document count verification: before={self.src_count_before_pause}, after={src_count_after}, increase={actual_increase}")

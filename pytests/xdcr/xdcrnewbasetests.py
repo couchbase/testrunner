@@ -2650,15 +2650,140 @@ class CouchbaseCluster:
             )
         return tasks
 
+    # Past this share of the cluster's data disks memcached hits DiskFull, ns_server
+    # crash-loops on enospc, and every later test fails on an unreachable node.
+    DGM_MAX_DISK_USED = 0.85
+
     def load_all_buckets_till_dgm(self, active_resident_threshold, value_size, expiry):
-        tasks = []
-        for bucket in self.__buckets:
-            tasks.append(self.__clusterop.async_load_gen_docs_till_dgm(server=self.__master_node, bucket=bucket,
-                                                                       active_resident_threshold=active_resident_threshold,
-                                                                       value_size=value_size,
-                                                                       exp=expiry,
-                                                                       java_sdk_client=self.use_java_sdk))
-        return tasks
+        """Load each bucket until its active resident ratio is at or below
+        `active_resident_threshold`, one bucket at a time.
+
+        This used clusterop.async_load_gen_docs_till_dgm, which queues 10000*loop docs
+        a minute without waiting for them (10 GB, then 20 GB ... in flight with 1 MB
+        values), leaves its loaders running after it returns, and on timeout only
+        prints, so tests went on far from DGM (CI 113760 passed at RR 53.6 against a
+        target of 1). Here every batch is sized from the bucket quota and waited for,
+        disk use is checked between batches, and missing the target raises.
+        """
+        timeout_mins = int(TestInputSingleton.input.param("dgm_timeout_mins", 60))
+        value_size = max(int(value_size), 1)
+        loaded = [self.__load_bucket_till_dgm(bucket, float(active_resident_threshold),
+                                              value_size, expiry, timeout_mins)
+                  for bucket in self.__buckets]
+        if loaded and not self.use_java_sdk:
+            # async_update_delete derives its keys from the create generator, as after
+            # load_all_buckets; keys below the smallest count exist in every bucket.
+            prefix = self.__dgm_key_prefix()
+            self.gen = self.__kv_gen[OPS.CREATE] = BlobGenerator(
+                prefix, prefix + "-", value_size, start=0, end=min(loaded))
+        return []
+
+    def __dgm_key_prefix(self):
+        # The cluster name keeps the two sides of a bidirectional pair on
+        # different keys, as the old loader's random prefix did.
+        return "dgm-{0}".format(self.__name)
+
+    def __dgm_reading(self, rest, bucket_name):
+        """(active resident ratio %, active items, data disk used fraction,
+        data disk free bytes, bytes used by data) for the bucket and the cluster."""
+        last_error = None
+        for _ in range(3):
+            try:
+                samples = rest.fetch_bucket_stats(bucket=bucket_name, zoom="minute")["op"]["samples"]
+                rr = samples["vb_active_resident_items_ratio"][-1]
+                items = samples["curr_items"][-1]
+                hdd = rest.get_pools_default()["storageTotals"]["hdd"]
+                if rr is not None and items is not None:
+                    return (float(rr), int(items), hdd["used"] / float(hdd["total"]),
+                            hdd["free"], hdd["usedByData"])
+                last_error = "stats sample without the resident ratio or item count"
+            except Exception as e:
+                last_error = e
+            time.sleep(10)
+        raise XDCRException("Cannot read the resident ratio or disk usage of bucket {0} on {1}: {2}"
+                            .format(bucket_name, self.__master_node.ip, last_error))
+
+    def __load_dgm_batch(self, bucket, start, count, value_size, expiry):
+        """Load `count` docs; with the java loader `count` is per collection."""
+        if self.use_java_sdk:
+            gen = SDKDataLoader(num_ops=count, start_seq_num=start, percent_create=100,
+                                percent_update=0, percent_delete=0, doc_size=value_size,
+                                doc_expiry=expiry, all_collections=True, json_template="Person")
+            task = self.__clusterop.async_load_gen_docs(self.__master_node, bucket.name, gen)
+        else:
+            prefix = self.__dgm_key_prefix()
+            gen = BlobGenerator(prefix, prefix + "-", value_size, start=start, end=start + count)
+            task = self.__clusterop.async_load_gen_docs(
+                self.__master_node, bucket.name, gen, bucket.kvs[1], OPS.CREATE, exp=expiry,
+                flag=0, only_store_hash=True, batch_size=1000, pause_secs=1, timeout_secs=180)
+        task.result()
+
+    def __load_bucket_till_dgm(self, bucket, threshold, value_size, expiry, timeout_mins):
+        rest = RestConnection(self.__master_node)
+        # The java loader (all_collections) writes its count into every collection,
+        # so a batch is split across them; with ~50 collections an unsplit batch
+        # loaded 50 times what was asked (1.86M docs for a 35K batch).
+        collections = 1
+        if self.use_java_sdk:
+            manifest = rest.get_bucket_manifest(bucket.name)
+            collections = max(1, sum(len(scope.get("collections", []))
+                                     for scope in manifest.get("scopes", [])))
+        quota_bytes = int(bucket.bucket_size) * 1024 * 1024 * len(self.get_nodes())
+        min_batch = max(100, int(0.1 * quota_bytes / value_size))
+        max_batch = max(min_batch, int(2 * quota_bytes / value_size))
+        # Doubles until the bucket leaves memory (RR < 100), so a mild target such as
+        # RR 75 is not overshot by one quota-sized batch.
+        batch = min_batch
+        deadline = time.time() + timeout_mins * 60
+        rr, items, disk_used, disk_free, data_bytes = self.__dgm_reading(rest, bucket.name)
+        items_start, data_bytes_start, start = items, data_bytes, 0
+        self.__log.info("Loading bucket {0} to an active resident ratio of {1}% with {2}-byte docs "
+                        "(quota {3} MB per node, {4} collections, first batch {5} docs)".format(
+                            bucket.name, threshold, value_size, bucket.bucket_size, collections,
+                            batch))
+        # At least one batch, as the old loader did: a row with dgm_run and no
+        # threshold (default 100) still expects data, and an empty bucket is at 100.
+        while True:
+            if time.time() >= deadline:
+                raise XDCRException(
+                    "Bucket {0} did not reach the DGM target in {1} min: active resident ratio "
+                    "{2:.1f}% > {3}% with {4} items".format(bucket.name, timeout_mins, rr,
+                                                            threshold, items))
+            if disk_used >= self.DGM_MAX_DISK_USED:
+                raise XDCRException(
+                    "Stopping the DGM load of bucket {0}: data disks are {1:.0%} full at an active "
+                    "resident ratio of {2:.1f}% (target {3}%). The cluster cannot hold the data "
+                    "this target needs; lower the bucket quota or the target, or put data_path on "
+                    "a larger disk".format(bucket.name, disk_used, rr, threshold))
+            per_collection = max(1, batch // collections)
+            self.__load_dgm_batch(bucket, start, per_collection, value_size, expiry)
+            start += per_collection
+            time.sleep(15)
+            rr, items, disk_used, disk_free, data_bytes = self.__dgm_reading(rest, bucket.name)
+            self.__log.info("Bucket {0}: active resident ratio {1:.1f}% (target {2}%), {3} items, "
+                            "data disks {4:.0%} full".format(bucket.name, rr, threshold, items,
+                                                             disk_used))
+            if rr <= threshold:
+                break
+            if rr >= 100 or not items:
+                batch = min(max_batch, batch * 2)
+                continue
+            # In DGM the resident set stays about the same, so the target needs about
+            # items * rr / threshold items. Load half of what is left each time.
+            remaining = items * rr / threshold - items
+            if items > items_start and data_bytes > data_bytes_start:
+                per_item = (data_bytes - data_bytes_start) / float(items - items_start)
+                if per_item * remaining > 0.9 * disk_free:
+                    raise XDCRException(
+                        "Bucket {0} needs about {1:.0f} GB more on the data disks to reach an "
+                        "active resident ratio of {2}% (now {3:.1f}%), and {4:.0f} GB are free; "
+                        "lower the bucket quota or the target, or put data_path on a larger "
+                        "disk".format(bucket.name, per_item * remaining / 1e9, threshold, rr,
+                                      disk_free / 1e9))
+            batch = int(min(max_batch, max(min_batch, remaining / 2)))
+        self.__log.info("Bucket {0} reached an active resident ratio of {1:.1f}% (target {2}%) "
+                        "with {3} items".format(bucket.name, rr, threshold, items))
+        return start
 
     def async_update_delete(
             self, op_type, perc=30, expiration=0, kv_store=1, num_items=1000):
@@ -5765,6 +5890,11 @@ class XDCRNewBaseTest(unittest.TestCase):
         src_cluster = None
         dest_cluster = None
         self.__merge_all_buckets()
+        if self._use_java_sdk and self._dgm_run:
+            # Java loads skip the key, item-count and rev-id checks below, and the
+            # per-collection count reads 0 = 0 for implicit mappings, so nothing else
+            # checks that the DGM data replicated.
+            self._wait_for_replication_to_catchup()
         for cb_cluster in self.__cb_clusters:
             for remote_cluster_ref in cb_cluster.get_remote_clusters():
                 try:
