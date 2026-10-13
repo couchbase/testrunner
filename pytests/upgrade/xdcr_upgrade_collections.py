@@ -1,4 +1,5 @@
 import queue
+import time
 from .newupgradebasetest import NewUpgradeBaseTest
 from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
 from couchbase_helper.documentgenerator import BlobGenerator
@@ -171,6 +172,160 @@ class XDCRUpgradeCollectionsTests(NewUpgradeBaseTest):
         # flushing buckets after upgrade
         if after_upgrade_buckets_flush is not False:
             self._all_buckets_flush()
+
+    def test_xdcr_online_upgrade_with_services(self):
+        """
+        Online counterpart of test_xdcr_upgrade_with_services. C1 and then C2 are
+        upgraded one node at a time (graceful failover, in-place package upgrade,
+        delta recovery, rebalance) while the C1->C2 replication keeps running. After
+        every node a fresh batch is loaded on C1 and must reach C2, so replication is
+        checked through both mixed-version windows: C1 mixed with C2 old, then C1 new
+        with C2 mixed.
+        """
+        # An unfetchable build makes the installer kill the whole testrunner, and the
+        # class defaults are unfetchable, so never fall back on them.
+        for param in ("initial_version", "upgrade_version"):
+            if param not in self.input.test_params:
+                self.fail("test_xdcr_online_upgrade_with_services needs {0}".format(param))
+        if self.initial_version == self.upgrade_versions[-1]:
+            self.fail("initial_version and upgrade_version are both {0}; nothing would be "
+                      "upgraded".format(self.initial_version))
+        step_items = self.input.param("step_items", 1000)
+        catchup_timeout = self.input.param("catchup_timeout", 600)
+        src_nodes = self.servers[:self.nodes_init]
+        des_nodes = self.servers[self.nodes_init:self.num_servers]
+        if len(src_nodes) < 2 or len(des_nodes) < 2:
+            self.fail("Online upgrade needs at least 2 nodes per cluster, got C1={0} C2={1}"
+                      .format(len(src_nodes), len(des_nodes)))
+
+        # Cluster setup as in test_xdcr_upgrade_with_services, except that every node
+        # joins: operations() rebalances in one node per services entry, so the
+        # offline test's "kv,kv" leaves all but two nodes of each cluster standalone
+        self._install(src_nodes)
+        self.operations(src_nodes, services=",".join(["kv"] * len(src_nodes)))
+        self.pre_upgrade(src_nodes)
+
+        self._install(des_nodes)
+        self.master = des_nodes[0]
+        try:
+            self.operations(des_nodes, services=",".join(["kv"] * len(des_nodes)))
+            self.sleep(timeout=10)
+        except Exception as ex:
+            self.log.warning("C2 setup raised: {0}".format(ex))
+        if "default" not in RestConnection(des_nodes[0]).get_buckets_itemCount():
+            self.fail("C2 has no default bucket after setup")
+        for cluster_name, nodes in (("C1", src_nodes), ("C2", des_nodes)):
+            members = len(RestConnection(nodes[0]).get_nodes())
+            if members != len(nodes):
+                self.fail("{0} has {1} active nodes after setup, expected {2}"
+                          .format(cluster_name, members, len(nodes)))
+
+        self.rest_src.add_remote_cluster(des_nodes[0].ip, des_nodes[0].port,
+                                         'Administrator', 'password', "C2")
+        repl_id = self.rest_src.start_replication('continuous', 'default', "C2")
+        if repl_id is None:
+            self.fail("Could not create the default C1->C2 replication")
+        self._create_ephemeral_buckets()
+        self.post_upgrade(src_nodes)
+
+        # operations() loaded the same num_items keys into default on both clusters
+        expected_items = self.num_items
+        self._wait_for_default_items(src_nodes[0], des_nodes[0], expected_items,
+                                     "before upgrade", catchup_timeout)
+
+        for hop, upgrade_version in enumerate(self.upgrade_versions):
+            for cluster_name, nodes in (("C1", src_nodes), ("C2", des_nodes)):
+                for index, node in enumerate(nodes, 1):
+                    step = "{0} node {1}/{2} ({3}) to {4}".format(
+                        cluster_name, index, len(nodes), node.ip, upgrade_version)
+                    self._online_upgrade_node(nodes, node, upgrade_version, step)
+                    key_prefix = "online_{0}_{1}_{2}_".format(hop, cluster_name.lower(), index)
+                    gen_load = BlobGenerator(key_prefix, key_prefix, self.value_size,
+                                             end=step_items)
+                    self._load_all_buckets(src_nodes[0], gen_load, "create", 0)
+                    expected_items += step_items
+                    self._wait_for_default_items(src_nodes[0], des_nodes[0], expected_items,
+                                                 "after upgrading " + step, catchup_timeout)
+
+        # Same post-upgrade collection checks as test_xdcr_upgrade_with_services
+        self.master = self.servers[0]
+        self.rest = RestConnection(self.master)
+        self.rest_col = CollectionsRest(self.master)
+        self.cli_col = CollectionsCLI(self.master)
+        self.stat_col = CollectionsStats(self.master)
+        self.des_rest_col = CollectionsRest(des_nodes[0])
+        self.des_cli_col = CollectionsCLI(des_nodes[0])
+        self.des_stat_col = CollectionsStats(des_nodes[0])
+        self.buckets = RestConnection(des_nodes[0]).get_buckets()
+        self._create_scope_collection(self.rest_col, self.cli_col, self.buckets[0].name)
+        self._create_scope_collection(self.des_rest_col, self.des_cli_col, self.buckets[0].name)
+        self.load_to_collections_bucket()
+        if self.input.param("enable_migration", False):
+            self.enable_migration_mode(self.buckets[0].name, self.buckets[0].name)
+        self.verify_doc_counts()
+
+    def _online_upgrade_node(self, cluster_nodes, node, upgrade_version, step):
+        """Graceful failover, package upgrade and delta recovery of one node."""
+        peer = [n for n in cluster_nodes if (n.ip, str(n.port)) != (node.ip, str(node.port))][0]
+        rest = RestConnection(peer)
+        otp_id = self._cluster_node(rest, node, step).id
+
+        rest.fail_over(otp_id, graceful=True)
+        if not rest.monitorRebalance():
+            self.fail("Graceful failover of {0} did not complete".format(step))
+        membership = self._cluster_node(rest, node, step).clusterMembership
+        if membership != "inactiveFailed":
+            self.fail("{0} is {1} after graceful failover, expected inactiveFailed"
+                      .format(step, membership))
+
+        remote = RemoteMachineShellConnection(node)
+        try:
+            remote.stop_server()
+        finally:
+            remote.disconnect()
+        # The node is still a cluster member, so it must not be re-initialised
+        self._upgrade(upgrade_version, node, queue=self.queue, skip_init=True)
+
+        # setRecoveryType alone marks the node for recovery; reAddNode would ask for a
+        # full recovery instead
+        rest.set_recovery_type(otp_id, "delta")
+        state = self._cluster_node(rest, node, step)
+        if state.clusterMembership != "inactiveAdded" or state.recoveryType != "delta":
+            self.fail("{0}: node is {1} with recoveryType {2}, expected a pending delta recovery"
+                      .format(step, state.clusterMembership, state.recoveryType))
+        rest.rebalance(otpNodes=[n.id for n in rest.node_statuses()], ejectedNodes=[])
+        if not rest.monitorRebalance():
+            self.fail("Delta-recovery rebalance after {0} failed".format(step))
+
+        # couchbase_upgrade does not check what dpkg/rpm did, so a failed package
+        # install would leave the old build running unnoticed
+        state = self._cluster_node(rest, node, step)
+        if state.clusterMembership != "active" or not state.version.startswith(upgrade_version):
+            self.fail("{0}: node is {1} running {2} after delta recovery"
+                      .format(step, state.clusterMembership, state.version))
+        self.log.info("Upgraded {0}".format(step))
+
+    def _cluster_node(self, rest, server, step):
+        for node in rest.get_nodes(get_all_nodes=True):
+            if node.ip == server.ip and str(node.port) == str(server.port):
+                return node
+        self.fail("{0}: {1}:{2} is not in the cluster".format(step, server.ip, server.port))
+
+    def _wait_for_default_items(self, src_node, des_node, expected, context, timeout):
+        """Wait until default holds exactly `expected` items on both clusters."""
+        end_time = time.time() + timeout
+        while True:
+            src_items = RestConnection(src_node).get_buckets_itemCount().get("default")
+            des_items = RestConnection(des_node).get_buckets_itemCount().get("default")
+            if src_items == expected and des_items == expected:
+                self.log.info("{0}: default holds {1} items on both clusters"
+                              .format(context, expected))
+                return
+            if time.time() > end_time:
+                self.fail("{0}: default did not reach {1} items within {2}s: src={3}, des={4}"
+                          .format(context, expected, timeout, src_items, des_items))
+            self.sleep(10, "{0}: expecting {1}, src={2}, des={3}"
+                       .format(context, expected, src_items, des_items))
 
     def run_view_queries(self):
         view_query_thread = Thread(target=self.view_queries, name="run_queries",
