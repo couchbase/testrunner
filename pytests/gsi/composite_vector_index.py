@@ -5702,13 +5702,15 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.item_count_related_validations()
 
             # Updating dimensions of vector fields for subset of documents and running scans
+            # DocLoader update range is [update_start, update_end)
+            update_start, update_end = 1, 10000
             keyspace = namespace.split(":")[-1]
             bucket, scope, collection = keyspace.split(".")
             self.gen_update = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=0,
                                             percent_update=100, percent_delete=0, workers=16, scope=scope,
                                             collection=collection, json_template=self.json_template, timeout=2000,
                                             op_type="update", mutate=1, dim=128, model=self.data_model,
-                                            update_start=1, update_end=10000)
+                                            update_start=update_start, update_end=update_end)
             task = self.cluster.async_load_gen_docs(data_node, bucket=bucket,
                                                     generator=self.gen_update,
                                                     timeout_secs=2000, use_magma_loader=True)
@@ -5724,7 +5726,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                             percent_update=100, percent_delete=0, workers=16, scope=scope,
                                             collection=collection, json_template=self.json_template, timeout=2000,
                                             op_type="update", mutate=1, dim=self.dimension, model=self.data_model,
-                                            update_start=1, update_end=10000)
+                                            update_start=update_start, update_end=update_end)
             task = self.cluster.async_load_gen_docs(data_node, bucket=bucket,
                                                     generator=self.gen_update,
                                                     timeout_secs=2000, use_magma_loader=True)
@@ -5733,7 +5735,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.item_count_related_validations()
 
             error_stat_name = "data_out_of_bounds" if self.isSparse else "invalid_vec_dim"
-            error_msg_and_doc_count = (f'"{error_stat_name}":10000')
+            error_msg_and_doc_count = (f'"{error_stat_name}":{update_end - update_start}')
             self.assertTrue(self.validate_error_msg_and_doc_count_in_cbcollect(self.master, error_msg_and_doc_count))
 
             query_stats_map = {}
