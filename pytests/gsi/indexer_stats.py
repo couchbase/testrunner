@@ -120,10 +120,12 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
         self.all_master_stats = self.rest.get_all_index_stats()
         self.consumer_filters = {"planner": {
             "indexer_level_stats": ["memory_quota", "memory_used", "memory_used_storage", "uptime", "cpu_utilization",
-                                    "memory_rss", "shard_compat_version"],
+                                    "memory_rss", "shard_compat_version", "bhive_shard_compat_version",
+                                    "memory_total_storage"],
             "index_level_stats": ['avg_disk_bps', 'avg_drain_rate', 'avg_mutation_rate', 'avg_scan_rate',
                                   'backstore_recs_in_mem', 'backstore_recs_on_disk', 'build_progress',
-                                  'combined_resident_percent', 'data_size', 'disk_size', 'index_state',
+                                  'combined_resident_percent', 'combined_memory_size_index', 'data_size',
+                                  'disk_size', 'index_state',
                                   'items_count', 'last_rollback_time', 'memory_used', 'num_docs_pending',
                                   'num_docs_queued', 'num_flush_queued', 'num_rows_returned', 'progress_stat_time',
                                   'recs_in_mem', 'recs_on_disk', 'resident_percent']
