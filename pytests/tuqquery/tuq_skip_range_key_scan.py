@@ -556,7 +556,7 @@ class QuerySkipRangeScanTests(QueryTests):
             self.query = f"EXPLAIN {select_query}"
             explain = self.run_cbq_query()
             plan_str = str(explain['results'])
-            self.assertIn('SequentialScan', plan_str,
+            self.assertIn('sequentialscan', plan_str.lower(),
                           f"MB-71904: Expected KV range scan (SequentialScan) in plan but got: {plan_str}")
 
             # Query with REQUEST_PLUS — with the fix, KV range scan honours this
