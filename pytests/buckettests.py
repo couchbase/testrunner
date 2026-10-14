@@ -29,7 +29,7 @@ class CreateBucketTests(BaseTestCase):
         self.server = self.master
         self.rest = RestConnection(self.server)
         self.node_version = self.rest.get_nodes_version()
-        self.total_items_travel_sample = 63288
+        self.total_items_travel_sample = 63340
         shell = RemoteMachineShellConnection(self.master)
         type = shell.extract_remote_info().distribution_type
         shell.disconnect()
@@ -207,7 +207,7 @@ class CreateBucketTests(BaseTestCase):
         shell = RemoteMachineShellConnection(self.master)
         shell.execute_command(
             "{0}cbimport json -f sample -u Administrator -p password "
-            "-c {1}:{2} -b travel-sample -m 200 -d {3}travel-sample.zip"
+            "-c {1}:{2} -b travel-sample -d {3}travel-sample.zip"
             .format(self.bin_path, self.master.ip, self.master.port,
                     self.sample_path))
         shell.disconnect()
