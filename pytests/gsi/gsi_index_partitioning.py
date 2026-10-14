@@ -3702,7 +3702,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         self.sleep(30)
 
-        node_list = copy.deepcopy(self.node_list[1:])
+        node_list = copy.deepcopy(self.node_list)  # incl. excluded node: rebalance repairs lost partitions onto it
         if node_out_str in node_list:
             node_list.remove(node_out_str)
         self.log.info(node_list)
@@ -3725,10 +3725,10 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             # Use a fresh RestConnection(self.index_servers[0]) instead of stale self.rest (bound to a node at setUp time that may have since been failed over/rebalanced out, causing connection refused)
                 RestConnection(self.index_servers[0]).get_indexer_metadata(), index)
 
-        self.assertEqual(total_index_item_count, bucket_item_count,
+        self.assertEqual(total_index_item_count, bucket_item_count * (self.num_index_replica + 1),
                          "Item count in index do not match after cluster ops.")
 
-        self.assertEqual(self.num_index_partitions, total_partition_count,
+        self.assertEqual(self.num_index_partitions * (self.num_index_replica + 1), total_partition_count,
                          "Some partitions are not available after rebalance")
 
     def test_replica_partition_index_with_excluded_nodes_failover_addback(self):
