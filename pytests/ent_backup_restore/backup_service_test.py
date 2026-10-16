@@ -106,6 +106,23 @@ from pytests.fts.fts_callable import (
 )
 
 
+
+class _EncryptedBody2(Body2):
+    """Body2 plus the repository encryption fields the generated client lacks."""
+    swagger_types = dict(Body2.swagger_types,
+                         encryption_key_url='str', km_auth_type='str',
+                         km_access_file_path='str')
+    attribute_map = dict(Body2.attribute_map,
+                         encryption_key_url='encryption_key_url',
+                         km_auth_type='km_auth_type',
+                         km_access_file_path='km_access_file_path')
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.encryption_key_url = None
+        self.km_auth_type = None
+        self.km_access_file_path = None
+
 class BackupServiceTest(BackupServiceBase):
     def setUp(self):
         super().setUp()
@@ -3490,7 +3507,7 @@ class BackupServiceTest(BackupServiceBase):
 
         Params:
           cbbs_scenario : end_to_end | collect_logs | upgrade |
-                          missing_creds | history_tamper
+                          missing_creds | history_tamper | history_plaintext
           ear=True, ear_protection (+ ear_km_* for KMS)
           expected_error : error substring for negative scenarios
         """
@@ -3509,6 +3526,7 @@ class BackupServiceTest(BackupServiceBase):
             "upgrade": self._cbbs_ear_upgrade,
             "missing_creds": self._cbbs_ear_missing_creds,
             "history_tamper": self._cbbs_ear_history_tamper,
+            "history_plaintext": self._cbbs_ear_history_plaintext,
         }
         handler = dispatch.get(cbbs_scenario)
         if not handler:
@@ -3521,7 +3539,16 @@ class BackupServiceTest(BackupServiceBase):
     # --- CBBS EaR helper: create encrypted repo via the service ---
     def _cbbs_ear_create_encrypted_repo(self, repo_name="ear_repo"):
         """Create a plan + repository with encryption enabled via the backup
-        service REST API. Returns the repo_name."""
+        service REST API. Returns the repo_name.
+
+        The service has no passphrase mode: encryption is chosen at repo
+        creation with flat KMS fields (encryption_key_url, km_auth_type, ...)
+        in the create-repository body, so the test needs ear_protection=kms
+        with ear_km_key_url (and ear_km_auth_file, a credentials file that
+        already exists on the backup node, for GCP/Azure/Vault file auth)."""
+        if self.backupset.protection != "kms" or not self.backupset.km_key_url:
+            self.fail("CBBS encrypted repos need ear_protection=kms and "
+                      "ear_km_key_url (the Backup Service has no passphrase mode)")
         plan_name = "ear_plan"
 
         # Create a plan with a backup task
@@ -3535,7 +3562,11 @@ class BackupServiceTest(BackupServiceBase):
         self.create_plan(plan_name, body=plan_body)
 
         # Create repository body
-        body = Body2(plan=plan_name, archive=self.backupset.directory)
+        body = _EncryptedBody2(plan=plan_name, archive=self.backupset.directory)
+        body.encryption_key_url = self.backupset.km_key_url
+        if self.backupset.km_auth_file:
+            body.km_auth_type = "file"
+            body.km_access_file_path = self.backupset.km_auth_file
         if self.objstore_provider:
             body = self.set_cloud_credentials(body)
             self.chown(self.objstore_provider.staging_directory)
@@ -3798,6 +3829,56 @@ class BackupServiceTest(BackupServiceBase):
             self.backupset.omit_credentials = False
 
     # --- TMP-007: history_tamper ---
+    def _cbbs_ear_history_plaintext(self, expected_error):
+        """MB-71541: the CBBS task history file (.cbbs-<uuid>/self-<repo>/history.*)
+        must not carry plaintext bucket names for an encrypted repo."""
+        repo_name = self._cbbs_ear_create_encrypted_repo()
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size,
+                            end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.sleep(10)
+        task_name = self.take_one_off_backup_with_name(
+            repo_name, body=Body4(full_backup=True)).task_name
+        self.assertTrue(self.wait_for_task(repo_name, task_name, timeout=400),
+                        "EaR CBBS history_plaintext: backup failed")
+
+        hidden_repo_name = self.get_repositories('active')[0].repo
+
+        # Precondition: the repo must really be encrypted, otherwise a
+        # plaintext history file is expected and proves nothing. The service
+        # REST API has no repo-encryption field, so this can fail on builds
+        # where CBBS repos cannot be encrypted.
+        shell = RemoteMachineShellConnection(self.backupset.backup_host)
+        info_out, info_err = shell.execute_command(
+            "{0}/cbbackupmgr info -a {1} -r {2}{3}".format(
+                self.cli_command_location, self.backupset.directory,
+                hidden_repo_name, self._common_encryption_arguments()))
+        info_lines = [l for l in (info_out or []) if hidden_repo_name in l]
+        if not info_lines or "true" not in info_lines[0].lower():
+            self.fail("EaR CBBS history_plaintext: repo '%s' is NOT encrypted "
+                      "(cbbackupmgr info: %s); cannot verify MB-71541. The "
+                      "backup service has no way to create an encrypted repo "
+                      "here, so this scenario is invalid until it does."
+                      % (hidden_repo_name,
+                         info_lines or (info_out or []) + (info_err or [])))
+
+        history_file = HistoryFile(self.backupset, hidden_repo_name)
+        hidden_dir = history_file.get_archive_hidden_directory()
+        leaked = []
+        evidence = []
+        for bucket in self.buckets:
+            out, _ = history_file.remote_shell.execute_command(
+                "grep -roa '.\\{{0,70\\}}{0}.\\{{0,70\\}}' {1} 2>/dev/null | head -5".format(
+                    bucket.name, hidden_dir))
+            hits = [line for line in (out or []) if line.strip()]
+            if hits:
+                leaked.append(bucket.name)
+                evidence.extend(hits)
+        if leaked:
+            self.fail("MB-71541: plaintext bucket name(s) %s in %s; matches: %s"
+                      % (leaked, hidden_dir, evidence))
+        self.log.info("EaR CBBS history_plaintext: no bucket names under %s", hidden_dir)
+
     def _cbbs_ear_history_tamper(self, expected_error):
         """Create encrypted repo + backup via CBBS, then tamper with the
         history.* file on disk. Assert that the service detects the tamper

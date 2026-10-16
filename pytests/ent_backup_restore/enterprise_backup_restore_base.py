@@ -743,7 +743,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
 
     def backup_create_validate(self):
         output, error = self.backup_create()
-        if error or "Backup repository `{0}` created successfully".format(self.backupset.name) not in output[0]:
+        created = "Backup repository `{0}` created successfully".format(self.backupset.name)
+        # Newer builds may print warnings first (e.g. the AES256CBC deprecation notice)
+        if error or not any(created in line for line in output):
             self.log.error(f"Backup create failed. Output: {output}, Error: {error}")
             self.fail("Creating backupset failed.")
         status, msg = self.validation_helper.validate_backup_create()

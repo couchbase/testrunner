@@ -313,6 +313,331 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backupset.end = len(self.backups)
         self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
 
+    def _ear_archive_root(self):
+        """Archive directory on the backup host, honouring the objstore staging
+        dir exactly like validate_artifact_confidentiality()."""
+        return (f"{self.backupset.objstore_staging_directory + '/' if self.objstore_provider else ''}"
+                f"{self.backupset.directory}")
+
+    def _ear_run_raw(self, args):
+        """Run `cbbackupmgr <args>` on the backup host and return
+        (combined output lines, exit code). Unlike the command builders this
+        takes the argument string verbatim, so a test controls how secrets
+        appear on the command line (e.g. `--passphrase=x`)."""
+        shell = RemoteMachineShellConnection(self.backupset.backup_host)
+        command = "{0}{1}/cbbackupmgr {2}".format(
+            self._encryption_env_prefix(), self.cli_command_location, args)
+        output, error, exit_code = shell.execute_command(command, get_exit_code=True)
+        shell.disconnect()
+        return (output or []) + (error or []), exit_code
+
+    def _ear_assert_archive_logs_populated(self):
+        """Guard against a vacuous scan: <archive>/logs must exist and hold files."""
+        shell = RemoteMachineShellConnection(self.backupset.backup_host)
+        out, _ = shell.execute_command(
+            "find {0}/logs -type f 2>/dev/null".format(self._ear_archive_root()))
+        shell.disconnect()
+        if not [line for line in (out or []) if line.strip()]:
+            self.fail("Archive-level log dir %s/logs is missing or empty, so the "
+                      "leak scan would pass vacuously" % self._ear_archive_root())
+
+    def _ear_interrupted_restore(self):
+        """Start a restore into a reset cluster, SIGINT it as soon as its
+        .restore work dir appears, and return True if the dir was left behind."""
+        host = self.backupset.restore_cluster_host
+        repo_root = "{0}/{1}".format(self._ear_archive_root(), self.backupset.name)
+        # Restore over the existing buckets: no cluster reset, so it works on the
+        # small single-node lanes where re-provisioning the cluster can fail.
+        restore = ("{0}{1}/cbbackupmgr restore --archive {2} --repo {3} "
+                   "--cluster http://{4}:{5} --username {6} --password {7} "
+                   "--force-updates --threads 1{8}"
+                   .format(self._encryption_env_prefix(), self.cli_command_location,
+                           self.backupset.directory, self.backupset.name,
+                           host.cluster_ip, host.port,
+                           self.backupset.restore_cluster_host_username,
+                           self.backupset.restore_cluster_host_password,
+                           self._common_encryption_arguments()))
+        script = ("{0} > /tmp/mb74352_restore.out 2>&1 & pid=$!; "
+                  "for i in $(seq 1 1200); do "
+                  "[ -d {1}/.restore ] && break; sleep 0.05; done; "
+                  "kill -INT $pid 2>/dev/null; wait $pid 2>/dev/null; sleep 2; "
+                  "[ -d {1}/.restore ] && echo LEFTOVER".format(restore, repo_root))
+        shell = RemoteMachineShellConnection(self.backupset.backup_host)
+        out, _ = shell.execute_command("bash -c '{0}'".format(script))
+        shell.disconnect()
+        return any("LEFTOVER" in line for line in (out or []))
+
+    def test_ear_archive_log_leak(self):
+        """MB-74352: archive-level logs (<archive>/logs) are never encrypted, so
+        they must not contain the repository passphrase, other secret flags, the
+        redaction salt, bucket/scope/collection names or document keys; and
+        nothing on disk may be named after a bucket.
+
+        Params:
+          ear=True (required)
+          leak : (1) secrets in the logged command line
+                 passphrase_eq / passphrase_single_dash / passphrase_dash
+                                    - `--passphrase=<pw>` / `-passphrase <pw>` / `--passphrase=-<pw>`
+                 client_cert_password / client_key_password
+                                    - `--client-cert-password=` / `--client-key-password=`
+                 salt               - `collect-logs --redact --salt <salt>`
+                 (2) repository contents in the logged command line
+                 collection_string / bucket_flag / key / key_short
+                 include_data / exclude_data / include_buckets / exclude_buckets
+                 (3) names in errors
+                 info_error         - `info` on a backup with a missing bucket dir
+                 info_backup_missing- `info --backup` for a scope/collection not in the backup
+                 (4) names on disk
+                 interrupted_restore- a SIGINT-ed restore must not leave a bucket-named dir
+        """
+        self._ear_require_enabled()
+        leak = self.input.param("leak", "passphrase_eq")
+        salt = "Mb74352SaltValue"
+        dash_passphrase = "-Mb74352DashPass"
+        cert_password = "Mb74352CertPw"
+        key_password = "Mb74352KeyPw"
+        missing_scope = "mb74352_noscope"
+        doc_key = "ent-backup-1"
+
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", self.expires)
+        self._ear_create_named_collections()
+        self.backup_create_validate()
+        self.backup_cluster_validate()
+
+        bucket = self.buckets[0].name
+        coll_string = "{0}.{1}.{2}".format(bucket, self.EAR_SCOPE_NAME, self.EAR_COLLECTION_NAME)
+        archive = self.backupset.directory
+        repo = self.backupset.name
+        passphrase = self.backupset.encryption_passphrase
+        enc = self._common_encryption_arguments()
+        enc_cfg = self._common_encryption_arguments(for_config=True)
+        info = "info --archive {0} --repo {1}".format(archive, repo)
+        config = "config --archive {0} --repo mb74352_repo".format(archive)
+        backup_name = self._ear_first_backup_name()
+        # Always scan for names/keys/passphrase/salt, whichever case runs.
+        tokens = {passphrase, salt, doc_key, self.EAR_SCOPE_NAME, self.EAR_COLLECTION_NAME}
+        tokens.update(b.name for b in self.buckets)
+        error_tokens = []
+        leaked_on_disk = []
+
+        raw = {
+            "passphrase_eq": "{0} --passphrase={1}".format(info, passphrase),
+            "passphrase_single_dash": "{0} -passphrase {1}".format(info, passphrase),
+            # Wrong on purpose: the command fails, but its command line is logged.
+            "passphrase_dash": "{0} --passphrase={1}".format(info, dash_passphrase),
+            "client_cert_password": "{0}{1} --client-cert-password={2}".format(info, enc, cert_password),
+            "client_key_password": "{0}{1} --client-key-password={2}".format(info, enc, key_password),
+            "salt": "collect-logs --archive {0} --repo {1} --redact --salt {2} -o /tmp/mb74352_logs{3}"
+                    .format(archive, repo, salt, enc),
+            "collection_string": "{0} --backup {1} --collection-string {2}{3}"
+                                 .format(info, backup_name, coll_string, enc),
+            "bucket_flag": "{0} --backup {1} --bucket {2}{3}".format(info, backup_name, bucket, enc),
+            "key": "examine --archive {0} --repo {1} --collection-string {2} --key {3}{4}"
+                   .format(archive, repo, coll_string, doc_key, enc),
+            "key_short": "examine --archive {0} --repo {1} --collection-string {2} -k {3}{4}"
+                         .format(archive, repo, coll_string, doc_key, enc),
+            "include_data": "{0} --include-data {1}{2}".format(config, coll_string, enc_cfg),
+            "exclude_data": "{0} --exclude-data {1}{2}".format(config, coll_string, enc_cfg),
+            "include_buckets": "{0} --include-buckets {1}{2}".format(config, bucket, enc_cfg),
+            "exclude_buckets": "{0} --exclude-buckets {1}{2}".format(config, bucket, enc_cfg),
+            "info_backup_missing": "{0} --backup {1} --collection-string {2}.{3}.nocoll{4}"
+                                   .format(info, backup_name, bucket, missing_scope, enc),
+            "info_error": "{0} --all{1}".format(info, enc),
+        }
+        if leak == "passphrase_dash":
+            tokens.add(dash_passphrase)
+        elif leak == "client_cert_password":
+            tokens.add(cert_password)
+        elif leak == "client_key_password":
+            tokens.add(key_password)
+        elif leak == "info_backup_missing":
+            tokens.add(missing_scope)
+            error_tokens = [missing_scope, bucket]
+        elif leak == "info_error":
+            # The console error of an authorized `info` may name the bucket (it
+            # is decrypted for the caller); only the unauthenticated run below
+            # and the archive logs must stay name-free.
+            self._ear_remove_one_bucket_dir()
+
+        if leak == "interrupted_restore":
+            if not self._ear_interrupted_restore():
+                self.fail("MB-74352: restore left no .restore dir after SIGINT "
+                          "(finished before the interrupt? raise items=); nothing to scan")
+            status, msg = self.validate_artifact_confidentiality(
+                sorted(tokens), must_be_absent=True)
+            if not status:
+                self.fail("MB-74352 (interrupted restore, whole archive): " + msg)
+            self.log.info("MB-74352 interrupted_restore: no bucket names on disk")
+            return
+        if leak not in raw:
+            self.fail("Unknown leak scenario: %s" % leak)
+
+        out, _ = self._ear_run_raw(raw[leak])
+        joined = " ".join(out)
+        self.log.info("MB-74352 leak=%s command output: %s", leak, joined[:3000])
+        if "unknown flag" in joined or "unknown shorthand" in joined:
+            self.fail("MB-74352 leak=%s: subcommand rejected the flag, so nothing was "
+                      "logged to test; adjust the scenario. Output: %s" % (leak, joined[:300]))
+        # Only error text counts: an authorized `info` legitimately prints bucket
+        # names in its normal output.
+        error_text = " ".join(line for line in out
+                              if "error" in line.lower() or "fail" in line.lower())
+        leaked_in_output = [t for t in error_tokens if t in error_text]
+
+        self._ear_assert_archive_logs_populated()
+        status, msg = self.validate_artifact_confidentiality(
+            sorted(tokens), paths="{0}/logs".format(self._ear_archive_root()),
+            must_be_absent=True)
+        failures = []
+        if not status:
+            failures.append("%s (leak=%s, archive-level logs)" % (msg, leak))
+        if leaked_in_output:
+            failures.append("`info` error text names %s" % leaked_in_output)
+        if leak == "info_error":
+            # Same failing archive, no credentials: nothing may reveal a name.
+            out_nocred, code_nocred = self._ear_run_raw(
+                "info --archive {0} --repo {1} --all".format(archive, repo))
+            nocred_text = " ".join(out_nocred)
+            self.log.info("MB-74352 info_error without credentials (exit %s): %s",
+                          code_nocred, nocred_text[:1500])
+            named = [b.name for b in self.buckets if b.name in nocred_text]
+            if named:
+                failures.append("`info` without credentials names %s" % named)
+        if failures:
+            self.fail("MB-74352: " + "; ".join(failures))
+        self.log.info("MB-74352 leak=%s: no secrets or names in <archive>/logs", leak)
+
+    def _ear_first_backup_name(self):
+        out, _ = self._ear_run_raw("info --archive {0} --repo {1} --json{2}".format(
+            self.backupset.directory, self.backupset.name, self._common_encryption_arguments()))
+        info = json.loads(out[0])
+        return info["backups"][0]["date"]
+
+    def _ear_remove_one_bucket_dir(self):
+        """Delete one bucket's data dir inside the first backup so `info` hits a
+        partial-read error (MB-74352 item 3)."""
+        shell = RemoteMachineShellConnection(self.backupset.backup_host)
+        repo_root = "{0}/{1}".format(self._ear_archive_root(), self.backupset.name)
+        # Bucket dirs sit at <repo>/<backup>/<bucket>; skip the repo-level logs
+        # tree (its children, e.g. logs/stats, are not bucket data).
+        out, _ = shell.execute_command(
+            "find {0} -mindepth 2 -maxdepth 2 -type d -not -path '{0}/logs/*' "
+            "| sort | head -1".format(repo_root))
+        victim = out[0].strip() if out else ""
+        if not victim:
+            shell.disconnect()
+            self.fail("Could not find a bucket dir under %s to remove" % repo_root)
+        shell.execute_command("rm -rf '{0}'".format(victim))
+        shell.disconnect()
+        self.log.info("MB-74352: removed %s to force a partial-read error", victim)
+
+    def test_ear_users_json(self):
+        """MB-74186: users.json (written by backup --enable-users) holds
+        usernames and must be encrypted in an encrypted repo.
+
+        Params:
+          enable-users=True (required)
+          ear=True for the encrypted repo; users_control=True with ear=False runs
+          the plaintext control (users.json must hold the usernames), which proves
+          the scan can see them.
+        """
+        users_control = self.input.param("users_control", False)
+        if not users_control:
+            self._ear_require_enabled()
+        if not self.backupset.enable_users:
+            self.fail("test_ear_users_json requires enable-users=True")
+
+        usernames = ["mb74186secretuser", "mb74186anotheruser"]
+        for name in usernames:
+            status = self.add_built_in_server_user(
+                [{"id": name, "name": name, "password": "password"}],
+                [{"id": name, "name": name, "roles": "admin"}])
+            if not status:
+                self.fail("Failed to create user %s" % name)
+
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", self.expires)
+        self.backup_create_validate()
+        self.backup_cluster_validate()
+
+        repo_root = "{0}/{1}".format(self._ear_archive_root(), self.backupset.name)
+        shell = RemoteMachineShellConnection(self.backupset.backup_host)
+        out, _ = shell.execute_command("find {0} -name users.json".format(repo_root))
+        users_files = [line.strip() for line in (out or []) if line.strip()]
+        if not users_files:
+            shell.disconnect()
+            self.fail("users.json not found under %s after backup with --enable-users"
+                      % repo_root)
+        first_byte = []
+        for users_file in users_files:
+            head, _ = shell.execute_command("head -c 1 '{0}'".format(users_file))
+            first_byte.append("".join(head or ""))
+        shell.disconnect()
+
+        if users_control:
+            status, msg = self.validate_artifact_confidentiality(
+                usernames, paths=" ".join(users_files), must_be_absent=False)
+            if not status:
+                self.fail("MB-74186 control: " + msg)
+            return
+
+        status, msg = self.validate_artifact_confidentiality(usernames, must_be_absent=True)
+        if not status:
+            self.fail("MB-74186: " + msg)
+        plaintext = [f for f, b in zip(users_files, first_byte) if b == "{"]
+        if plaintext:
+            self.fail("MB-74186: users.json looks like plaintext JSON: %s" % plaintext)
+
+        # The encrypted users.json must still be usable: a users-only restore
+        # brings the users back. No cluster reset or bucket re-creation, which
+        # the small single-node lanes cannot always provision.
+        for name in usernames:
+            self.remove_user(name)
+        host = self.backupset.restore_cluster_host
+        out, exit_code = self._ear_run_raw(
+            "restore --archive {0} --repo {1} --cluster http://{2}:{3} "
+            "--username {4} --password {5} --enable-users --disable-data "
+            "--disable-views --disable-gsi-indexes --disable-ft-indexes{6}".format(
+                self.backupset.directory, self.backupset.name, host.cluster_ip, host.port,
+                self.backupset.restore_cluster_host_username,
+                self.backupset.restore_cluster_host_password,
+                self._common_encryption_arguments()))
+        if exit_code != 0:
+            self.fail("MB-74186: users-only restore failed (exit %s): %s"
+                      % (exit_code, " ".join(out)[:400]))
+        rest = RestConnection(self.master)
+        _, content, _ = rest._http_request(rest.baseUrl + "settings/rbac/users/local")
+        missing = [n for n in usernames if n not in str(content)]
+        if missing:
+            self.fail("MB-74186: users not restored from encrypted users.json: %s" % missing)
+
+    def test_ear_collect_logs(self):
+        """MB-73606: `collect-logs` must work on an encrypted repo whatever the
+        cipher (ear_encryption_algo=AES256CBC was broken). Fails on a non-zero
+        exit or when no archive is produced."""
+        self._ear_require_enabled()
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", self.expires)
+        self.backup_create_validate()
+        self.backup_cluster_validate()
+
+        out_dir = "/tmp/mb73606_collected_logs"
+        shell = RemoteMachineShellConnection(self.backupset.backup_host)
+        shell.execute_command("rm -rf {0}; mkdir -p {0}".format(out_dir))
+        shell.disconnect()
+        out, exit_code = self._ear_run_raw(
+            "collect-logs --archive {0} --repo {1} -o {2}{3}".format(
+                self.backupset.directory, self.backupset.name, out_dir,
+                self._common_encryption_arguments()))
+        if exit_code != 0:
+            self.fail("MB-73606: collect-logs failed (exit %s): %s" % (exit_code, " ".join(out)[:300]))
+        shell = RemoteMachineShellConnection(self.backupset.backup_host)
+        files, _ = shell.execute_command("find {0} -type f".format(out_dir))
+        shell.disconnect()
+        if not [f for f in (files or []) if f.strip()]:
+            self.fail("MB-73606: collect-logs exited 0 but wrote nothing under %s" % out_dir)
+
     def test_ear_backup_restore_lifecycle(self):
         """EAR-FN-009/010/016/018/019/022/023/025.
 
