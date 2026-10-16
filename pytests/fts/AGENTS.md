@@ -204,9 +204,12 @@ Utility (not a TestCase):
   | `test_hierarchical_online_upgrade` | Hierarchical (nested) search | `TOTORO;ONLINE;HIER` |
   | `test_collections_scale_online_upgrade` | ~10k collections, varying scope shapes | `TOTORO;ONLINE;COLLECTIONS` |
   | `test_chained_upgrade` | Multi-hop chained upgrade (CBQE-8244) | `TOTORO;<ONLINE\|OFFLINE>;CHAINED` |
+  | `test_query_correctness_online_upgrade` / `..._offline_upgrade` | Query-type matrix result sets unchanged (CBQE-9123, CBSE-23367) | `TOTORO;<ONLINE\|OFFLINE>;QUERYMATRIX` |
+  | `test_ingestion_online_upgrade` / `..._offline_upgrade` | Docs written during/after the upgrade get indexed (CBQE-9123, CBSE-22203) | `TOTORO;<ONLINE\|OFFLINE>;INGEST` |
+  | `test_query_load_rollback_online_upgrade` | Query load + index rollback, no goroutine storm (CBQE-9123, CBSE-21687) | `TOTORO;ONLINE;ROLLBACK` |
 
-  Rank Fusion is the only Totoro feature still unautomated; the conf carries a
-  commented placeholder entry so it stays the single Totoro index.
+  Rank Fusion is the only Totoro feature still unautomated for upgrades; it has
+  no entry in the Totoro conf yet.
 
   `conf/fts/py-fts-hierarchical-search.conf` was retired when hierarchical
   upgrade coverage landed here. Its 58 functional entries (3 stable-topology,
@@ -245,6 +248,32 @@ Utility (not a TestCase):
   `upgrade_version` skips it. Reproducing MB-62427 needs a 6.x-origin chain,
   since that bug is specifically about 6.x segments carried forward as a
   v11/v16 mix.
+
+- **Upgrade robustness (CBQE-9123)** — three gaps that let customer issues
+  through, each its own test so a failure names the gap:
+  - *Query correctness* snapshots the doc-ID set of ~20 query types (text,
+    numeric/date ranges, bool, query_string, geopoint distance/bbox/polygon,
+    geoshape intersects/within) at Stage 0 and diffs it, through **every** FTS
+    node as coordinator, in the mixed cluster and after the upgrade. A subset is
+    also run through N1QL `SEARCH()` when the topology has a query node. The
+    corpus is `qm`-prefixed docs with `type: qmatrix`, and the index maps only
+    that type, so the emp workload run around each rebalance cannot change a
+    result set. A query whose baseline is empty is itself a failure.
+  - *Ingestion* writes a tagged batch of brand-new keys during every rebalance
+    (via the `load_fn` passthrough on `_rolling_upgrade_fts_nodes`), in the mixed
+    cluster and after the upgrade, then requires each batch to be searchable in
+    full, post-upgrade updates/deletes of pre-upgrade docs to show, and the index
+    to reach the bucket count with `num_mutations_to_index` drained.
+  - *Query load + rollback* runs `FTSQueryLoadMonitor` (`fts_base.py`) through
+    every stage: numeric-range queries (MB-69830's trigger: one goroutine per
+    segment per query) plus a rotating upsert loop that keeps cutting segments,
+    while sampling `:8094/debug/pprof/goroutine` and node CPU. In the mixed
+    cluster it forces a DCP rollback with the `test_partial_rollback_oso` recipe
+    (couchstore only) and fails if the rollback never happened. A stage fails if
+    a node's goroutine peak exceeds `max(idle x goroutine_storm_ratio,
+    goroutine_storm_floor)` (10x / 20000), or if goroutines/CPU do not settle
+    within `goroutine_settle_timeout` once the load stops. The pre-upgrade window
+    is logged, not asserted, since the old build may carry the bug.
 
 - **Versions are never in the conf.** `initial_version` comes from the testDB
   doc (one doc per source version) and `upgrade_version` from the dispatcher,

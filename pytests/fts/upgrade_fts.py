@@ -2,6 +2,7 @@ import contextlib
 import gc
 import logging
 import json
+import random
 import time
 import uuid
 
@@ -10,9 +11,10 @@ from newupgradebasetest import NewUpgradeBaseTest
 from .fts_callable import FTSCallable
 from scripts.java_sdk_setup import JavaSdkSetup
 from .fts_base import (CouchbaseCluster, FTSIndex, FTSBaseTest, _ScanPlusHashMap, UDFHelper,
-                       FTSConcurrentWorkload, FTSPostChangeValidator)
+                       FTSConcurrentWorkload, FTSPostChangeValidator, FTSQueryLoadMonitor, OPS)
 from lib.membase.helper.bucket_helper import BucketOperationHelper
-from couchbase_helper.documentgenerator import SDKDataLoader
+from lib.memcached.helper.data_helper import MemcachedClientHelper, VBucketAwareMemcached
+from couchbase_helper.documentgenerator import SDKDataLoader, JsonDocGenerator
 from membase.api.rest_client import RestConnection
 from lib.collection.collections_cli_client import CollectionsCLI
 from .fts_backup_restore import FTSIndexBackupClient
@@ -2200,12 +2202,13 @@ class UpgradeFTS(NewUpgradeBaseTest):
     # =========================================================================
     # =========================================================================
 
-    def _upgrade_workload(self, label, driver, index):
+    def _upgrade_workload(self, label, driver, index, load_fn=None):
         """Concurrent CRUD + query workload around one rebalance of an upgrade."""
         if driver is None:
             return contextlib.nullcontext()
 
-        workload = FTSConcurrentWorkload(self, index=index, driver=driver, label=label)
+        workload = FTSConcurrentWorkload(self, index=index, driver=driver, label=label,
+                                         load_fn=load_fn)
 
         @contextlib.contextmanager
         def _run():
@@ -2262,7 +2265,8 @@ class UpgradeFTS(NewUpgradeBaseTest):
         master_ip = getattr(self.master, 'ip', None)
         return sorted(rest, key=lambda n: n.ip == master_ip)
 
-    def _upgrade_rest_of_cluster(self, already_upgraded, label, driver=None, index=None):
+    def _upgrade_rest_of_cluster(self, already_upgraded, label, driver=None, index=None,
+                                 load_fn=None):
         """Upgrade every remaining cluster node, so the cluster ends fully upgraded.
 
         Upgrading only the FTS nodes leaves cluster-wide features (encryption at
@@ -2274,7 +2278,7 @@ class UpgradeFTS(NewUpgradeBaseTest):
         for node in remaining:
             self._move_rest_endpoint_off(node, label)
             self._rolling_upgrade_fts_nodes([node], label=f"{label} [{node.ip}]",
-                                            driver=driver, index=index)
+                                            driver=driver, index=index, load_fn=load_fn)
         return remaining
 
     def _move_rest_endpoint_off(self, node, label=""):
@@ -2311,13 +2315,13 @@ class UpgradeFTS(NewUpgradeBaseTest):
         return fts_nodes[0]
 
     def _rolling_upgrade_fts_nodes(self, nodes_out, label="", version=None,
-                                   driver=None, index=None):
+                                   driver=None, index=None, load_fn=None):
         """Rebalance nodes out, install `version` on them, rebalance back in."""
         version = version or self.upgrade_to
         log.info("=" * 20 + f" Rolling upgrade {label}: {[n.ip for n in nodes_out]} -> {version}")
 
         # CBQE-8242
-        with self._upgrade_workload(f"{label} rebalance-out", driver, index):
+        with self._upgrade_workload(f"{label} rebalance-out", driver, index, load_fn):
             self.cluster.async_rebalance(self.servers[:self.nodes_init], [], nodes_out).result()
 
         for thread in self._async_update(version, nodes_out):
@@ -2330,7 +2334,7 @@ class UpgradeFTS(NewUpgradeBaseTest):
             for node in nodes_out:
                 if "{0}:{1}".format(node.ip, node.port) in self.services_map[service]:
                     services_in.append(service)
-        with self._upgrade_workload(f"{label} rebalance-in", driver, index):
+        with self._upgrade_workload(f"{label} rebalance-in", driver, index, load_fn):
             self.cluster.async_rebalance(
                 self.servers[:self.nodes_init], nodes_out, [], services=services_in
             ).result()
@@ -3058,7 +3062,7 @@ class UpgradeFTS(NewUpgradeBaseTest):
         deadline = time.time() + timeout
         hits, status = -1, None
         while time.time() < deadline:
-            hits, _, _, status = index.execute_query(query=self.EAR_QUERY,
+            hits, _, _, status = index.execute_query(query=query or self.EAR_QUERY,
                                                      zero_results_ok=True)
             if hits >= expected - tolerance:
                 return hits, status
@@ -4091,3 +4095,876 @@ class UpgradeFTS(NewUpgradeBaseTest):
             self.fail("test_hierarchical_online_upgrade failed:\n" +
                       "\n".join(f"  {k}: {v}" for k, v in errors.items()))
         log.info("test_hierarchical_online_upgrade PASSED")
+
+    # =========================================================================
+    # CBQE-9123: post-upgrade query correctness (CBSE-23367 / MB-73107)
+    # =========================================================================
+
+    def _wait_tasks(self, tasks, label, timeout=None):
+        """Wait for KV load tasks against one shared deadline; raise TimeoutError past it.
+
+        A load task that stalls never returns from an unbounded result(), and it
+        wedges its cluster's single task-manager thread with it.
+        """
+        timeout = timeout or self.input.param("load_timeout", 600)
+        deadline = time.time() + timeout
+        for task in tasks:
+            try:
+                task.result(timeout=max(1, deadline - time.time()))
+            except Exception as err:
+                if time.time() >= deadline or type(err).__name__ == "TimeoutError":
+                    raise TimeoutError(f"{label}: KV load did not finish within {timeout}s")
+                raise
+
+    QUERY_MATRIX_INDEX = "query_matrix_upgrade_idx"
+    # The matrix docs carry their own type, and the index maps only that type,
+    # so the emp workload that runs around every rebalance cannot change a
+    # result set between the pre- and post-upgrade snapshots.
+    QUERY_MATRIX_TYPE = "qmatrix"
+    QUERY_MATRIX_KEY_PREFIX = "qm"
+    QUERY_MATRIX_FIELDS = {
+        "name": "text", "dept": "text", "languages_known": "text", "doc_set": "text",
+        "salary": "number", "join_date": "datetime", "is_manager": "boolean",
+        "location": "geopoint", "geoarea": "geoshape",
+    }
+    # Queries that are also run through N1QL SEARCH() -- the third shape
+    # CBSE-23367 saw come back empty.
+    QUERY_MATRIX_N1QL = ("match", "numeric_range", "geo_distance", "geo_bounding_box",
+                         "geoshape_circle_intersects", "geoshape_polygon_within")
+
+    @staticmethod
+    def _qm_square(lon, lat, half=0.5):
+        lon = min(max(lon, -179.0), 179.0)
+        lat = min(max(lat, -89.0), 89.0)
+        return {"type": "Polygon", "coordinates": [[
+            [lon - half, lat - half], [lon + half, lat - half], [lon + half, lat + half],
+            [lon - half, lat + half], [lon - half, lat - half]]]}
+
+    def _load_query_matrix_docs(self, fts_callable, num_docs):
+        """Load the matrix corpus into `default` under its own key prefix and type.
+
+        Every doc gets a geoshape next to its geopoint: a Point for even docs and
+        a small Polygon for odd ones, so the geoshape relations have both to test.
+        """
+        gen = JsonDocGenerator(self.QUERY_MATRIX_KEY_PREFIX, encoding="utf-8",
+                               start=0, end=num_docs)
+        for i, doc in gen.gen_docs.items():
+            doc['type'] = self.QUERY_MATRIX_TYPE
+            doc['doc_set'] = self.QUERY_MATRIX_TYPE
+            lat, lon = doc['location']['lat'], doc['location']['lon']
+            doc['geoarea'] = ({"type": "Point", "coordinates": [lon, lat]} if i % 2 == 0
+                              else self._qm_square(lon, lat))
+        docs = list(gen.gen_docs.values())
+        bucket = fts_callable.cb_cluster.get_bucket_by_name("default")
+        self._wait_tasks(fts_callable.cb_cluster.async_load_bucket_from_generator(bucket, gen),
+                         "query matrix load")
+        return docs
+
+    def _create_query_matrix_index(self, fts_callable):
+        index = fts_callable.create_fts_index(
+            self.QUERY_MATRIX_INDEX, source_type='couchbase', source_name="default",
+            index_type='fulltext-index', index_params=None, plan_params=None,
+            source_params=None, source_uuid=None, collection_index=False,
+            _type=None, analyzer="standard", no_check=False, cluster=self.cb_cluster)
+
+        properties = {}
+        for field, ftype in self.QUERY_MATRIX_FIELDS.items():
+            properties[field] = {
+                "enabled": True, "dynamic": False,
+                # Phrase queries need positions, i.e. term vectors on text fields.
+                "fields": [{"name": field, "type": ftype, "index": True, "docvalues": True,
+                            "include_in_all": ftype == "text",
+                            "include_term_vectors": ftype == "text"}],
+            }
+        # params only carries a 'mapping' when a custom map was generated, so
+        # write the whole mapping rather than patching a default one.
+        index.index_definition['params']['mapping'] = {
+            "default_analyzer": "standard",
+            "default_datetime_parser": "dateTimeOptional",
+            "default_field": "_all",
+            "default_mapping": {"enabled": False, "dynamic": False},
+            "default_type": "_default",
+            "docvalues_dynamic": False,
+            "index_dynamic": True,
+            "store_dynamic": False,
+            "type_field": "_type",
+            "types": {self.QUERY_MATRIX_TYPE: {"enabled": True, "dynamic": False,
+                                               "properties": properties}},
+        }
+        index.index_definition['params']['doc_config'] = {
+            "mode": "type_field", "type_field": "type",
+            "docid_prefix_delim": "", "docid_regexp": ""}
+        index.index_definition['uuid'] = index.get_uuid()
+        index.update()
+        return index
+
+    @staticmethod
+    def _query_matrix(docs):
+        """One query per type, with parameters drawn from the corpus so each has hits."""
+        first_name = next(d['name'].split()[0] for d in docs
+                          if d['name'].split()[0].isalpha() and len(d['name'].split()[0]) >= 4)
+        full_name = next(d['name'] for d in docs if d['name'].startswith(first_name + " "))
+        salaries = sorted(d['salary'] for d in docs)
+        lo, mid = salaries[len(salaries) // 4], salaries[len(salaries) // 2]
+        engineering = {"term": "engineering", "field": "dept"}
+        salary_range = {"min": lo, "max": mid, "inclusive_min": True,
+                        "inclusive_max": False, "field": "salary"}
+        return {
+            "match": {"match": first_name, "field": "name"},
+            "match_phrase": {"match_phrase": full_name, "field": "name"},
+            "fuzzy": {"match": first_name, "field": "name", "fuzziness": 1},
+            "prefix": {"prefix": first_name[:3].lower(), "field": "name"},
+            "wildcard": {"wildcard": first_name[:2].lower() + "*", "field": "name"},
+            "term": engineering,
+            "numeric_range": salary_range,
+            "date_range": {"start": "1980-01-01T00:00:00", "end": "1995-01-01T00:00:00",
+                           "field": "join_date"},
+            "boolean_field": {"bool": True, "field": "is_manager"},
+            "conjunction": {"conjuncts": [engineering, salary_range]},
+            "disjunction": {"disjuncts": [engineering, {"term": "sales", "field": "dept"}]},
+            "bool": {"must": {"conjuncts": [{"bool": True, "field": "is_manager"}]},
+                     "must_not": {"disjuncts": [engineering]},
+                     "should": {"disjuncts": [{"match": "english", "field": "languages_known"}]}},
+            "query_string": {"query": f"+dept:engineering +salary:>={mid}"},
+            "geo_distance": {"location": {"lon": 0, "lat": 0}, "distance": "2000km",
+                             "field": "location"},
+            "geo_bounding_box": {"top_left": {"lon": -30, "lat": 30},
+                                 "bottom_right": {"lon": 30, "lat": -30}, "field": "location"},
+            "geo_polygon": {"polygon_points": [{"lat": 40, "lon": -100}, {"lat": 40, "lon": -60},
+                                               {"lat": 10, "lon": -60}, {"lat": 10, "lon": -100}],
+                            "field": "location"},
+            "geoshape_circle_intersects": {
+                "field": "geoarea", "geometry": {
+                    "shape": {"type": "circle", "coordinates": [0, 0], "radius": "2000km"},
+                    "relation": "intersects"}},
+            "geoshape_polygon_within": {
+                "field": "geoarea", "geometry": {
+                    "shape": {"type": "polygon", "coordinates": [
+                        [[-30, -30], [30, -30], [30, 30], [-30, 30], [-30, -30]]]},
+                    "relation": "within"}},
+            "geoshape_envelope_intersects": {
+                "field": "geoarea", "geometry": {
+                    "shape": {"type": "envelope", "coordinates": [[-100, 40], [-60, 10]]},
+                    "relation": "intersects"}},
+            "match_all": {"match_all": {}},
+        }
+
+    def _run_matrix_query(self, node, query, size, attempts=3):
+        """(total_hits, frozenset of ids) or an error string. Retries partial results."""
+        body = {"query": query, "size": size, "from": 0, "fields": [], "explain": False}
+        detail = None
+        for attempt in range(attempts):
+            try:
+                total, hits, _, status = RestConnection(node).run_fts_query(
+                    self.QUERY_MATRIX_INDEX, body, timeout=120)
+                failed = status.get('failed', 0) if isinstance(status, dict) else None
+                if total != -1 and failed == 0:
+                    return total, frozenset(h['id'] for h in hits or [])
+                detail = f"total_hits={total}, status={status}"
+            except Exception as err:
+                detail = str(err)
+            if attempt < attempts - 1:
+                time.sleep(15)
+        return f"query failed on {node.ip}: {detail}"
+
+    def _query_matrix_snapshot(self, node, queries, size):
+        return {name: self._run_matrix_query(node, query, size) for name, query in queries.items()}
+
+    def _n1ql_search_snapshot(self, queries):
+        """Doc ids N1QL SEARCH() returns per query, or None when no query node exists."""
+        n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
+        if n1ql_node is None:
+            return None
+        snapshot = {}
+        options = json.dumps({"index": self.QUERY_MATRIX_INDEX})
+        for name in self.QUERY_MATRIX_N1QL:
+            statement = (f"SELECT RAW META(t).id FROM `default` AS t "
+                         f"WHERE SEARCH(t, {json.dumps({'query': queries[name]})}, {options})")
+            try:
+                result = RestConnection(n1ql_node).query_tool(statement, timeout=300,
+                                                              verbose=False)
+                snapshot[name] = frozenset(result.get('results', []))
+            except Exception as err:
+                snapshot[name] = f"SEARCH() failed on {n1ql_node.ip}: {err}"
+        return snapshot
+
+    def _wait_query_matrix_ready(self, num_docs, label, timeout=900, poll=15):
+        """Block until every matrix doc is searchable on the FTS query node."""
+        query = {"match": self.QUERY_MATRIX_TYPE, "field": "doc_set"}
+        deadline = time.time() + timeout
+        result = None
+        while time.time() < deadline:
+            result = self._run_matrix_query(self.get_fts_query_node(), query, 0, attempts=1)
+            if isinstance(result, tuple) and result[0] == num_docs:
+                log.info(f"[{label}] query matrix index serves all {num_docs} docs")
+                return []
+            log.info(f"[{label}] query matrix index not ready yet: {result}")
+            time.sleep(poll)
+        return [f"[{label}] query matrix index never served all {num_docs} docs "
+                f"within {timeout}s (last: {result})"]
+
+    @staticmethod
+    def _diff_snapshots(baseline, current, label):
+        """Errors for every query whose result set is not identical to the baseline."""
+        errors = []
+        for name, base in baseline.items():
+            got = current.get(name)
+            if isinstance(got, str):
+                errors.append(f"[{label}] {name}: {got}")
+                continue
+            base_ids = base[1] if isinstance(base, tuple) else base
+            got_ids = got[1] if isinstance(got, tuple) else got
+            if got_ids != base_ids:
+                missing, extra = base_ids - got_ids, got_ids - base_ids
+                errors.append(
+                    f"[{label}] {name}: {len(got_ids)} results vs {len(base_ids)} before the "
+                    f"upgrade (missing {len(missing)}, e.g. {sorted(missing)[:5]}; "
+                    f"unexpected {len(extra)}, e.g. {sorted(extra)[:5]})")
+        return errors
+
+    def _query_matrix_baseline(self):
+        """Stage 0 for both correctness tests. Returns (queries, fts, n1ql, size, errors)."""
+        errors = {}
+        num_docs = self.input.param("query_matrix_items", 10000)
+        fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False,
+                                   servers=self.servers)
+        docs = self._load_query_matrix_docs(fts_callable, num_docs)
+        self._create_query_matrix_index(fts_callable)
+        ready = self._wait_query_matrix_ready(num_docs, "Stage 0")
+        if ready:
+            self.fail(f"query matrix index did not build before the upgrade: {ready}")
+
+        queries = self._query_matrix(docs)
+        fts_baseline = self._query_matrix_snapshot(self.get_fts_query_node(), queries, num_docs)
+        failed = {k: v for k, v in fts_baseline.items() if isinstance(v, str)}
+        if failed:
+            self.fail(f"query matrix could not run before the upgrade: {failed}")
+        empty = [k for k, v in fts_baseline.items() if not v[1]]
+        if empty:
+            # An empty baseline can never expose "returns nothing after upgrade".
+            errors['s0_empty_baseline'] = (f"these queries matched nothing before the upgrade, "
+                                           f"so they prove nothing: {empty}")
+        log.info("Stage 0 query matrix: " +
+                 ", ".join(f"{k}={len(v[1])}" for k, v in fts_baseline.items()))
+
+        n1ql_baseline = self._n1ql_search_snapshot(queries)
+        if n1ql_baseline is None:
+            log.warning("no n1ql node in the cluster - SEARCH() is not covered by this run")
+        else:
+            for name, ids in n1ql_baseline.items():
+                if isinstance(ids, str):
+                    self.fail(f"SEARCH() could not run before the upgrade: {name}: {ids}")
+                if ids != fts_baseline[name][1]:
+                    errors.setdefault('s0_n1ql_vs_fts', []).append(
+                        f"{name}: SEARCH() returned {len(ids)}, FTS {len(fts_baseline[name][1])}")
+        return fts_callable, queries, fts_baseline, n1ql_baseline, num_docs, errors
+
+    def _check_query_matrix(self, queries, fts_baseline, n1ql_baseline, num_docs, label):
+        """Rerun the matrix through every FTS node and SEARCH(); diff against Stage 0."""
+        errors = {}
+        ready = self._wait_query_matrix_ready(num_docs, label)
+        if ready:
+            errors[f'{label}_ready'] = ready
+        fts_nodes = self.get_nodes_from_services_map(service_type="fts", get_all_nodes=True) or []
+        for node in fts_nodes:
+            # Each node coordinates its own scatter-gather, so a regression that
+            # only shows when an upgraded (or an old) node coordinates shows here.
+            current = self._query_matrix_snapshot(node, queries, num_docs)
+            diff = self._diff_snapshots(fts_baseline, current, f"{label} via {node.ip}")
+            if diff:
+                # Logged now too: a later stage that raises (a failed rebalance)
+                # would otherwise take these findings down with it.
+                log.warning(f"[{label}] query matrix mismatches via {node.ip}: {diff}")
+                errors[f'{label}_fts_{node.ip}'] = diff
+            else:
+                log.info(f"[{label}] query matrix identical to the baseline via {node.ip}")
+        if n1ql_baseline is not None:
+            diff = self._diff_snapshots(n1ql_baseline, self._n1ql_search_snapshot(queries),
+                                        f"{label} SEARCH()")
+            if diff:
+                log.warning(f"[{label}] SEARCH() mismatches: {diff}")
+                errors[f'{label}_n1ql'] = diff
+        return errors
+
+    def test_query_correctness_online_upgrade(self):
+        """Rolling upgrade: a query-type matrix must return identical result sets (CBSE-23367)."""
+        fts_nodes = self.get_nodes_from_services_map(service_type="fts", get_all_nodes=True)
+        if not fts_nodes or len(fts_nodes) < 2:
+            self.fail("test_query_correctness_online_upgrade requires >= 2 FTS nodes")
+
+        log.info("=" * 20 + " Stage 0: pre-upgrade query matrix baseline")
+        fts_callable, queries, fts_baseline, n1ql_baseline, num_docs, errors = \
+            self._query_matrix_baseline()
+
+        self._rolling_upgrade_fts_nodes([fts_nodes[0]], label="Stage 1 (first FTS node)",
+                                        driver=fts_callable)
+
+        log.info("=" * 20 + " Stage 2: mixed-cluster query matrix")
+        errors.update(self._check_query_matrix(queries, fts_baseline, n1ql_baseline,
+                                               num_docs, "s2"))
+
+        self._upgrade_rest_of_cluster([fts_nodes[0]], "Stage 3 (rest of cluster)",
+                                      driver=fts_callable)
+        errors.update({f"s3_{i}": e for i, e in
+                       enumerate(self._assert_cluster_fully_upgraded("Stage 3"))})
+
+        log.info("=" * 20 + " Stage 4: post-upgrade query matrix")
+        errors.update(self._check_query_matrix(queries, fts_baseline, n1ql_baseline,
+                                               num_docs, "s4"))
+
+        errors.update(self._totoro_post_upgrade_checks("query correctness online upgrade"))
+        if errors:
+            self.fail("test_query_correctness_online_upgrade failed:\n" +
+                      "\n".join(f"  {k}: {v}" for k, v in errors.items()))
+        log.info("test_query_correctness_online_upgrade PASSED")
+
+    def test_query_correctness_offline_upgrade(self):
+        """Offline upgrade: a query-type matrix must return identical result sets (CBSE-23367)."""
+        log.info("=" * 20 + " Pre-upgrade query matrix baseline")
+        _, queries, fts_baseline, n1ql_baseline, num_docs, errors = self._query_matrix_baseline()
+
+        self._offline_upgrade_all_nodes(label="query correctness")
+        errors.update({f"post_{i}": e for i, e in
+                       enumerate(self._assert_cluster_fully_upgraded("post-upgrade"))})
+
+        log.info("=" * 20 + " Post-upgrade query matrix")
+        errors.update(self._check_query_matrix(queries, fts_baseline, n1ql_baseline,
+                                               num_docs, "post"))
+
+        errors.update(self._totoro_post_upgrade_checks("query correctness offline upgrade"))
+        if errors:
+            self.fail("test_query_correctness_offline_upgrade failed:\n" +
+                      "\n".join(f"  {k}: {v}" for k, v in errors.items()))
+        log.info("test_query_correctness_offline_upgrade PASSED")
+
+    # =========================================================================
+    # CBQE-9123: docs written during/after the upgrade must be indexed (CBSE-22203)
+    # =========================================================================
+
+    INGEST_INDEX = "ingest_upgrade_idx"
+    INGEST_UPDATE_TAG = "updatedpostupgrade"
+
+    def _load_ingest_batch(self, fts_callable, tag, count):
+        """Async-load `count` brand-new docs (keys ing<tag>...) carrying ingest_batch=<tag>."""
+        gen = JsonDocGenerator(f"ing{tag}", encoding="utf-8", start=0, end=count)
+        for doc in gen.gen_docs.values():
+            doc['ingest_batch'] = tag
+        bucket = fts_callable.cb_cluster.get_bucket_by_name("default")
+        return fts_callable.cb_cluster.async_load_bucket_from_generator(bucket, gen)
+
+    def _ingest_load_fn(self, fts_callable, batches, label):
+        """A FTSConcurrentWorkload load_fn writing one new tagged batch per rebalance."""
+        size = self.input.param("ingest_batch_size", 5000)
+
+        def _load():
+            tag = f"batch{len(batches)}"
+            log.info(f"[{label}] loading ingest batch '{tag}' ({size} new docs)")
+            # A fresh FTSCallable: the one from Stage 0 still points at the
+            # original master, which may be the node out for upgrade right now
+            # ("Bucket with name: default not found").
+            loader = FTSCallable(self.servers, es_validate=False, es_reset=False,
+                                 servers=self.servers)
+            tasks = self._load_ingest_batch(loader, tag, size)
+            # Only now: a batch whose load never started must not be expected.
+            batches[tag] = (label, size)
+            return tasks
+        return _load
+
+    def _mutate_pre_upgrade_docs(self, fts_callable, num_updates, num_deletes):
+        """Update the first `num_updates` pre-upgrade docs and delete the last `num_deletes`.
+
+        Returns the deleted keys. Keys follow JsonDocGenerator: emp<10000000 + n>.
+        """
+        bucket = fts_callable.cb_cluster.get_bucket_by_name("default")
+        update_gen = JsonDocGenerator("emp", encoding="utf-8", start=0, end=num_updates)
+        for doc in update_gen.gen_docs.values():
+            doc['ingest_batch'] = self.INGEST_UPDATE_TAG
+        delete_start = self.num_items - num_deletes
+        delete_gen = JsonDocGenerator("emp", op_type="delete", encoding="utf-8",
+                                      start=delete_start, end=self.num_items)
+        tasks = fts_callable.cb_cluster.async_load_bucket_from_generator(bucket, update_gen)
+        tasks += fts_callable.cb_cluster.async_load_bucket_from_generator(
+            bucket, delete_gen, ops=OPS.DELETE)
+        self._wait_tasks(tasks, "post-upgrade updates/deletes")
+        return [f"emp{10000000 + n + 1}" for n in range(delete_start, self.num_items)]
+
+    def _wait_index_caught_up(self, index, label, timeout=None, poll=15, drained=True):
+        """The index must reach the bucket's item count with nothing left to index.
+
+        A DCP stall (CBSE-22203: sourceSeq < seqReceived) shows up as a doc count
+        stuck below the source while num_mutations_to_index never drains. Pass
+        drained=False while a mutation load is still running, since the backlog
+        never reaches zero then.
+        """
+        timeout = timeout or self.input.param("ingest_timeout", 900)
+        deadline = time.time() + timeout
+        indexed = source = pending = None
+        while time.time() < deadline:
+            try:
+                indexed = index.get_indexed_doc_count()
+                source = index.get_src_bucket_doc_count()
+                pending = index.get_num_mutations_to_index()
+                if indexed == source and (pending == 0 or not drained):
+                    log.info(f"[{label}] '{index.name}' caught up: {indexed} docs, "
+                             f"nothing left to index")
+                    return []
+            except Exception as err:
+                log.info(f"[{label}] waiting on '{index.name}': {err}")
+            log.info(f"[{label}] '{index.name}' indexed={indexed} source={source} "
+                     f"num_mutations_to_index={pending}")
+            time.sleep(poll)
+        return [f"[{label}] '{index.name}' never caught up within {timeout}s: indexed={indexed}, "
+                f"source={source}, num_mutations_to_index={pending} - an index stuck below "
+                f"its source after an upgrade is the CBSE-22203 signature"]
+
+    def _check_ingest_batches(self, index, batches, label):
+        """Every tagged batch must be searchable in full."""
+        errors = []
+        timeout = self.input.param("ingest_timeout", 900)
+        for tag, (stage, size) in batches.items():
+            hits, status = self._wait_for_hits(index, size, timeout=timeout,
+                                               query={"match": tag, "field": "ingest_batch"})
+            if hits != size:
+                errors.append(f"[{label}] batch '{tag}' written during {stage}: {hits}/{size} "
+                              f"docs searchable (status={status})")
+        return errors
+
+    def _check_post_upgrade_mutations(self, index, num_updates, deleted_keys, label):
+        """Updates to pre-upgrade docs must be searchable; deletes must be gone."""
+        errors = []
+        hits, status = self._wait_for_hits(
+            index, num_updates, timeout=self.input.param("ingest_timeout", 900),
+            query={"match": self.INGEST_UPDATE_TAG, "field": "ingest_batch"})
+        if hits != num_updates:
+            errors.append(f"[{label}] {hits}/{num_updates} post-upgrade updates of pre-upgrade "
+                          f"docs are searchable (status={status})")
+        sample = deleted_keys[:200]
+        hits, _, _, status = index.execute_query(query={"ids": sample}, zero_results_ok=True)
+        if hits != 0:
+            errors.append(f"[{label}] {hits} of {len(sample)} docs deleted after the upgrade "
+                          f"are still returned (status={status})")
+        return errors
+
+    def _create_ingest_index(self, fts_callable):
+        index = fts_callable.create_fts_index(
+            self.INGEST_INDEX, source_type='couchbase', source_name="default",
+            index_type='fulltext-index', index_params=None, plan_params=None,
+            source_params=None, source_uuid=None, collection_index=False,
+            _type=None, analyzer="standard", no_check=False, cluster=self.cb_cluster)
+        fts_callable.wait_for_indexing_complete(self.num_items)
+        return index
+
+    def _post_upgrade_ingest_checks(self, fts_callable, index, batches, label):
+        errors = {}
+        post_batches = dict(batches)
+        size = self.input.param("ingest_batch_size", 5000)
+        tag = f"batch{len(post_batches)}"
+        post_batches[tag] = ("post-upgrade", size)
+        self._wait_tasks(self._load_ingest_batch(fts_callable, tag, size), f"ingest {tag}")
+
+        num_updates = self.input.param("ingest_updates", 1000)
+        deleted = self._mutate_pre_upgrade_docs(
+            fts_callable, num_updates, self.input.param("ingest_deletes", 1000))
+
+        caught_up = self._wait_index_caught_up(index, label)
+        if caught_up:
+            errors[f'{label}_caught_up'] = caught_up
+        batch_errors = self._check_ingest_batches(index, post_batches, label)
+        if batch_errors:
+            errors[f'{label}_batches'] = batch_errors
+        mutation_errors = self._check_post_upgrade_mutations(index, num_updates, deleted, label)
+        if mutation_errors:
+            errors[f'{label}_mutations'] = mutation_errors
+        return errors
+
+    def test_ingestion_online_upgrade(self):
+        """Rolling upgrade: docs written during and after it must become searchable (CBSE-22203)."""
+        errors = {}
+        fts_nodes = self.get_nodes_from_services_map(service_type="fts", get_all_nodes=True)
+        if not fts_nodes or len(fts_nodes) < 2:
+            self.fail("test_ingestion_online_upgrade requires >= 2 FTS nodes")
+
+        log.info("=" * 20 + " Stage 0: pre-upgrade index")
+        fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False,
+                                   servers=self.servers)
+        fts_callable.load_data(self.num_items)
+        index = self._create_ingest_index(fts_callable)
+        batches = {}
+
+        # Each rebalance of the upgrade writes its own batch of new keys, so a
+        # batch that never becomes searchable names the window it was written in.
+        self._rolling_upgrade_fts_nodes(
+            [fts_nodes[0]], label="Stage 1 (first FTS node)", driver=fts_callable, index=index,
+            load_fn=self._ingest_load_fn(fts_callable, batches, "Stage 1"))
+
+        log.info("=" * 20 + " Stage 2: mixed-cluster ingestion")
+        size = self.input.param("ingest_batch_size", 5000)
+        tag = f"batch{len(batches)}"
+        batches[tag] = ("Stage 2 (mixed cluster)", size)
+        self._wait_tasks(self._load_ingest_batch(fts_callable, tag, size), f"ingest {tag}")
+        stage2 = self._check_ingest_batches(index, batches, "Stage 2")
+        if stage2:
+            errors['s2_batches'] = stage2
+
+        self._upgrade_rest_of_cluster(
+            [fts_nodes[0]], "Stage 3 (rest of cluster)", driver=fts_callable, index=index,
+            load_fn=self._ingest_load_fn(fts_callable, batches, "Stage 3"))
+        errors.update({f"s3_{i}": e for i, e in
+                       enumerate(self._assert_cluster_fully_upgraded("Stage 3"))})
+
+        log.info("=" * 20 + " Stage 4: post-upgrade ingestion")
+        fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False,
+                                   variable_node=self.get_fts_query_node(), servers=self.servers)
+        errors.update(self._post_upgrade_ingest_checks(fts_callable, index, batches, "s4"))
+
+        # Last: the generic post-upgrade CRUD rewrites the emp docs updated above.
+        errors.update(self._totoro_post_upgrade_checks("ingestion online upgrade"))
+        if errors:
+            self.fail("test_ingestion_online_upgrade failed:\n" +
+                      "\n".join(f"  {k}: {v}" for k, v in errors.items()))
+        log.info("test_ingestion_online_upgrade PASSED")
+
+    def test_ingestion_offline_upgrade(self):
+        """Offline upgrade: docs written after it must become searchable (CBSE-22203)."""
+        errors = {}
+        log.info("=" * 20 + " Pre-upgrade index")
+        fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False,
+                                   servers=self.servers)
+        fts_callable.load_data(self.num_items)
+        index = self._create_ingest_index(fts_callable)
+
+        # A batch written just before the shutdown, so the index carries
+        # recently-ingested data across the upgrade rather than a settled build.
+        size = self.input.param("ingest_batch_size", 5000)
+        batches = {"batch0": ("pre-upgrade", size)}
+        self._wait_tasks(self._load_ingest_batch(fts_callable, "batch0", size), "ingest batch0")
+        pre = self._check_ingest_batches(index, batches, "pre-upgrade")
+        if pre:
+            self.fail(f"pre-upgrade ingestion already broken: {pre}")
+
+        self._offline_upgrade_all_nodes(label="ingestion")
+        errors.update({f"post_{i}": e for i, e in
+                       enumerate(self._assert_cluster_fully_upgraded("post-upgrade"))})
+
+        log.info("=" * 20 + " Post-upgrade ingestion")
+        fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False,
+                                   variable_node=self.get_fts_query_node(), servers=self.servers)
+        errors.update(self._post_upgrade_ingest_checks(fts_callable, index, batches, "post"))
+
+        errors.update(self._totoro_post_upgrade_checks("ingestion offline upgrade"))
+        if errors:
+            self.fail("test_ingestion_offline_upgrade failed:\n" +
+                      "\n".join(f"  {k}: {v}" for k, v in errors.items()))
+        log.info("test_ingestion_offline_upgrade PASSED")
+
+    # =========================================================================
+    # CBQE-9123: query load + index rollback across the upgrade (CBSE-21687 / MB-69830)
+    # =========================================================================
+
+    ROLLBACK_INDEX = "rollback_load_upgrade_idx"
+
+    def _numeric_range_query_fn(self, fts_nodes):
+        """MB-69830's trigger: numeric range queries, one goroutine per segment each.
+
+        Uses a private RNG -- JsonDocGenerator reseeds the global one on every
+        construction, which the mutation loop does continuously.
+        """
+        rng = random.Random(9123)
+        width = self.input.param("numeric_range_width", 5000)
+        rests = [RestConnection(node, check_connectivity=False) for node in fts_nodes]
+
+        def _query():
+            low = rng.uniform(50000, 150000 - width)
+            body = {"query": {"min": low, "max": low + width, "field": "salary"},
+                    "size": 10, "fields": []}
+            # Not run_fts_query: urllib_request logs every call at INFO, which
+            # at query_load_threads x back-to-back queries floods the job log.
+            rest = rng.choice(rests)
+            ok, content, _ = rest._http_request(
+                rest.fts_baseUrl + f"api/index/{self.ROLLBACK_INDEX}/query", 'POST',
+                params=json.dumps(body), headers=rest._create_capi_headers(), timeout=60)
+            return ok and json.loads(content).get('total_hits', -1) != -1
+        return _query
+
+    def _segment_mutation_fn(self, first_key):
+        """Upserts a small rotating batch so the index keeps cutting new in-memory segments.
+
+        Returns (mutate, cleanup). Uses one persistent VBucketAwareMemcached
+        client rather than the task framework: every LoadDocumentsGeneratorsTask
+        opens a client it never closes and holds the process-wide
+        CONCURRENCY_LOCK, so a round per few seconds both leaked connections and
+        stalled behind the stage's own workload. A failed round drops the client
+        and the next round reconnects to the current cluster.
+        """
+        batch = self.input.param("segment_mutation_batch", 500)
+        state = {"start": first_key, "client": None}
+
+        def _close():
+            client, state["client"] = state["client"], None
+            if client is not None:
+                try:
+                    client.done()
+                except Exception:
+                    pass
+
+        def _mutate():
+            if state["client"] is None:
+                state["client"] = VBucketAwareMemcached(RestConnection(self.servers[0]), "default")
+            start = state["start"]
+            if start + batch > self.num_items:
+                start = first_key
+            state["start"] = start + batch
+            gen = JsonDocGenerator("emp", encoding="utf-8", start=start, end=start + batch)
+            # Same keys JsonDocGenerator emits: emp<10000000 + n + 1>.
+            docs = {f"emp{10000000 + n + 1}": json.dumps(doc) for n, doc in gen.gen_docs.items()}
+            try:
+                state["client"].setMulti(0, 0, docs)
+            except Exception:
+                _close()
+                raise
+        return _mutate, _close
+
+    def _query_load_monitor(self, fts_nodes, label):
+        mutate, cleanup = self._segment_mutation_fn(self.input.param("rollback_mutations", 5000))
+        return FTSQueryLoadMonitor(
+            self, fts_nodes, self._numeric_range_query_fn(fts_nodes), label=label,
+            query_threads=self.input.param("query_load_threads", 16),
+            mutate_fn=mutate, cleanup_fn=cleanup,
+            sample_interval=self.input.param("goroutine_sample_interval", 5))
+
+    def _segment_counts(self, fts_nodes):
+        """In-memory and on-disk segment counts per node, for the log only."""
+        counts = {}
+        for node in fts_nodes:
+            node_counts = {}
+            for stat in ("num_root_memorysegments", "num_root_filesegments"):
+                try:
+                    _, value = RestConnection(node).get_fts_stats(
+                        index_name=self.ROLLBACK_INDEX, bucket_name="default", stat_name=stat)
+                    node_counts[stat] = value
+                except Exception:
+                    node_counts[stat] = None
+            counts[node.ip] = node_counts
+        return counts
+
+    def _idle_goroutines(self, fts_nodes, samples=3, interval=10):
+        """Per-node goroutine count with no query load running (max of a few samples)."""
+        idle = {}
+        for _ in range(samples):
+            for ip, count in FTSQueryLoadMonitor.goroutine_counts(fts_nodes).items():
+                if count is not None:
+                    idle[ip] = max(idle.get(ip, 0), count)
+            time.sleep(interval)
+        return idle
+
+    def _check_goroutine_storm(self, monitor, idle, label):
+        """A node's goroutine peak under load must stay within ratio x its idle count."""
+        errors = []
+        ratio = self.input.param("goroutine_storm_ratio", 10)
+        floor = self.input.param("goroutine_storm_floor", 20000)
+        for ip, peak in monitor.goroutine_peaks.items():
+            limit = max(idle.get(ip, 0) * ratio, floor)
+            if peak > limit:
+                errors.append(f"[{label}] {ip} peaked at {peak} goroutines under numeric-range "
+                              f"query load (idle {idle.get(ip)}, limit {limit}) - the MB-69830 "
+                              f"term-dictionary lock contention signature")
+        if not monitor.goroutine_peaks:
+            errors.append(f"[{label}] no goroutine sample could be read from any FTS node")
+        # Without new segments the window never reproduces MB-69830's condition.
+        errors.extend(monitor.errors)
+        if monitor.query_count and monitor.query_failures == monitor.query_count:
+            errors.append(f"[{label}] all {monitor.query_count} load queries failed")
+        return errors
+
+    def _check_goroutines_settle(self, fts_nodes, idle, label):
+        """Once the load stops, goroutines and CPU must come back down.
+
+        Busy-waiting goroutines (CBSE-21687) do not drain when the queries that
+        spawned them stop, so a node that stays high is the storm, not the load.
+        """
+        settle_ratio = self.input.param("goroutine_settle_ratio", 3)
+        settle_floor = self.input.param("goroutine_settle_floor", 5000)
+        cpu_limit = self.input.param("cpu_settle_threshold", 50)
+        timeout = self.input.param("goroutine_settle_timeout", 300)
+        servers = self.servers[:self.nodes_init]
+        deadline = time.time() + timeout
+        high_goroutines, high_cpu = {}, {}
+        while time.time() < deadline:
+            counts = FTSQueryLoadMonitor.goroutine_counts(fts_nodes)
+            cpu = FTSQueryLoadMonitor.cpu_rates(servers)
+            high_goroutines = {ip: c for ip, c in counts.items() if c is not None
+                               and c > max(idle.get(ip, 0) * settle_ratio, settle_floor)}
+            high_cpu = {n.ip: cpu[n.ip] for n in fts_nodes
+                        if cpu.get(n.ip) is not None and cpu[n.ip] > cpu_limit}
+            if not high_goroutines and not high_cpu:
+                log.info(f"[{label}] goroutines and CPU settled: {counts}, cpu={cpu}")
+                return []
+            time.sleep(15)
+        errors = []
+        if high_goroutines:
+            errors.append(f"[{label}] goroutines still high {timeout}s after the query load "
+                          f"stopped: {high_goroutines} (idle {idle})")
+        if high_cpu:
+            errors.append(f"[{label}] FTS node CPU still above {cpu_limit}% {timeout}s after "
+                          f"the query load stopped: {high_cpu}")
+        return errors
+
+    def _rollback_count(self, fts_nodes):
+        total, seen = 0, False
+        for node in fts_nodes:
+            try:
+                status, value = RestConnection(node).get_fts_stats(
+                    index_name=self.ROLLBACK_INDEX, bucket_name="default",
+                    stat_name="timer_rollback_count")
+                if status and value is not None:
+                    total += int(value)
+                    seen = True
+            except Exception:
+                pass
+        return total if seen else None
+
+    def _force_index_rollback(self, fts_callable, index, fts_nodes, label):
+        """Drive a DCP rollback of the index in the mixed cluster.
+
+        Same recipe as StableTopFTS.test_partial_rollback_oso: with persistence
+        stopped on both KV nodes, write mutations FTS indexes from memory, kill
+        memcached on one node and fail the other over, so the surviving vbuckets
+        are behind what FTS has seen. Then recover the failed-over node.
+        """
+        errors = []
+        kv_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True) or []
+        if len(kv_nodes) < 2:
+            return [f"[{label}] index rollback needs >= 2 KV nodes, found {len(kv_nodes)}"]
+        node_a, node_b = kv_nodes[0], kv_nodes[1]
+        bucket = fts_callable.cb_cluster.get_bucket_by_name("default")
+        rollback_query = {"query": "mutated:>0"}
+        num_mutations = self.input.param("rollback_mutations", 5000)
+        rollbacks_before = self._rollback_count(fts_nodes)
+
+        log.info(f"[{label}] stopping persistence on {node_a.ip} and {node_b.ip}")
+        for node in (node_a, node_b):
+            MemcachedClientHelper.direct_client(node, bucket).stop_persistence()
+
+        gen = JsonDocGenerator("emp", encoding="utf-8", start=0, end=num_mutations)
+        for doc in gen.gen_docs.values():
+            doc['mutated'] = 1
+        self._wait_tasks(fts_callable.cb_cluster.async_load_bucket_from_generator(bucket, gen),
+                         f"{label} rollback mutations")
+        hits_before, _ = self._wait_for_hits(index, num_mutations, query=rollback_query)
+        log.info(f"[{label}] {hits_before} unpersisted mutations indexed before the rollback")
+
+        log.info(f"[{label}] killing memcached on {node_a.ip}")
+        shell = RemoteMachineShellConnection(node_a)
+        shell.kill_memcached()
+        shell.disconnect()
+        MemcachedClientHelper.direct_client(node_b, bucket).start_persistence()
+
+        log.info(f"[{label}] hard failover of {node_b.ip}")
+        self.cluster.async_failover(self.servers[:self.nodes_init], [node_b],
+                                    graceful=False).result(
+            timeout=self.input.param("failover_timeout", 600))
+        self.sleep(60, "letting memcached warm up and FTS roll back")
+
+        caught_up = self._wait_index_caught_up(index, f"{label} after failover",
+                                               drained=False)
+        errors.extend(caught_up)
+        hits_after, _, _, _ = index.execute_query(query=rollback_query, zero_results_ok=True)
+        rollbacks_after = self._rollback_count(fts_nodes)
+        log.info(f"[{label}] mutated:>0 hits {hits_before} -> {hits_after}, "
+                 f"timer_rollback_count {rollbacks_before} -> {rollbacks_after}")
+        rolled_back = (hits_after < hits_before or
+                       (rollbacks_after is not None and rollbacks_before is not None
+                        and rollbacks_after > rollbacks_before))
+        if not rolled_back:
+            errors.append(f"[{label}] the index never rolled back (mutated:>0 hits "
+                          f"{hits_before} -> {hits_after}, timer_rollback_count "
+                          f"{rollbacks_before} -> {rollbacks_after}), so this run did not "
+                          f"exercise rollback under load")
+
+        log.info(f"[{label}] full recovery of {node_b.ip}")
+        rest = RestConnection(self.master)
+        for status in rest.node_statuses():
+            if status.ip == node_b.ip:
+                rest.set_recovery_type(otpNode=status.id, recoveryType="full")
+                rest.add_back_node(status.id)
+        self.cluster.async_rebalance(self.servers[:self.nodes_init], [], []).result(
+            timeout=self.input.param("rebalance_timeout", 1800))
+        return errors
+
+    def test_query_load_rollback_online_upgrade(self):
+        """Rolling upgrade + index rollback under numeric-range query load (CBSE-21687 / MB-69830)."""
+        errors = {}
+        if self.bucket_storage == "magma":
+            self.skipTest("the rollback is driven by stopping persistence, which magma does "
+                          "not support - run with bucket_storage=couchstore")
+        fts_nodes = self.get_nodes_from_services_map(service_type="fts", get_all_nodes=True)
+        if not fts_nodes or len(fts_nodes) < 2:
+            self.fail("test_query_load_rollback_online_upgrade requires >= 2 FTS nodes")
+        window = self.input.param("query_load_window", 120)
+
+        log.info("=" * 20 + " Stage 0: pre-upgrade index and goroutine baseline")
+        fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False,
+                                   servers=self.servers)
+        fts_callable.load_data(self.num_items)
+        index = fts_callable.create_fts_index(
+            self.ROLLBACK_INDEX, source_type='couchbase', source_name="default",
+            index_type='fulltext-index', index_params=None, plan_params=None,
+            source_params=None, source_uuid=None, collection_index=False,
+            _type=None, analyzer="standard", no_check=False, cluster=self.cb_cluster)
+        fts_callable.wait_for_indexing_complete(self.num_items)
+        idle = self._idle_goroutines(fts_nodes)
+        if not idle:
+            self.fail("could not read a goroutine count from :8094/debug/pprof on any FTS "
+                      "node, so a goroutine storm could not be detected")
+        log.info(f"Stage 0 idle goroutines: {idle}")
+
+        # Informational only: the pre-upgrade build may itself carry MB-69830.
+        with self._query_load_monitor(fts_nodes, "Stage 0 load") as monitor:
+            self.sleep(window, "numeric-range query load on the pre-upgrade build")
+        log.info(f"Stage 0 (pre-upgrade build) under load: goroutine peaks "
+                 f"{monitor.goroutine_peaks}, cpu peaks {monitor.cpu_peaks}, "
+                 f"segments {self._segment_counts(fts_nodes)}")
+        pre_settle = self._check_goroutines_settle(fts_nodes, idle, "Stage 0")
+        if pre_settle:
+            log.warning(f"the pre-upgrade build did not settle after load: {pre_settle}")
+
+        def _rollback():
+            rollback_errors = self._force_index_rollback(
+                fts_callable, index, fts_nodes, "Stage 2 (mixed cluster)")
+            if rollback_errors:
+                errors['s2_rollback'] = rollback_errors
+
+        stages = (
+            ("Stage 1", lambda: self._rolling_upgrade_fts_nodes(
+                [fts_nodes[0]], label="Stage 1 (first FTS node)", driver=fts_callable,
+                index=index)),
+            ("Stage 2", _rollback),
+            ("Stage 3", lambda: self._upgrade_rest_of_cluster(
+                [fts_nodes[0]], "Stage 3 (rest of cluster)", driver=fts_callable,
+                index=index)),
+            ("Stage 4", lambda: self.sleep(window, "numeric-range query load post-upgrade")),
+        )
+        for stage, action in stages:
+            log.info("=" * 20 + f" {stage} under numeric-range query load")
+            fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False,
+                                       variable_node=self.get_fts_query_node(),
+                                       servers=self.servers)
+            with self._query_load_monitor(fts_nodes, stage) as monitor:
+                action()
+            log.info(f"{stage} segments: {self._segment_counts(fts_nodes)}")
+            storm = self._check_goroutine_storm(monitor, idle, stage)
+            settle = self._check_goroutines_settle(fts_nodes, idle, stage)
+            if storm or settle:
+                errors[f"{stage.lower().replace(' ', '')}_goroutines"] = storm + settle
+
+        errors.update({f"s4_{i}": e for i, e in
+                       enumerate(self._assert_cluster_fully_upgraded("Stage 4"))})
+        caught_up = self._wait_index_caught_up(index, "Stage 4")
+        if caught_up:
+            errors['s4_caught_up'] = caught_up
+
+        errors.update(self._totoro_post_upgrade_checks("query load + rollback upgrade"))
+        if errors:
+            self.fail("test_query_load_rollback_online_upgrade failed:\n" +
+                      "\n".join(f"  {k}: {v}" for k, v in errors.items()))
+        log.info("test_query_load_rollback_online_upgrade PASSED")

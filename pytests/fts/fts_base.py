@@ -2932,6 +2932,10 @@ class CouchbaseCluster:
     def update_nodes_list(self, server):
         self.__nodes.append(server)
 
+    def shutdown_task_manager(self, force=True):
+        """Stop this cluster's task-manager thread without touching the cluster itself."""
+        self.__clusterop.shutdown(force=force)
+
     def cleanup_cluster(
             self,
             test_case,
@@ -5287,6 +5291,172 @@ class FTSConcurrentWorkload:
             f"(queries={self.query_count}, query_failures={self.query_failures}, "
             f"errors={len(self.errors)})")
         return self.errors
+
+    def __enter__(self):
+        return self.start()
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.stop()
+        return False
+
+
+class FTSQueryLoadMonitor:
+    """Sustained query load with goroutine and CPU sampling on the FTS nodes (MB-69830).
+
+    `query_fn` is called back to back from `query_threads` threads; `mutate_fn`,
+    if given, runs in its own loop so the index keeps cutting new segments while
+    it is being queried. Neither ever raises into the caller: failures are
+    counted, and the sampler simply skips a node that is out of the cluster.
+
+    Nothing here may block the test: every thread is a daemon, stop() waits
+    against one deadline, and a mutation round that raises TimeoutError ends
+    the mutation loop (recorded in `errors`) instead of queueing more work
+    behind a stuck task manager. `cleanup_fn` runs once the threads are told
+    to stop, to release whatever `mutate_fn` set up.
+    """
+
+    def __init__(self, test, fts_nodes, query_fn, label="", query_threads=8,
+                 mutate_fn=None, mutate_interval=2, sample_interval=5,
+                 stop_timeout=90, cleanup_fn=None, mutate_stall_timeout=300):
+        self._test = test
+        self._fts_nodes = list(fts_nodes)
+        self._query_fn = query_fn
+        self._mutate_fn = mutate_fn
+        self._mutate_interval = mutate_interval
+        self._sample_interval = sample_interval
+        self._num_query_threads = query_threads
+        self._label = label or "query load"
+        self._stop_timeout = stop_timeout
+        self._cleanup_fn = cleanup_fn
+        self._mutate_stall_timeout = mutate_stall_timeout
+        self._last_mutation = None
+        self.log = test.log
+
+        self._stop = threading.Event()
+        self._threads = []
+        self._lock = threading.Lock()
+        self.query_count = 0
+        self.query_failures = 0
+        self.mutation_rounds = 0
+        self.goroutine_peaks = {}
+        self.cpu_peaks = {}
+        self.samples = []
+        self.errors = []
+
+    @staticmethod
+    def goroutine_counts(fts_nodes):
+        """{node ip: goroutine count}, None for a node that did not answer."""
+        counts = {}
+        for node in fts_nodes:
+            try:
+                counts[node.ip] = RestConnection(
+                    node, check_connectivity=False).get_fts_go_routine_count()
+            except Exception:
+                counts[node.ip] = None
+        return counts
+
+    @staticmethod
+    def cpu_rates(servers):
+        """{node ip: cpu_utilization_rate} from the first cluster node that answers."""
+        for server in servers:
+            try:
+                nodes = RestConnection(server, check_connectivity=False).get_pools_default(
+                    timeout=10).get("nodes", [])
+            except Exception:
+                continue
+            rates = {}
+            for node in nodes:
+                rate = node.get("systemStats", {}).get("cpu_utilization_rate")
+                if rate is not None:
+                    rates[node.get("hostname", "").split(":")[0]] = float(rate)
+            if rates:
+                return rates
+        return {}
+
+    def _query_loop(self):
+        while not self._stop.is_set():
+            ok = False
+            try:
+                ok = bool(self._query_fn())
+            except Exception:
+                ok = False
+            with self._lock:
+                self.query_count += 1
+                if not ok:
+                    self.query_failures += 1
+
+    def _mutate_loop(self):
+        while not self._stop.is_set():
+            try:
+                self._mutate_fn()
+                self.mutation_rounds += 1
+                self._last_mutation = time.time()
+            except TimeoutError as err:
+                self.errors.append(f"[{self._label}] mutation loop stalled after "
+                                   f"{self.mutation_rounds} round(s), stopped mutating: {err}")
+                self.log.warning(self.errors[-1])
+                return
+            except Exception as err:
+                self.log.info(f"[{self._label}] mutation round failed: {err}")
+            self._stop.wait(self._mutate_interval)
+
+    def _sample_loop(self):
+        servers = self._test.servers[:self._test.nodes_init]
+        while not self._stop.is_set():
+            goroutines = self.goroutine_counts(self._fts_nodes)
+            cpu = self.cpu_rates(servers)
+            self.samples.append({"time": time.time(), "goroutines": goroutines, "cpu": cpu})
+            for ip, count in goroutines.items():
+                if count is not None and count > self.goroutine_peaks.get(ip, 0):
+                    self.goroutine_peaks[ip] = count
+            for node in self._fts_nodes:
+                rate = cpu.get(node.ip)
+                if rate is not None and rate > self.cpu_peaks.get(node.ip, 0):
+                    self.cpu_peaks[node.ip] = rate
+            self._stop.wait(self._sample_interval)
+
+    def start(self):
+        self._last_mutation = time.time()
+        self.log.info(f"---- starting query load monitor: {self._label} "
+                      f"({self._num_query_threads} query threads)")
+        targets = [self._query_loop] * self._num_query_threads + [self._sample_loop]
+        if self._mutate_fn is not None:
+            targets.append(self._mutate_loop)
+        for i, target in enumerate(targets):
+            thread = threading.Thread(target=target, daemon=True,
+                                      name=f"fts_load_monitor_{self._label}_{i}")
+            thread.start()
+            self._threads.append(thread)
+        return self
+
+    def stop(self):
+        self._stop.set()
+        if self._mutate_fn is not None and self._last_mutation is not None:
+            # Catches a round that hangs outright, not only one that times out.
+            idle = time.time() - self._last_mutation
+            if idle > self._mutate_stall_timeout and not self.errors:
+                self.errors.append(f"[{self._label}] no mutation round completed in the last "
+                                   f"{int(idle)}s ({self.mutation_rounds} completed in total)")
+        deadline = time.time() + self._stop_timeout
+        for thread in self._threads:
+            thread.join(timeout=max(0, deadline - time.time()))
+        stuck = [t.name for t in self._threads if t.is_alive()]
+        if stuck:
+            # Daemons, so they cannot hold the process; just say so.
+            self.log.warning(f"[{self._label}] {len(stuck)} load thread(s) still busy after "
+                             f"{self._stop_timeout}s, abandoning them: {stuck}")
+        self._threads = []
+        if self._cleanup_fn is not None:
+            try:
+                self._cleanup_fn()
+            except Exception as err:
+                self.log.warning(f"[{self._label}] load cleanup failed: {err}")
+        self.log.info(
+            f"---- finished query load monitor: {self._label} "
+            f"(queries={self.query_count}, failures={self.query_failures}, "
+            f"mutation_rounds={self.mutation_rounds}, "
+            f"goroutine_peaks={self.goroutine_peaks}, cpu_peaks={self.cpu_peaks})")
+        return self
 
     def __enter__(self):
         return self.start()

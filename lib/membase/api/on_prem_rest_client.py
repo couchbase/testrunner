@@ -1,5 +1,6 @@
 import base64
 import json
+import re
 import urllib.request, urllib.parse, urllib.error
 
 import requests
@@ -3231,6 +3232,24 @@ class RestConnection(object):
         log.error("ERROR: Stat {0} error on {1} on bucket {2}".
                   format(stat_name, index_name, bucket_name))
         return False, None
+
+    def get_fts_go_routine_count(self, timeout=10):
+        """Total goroutines in this node's cbft process, from its pprof endpoint.
+
+        `timeout` also bounds the reconnect budget, so a node that is out of the
+        cluster mid-upgrade fails fast instead of stalling a sampler.
+        """
+        api = self.fts_baseUrl + "debug/pprof/goroutine?debug=1"
+        status, content, header = self._http_request(api, 'GET', timeout=timeout)
+        if not status:
+            raise Exception(content)
+        if isinstance(content, bytes):
+            content = content.decode('utf-8', 'ignore')
+        # First line of a debug=1 dump: "goroutine profile: total <N>"
+        match = re.search(r"goroutine profile: total (\d+)", content)
+        if not match:
+            raise Exception("unexpected pprof goroutine output: %s" % content[:200])
+        return int(match.group(1))
 
     def get_specific_nsstats(self, node, creds):
         try:
