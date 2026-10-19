@@ -75,12 +75,24 @@ class GSIEncryptionAtRestRebalance(GSIEncryptionAtRestBase, BaseSecondaryIndexin
         self.index_online_timeout = self.input.param("index_online_timeout", 2400)
         self.failure_detected = False
         self.test_failures = []
+        # Patterns a test induces on purpose; set per test, never on the class.
+        self.allowed_encryption_log_patterns = ()
+        self.gsi_log_error_baseline = None
+        if not getattr(self, "capella_run", False) and not self.input.param("skip_encryption_log_check", False):
+            self.gsi_log_error_baseline = self.get_gsi_log_error_counts(label="[setUp] ")
         self.log.info("==============  GSIEncryptionAtRestRebalance setup has completed ==============")
 
     def tearDown(self):
         self.log.info("==============  GSIEncryptionAtRestRebalance tearDown has started ==============")
+        log_check_error = None
+        try:
+            self.check_gsi_logs_for_encryption_errors()
+        except Exception as ex:
+            log_check_error = ex
         self._disable_cluster_level_encryption_at_rest()
         super(GSIEncryptionAtRestRebalance, self).tearDown()
+        if log_check_error:
+            raise log_check_error
         self.log.info("==============  GSIEncryptionAtRestRebalance tearDown has completed ==============")
 
     def wait_until_indexes_online(self, timeout=1800, defer_build=False,
@@ -588,6 +600,7 @@ class GSIEncryptionAtRestRebalance(GSIEncryptionAtRestBase, BaseSecondaryIndexin
         self.log.info(f"Build query: {build_query}")
         self.run_cbq_query(query=build_query, server=query_node)
         self.log.info(f"Build indexes query executed for namespace {namespace}")
+        self.sleep(10, "/indexStatus is refreshed every 5s by ns_server; let it list the new indexes")
 
     def _enable_shard_rebalance_if_file_mode(self, step_prefix="[STEP 3]"):
         if self.rebalance_mode == "file":
@@ -736,9 +749,11 @@ class GSIEncryptionAtRestRebalance(GSIEncryptionAtRestBase, BaseSecondaryIndexin
     def _ear_rebalance_and_validate(self, nodes_in_list, nodes_out_list, services_in,
                                      select_queries, index_nodes, shard_rebalance_enabled=False,
                                      encrypted_bucket_names=None,
-                                     run_continuous_workload=False, skip_scans=False):
+                                     run_continuous_workload=False, skip_scans=False,
+                                     before_file_validation=None):
         """
         Perform rebalance operation and validate indexes and encryption.
+        before_file_validation: called after the rebalance, before the file encryption check.
 
         Args:
             nodes_in_list: List of nodes to add
@@ -853,6 +868,8 @@ class GSIEncryptionAtRestRebalance(GSIEncryptionAtRestBase, BaseSecondaryIndexin
         else:
             # Validate file encryption
             self.log.info("Validating file encryption after rebalance...")
+            if before_file_validation:
+                before_file_validation()
             updated_index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
             expected_key_ids = self.get_indexer_in_use_key_ids(updated_index_nodes)
             validation_passed = self.validate_file_encryption_with_key(
@@ -1083,7 +1100,7 @@ class GSIEncryptionAtRestRebalance(GSIEncryptionAtRestBase, BaseSecondaryIndexin
             self.log.error(f"[STEP 10] FAILED - File encryption validation failed: {str(e)}")
             raise
         
-        self.restart_index_nodes(index_nodes)
+        self.restart_index_nodes(index_nodes, validate_read_back=True, select_queries=select_queries)
 
         # ========== TEST COMPLETE ==========
         self.log.info("=" * 80)
@@ -1352,7 +1369,7 @@ class GSIEncryptionAtRestRebalance(GSIEncryptionAtRestBase, BaseSecondaryIndexin
             self.log.error(f"[STEP 11] FAILED: {str(e)}")
             raise
         
-        self.restart_index_nodes(index_nodes)
+        self.restart_index_nodes(index_nodes, validate_read_back=True, select_queries=select_queries)
 
         # ========== TEST COMPLETE ==========
         self.log.info("=" * 80)
@@ -1630,7 +1647,7 @@ class GSIEncryptionAtRestRebalance(GSIEncryptionAtRestBase, BaseSecondaryIndexin
             self.log.error(f"[STEP 12] FAILED: {str(e)}")
             raise
         
-        self.restart_index_nodes(index_nodes)
+        self.restart_index_nodes(index_nodes, validate_read_back=True, select_queries=select_queries)
 
         # ========== TEST COMPLETE ==========
         self.log.info("=" * 80)
@@ -1789,7 +1806,7 @@ class GSIEncryptionAtRestRebalance(GSIEncryptionAtRestBase, BaseSecondaryIndexin
             self.log.error(f"[STEP 7] FAILED: {str(e)}")
             raise
 
-        self.restart_index_nodes(index_nodes)
+        self.restart_index_nodes(index_nodes, validate_read_back=True, select_queries=select_queries)
 
         # ========== TEST COMPLETE ==========
         self.log.info("=" * 80)
@@ -3717,6 +3734,12 @@ class GSIEncryptionAtRestRebalance(GSIEncryptionAtRestBase, BaseSecondaryIndexin
             self.log.error(f"[STEP 7] FAILED: {str(e)}")
             raise
 
+        def stop_rotation():  # rotation/expiry ran through the rebalance; no new DEKs while files are checked
+            for name, key_id in ((bucket1_name, bucket1_key_id), (bucket2_name, bucket2_key_id)):
+                if key_id not in (None, -1):
+                    self.set_bucket_dek_rotation_config(name, key_id, 36000, 36000)
+            self.sleep(30, "[STEP 8] Letting an in-flight DEK rotation reach the indexers")
+
         # ========== STEP 8: Trigger rebalance ==========
         try:
             self.log.info(f"[STEP 8] Performing {self.rebalance_type} rebalance ({self.rebalance_mode} mode)...")
@@ -3768,7 +3791,8 @@ class GSIEncryptionAtRestRebalance(GSIEncryptionAtRestBase, BaseSecondaryIndexin
                 select_queries=all_select_queries,
                 index_nodes=index_nodes,
                 shard_rebalance_enabled=shard_rebalance_enabled,
-                encrypted_bucket_names=encrypted_bucket_names, skip_scans=True
+                encrypted_bucket_names=encrypted_bucket_names, skip_scans=True,
+                before_file_validation=stop_rotation
             )
 
             self.log.info("[STEP 8] PASSED - Rebalance completed and validated")
@@ -3941,6 +3965,9 @@ class GSIEncryptionAtRestRebalance(GSIEncryptionAtRestBase, BaseSecondaryIndexin
                                           before adding the node back
         """
         STABLE_INTERVAL_S = 36000  # 10 hours — no accidental background rotation
+        # A rebalance waits for an in-flight BHIVE drop; the indexer gives up after its retries
+        # and ns_server re-drives the drop later (dek_removal_min_interval), so this is expected
+        self.allowed_encryption_log_patterns = ("trackDropKeys.*retry stopped",)
 
         dek_drop_scenario = self.input.param("dek_drop_scenario", "during_rebalance")
         shard_rebalance_enabled = False

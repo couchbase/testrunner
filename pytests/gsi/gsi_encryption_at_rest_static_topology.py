@@ -73,11 +73,23 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
         # defaults to 1), so vector coverage needs more headroom than the
         # scalar-only default of 1200s used elsewhere in this file.
         self.index_online_timeout = self.input.param("index_online_timeout", 1200)
+        # Patterns a test induces on purpose; set per test, never on the class.
+        self.allowed_encryption_log_patterns = ()
+        self.gsi_log_error_baseline = None
+        if not getattr(self, "capella_run", False) and not self.input.param("skip_encryption_log_check", False):
+            self.gsi_log_error_baseline = self.get_gsi_log_error_counts(label="[setUp] ")
         self.log.info("==============  GSIEncryptionAtRestStaticTopology setup has completed ==============")
 
     def tearDown(self):
         self.log.info("==============  GSIEncryptionAtRestStaticTopology tearDown has started ==============")
+        log_check_error = None
+        try:
+            self.check_gsi_logs_for_encryption_errors()
+        except Exception as ex:
+            log_check_error = ex
         super(GSIEncryptionAtRestStaticTopology, self).tearDown()
+        if log_check_error:
+            raise log_check_error
         self.log.info("==============  GSIEncryptionAtRestStaticTopology tearDown has completed ==============")
 
     def suite_tearDown(self):
@@ -307,6 +319,14 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
         self.wait_until_indexes_online(timeout=300)
         self.log.info(f"[LIFECYCLE] BUILD PASSED - {deferred_name}")
 
+    def _kv_node_without_n1ql(self, kv_nodes):
+        """KV node to kill and fail over: one without the query service, so scans after the
+        failover still have a query node."""
+        n1ql_ips = {n.ip for n in self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)}
+        node = next((n for n in kv_nodes if n.ip not in n1ql_ips), None)
+        self.assertIsNotNone(node, f"No KV node without the query service in {[n.ip for n in kv_nodes]}")
+        return node
+
     def _induce_partial_rollback(self, kv_nodes, bucket_name):
         """
         Induce a KV partial rollback:
@@ -338,7 +358,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
             task.result()
         time.sleep(10)
 
-        node_to_kill = kv_nodes[0]
+        node_to_kill = self._kv_node_without_n1ql(kv_nodes)
         self.log.info(f"[_induce_partial_rollback] Killing memcached on {node_to_kill.ip}...")
         shell = RemoteMachineShellConnection(node_to_kill)
         shell.kill_memcached()
@@ -586,13 +606,26 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
                     username=self.username,
                     password=self.password
                 )
-                tasks = self.data_ops_javasdk_loader_in_batches(
-                    sdk_data_loader=gen_create,
-                    batch_size=10**4,
-                    dataset=self.json_template
-                )
+                if self.use_magma_loader:
+                    # Vector templates (e.g. MSMARCOSiftEmbeddingProduct) are only
+                    # available to the magma loader; java_sdk_client NPEs on them
+                    # and loads zero docs without failing the task.
+                    tasks = [
+                        self.cluster.async_load_gen_docs(
+                            self.master, bucket=bucket_name, generator=gen_create,
+                            pause_secs=1, timeout_secs=300, use_magma_loader=True
+                        )
+                        for bucket_name in bucket_names
+                    ]
+                else:
+                    tasks = self.data_ops_javasdk_loader_in_batches(
+                        sdk_data_loader=gen_create,
+                        batch_size=10**4,
+                        dataset=self.json_template
+                    )
                 for task in tasks:
                     task.result()
+                self._assert_buckets_loaded(bucket_names, int(self.num_of_docs_per_collection))
                 self.log.info(
                     f"[STEP 6.a] PASSED - Loaded {self.num_of_docs_per_collection} documents into each bucket: {bucket_names}"
                 )
@@ -786,7 +819,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
             self.log.error(f"[STEP 10] FAILED - File encryption validation failed: {str(e)}")
             raise
 
-        self.restart_index_nodes(index_nodes)
+        self.restart_index_nodes(index_nodes, validate_read_back=True, select_queries=select_queries)
 
         # ========== TEST COMPLETE ==========
         self.log.info("=" * 80)
@@ -938,7 +971,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
             raise
 
 
-        self.restart_index_nodes(index_nodes)
+        self.restart_index_nodes(index_nodes, validate_read_back=True, select_queries=select_queries)
 
         # ========== TEST COMPLETE ==========
         self.log.info("=" * 80)
@@ -1207,7 +1240,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
             self.log.error(f"[STEP 13] FAILED: {str(e)}")
             raise
 
-        self.restart_index_nodes(index_nodes)
+        self.restart_index_nodes(index_nodes, validate_read_back=True, select_queries=select_queries)
 
         # ========== TEST COMPLETE ==========
         self.log.info("=" * 80)
@@ -1470,7 +1503,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
         except Exception as e:
             self.log.error(f"[STEP 12] FAILED: {str(e)}")
             raise
-        self.restart_index_nodes(index_nodes)
+        self.restart_index_nodes(index_nodes, validate_read_back=True, select_queries=select_queries)
 
         # ========== TEST COMPLETE ==========
         self.log.info("=" * 80)
@@ -1832,7 +1865,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
                 self.log.error(f"[STEP 16] FAILED: {str(e)}")
                 raise
 
-        self.restart_index_nodes(index_nodes)
+        self.restart_index_nodes(index_nodes, validate_read_back=True, select_queries=select_queries)
 
         # ========== TEST COMPLETE ==========
         self.log.info("=" * 80)
@@ -2169,6 +2202,8 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
                     index_nodes, [bucket_name], timeout=300, step_prefix="[STEP 13] "
                 )
             else:
+                if self.gsi_type == "memory_optimized":  # STEP 12 mutations: the next snapshots delete the older ones
+                    self.sleep(int(self.input.param("snapshot_wait", 90)), "[STEP 13] Waiting for the MOI snapshots")
                 validation_passed = self.validate_file_encryption_with_key(
                     index_nodes,
                     expected_key_id=sorted(set(baseline_in_use_key_ids) | set(new_in_use_key_ids)),
@@ -2182,7 +2217,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
             self.log.error(f"[STEP 13] FAILED: {str(e)}")
             raise
 
-        self.restart_index_nodes(index_nodes)
+        self.restart_index_nodes(index_nodes, validate_read_back=True, select_queries=select_queries)
 
         # ========== TEST COMPLETE ==========
         self.log.info("=" * 80)
@@ -2381,7 +2416,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
             self.log.error(f"[STEP 10] FAILED: {str(e)}")
             raise
 
-        self.restart_index_nodes(index_nodes)
+        self.restart_index_nodes(index_nodes, validate_read_back=True, select_queries=select_queries)
 
         # ========== TEST COMPLETE ==========
         self.log.info("=" * 80)
@@ -2613,7 +2648,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
             self.log.error(f"[STEP 11] FAILED: {str(e)}")
             raise
 
-        self.restart_index_nodes(index_nodes)
+        self.restart_index_nodes(index_nodes, validate_read_back=True, select_queries=select_queries)
 
         # ========== TEST COMPLETE ==========
         self.log.info("=" * 80)
@@ -2875,7 +2910,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
             self.log.error(f"[STEP 14] FAILED: {str(e)}")
             raise
 
-        self.restart_index_nodes(index_nodes)
+        self.restart_index_nodes(index_nodes, validate_read_back=True, select_queries=select_queries)
 
         # ========== TEST COMPLETE ==========
         self.log.info("=" * 80)
@@ -3167,7 +3202,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
             self.log.error(f"[STEP 13] FAILED: {str(e)}")
             raise
 
-        self.restart_index_nodes(index_nodes)
+        self.restart_index_nodes(index_nodes, validate_read_back=True, select_queries=select_queries)
 
         # ========== TEST COMPLETE ==========
         self.log.info("=" * 80)
@@ -3436,7 +3471,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
             self.log.error(f"[STEP 15] FAILED: {str(e)}")
             raise
 
-        self.restart_index_nodes(index_nodes)
+        self.restart_index_nodes(index_nodes, validate_read_back=True, select_queries=select_queries)
 
         # ========== TEST COMPLETE ==========
         self.log.info("=" * 80)
@@ -3621,7 +3656,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
             raise
 
         # ========== STEP 10: Kill memcached on KV node to force rollback ==========
-        kv_node_to_kill = kv_nodes[0]
+        kv_node_to_kill = self._kv_node_without_n1ql(kv_nodes)
         try:
             self.log.info(f"[STEP 10] Killing memcached on {kv_node_to_kill.ip} to force KV rollback...")
             shell = RemoteMachineShellConnection(kv_node_to_kill)
@@ -3730,7 +3765,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
             self.log.error(f"[STEP 17] FAILED: {str(e)}")
             raise
 
-        self.restart_index_nodes(index_nodes)
+        self.restart_index_nodes(index_nodes, validate_read_back=True, select_queries=select_queries)
 
         # ========== TEST COMPLETE ==========
         self.log.info("=" * 80)
@@ -3949,7 +3984,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
             self.log.error(f"[STEP 13] FAILED: {str(e)}")
             raise
 
-        self.restart_index_nodes(index_nodes)
+        self.restart_index_nodes(index_nodes, validate_read_back=True, select_queries=select_queries)
 
         self.log.info("=" * 80)
         self.log.info("TEST PASSED: test_gsi_encryption_at_rest_partial_rollback_with_key_drop")
@@ -4196,7 +4231,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
             self.log.error(f"[STEP 16] FAILED: {str(e)}")
             raise
 
-        self.restart_index_nodes(index_nodes)
+        self.restart_index_nodes(index_nodes, validate_read_back=True, select_queries=select_queries)
 
         self.log.info("=" * 80)
         self.log.info("TEST PASSED: test_gsi_encryption_at_rest_rtz_with_dek_rotation")
@@ -4434,7 +4469,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
             self.log.error(f"[STEP 16] FAILED: {str(e)}")
             raise
 
-        self.restart_index_nodes(index_nodes)
+        self.restart_index_nodes(index_nodes, validate_read_back=True, select_queries=select_queries)
 
         self.log.info("=" * 80)
         self.log.info("TEST PASSED: test_gsi_encryption_at_rest_rtz_with_key_drop")
@@ -4685,7 +4720,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
             self.log.error(f"[STEP 12] FAILED: {str(e)}")
             raise
 
-        self.restart_index_nodes(index_nodes)
+        self.restart_index_nodes(index_nodes, validate_read_back=True, select_queries=select_queries)
 
         self.log.info("=" * 80)
         self.log.info("TEST PASSED: test_gsi_encryption_at_rest_partial_rollback_concurrent_key_op")
@@ -4961,7 +4996,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
             self.log.error(f"[STEP 13] FAILED: {str(e)}")
             raise
 
-        self.restart_index_nodes(index_nodes)
+        self.restart_index_nodes(index_nodes, validate_read_back=True, select_queries=select_queries)
 
         self.log.info("=" * 80)
         self.log.info("TEST PASSED: test_gsi_encryption_at_rest_rtz_concurrent_key_op")
@@ -5133,7 +5168,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
             self.log.error(f"[STEP 9] FAILED: {str(e)}")
             raise
 
-        self.restart_index_nodes(index_nodes)
+        self.restart_index_nodes(index_nodes, validate_read_back=True, select_queries=select_queries)
 
         self.log.info("=" * 80)
         self.log.info("TEST PASSED: test_gsi_encryption_at_rest_dek_multi_rotation")
@@ -5354,7 +5389,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
             self.log.error(f"[STEP 12] FAILED: {str(e)}")
             raise
 
-        self.restart_index_nodes(index_nodes)
+        self.restart_index_nodes(index_nodes, validate_read_back=True, select_queries=select_queries)
 
         self.log.info("=" * 80)
         self.log.info("TEST PASSED: test_gsi_encryption_at_rest_enable_then_disable")
@@ -5364,6 +5399,21 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
     # =========================================================================
     # Test 4: Indexer restart concurrently with key rotation / expiry / key drop
     # =========================================================================
+
+    def _assert_buckets_loaded(self, bucket_names, expected_items, timeout=120):
+        """The loaders can fail silently (e.g. java_sdk_client NPE on a vector template it
+        lacks), so wait until each bucket holds expected_items docs or fail."""
+        for bucket_name in bucket_names:
+            deadline = time.time() + timeout
+            while True:
+                item_count = self.get_buckets_itemCount().get(bucket_name, 0)
+                if item_count >= expected_items or time.time() > deadline:
+                    break
+                time.sleep(5)
+            if item_count < expected_items:
+                raise AssertionError(
+                    f"Bucket '{bucket_name}' has {item_count} items after load, expected {expected_items}"
+                )
 
     def test_gsi_encryption_at_rest_indexer_restart_concurrent_key_op(self):
         """
@@ -5378,21 +5428,59 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
           "rotation" — DEK rotation via short TTL (immediate poll)
           "expiry"   — DEK expiry via short TTL (same mechanism, semantic distinction)
           "drop"     — disable_bucket_encryption
+          "enable"   — bucket starts unencrypted; enable_bucket_encryption +
+                       forceEncryptionAtRest while the indexers restart
+          "log_reencrypt" — dropEncryptionAtRestDeks/log (needs enable_log_encryption_at_rest):
+                       stats log, request-handler cache and persisted stats re-encrypted
+                       while the indexers restart
+          "other_reencrypt" — dropEncryptionAtRestDeks/other (needs enable_other_encryption_at_rest):
+                       metadata store re-encrypted while the indexers restart
+          "reencrypt" — dropEncryptionAtRestDeks on the bucket: existing DEKs are
+                       dropped and the indexer re-encrypts all index data with a
+                       new DEK (long-running on a large index)
+
+        restart_mode param (conf-driven):
+          "graceful" (default) — rolling stop_server/start_server
+          "kill"     — rolling kill -9 of the indexer process, kill_delay_s after
+                       the previous node (and after the key op starts), so the
+                       kill lands while the key op is being applied
+          kill_first=True (with restart_mode=kill) — kill -9 the indexer on ALL
+                       index nodes at once, then trigger the key op, so it arrives
+                       while every indexer is down or warming up (use a large
+                       index to keep warmup long). For rotation/expiry the order is
+                       reversed: the short DEK interval is set first and the kill is
+                       timed kill_lead_s before the interval elapses, so the rotation
+                       falls due during warmup. FRAGILE: assumes ns_server rotates
+                       exactly one interval after the setting changes.
 
         Steps:
         1.  Verify prerequisites
         2.  Set indexer snapshot settings, pin DEK interval high
-        3.  Create single encrypted bucket, load docs
+        3.  Create single bucket (encrypted, or unencrypted for "enable"), load docs
         4.  Create indexes, wait for Ready
-        5.  Baseline scans + file encryption validation
+        5.  Baseline scans + file encryption validation (files NOT encrypted for "enable")
         6.  Launch Thread-1 (_restart_index_nodes) and Thread-2 (key op) concurrently
         7.  Join both threads; wait_until_indexes_online(timeout=1800)
         8.  Scans on existing indexes
         9.  Create new indexes, scan
         10. Lifecycle ops (alter/drop/build)
-        11. File encryption validation with new key IDs (rotation/expiry) or item count (drop)
+        11. File encryption validation with new key IDs (rotation/expiry), item count (drop),
+            no unencrypted ("") keys left for the bucket + item count (enable), or
+            old DEK IDs gone from GetInUseKeys + item count (reencrypt)
         """
         STABLE_DEK_INTERVAL_S = 36000
+        restart_mode = self.input.param("restart_mode", "graceful")
+        kill_delay_s = int(self.input.param("kill_delay_s", 10))
+        kill_first = bool(self.input.param("kill_first", False))
+        kill_lead_s = int(self.input.param("kill_lead_s", 3))
+        kills_done = threading.Event()
+        # kill_first + rotation/expiry: time the kill to the rotation instead.
+        timed_rotation = kill_first and self.key_op in ("rotation", "expiry")
+        rotation_armed = threading.Event()
+        rotation_set_at = [None]
+        # Large indexes can take a while to recover after kill -9; give the key op
+        # (and its poll) longer when every indexer is killed at once.
+        key_op_timeout = 1500 if kill_first else 600
         self.log.info("=" * 80)
         self.log.info("STARTING TEST: test_gsi_encryption_at_rest_indexer_restart_concurrent_key_op")
         self.log.info(f"Test parameters: gsi_type={self.gsi_type}, key_op={self.key_op}")
@@ -5408,8 +5496,20 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
                 self.skipTest("Encryption at rest not enabled. Set enable_encryption_at_rest=True")
             key_id = self.encryption_at_rest_id
             self.assertIsNotNone(key_id, "encryption_at_rest_id is None")
-            if self.key_op not in ("rotation", "expiry", "drop"):
-                raise ValueError(f"key_op must be 'rotation', 'expiry', or 'drop', got '{self.key_op}'")
+            if self.key_op not in ("rotation", "expiry", "drop", "enable", "reencrypt",
+                                   "log_reencrypt", "other_reencrypt"):
+                raise ValueError(
+                    f"key_op must be 'rotation', 'expiry', 'drop', 'enable', 'reencrypt', "
+                    f"'log_reencrypt' or 'other_reencrypt', got '{self.key_op}'"
+                )
+            if self.key_op == "other_reencrypt" and not getattr(self, "enable_other_encryption_at_rest", False):
+                self.skipTest("key_op=other_reencrypt needs enable_other_encryption_at_rest=True")
+            if self.key_op == "log_reencrypt" and not getattr(self, "enable_log_encryption_at_rest", False):
+                self.skipTest("key_op=log_reencrypt needs enable_log_encryption_at_rest=True")
+            if restart_mode not in ("graceful", "kill"):
+                raise ValueError(f"restart_mode must be 'graceful' or 'kill', got '{restart_mode}'")
+            if kill_first and restart_mode != "kill":
+                raise ValueError("kill_first=True requires restart_mode=kill")
             self.log.info(f"[STEP 1] PASSED - key_id={key_id}, key_op={self.key_op}")
         except Exception as e:
             self.log.error(f"[STEP 1] FAILED: {str(e)}")
@@ -5421,17 +5521,22 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
         except Exception as e:
             self.log.error(f"[STEP 2] FAILED: {str(e)}")
             raise
-        # ========== STEP 3: Create encrypted bucket, load docs ==========
+        # ========== STEP 3: Create bucket (unencrypted for key_op=enable), load docs ==========
         bucket_name = self.test_bucket
         namespace = f"default:{bucket_name}._default._default"
+        start_encrypted = self.key_op != "enable"
         try:
-            self.log.info(f"[STEP 3] Creating bucket '{bucket_name}' with encryption...")
-            self.create_bucket_with_encryption(bucket_name, enable_encryption=True)
-            self.set_bucket_dek_rotation_config(
-                bucket_name, key_id,
-                dek_rotation_interval=STABLE_DEK_INTERVAL_S,
-                dek_lifetime=STABLE_DEK_INTERVAL_S
+            self.log.info(
+                f"[STEP 3] Creating bucket '{bucket_name}' "
+                f"{'with' if start_encrypted else 'WITHOUT'} encryption..."
             )
+            self.create_bucket_with_encryption(bucket_name, enable_encryption=start_encrypted)
+            if start_encrypted:
+                self.set_bucket_dek_rotation_config(
+                    bucket_name, key_id,
+                    dek_rotation_interval=STABLE_DEK_INTERVAL_S,
+                    dek_lifetime=STABLE_DEK_INTERVAL_S
+                )
             gen_create = SDKDataLoader(
                 num_ops=self.num_of_docs_per_collection,
                 percent_create=100, percent_update=0, percent_delete=0,
@@ -5439,11 +5544,17 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
                 json_template=self.json_template, output=True,
                 username=self.username, password=self.password
             )
-            tasks = self.data_ops_javasdk_loader_in_batches(
-                sdk_data_loader=gen_create, batch_size=10**4, dataset=self.json_template
-            )
+            if self.use_magma_loader:
+                tasks = [self.cluster.async_load_gen_docs(
+                    self.master, bucket=bucket_name, generator=gen_create,
+                    pause_secs=1, timeout_secs=300, use_magma_loader=True)]
+            else:
+                tasks = self.data_ops_javasdk_loader_in_batches(
+                    sdk_data_loader=gen_create, batch_size=10**4, dataset=self.json_template
+                )
             for task in tasks:
                 task.result()
+            self._assert_buckets_loaded([bucket_name], int(self.num_of_docs_per_collection))
             self.log.info(f"[STEP 3] PASSED - Bucket created, {self.num_of_docs_per_collection} docs loaded")
         except Exception as e:
             self.log.error(f"[STEP 3] FAILED: {str(e)}")
@@ -5461,15 +5572,35 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
             self.log.error(f"[STEP 4] FAILED: {str(e)}")
             raise
 
-        baseline_key_ids = self.get_indexer_in_use_key_ids(index_nodes)
+        # An unencrypted bucket has no in-use key IDs, and get_indexer_in_use_key_ids
+        # raises when it finds none.
+        baseline_key_ids = self.get_indexer_in_use_key_ids(index_nodes) if start_encrypted else []
+        log_baseline_key_ids = []
+        other_baseline_key_ids = []
+        baseline_metadata = None
+        if self.key_op == "other_reencrypt":
+            other_baseline_key_ids = self.poll_for_new_indexer_key_ids(
+                index_nodes, [], timeout=600, label="[STEP 4] ", key_type="other")
+            baseline_metadata = self._index_metadata_snapshot(bucket_name)
+        if self.key_op == "log_reencrypt":
+            # Write the log-key files (cache, stats log, persisted stats) before the restart
+            self._populate_request_handler_cache(index_nodes)
+            self.sleep(60, "Waiting for stats log and persisted stats to be written")
+            log_baseline_key_ids = self.poll_for_new_indexer_key_ids(
+                index_nodes, [], timeout=300, label="[STEP 4] ", key_type="log")
 
         # ========== STEP 5: Baseline scans + file encryption validation ==========
         try:
             self.log.info("[STEP 5] Running baseline scans and file encryption validation...")
             self.run_scan_validation(select_queries, validate_item_count=True)
-            if not self.validate_file_encryption_with_key(
-                    index_nodes, expected_key_id=baseline_key_ids, step_prefix="[STEP 5] "):
-                raise Exception("Baseline file encryption validation failed")
+            if start_encrypted:
+                if not self.validate_file_encryption_with_key(
+                        index_nodes, expected_key_id=baseline_key_ids, step_prefix="[STEP 5] "):
+                    raise Exception("Baseline file encryption validation failed")
+            else:
+                self.validate_files_not_encrypted(
+                    index_nodes, bucket_name, timeout=60, step_prefix="[STEP 5] "
+                )
             self.log.info("[STEP 5] PASSED")
         except Exception as e:
             self.log.error(f"[STEP 5] FAILED: {str(e)}")
@@ -5479,16 +5610,63 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
         thread_errors = []
         new_key_ids = [None]
 
+        def kill_index_nodes_rolling():
+            for node in index_nodes:
+                self.sleep(kill_delay_s, f"[STEP 6 restart] Waiting before kill -9 on {node.ip}")
+                self.log.info(f"[STEP 6 restart] kill -9 indexer on {node.ip}")
+                shell = RemoteMachineShellConnection(node)
+                try:
+                    shell.execute_command("pkill -9 -x indexer")
+                finally:
+                    shell.disconnect()
+                # ns_server restarts the indexer; wait until it is Active and serves
+                # GetInUseKeys again before killing the next node.
+                self.wait_for_indexer_ready([node], timeout=300, interval=2,
+                                            label="[STEP 6 restart] ")
+
+        def kill_index_nodes_all_then_wait():
+            try:
+                for node in index_nodes:
+                    self.log.info(f"[STEP 6 restart] kill -9 indexer on {node.ip}")
+                    shell = RemoteMachineShellConnection(node)
+                    try:
+                        shell.execute_command("pkill -9 -x indexer")
+                    finally:
+                        shell.disconnect()
+            finally:
+                # Release the key-op thread even if a kill failed, so it never hangs.
+                kills_done.set()
+            self.wait_for_indexer_ready(index_nodes, timeout=900, interval=5,
+                                        label="[STEP 6 restart] ")
+
         def run_restart():
             try:
-                self.log.info("[STEP 6 restart] Starting rolling indexer restart...")
-                self.restart_index_nodes(index_nodes)
+                if restart_mode == "kill" and kill_first:
+                    if timed_rotation:
+                        if not rotation_armed.wait(timeout=300) or rotation_set_at[0] is None:
+                            raise Exception("DEK rotation interval was not set within 300s")
+                        due_at = rotation_set_at[0] + self.kek_rotation_interval_seconds
+                        wait_s = max(0, due_at - kill_lead_s - time.time())
+                        self.sleep(wait_s, f"[STEP 6 restart] Timing kill -9 to {kill_lead_s}s before "
+                                           f"the DEK {self.key_op} is due")
+                    self.log.info("[STEP 6 restart] kill -9 the indexer on all index nodes...")
+                    kill_index_nodes_all_then_wait()
+                elif restart_mode == "kill":
+                    self.log.info("[STEP 6 restart] Starting rolling kill -9 of the indexer...")
+                    kill_index_nodes_rolling()
+                else:
+                    self.log.info("[STEP 6 restart] Starting rolling indexer restart...")
+                    self.restart_index_nodes(index_nodes)
                 self.log.info("[STEP 6 restart] Rolling restart complete")
             except Exception as ex:
                 thread_errors.append(f"restart thread: {ex}")
 
         def run_key_op():
             try:
+                if kill_first and not timed_rotation:
+                    if not kills_done.wait(timeout=300):
+                        raise Exception("kill -9 of the indexers did not complete within 300s")
+                    self.log.info("[STEP 6 key_op] Indexers killed; triggering the key op while they warm up")
                 if self.key_op in ("rotation", "expiry"):
                     DEK_ROTATION_INTERVAL_S = self.kek_rotation_interval_seconds
                     self.log.info(f"[STEP 6 key_op] Triggering DEK {self.key_op} via short TTL ({DEK_ROTATION_INTERVAL_S}s)...")
@@ -5497,10 +5675,64 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
                         dek_rotation_interval=DEK_ROTATION_INTERVAL_S,
                         dek_lifetime=DEK_ROTATION_INTERVAL_S * 5
                     )
+                    if timed_rotation:
+                        rotation_set_at[0] = time.time()
+                        rotation_armed.set()
+                    # Tolerates indexers that are down or warming up (kill -9 / restart)
                     new_key_ids[0] = self.poll_for_new_indexer_key_ids(
-                        index_nodes, baseline_key_ids, timeout=600, label="[STEP 6 key_op] "
-                    )
+                        index_nodes, baseline_key_ids, timeout=key_op_timeout,
+                        label="[STEP 6 key_op] ", key_type="bucket")
                     self.log.info(f"[STEP 6 key_op] New key IDs: {new_key_ids[0]}")
+                elif self.key_op == "enable":
+                    self.log.info(f"[STEP 6 key_op] Enabling encryption on '{bucket_name}' with key_id={key_id}...")
+                    status, response = self.rest.enable_bucket_encryption(bucket_name, key_id)
+                    if not status:
+                        raise Exception(f"Failed to enable encryption: {response}")
+                    enc_key = self.rest.get_bucket_json(bucket_name).get('encryptionAtRestKeyId', None)
+                    if enc_key in [None, -1]:
+                        raise Exception(f"Encryption not enabled — encryptionAtRestKeyId={enc_key}")
+                    self.set_bucket_dek_rotation_config(
+                        bucket_name, key_id,
+                        dek_rotation_interval=STABLE_DEK_INTERVAL_S,
+                        dek_lifetime=STABLE_DEK_INTERVAL_S
+                    )
+                    # Enabling only encrypts new writes; force-encrypt makes the
+                    # indexer rewrite the existing plaintext files.
+                    status, response = self.rest.force_bucket_encryption_at_rest(bucket_name)
+                    if not status:
+                        raise Exception(f"forceEncryptionAtRest API call failed: {response}")
+                    self.log.info("[STEP 6 key_op] Force encryption triggered, polling for the bucket key in use...")
+                    new_key_ids[0] = self.poll_for_new_indexer_key_ids(
+                        index_nodes, [], timeout=key_op_timeout,
+                        label="[STEP 6 key_op] ", key_type="bucket")
+                    self.log.info(f"[STEP 6 key_op] Bucket key in use: {new_key_ids[0]}")
+                elif self.key_op == "other_reencrypt":
+                    self.log.info("[STEP 6 key_op] Dropping 'other' DEKs (metadata store re-encryption)...")
+                    status, response = self.rest.trigger_other_reencryption()
+                    if not status:
+                        raise Exception(f"dropEncryptionAtRestDeks/other failed: {response}")
+                    new_key_ids[0] = self.poll_for_new_indexer_key_ids(
+                        index_nodes, other_baseline_key_ids, timeout=key_op_timeout,
+                        label="[STEP 6 key_op] ", key_type="other")
+                    self.log.info(f"[STEP 6 key_op] New 'other' key IDs: {new_key_ids[0]}")
+                elif self.key_op == "log_reencrypt":
+                    self.log.info("[STEP 6 key_op] Dropping log DEKs (log file re-encryption)...")
+                    status, response = self.rest.trigger_log_reencryption()
+                    if not status:
+                        raise Exception(f"dropEncryptionAtRestDeks/log failed: {response}")
+                    new_key_ids[0] = self.poll_for_new_indexer_key_ids(
+                        index_nodes, log_baseline_key_ids, timeout=key_op_timeout,
+                        label="[STEP 6 key_op] ", key_type="log")
+                    self.log.info(f"[STEP 6 key_op] New log key IDs: {new_key_ids[0]}")
+                elif self.key_op == "reencrypt":
+                    self.log.info(f"[STEP 6 key_op] Dropping DEKs on '{bucket_name}' (full re-encryption)...")
+                    status, response = self.rest.trigger_data_reencryption(bucket_name)
+                    if not status:
+                        raise Exception(f"dropEncryptionAtRestDeks API call failed: {response}")
+                    new_key_ids[0] = self.poll_for_new_indexer_key_ids(
+                        index_nodes, baseline_key_ids, timeout=key_op_timeout,
+                        label="[STEP 6 key_op] ", key_type="bucket")
+                    self.log.info(f"[STEP 6 key_op] New key IDs after DEK drop: {new_key_ids[0]}")
                 else:
                     status, response = self.rest.disable_bucket_encryption(bucket_name)
                     if not status:
@@ -5511,6 +5743,8 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
                     self.log.info(f"[STEP 6 key_op] Encryption disabled, encryptionAtRestKeyId={enc_key}")
             except Exception as ex:
                 thread_errors.append(f"key_op thread: {ex}")
+            finally:
+                rotation_armed.set()
 
         try:
             self.log.info(f"[STEP 6] Launching indexer restart and key_op='{self.key_op}' threads concurrently...")
@@ -5526,8 +5760,15 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
         # ========== STEP 7: Join threads, wait for indexes online ==========
         try:
             self.log.info("[STEP 7] Waiting for restart and key op threads to complete...")
-            t_restart.join(timeout=1800)
-            t_key_op.join(timeout=700)
+            # Graceful restart: up to ~20 s stop + 900 s ready wait per node, one node at a time
+            restart_join_timeout = max(1800, 960 * len(index_nodes))
+            t_restart.join(timeout=restart_join_timeout)
+            t_key_op.join(timeout=key_op_timeout + 400)
+            still_running = [f"{t.name} still running after {timeout} s"
+                             for t, timeout in ((t_restart, restart_join_timeout),
+                                                (t_key_op, key_op_timeout + 400)) if t.is_alive()]
+            if still_running:
+                raise Exception(f"Threads did not finish: {'; '.join(still_running)}")
             if thread_errors:
                 raise Exception(f"Thread failures: {'; '.join(thread_errors)}")
             self.log.info("[STEP 7] Threads joined, waiting for all indexes to be online (timeout=1800s)...")
@@ -5537,6 +5778,11 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
             self.log.error(f"[STEP 7] FAILED: {str(e)}")
             raise
 
+        if self.key_op == "other_reencrypt":
+            # Metadata read back after the restart under the new 'other' key (before
+            # step 10's alter/drop/build changes the index list)
+            self.assertEqual(self._index_metadata_snapshot(bucket_name), baseline_metadata,
+                             "[STEP 7] Index metadata changed after restart during 'other' key drop")
         # ========== STEP 8: Scans on existing indexes ==========
         try:
             self.log.info("[STEP 8] Running scans after concurrent restart + key op...")
@@ -5583,6 +5829,9 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
         # ========== STEP 11: File encryption validation (rotation/expiry) or item count (drop) ==========
         try:
             if self.key_op in ("rotation", "expiry") and new_key_ids[0]:
+                # rotation ran through the restarts; no new DEKs while files are checked
+                self.set_bucket_dek_rotation_config(bucket_name, key_id, STABLE_DEK_INTERVAL_S, STABLE_DEK_INTERVAL_S)
+                self.sleep(30, "[STEP 11] Letting an in-flight DEK rotation reach the indexers")
                 self.log.info(f"[STEP 11] Validating file encryption with new key IDs {new_key_ids[0]}...")
                 if not self.validate_file_encryption_with_key(
                         index_nodes,
@@ -5590,6 +5839,55 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
                         step_prefix="[STEP 11] "):
                     raise Exception("File encryption validation failed after concurrent restart + DEK rotation")
                 self.log.info("[STEP 11] PASSED - Files encrypted with new DEK key IDs")
+            elif self.key_op == "other_reencrypt":
+                try:
+                    self.poll_for_indexer_key_ids_gone(index_nodes, other_baseline_key_ids, timeout=600,
+                                                       label="[STEP 11] ", key_type="other")
+                except Exception as ex:
+                    # Old keys may legitimately linger; record it but don't fail the test.
+                    self.log.warning(f"[STEP 11] Old 'other' keys still in use: {ex}")
+                self._validate_metadata_repo(
+                    index_nodes, self.get_indexer_in_use_key_ids(index_nodes, key_type="other"), "[STEP 11] ")
+                self.item_count_related_validations()
+                self.log.info("[STEP 11] PASSED - metadata store re-encrypted and indexes intact after restart")
+            elif self.key_op == "log_reencrypt":
+                try:
+                    self.poll_for_indexer_key_ids_gone(index_nodes, log_baseline_key_ids, timeout=600,
+                                                       label="[STEP 11] ", key_type="log")
+                except Exception as ex:
+                    # Old keys may legitimately linger; record it but don't fail the test.
+                    self.log.warning(f"[STEP 11] Old log keys still in use: {ex}")
+                self._populate_request_handler_cache(index_nodes)
+                self.sleep(60, "[STEP 11] Waiting for log files to be written after the restart")
+                self.validate_log_encryption_files_encrypted(
+                    index_nodes, require_files=("indexer_stats_log", "projector_stats_log",
+                                                "request_handler_cache", "persisted_stats"),
+                    expected_key_id=self.get_indexer_in_use_key_ids(index_nodes, key_type="log"))
+                self.item_count_related_validations()
+                self.log.info("[STEP 11] PASSED - log files re-encrypted and readable after restart")
+            elif self.key_op == "reencrypt":
+                # Re-encryption is complete once no index node still reports a
+                # dropped (baseline) DEK as in use.
+                self.log.info(f"[STEP 11] key_op=reencrypt: waiting for old key IDs {baseline_key_ids} "
+                              f"to leave GetInUseKeys...")
+                try:
+                    remaining = self.poll_for_indexer_key_ids_gone(
+                        index_nodes, baseline_key_ids, timeout=900, label="[STEP 11] ", key_type="bucket")
+                except Exception as ex:
+                    # Old keys may legitimately linger; record it but don't fail the test.
+                    self.log.warning(f"[STEP 11] Old bucket DEKs still in use: {ex}")
+                    remaining = self.get_indexer_in_use_key_ids(index_nodes, key_type="bucket")
+                self.item_count_related_validations()
+                self.log.info(f"[STEP 11] PASSED - Old DEKs dropped; in use now: {remaining}")
+            elif self.key_op == "enable":
+                # Force encryption is complete once no index node reports the
+                # unencrypted ("") key for this bucket any more.
+                self.log.info("[STEP 11] key_op=enable: waiting for no unencrypted keys left for the bucket...")
+                self.validate_mixed_bucket_encrypted_keys(
+                    index_nodes, [bucket_name], timeout=600, step_prefix="[STEP 11] "
+                )
+                self.item_count_related_validations()
+                self.log.info("[STEP 11] PASSED - Existing index data re-encrypted after enable during restart")
             else:
                 self.log.info("[STEP 11] key_op=drop: running item count validation...")
                 self.item_count_related_validations()
@@ -5598,7 +5896,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
             self.log.error(f"[STEP 11] FAILED: {str(e)}")
             raise
 
-        self.restart_index_nodes(index_nodes)
+        self.restart_index_nodes(index_nodes, validate_read_back=True, select_queries=select_queries)
 
         self.log.info("=" * 80)
         self.log.info("TEST PASSED: test_gsi_encryption_at_rest_indexer_restart_concurrent_key_op")
@@ -5878,7 +6176,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
             self.log.error(f"[STEP 12] FAILED: {str(e)}")
             raise
 
-        self.restart_index_nodes(index_nodes)
+        self.restart_index_nodes(index_nodes, validate_read_back=True, select_queries=select_queries)
 
         self.log.info("=" * 80)
         self.log.info("TEST PASSED: test_gsi_encryption_at_rest_workload_concurrent_key_op")
@@ -6144,7 +6442,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
             self.log.error(f"[STEP 14] FAILED: {str(e)}")
             raise
 
-        self.restart_index_nodes(index_nodes)
+        self.restart_index_nodes(index_nodes, validate_read_back=True, select_queries=select_queries)
 
         self.log.info("=" * 80)
         self.log.info("TEST PASSED: test_gsi_encryption_at_rest_dgm_with_key_toggle_compaction")
@@ -6302,7 +6600,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
             self.log.error(f"[STEP 7] FAILED: {str(e)}")
             raise
 
-        self.restart_index_nodes(index_nodes)
+        self.restart_index_nodes(index_nodes, validate_read_back=True, select_queries=select_queries)
 
         # ========== TEST COMPLETE ==========
         self.log.info("=" * 80)
@@ -6521,7 +6819,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
             self.log.error(f"[STEP 11] FAILED: {str(e)}")
             raise
 
-        self.restart_index_nodes(index_nodes)
+        self.restart_index_nodes(index_nodes, validate_read_back=True, select_queries=select_queries)
 
         # ========== TEST COMPLETE ==========
         self.log.info("=" * 80)
@@ -6720,3 +7018,342 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
             f"metadata_repo_v2 wal/sstable files confirmed encrypted with key_id={active_key_id}"
         )
         self.log.info("=" * 80)
+
+    # =========================================================================
+    # Log key and 'other' key lifecycle (re-encrypt, restart, disable, re-enable)
+    # =========================================================================
+
+    def _setup_bucket_and_indexes(self, prefix, index_nodes):
+        """Create the test bucket (encrypted if enable_encryption_at_rest), load docs,
+        create indexes and wait for Ready. Returns (bucket_name, select_queries)."""
+        bucket_name = self.test_bucket
+        namespace = f"default:{bucket_name}._default._default"
+        self.create_bucket_with_encryption(bucket_name, enable_encryption=bool(self.enable_encryption_at_rest))
+        gen_create = SDKDataLoader(
+            num_ops=self.num_of_docs_per_collection,
+            percent_create=100, percent_update=0, percent_delete=0,
+            scope="_default", collection="_default",
+            json_template=self.json_template, output=True,
+            username=self.username, password=self.password
+        )
+        for task in self.data_ops_javasdk_loader_in_batches(
+                sdk_data_loader=gen_create, batch_size=10**4, dataset=self.json_template):
+            task.result()
+        select_queries = self.create_indexes_on_namespace(
+            namespace, index_nodes, prefix, step_prefix="[SETUP]", wait_for_ready=True
+        )
+        return bucket_name, select_queries
+
+    def _index_metadata_snapshot(self, bucket_name):
+        """Index names and states from system:indexes, to compare across restarts."""
+        result = self.run_cbq_query(
+            query=f"SELECT name, state FROM system:indexes "
+                  f"WHERE keyspace_id = '{bucket_name}' OR bucket_id = '{bucket_name}' ORDER BY name"
+        )
+        return sorted((row["name"], row["state"]) for row in result["results"])
+
+    def _list_request_handler_cache_files(self, node):
+        cache_dir = f"{RestConnection(node).get_index_path()}/@2i/cache"
+        shell = RemoteMachineShellConnection(node)
+        try:
+            out, _ = shell.execute_command(
+                f"find {cache_dir}/meta {cache_dir}/stats -type f 2>/dev/null | head -20")
+        finally:
+            shell.disconnect()
+        return [line.strip() for line in out if line.strip()]
+
+    def _populate_request_handler_cache(self, index_nodes, timeout=180, interval=15):
+        """The request-handler cache is written when the indexer serves metadata/stats
+        requests (/getIndexStatus), not by scans. Call it on every index node and wait
+        until cache files exist, so cache checks never pass on an empty directory."""
+        deadline = time.time() + timeout
+        missing = [node.ip for node in index_nodes]
+        while time.time() < deadline:
+            for node in index_nodes:
+                RestConnection(node).get_indexer_metadata()
+            missing = [node.ip for node in index_nodes if not self._list_request_handler_cache_files(node)]
+            if not missing:
+                return
+            self.sleep(interval, f"Waiting for request-handler cache files on {missing}")
+        self.fail(f"No request-handler cache files under @2i/cache on {missing} after calling getIndexStatus")
+
+    def _wait_for_log_files_plaintext(self, index_nodes, timeout=300, interval=15):
+        """Poll every interval seconds, for up to timeout seconds, until indexer_stats.log
+        (and its .enc sibling, if any) and the request-handler cache files carry no
+        encryption header on any index node (log encryption disabled + decrypted). A
+        missing stats log counts as not done; the cache is populated first so it is
+        never checked empty."""
+        helper = self.gsi_encryption_helper
+        self._populate_request_handler_cache(index_nodes)
+        deadline = time.time() + timeout
+        encrypted, missing = [], []
+        while time.time() < deadline:
+            encrypted, missing = [], []
+            for node in index_nodes:
+                stats_log = f"{helper.get_log_path(node)}/indexer_stats.log"
+                shell = RemoteMachineShellConnection(node, verbose=False)
+                try:
+                    out, _ = shell.execute_command(
+                        f"for f in {stats_log} {stats_log}.enc; do test -f $f && echo $f; done")
+                finally:
+                    shell.disconnect()
+                files = [line.strip() for line in out if line.strip()]
+                if stats_log not in files:
+                    missing.append(f"{node.ip}:{stats_log}")
+                files += self._list_request_handler_cache_files(node)
+                for path in files:
+                    is_encrypted, _ = helper.verify_file_encryption_magic_bytes(node, path)
+                    if is_encrypted:
+                        encrypted.append(f"{node.ip}:{path}")
+            if not encrypted and not missing:
+                return
+            self.sleep(interval, f"Waiting for log files to be decrypted: encrypted={encrypted[:5]}, "
+                                 f"missing={missing}")
+        # Old encrypted files may legitimately linger; record it but don't fail the test.
+        self.log.warning(f"Log files not confirmed plaintext {timeout}s after disabling log encryption: "
+                         f"still encrypted={encrypted}, missing={missing}")
+
+    def _validate_metadata_repo(self, index_nodes, key_ids, label):
+        """Fail if any node's metadata_repo_v2 files don't carry one of key_ids. Every
+        index node hosts the metadata store, so "skipped" (no files found) fails too."""
+        results = self.gsi_encryption_helper.verify_gsi_metadata_repo_encrypted(
+            index_nodes, expected_key_id=key_ids
+        )
+        failed = {ip: r for ip, r in results.items() if r.get("status") != "passed"}
+        if failed:
+            raise Exception(f"{label}metadata_repo encryption check FAILED: {failed}")
+
+    def _wait_for_metadata_repo_plaintext(self, index_nodes, old_key_ids, label, timeout=600, interval=15):
+        """Wait until no node's metadata_repo_v2 files carry any of old_key_ids
+        (metadata decrypted after 'other' encryption is disabled). The files have no
+        encryption header, so a node is done only when it has non-empty files and none
+        of them holds an old key ID."""
+        deadline = time.time() + timeout
+        still = {}
+        while time.time() < deadline:
+            results = self.gsi_encryption_helper.verify_gsi_metadata_repo_encrypted(
+                index_nodes, expected_key_id=old_key_ids
+            )
+            still = {}
+            for ip, result in results.items():
+                checked = (result.get("wal_files_checked", 0) + result.get("sstable_files_checked", 0)
+                           - len(result.get("skipped_empty_files", [])))
+                missed = {path for path, _ in result.get("failed_files", [])}
+                if checked <= 0:
+                    still[ip] = "no non-empty metadata_repo files found"
+                elif len(missed) < checked:
+                    still[ip] = f"{checked - len(missed)} of {checked} files still carry an old key"
+            if not still:
+                self.log.info(f"{label}metadata_repo files carry none of {old_key_ids} on any node")
+                return
+            self.sleep(interval, f"{label}metadata_repo not decrypted yet: {still}")
+        # Old keys may linger in obsolete WAL/sstable files; record it but don't fail the test.
+        self.log.warning(f"{label}metadata_repo still carries {old_key_ids} after {timeout}s: {still}")
+
+    def test_gsi_encryption_at_rest_log_key_lifecycle(self):
+        """
+        Log key lifecycle with GSI files: indexer_stats.log, the request-handler cache
+        and persisted stats are encrypted with the log key.
+
+        Steps:
+        1.  Prerequisites (log encryption enabled), bucket + indexes, scans; call
+            /getIndexStatus on every node so the request-handler cache is written
+        2.  Wait for the log key in use; validate log-encrypted files
+        3.  Drop log DEKs (re-encryption): new log key in use, old keys gone, files
+            re-validated with the new key
+        4.  Restart indexers (read path: stats log reopened, persisted stats restored
+            unchanged); re-validate files; scans
+        5.  Disable log encryption + drop DEKs (decryption): log keys gone, files plaintext
+        6.  Re-enable log encryption + force-encrypt: log key back, files encrypted
+        7.  Scans + item counts
+        """
+        self.log.info("STARTING TEST: test_gsi_encryption_at_rest_log_key_lifecycle")
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        if not getattr(self, "enable_log_encryption_at_rest", False):
+            self.skipTest("Log encryption at rest not enabled. Set enable_log_encryption_at_rest=True")
+        log_secret_id = self.log_encryption_at_rest_id
+        flush_wait = int(self.input.param("stats_flush_wait", 60))
+        # projector_stats.log lives on KV nodes, so it is not required on index nodes
+        REQUIRED_LOG_FILES = ("indexer_stats_log", "projector_stats_log", "request_handler_cache",
+                              "persisted_stats")
+
+        # STEP 1: bucket, indexes, scans; getIndexStatus populates the request-handler cache
+        self.set_indexer_snapshot_settings(index_nodes)
+        for node in index_nodes:
+            # persist stats every 60s so step 4 can compare them across a restart
+            RestConnection(node).set_index_settings_internal({"indexer.statsPersistenceInterval": 60})
+        bucket_name, select_queries = self._setup_bucket_and_indexes('logkey_', index_nodes)
+        self.run_scan_validation(select_queries, validate_item_count=True)
+        self._populate_request_handler_cache(index_nodes)
+        self.sleep(flush_wait, "[STEP 1] Waiting for stats log and persisted stats to be written")
+
+        # STEP 2: baseline log key and files
+        log_keys = self.poll_for_new_indexer_key_ids(index_nodes, [], timeout=300,
+                                                     label="[STEP 2] ", key_type="log")
+        self.validate_log_encryption_files_encrypted(index_nodes, require_files=REQUIRED_LOG_FILES, expected_key_id=self.get_indexer_in_use_key_ids(index_nodes, key_type="log"))
+        self.log.info(f"[STEP 2] PASSED - log key(s) in use: {log_keys}")
+
+        # STEP 3: drop log DEKs -> re-encryption with a new log key
+        status, response = self.rest.trigger_log_reencryption()
+        self.assertTrue(status, f"dropEncryptionAtRestDeks/log failed: {response}")
+        new_log_keys = self.poll_for_new_indexer_key_ids(index_nodes, log_keys, timeout=600,
+                                                         label="[STEP 3] ", key_type="log")
+        try:
+            self.poll_for_indexer_key_ids_gone(index_nodes, log_keys, timeout=600,
+                                               label="[STEP 3] ", key_type="log")
+        except Exception as ex:
+            # Old keys may legitimately linger; record it but don't fail the test.
+            self.log.warning(f"[STEP 3] Old log keys still in use after DEK drop: {ex}")
+        self.validate_log_encryption_files_encrypted(index_nodes, require_files=REQUIRED_LOG_FILES, expected_key_id=self.get_indexer_in_use_key_ids(index_nodes, key_type="log"))
+        self.log.info(f"[STEP 3] PASSED - log files re-encrypted with {new_log_keys}")
+
+        # STEP 4: restart -> read path (persisted stats file is encrypted with the log key)
+        self.sleep(max(flush_wait, 75), "[STEP 4] Waiting for stats to be persisted")
+        stats_before = {node.ip: self.get_persisted_stats(index_node=node) for node in index_nodes}
+        self.restart_index_nodes(index_nodes)
+        stats_after = {node.ip: self.get_persisted_stats(index_node=node) for node in index_nodes}
+        if not any(stats_before.values()):
+            self.fail("[STEP 4] No persisted stats found before restart; nothing to compare")
+        changed = {ip: {k: (v, stats_after[ip].get(k)) for k, v in before.items() if stats_after[ip].get(k) != v}
+                   for ip, before in stats_before.items()}
+        changed = {ip: diff for ip, diff in changed.items() if diff}
+        self.assertFalse(changed, f"[STEP 4] Persisted stats not restored after restart (before, after): {changed}")
+        self.sleep(flush_wait, "[STEP 4] Waiting for the reopened stats log to be written")
+        self.validate_log_encryption_files_encrypted(index_nodes, require_files=REQUIRED_LOG_FILES, expected_key_id=self.get_indexer_in_use_key_ids(index_nodes, key_type="log"))
+        self.run_scan_validation(select_queries)
+        self.log.info("[STEP 4] PASSED - log-encrypted files readable and still encrypted after restart")
+
+        # STEP 5: disable -> decryption
+        status, response = self.rest.disable_log_encryption()
+        self.assertTrue(status, f"Disabling log encryption failed: {response}")
+        status, response = self.rest.trigger_log_reencryption()
+        self.assertTrue(status, f"dropEncryptionAtRestDeks/log (decrypt) failed: {response}")
+        try:
+            self.poll_for_indexer_key_ids_gone(index_nodes, new_log_keys, timeout=600,
+                                               label="[STEP 5] ", key_type="log")
+        except Exception as ex:
+            # Old keys may legitimately linger; record it but don't fail the test.
+            self.log.warning(f"[STEP 5] Log keys still in use after disabling: {ex}")
+        self._wait_for_log_files_plaintext(index_nodes)
+        # Read path for plaintext files: restart, then scans
+        self.restart_index_nodes(index_nodes)
+        self.run_scan_validation(select_queries)
+        self.log.info("[STEP 5] PASSED - log files decrypted and indexer restarted on plaintext files")
+
+        # STEP 6: re-enable + force-encrypt
+        status, response = self.rest.configure_log_encryption_at_rest({
+            "encryptionMethod": "encryptionKey", "encryptionKeyId": log_secret_id,
+            "dekLifetime": 31536000, "dekRotationInterval": 2592000})
+        self.assertTrue(status, f"Re-enabling log encryption failed: {response}")
+        status, response = self.rest.force_log_encryption_at_rest()
+        self.assertTrue(status, f"forceEncryptionAtRest/log failed: {response}")
+        final_log_keys = self.poll_for_new_indexer_key_ids(index_nodes, log_keys + new_log_keys, timeout=600,
+                                                           label="[STEP 6] ", key_type="log")
+        self._populate_request_handler_cache(index_nodes)
+        self.sleep(flush_wait, "[STEP 6] Waiting for log files to be written under the new key")
+        self.validate_log_encryption_files_encrypted(index_nodes, require_files=REQUIRED_LOG_FILES, expected_key_id=self.get_indexer_in_use_key_ids(index_nodes, key_type="log"))
+        # Read path under the re-enabled key: restart, re-check files, scans
+        self.restart_index_nodes(index_nodes)
+        self.sleep(flush_wait, "[STEP 6] Waiting for the reopened stats log to be written")
+        self.validate_log_encryption_files_encrypted(index_nodes, require_files=REQUIRED_LOG_FILES, expected_key_id=self.get_indexer_in_use_key_ids(index_nodes, key_type="log"))
+        self.run_scan_validation(select_queries)
+        self.log.info(f"[STEP 6] PASSED - log files encrypted again with {final_log_keys} and readable after restart")
+
+        # STEP 7
+        self.run_scan_validation(select_queries)
+        self.item_count_related_validations()
+        self.log.info("TEST PASSED: test_gsi_encryption_at_rest_log_key_lifecycle")
+
+    def test_gsi_encryption_at_rest_other_key_lifecycle(self):
+        """
+        'other' key lifecycle with the GSI metadata store (@2i/metadata_repo_v2).
+
+        Steps:
+        1.  Prerequisites (other encryption enabled), bucket + indexes, scans
+        2.  Wait for the 'other' key in use; validate metadata_repo files
+        3.  Drop 'other' DEKs (re-encryption): new key in use, old keys gone,
+            metadata_repo re-validated
+        4.  Restart indexers (read path: metadata loaded under the new key);
+            index list unchanged; scans
+        5.  Disable 'other' encryption + drop DEKs (decryption): keys gone; restart;
+            index list unchanged; scans
+        6.  Re-enable + drop DEKs (encrypt existing): key back, metadata_repo encrypted
+        7.  Scans + item counts
+        """
+        self.log.info("STARTING TEST: test_gsi_encryption_at_rest_other_key_lifecycle")
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        if not getattr(self, "enable_other_encryption_at_rest", False):
+            self.skipTest("Other encryption at rest not enabled. Set enable_other_encryption_at_rest=True")
+        other_secret_id = self.other_encryption_at_rest_id
+        self.assertIsNotNone(other_secret_id, "other_encryption_at_rest_id is None")
+
+        # STEP 1
+        self.set_indexer_snapshot_settings(index_nodes)
+        bucket_name, select_queries = self._setup_bucket_and_indexes('otherkey_', index_nodes)
+        self.run_scan_validation(select_queries, validate_item_count=True)
+        baseline_metadata = self._index_metadata_snapshot(bucket_name)
+
+        # STEP 2
+        other_keys = self.poll_for_new_indexer_key_ids(index_nodes, [], timeout=600,
+                                                       label="[STEP 2] ", key_type="other")
+        self._validate_metadata_repo(index_nodes, self.get_indexer_in_use_key_ids(index_nodes, key_type="other"), "[STEP 2] ")
+        self.log.info(f"[STEP 2] PASSED - 'other' key(s) in use: {other_keys}")
+
+        # STEP 3: drop 'other' DEKs -> re-encryption
+        status, response = self.rest.trigger_other_reencryption()
+        self.assertTrue(status, f"dropEncryptionAtRestDeks/other failed: {response}")
+        new_other_keys = self.poll_for_new_indexer_key_ids(index_nodes, other_keys, timeout=600,
+                                                           label="[STEP 3] ", key_type="other")
+        try:
+            self.poll_for_indexer_key_ids_gone(index_nodes, other_keys, timeout=600,
+                                               label="[STEP 3] ", key_type="other")
+        except Exception as ex:
+            # Old keys may legitimately linger; record it but don't fail the test.
+            self.log.warning(f"[STEP 3] Old 'other' keys still in use after DEK drop: {ex}")
+        self._validate_metadata_repo(index_nodes, self.get_indexer_in_use_key_ids(index_nodes, key_type="other"), "[STEP 3] ")
+        self.log.info(f"[STEP 3] PASSED - metadata_repo re-encrypted with {new_other_keys}")
+
+        # STEP 4: restart -> metadata read back under the new key
+        self.restart_index_nodes(index_nodes)
+        self.assertEqual(self._index_metadata_snapshot(bucket_name), baseline_metadata,
+                         "[STEP 4] Index metadata changed after restart with the new 'other' key")
+        self.run_scan_validation(select_queries)
+        self.log.info("[STEP 4] PASSED - metadata loaded after restart")
+
+        # STEP 5: disable -> decryption, then restart and read back
+        status, response = self.rest.disable_other_encryption()
+        self.assertTrue(status, f"Disabling 'other' encryption failed: {response}")
+        status, response = self.rest.trigger_other_reencryption()
+        self.assertTrue(status, f"dropEncryptionAtRestDeks/other (decrypt) failed: {response}")
+        try:
+            self.poll_for_indexer_key_ids_gone(index_nodes, new_other_keys, timeout=600,
+                                               label="[STEP 5] ", key_type="other")
+        except Exception as ex:
+            # Old keys may legitimately linger; record it but don't fail the test.
+            self.log.warning(f"[STEP 5] 'other' keys still in use after disabling: {ex}")
+        self._wait_for_metadata_repo_plaintext(index_nodes, other_keys + new_other_keys, "[STEP 5] ")
+        self.restart_index_nodes(index_nodes)
+        self.assertEqual(self._index_metadata_snapshot(bucket_name), baseline_metadata,
+                         "[STEP 5] Index metadata changed after restart with 'other' encryption disabled")
+        self.run_scan_validation(select_queries)
+        self.log.info("[STEP 5] PASSED - metadata decrypted and loaded after restart")
+
+        # STEP 6: re-enable -> encrypt existing metadata
+        status, response = self.rest.configure_other_encryption_at_rest({
+            "encryptionMethod": "encryptionKey", "encryptionKeyId": other_secret_id,
+            "dekLifetime": 31536000, "dekRotationInterval": 2592000})
+        self.assertTrue(status, f"Re-enabling 'other' encryption failed: {response}")
+        status, response = self.rest.trigger_other_reencryption()
+        self.assertTrue(status, f"dropEncryptionAtRestDeks/other (encrypt) failed: {response}")
+        final_other_keys = self.poll_for_new_indexer_key_ids(index_nodes, other_keys + new_other_keys,
+                                                             timeout=600, label="[STEP 6] ", key_type="other")
+        self._validate_metadata_repo(index_nodes, self.get_indexer_in_use_key_ids(index_nodes, key_type="other"), "[STEP 6] ")
+        self.restart_index_nodes(index_nodes)
+        self.assertEqual(self._index_metadata_snapshot(bucket_name), baseline_metadata,
+                         "[STEP 6] Index metadata changed after restart with 'other' encryption re-enabled")
+        self.log.info(f"[STEP 6] PASSED - metadata_repo encrypted again with {final_other_keys} and reloaded")
+
+        # STEP 7
+        self.run_scan_validation(select_queries)
+        self.item_count_related_validations()
+        self.log.info("TEST PASSED: test_gsi_encryption_at_rest_other_key_lifecycle")

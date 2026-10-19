@@ -776,9 +776,9 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex, CRLBase):
                 if not status or not isinstance(response, dict):
                     continue
                 for label, ids in response.items():
-                    # Match the top-level "other" datatype bucket (label is
-                    # exactly "other" on the indexer endpoint).
-                    if str(label).strip().lower() != "other":
+                    # Match the "other" datatype; the indexer reports it as
+                    # "{other }" (older builds: "other").
+                    if str(label).strip("{} ").lower() != "other":
                         continue
                     self._extract_indexer_key_ids(ids, keys)
             except Exception as e:

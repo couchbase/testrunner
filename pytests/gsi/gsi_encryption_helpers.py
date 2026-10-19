@@ -60,7 +60,7 @@ class GSIEncryptionHelpers:
     _NAME_BLOCKLIST = {"", "default", "_default", "meta", "id", "self"}
     _BUCKET_KEY_TAG_RE = re.compile(
         r"^\{service_bucket\s+"
-        r"([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})"
+        r"([0-9a-fA-F]{32})"
         r"\}$"
     )
 
@@ -1658,7 +1658,7 @@ class GSIEncryptionHelpers:
                 # its key ID (a real encryption gap). Annotate the byte size so
                 # triage can spot suspiciously small / header-only segments.
                 size = self._remote_file_size(node, file_path)
-                if size == 0:
+                if size <= 0:  # 0 = empty segment, -1 = compacted away after find
                     empty_files.append(
                         (file_path, "zero-length segment (no data to encrypt)")
                     )
@@ -1817,7 +1817,11 @@ class GSIEncryptionHelpers:
         target = (f"{stats_log}.enc"
                   if enc_exists_out and 'exists' in enc_exists_out[0]
                   else stats_log)
+        return self._verify_file_header(node, target, expected_key_ids)
 
+    def _verify_file_header(self, node, target, expected_key_ids):
+        """Encryption magic header plus (when given) one of expected_key_ids in the
+        header of target. Returns a verifier result dict."""
         is_encrypted, details = self.verify_file_encryption_magic_bytes(node, target)
         if not is_encrypted:
             return {"status": "failed", "file": target, "reason": details,
@@ -1854,16 +1858,17 @@ class GSIEncryptionHelpers:
                                                 expected_key_ids)
                 for node in index_nodes}
 
-    def verify_gsi_projector_stats_log_encrypted(self, index_nodes,
+    def verify_gsi_projector_stats_log_encrypted(self, kv_nodes,
                                                  expected_key_id=None):
         """
-        Verify ``projector_stats.log`` is encrypted on every index node.
+        Verify ``projector_stats.log`` is encrypted on every KV node (the projector
+        runs alongside the data service, not the indexer).
 
         Mirrors :meth:`verify_gsi_indexer_stats_log_encrypted` for the projector
         log; both share ``_verify_stats_log``.
 
         Args:
-            index_nodes: List of index server objects.
+            kv_nodes: List of KV (data service) server objects.
             expected_key_id: Optional key ID (or list) expected in the header.
 
         Returns:
@@ -1872,7 +1877,30 @@ class GSIEncryptionHelpers:
         expected_key_ids = self._normalize_key_ids(expected_key_id)
         return {node.ip: self._verify_stats_log(node, "projector_stats.log",
                                                 expected_key_ids)
-                for node in index_nodes}
+                for node in kv_nodes}
+
+    def verify_gsi_persisted_stats_encrypted(self, index_nodes, expected_key_id=None):
+        """
+        Verify the persisted stats file ``<index path>/@2i/indexstats/stats`` is
+        encrypted with the log key on every index node (MB-69769).
+
+        Returns:
+            dict: ``{node_ip: result}``; "skipped" when the file does not exist.
+        """
+        expected_key_ids = self._normalize_key_ids(expected_key_id)
+        results = {}
+        for node in index_nodes:
+            stats_file = f"{RestConnection(node).get_index_path()}/@2i/indexstats/stats"
+            shell = RemoteMachineShellConnection(node, verbose=False)
+            try:
+                out, _ = shell.execute_command(f"test -s {stats_file} && echo exists || echo not_found")
+            finally:
+                shell.disconnect()
+            if not out or "exists" not in out[0]:
+                results[node.ip] = {"status": "skipped", "reason": f"{stats_file} not found or empty"}
+                continue
+            results[node.ip] = self._verify_file_header(node, stats_file, expected_key_ids)
+        return results
 
     def verify_gsi_request_handler_cache_encrypted(self, index_nodes,
                                                    expected_key_id=None):
@@ -2550,9 +2578,11 @@ class GSIEncryptionHelpers:
         if not status or not isinstance(resp, dict):
             self.log.warning(f"[other-key] GetInUseKeys returned non-dict: {resp!r}")
             return []
-        other = resp.get("other", [])
-        if not isinstance(other, list):
-            other = [other]
+        # The indexer reports the entry as "{other }" (older builds: "other").
+        other = []
+        for label, ids in resp.items():
+            if str(label).strip("{} ").lower() == "other":
+                other.extend(ids if isinstance(ids, list) else [ids])
         return [
             str(k) for k in other
             if k is not None
@@ -3265,49 +3295,232 @@ class GSIEncryptionAtRestBase:
             if self.UUID_PATTERN.match(value_str):
                 key_ids.add(value_str)
 
-    def get_indexer_in_use_key_ids(self, index_nodes):
-        key_ids = set()
-        transient_not_ready = False
-        for index_node in index_nodes:
-            rest = RestConnection(index_node)
-            status, response = rest.get_indexer_in_use_encryption_keys()
-            if not status:
-                # During an indexer restart the GetInUseKeys endpoint
-                # transiently returns "EncryptionMgr not ready to process
-                # requests". That is not a real failure — skip this node for now
-                # (polling callers such as poll_for_new_indexer_key_ids will
-                # retry once the indexer is back up) instead of hard-failing.
-                if response is not None and "EncryptionMgr not ready" in str(response):
+    # Encryption read/decrypt and key-operation failures (from the MB-65865 changes).
+    # Regexes for zgrep -E. Unverified against source: they come from diff summaries.
+    ENCRYPTION_ERROR_PATTERNS_INDEXER = [
+        "getKeyCipherById.*failed",
+        "getKeyCipherById.*could not find keydatatype",
+        "GetEncryptionKeyByIdCb.*retry:",
+        "cache file is encrypted but no key lookup available",
+        "populateMetaMemCacheFromDisk.*Failed to read metadata file",
+        "populateStatsMemCacheFromDisk.*Failed to read stats file",
+        "requestHandlerCache::readFile: key lookup panicked",
+        "requestHandlerCache::doEncryptionDropKey error",
+        "stats file is encrypted but no key lookup available",
+        "stats file content truncated or missing header",
+        "StatsManager::handleEncryptionDropKey error",
+        "no key data for keyID",
+        "Error in NewDedupeLogStatsWithFileHandler",
+        "Error observed while decryptCodebookByChunk",
+        "Error observed while IsFileEncrypted",
+        "SetCodebookEncryptionKey re-encryption failed",
+        "DropCodebookEncryptionKey re-encryption failed",
+        "trackDropKeys.*retry stopped",
+        "newPlasmaSlice:GetKeyIdList.*failed",
+        "NewBhiveSlice:GetKeyIdList.*failed",
+        "failed to get metadata store keys",
+        "handleGetInuseKeys failed to get in use keys",
+        "import encryption keys failed for bucket",
+        "shard key copy failed",
+        "failed to open key file",
+        "missing encryption key path",
+        "RemapSlice failed",
+        "Recovery inst path not found",
+    ]
+    ENCRYPTION_ERROR_PATTERNS_PROJECTOR = [
+        "no key data for keyID",
+        "Error in NewDedupeLogStatsWithFileHandler",
+        "StatsManager::handleEncryptionDropKey error",
+        "getKeyCipherById.*failed",
+    ]
+
+    def get_gsi_log_error_counts(self, label=""):
+        """Per (node, log, pattern) count of encryption error lines in indexer.log* (index
+        nodes) and projector.log* (KV nodes). Encrypted log files are read with cbcat,
+        others with zcat -f. Logs each file's size and mtime so a rotation between the
+        setUp baseline and tearDown is visible in the test log."""
+        cbcat = ("/opt/couchbase/bin/cbcat --password - --with-gosecrets "
+                 "/opt/couchbase/var/lib/couchbase/config/gosecrets.cfg")
+        counts = {}
+        targets = [("index", "indexer.log", self.ENCRYPTION_ERROR_PATTERNS_INDEXER),
+                   ("kv", "projector.log", self.ENCRYPTION_ERROR_PATTERNS_PROJECTOR)]
+        for service, log_name, patterns in targets:
+            for server in self.get_nodes_from_services_map(service_type=service, get_all_nodes=True) or []:
+                status, log_dir = RestConnection(server).diag_eval(
+                    'filename:absname(element(2, application:get_env(ns_server,error_logger_mf_dir))).')
+                if not status:
+                    self.log.warning(f"{label}diag_eval failed on {server.ip}: {log_dir}")
+                    continue
+                log_dir = str(log_dir).strip('"')
+                greps = "; ".join(f"grep -cE '{pattern}' $T" for pattern in patterns)
+                shell = RemoteMachineShellConnection(server, verbose=False)
+                try:
+                    listing, _ = shell.execute_command(
+                        f"ls -l --time-style=full-iso {log_dir}/{log_name}* 2>/dev/null")
+                    out, _ = shell.execute_command(
+                        f"T=$(mktemp); for f in {log_dir}/{log_name}*; do "
+                        f"if head -c 64 \"$f\" | grep -qa 'Couchbase Encrypted'; then {cbcat} \"$f\" </dev/null; "
+                        f"else zcat -f \"$f\"; fi; done > $T 2>/dev/null; {greps}; rm -f $T")
+                finally:
+                    shell.disconnect()
+                self.log.info(f"{label}{log_name}* on {server.ip}:\n" + "\n".join(listing))
+                values = [line.strip() for line in out if line.strip().isdigit()]
+                if len(values) != len(patterns):
+                    self.log.warning(f"{label}Could not count {log_name}* errors on {server.ip}: {out}")
+                    continue
+                for pattern, value in zip(patterns, values):
+                    counts[(server.ip, log_name, pattern)] = int(value)
+        return counts
+
+    def check_gsi_logs_for_encryption_errors(self):
+        """Fail if indexer/projector logs gained encryption read/decrypt or key-operation
+        errors since the setUp baseline (self.gsi_log_error_baseline). Called from the
+        encryption suites' tearDown only."""
+        if getattr(self, "capella_run", False) or self.input.param("skip_encryption_log_check", False):
+            return
+        baseline = getattr(self, "gsi_log_error_baseline", None)
+        if baseline is None:
+            self.log.warning("No GSI log error baseline from setUp; skipping encryption log check")
+            return
+        current = self.get_gsi_log_error_counts(label="[tearDown] ")
+        hits = []
+        for key, count in current.items():
+            ip, log_name, pattern = key
+            before = baseline.get(key, 0)
+            if count < before:
+                self.log.warning(f"'{pattern}' count in {log_name}* on {ip} dropped {before} -> {count}: "
+                                 f"logs rotated out during the test, new hits may be missed")
+            elif count > before and pattern not in self.allowed_encryption_log_patterns:
+                self.log.error(f"===== '{pattern}' in {log_name}* on {ip}: {before} -> {count}")
+                hits.append(f"{ip}:{log_name}:{pattern} (+{count - before})")
+        if hits:
+            raise Exception(f"Encryption errors found in GSI logs: {hits}")
+
+    def is_indexer_ready(self, node):
+        """True when the indexer on node reports Active and answers GetInUseKeys.
+
+        A killed or restarting indexer refuses connections or reports Bootstrap/Warmup,
+        and GetInUseKeys returns "EncryptionMgr not ready" until key bootstrap is done.
+        """
+        rest = RestConnection(node)
+        try:
+            state = rest.get_indexer_stats(timeout=30).get("indexer_state")
+            keys_ok, _ = rest.get_indexer_in_use_encryption_keys()
+        except Exception as ex:
+            self.log.info(f"Indexer on {node.ip} not reachable yet: {ex}")
+            return False
+        if state != "Active" or not keys_ok:
+            self.log.info(f"Indexer on {node.ip} not ready: indexer_state={state}, GetInUseKeys ok={keys_ok}")
+            return False
+        return True
+
+    def wait_for_indexer_ready(self, index_nodes, timeout=600, interval=10, label=""):
+        """Wait until every index node is Active and answers GetInUseKeys.
+
+        Call after any indexer restart or kill, before triggering key operations or
+        checking key state, so checks never run against a half-started indexer.
+        """
+        deadline = time.time() + timeout
+        pending = list(index_nodes)
+        while time.time() < deadline:
+            pending = [node for node in pending if not self.is_indexer_ready(node)]
+            if not pending:
+                self.log.info(f"{label}Indexer ready on {[node.ip for node in index_nodes]}")
+                return
+            self.sleep(interval, f"{label}Waiting for indexer ready on {[node.ip for node in pending]}")
+        self.fail(f"{label}Indexer not ready within {timeout}s on {[node.ip for node in pending]}")
+
+    @staticmethod
+    def _is_key_type_entry(entry, key_type):
+        """True if a GetInUseKeys entry name belongs to key_type.
+
+        key_type: "bucket" ("{service_bucket <uuid>}"), "other" ("{other }", config key
+        that encrypts the metadata store), or "log" ("{log }").
+        """
+        name = str(entry).strip()
+        if key_type == "bucket":
+            return bool(GSIEncryptionHelpers._BUCKET_KEY_TAG_RE.match(name))
+        tokens = name.strip("{} ").split()
+        return bool(tokens) and tokens[0] == key_type
+
+    def get_indexer_in_use_key_ids(self, index_nodes, strict=False, key_type=None, wait_ready_timeout=300):
+        """Union of in-use key IDs reported by the index nodes.
+
+        key_type limits the result to "bucket", "other" or "log" keys (None = all).
+        Nodes that are down, restarting or answer "EncryptionMgr not ready" are
+        skipped and recorded in self.in_use_keys_skipped_nodes; with strict=True a
+        skipped node raises instead, so callers never decide on a partial set.
+
+        wait_ready_timeout: while any node is skipped, retry for up to this many
+        seconds before using the result, so a one-off read (baseline, expected keys)
+        never comes back empty just because the indexers were not answering. If no
+        key IDs were read by then, it raises. Polling helpers pass 0: they get []
+        and retry on their own.
+        """
+        deadline = time.time() + wait_ready_timeout
+        while True:
+            key_ids = set()
+            self.in_use_keys_skipped_nodes = []
+            for index_node in index_nodes:
+                rest = RestConnection(index_node)
+                try:
+                    status, response = rest.get_indexer_in_use_encryption_keys()
+                except Exception as ex:
+                    status, response = False, f"request failed: {ex}"
+                if not status:
+                    if any(code in str(response) for code in ("401", "403", "Unauthorized", "Forbidden")):
+                        raise Exception(
+                            f"Failed to fetch in-use encryption keys from index node {index_node.ip}: {response}"
+                        )
+                    # A killed/restarting indexer refuses the connection, and a warming-up
+                    # one answers "EncryptionMgr not ready to process requests".
                     self.log.warning(
                         f"Indexer on {index_node.ip} not ready for GetInUseKeys "
-                        f"(transient, e.g. during restart): {response} — skipping "
-                        "this node for this cycle"
+                        f"(e.g. restart/kill): {response} — skipping this node for this cycle"
                     )
-                    transient_not_ready = True
+                    self.in_use_keys_skipped_nodes.append(index_node.ip)
+                    if strict:
+                        raise Exception(
+                            f"Indexer on {index_node.ip} not ready for GetInUseKeys: {response}"
+                        )
                     continue
-                raise Exception(
-                    f"Failed to fetch in-use encryption keys from index node {index_node.ip}: {response}"
-                )
-            self.extract_in_use_key_ids(response, key_ids)
+                if key_type and isinstance(response, dict):
+                    response = {k: v for k, v in response.items() if self._is_key_type_entry(k, key_type)}
+                self.extract_in_use_key_ids(response, key_ids)
+
+            if not self.in_use_keys_skipped_nodes or time.time() >= deadline:
+                break
+            self.sleep(10, f"Waiting for indexers {self.in_use_keys_skipped_nodes} to answer GetInUseKeys")
+
+        if key_ids and self.in_use_keys_skipped_nodes:
+            self.log.warning(
+                f"In-use key IDs are PARTIAL: nodes {self.in_use_keys_skipped_nodes} were not "
+                f"ready and are not included"
+            )
 
         if not key_ids:
-            if transient_not_ready:
-                # Every queried indexer was transiently not-ready; return an
-                # empty list so a polling caller simply retries next cycle,
-                # rather than raising a spurious hard failure mid-restart.
+            if self.in_use_keys_skipped_nodes:
+                if wait_ready_timeout:
+                    raise Exception(
+                        f"Indexers {self.in_use_keys_skipped_nodes} did not answer GetInUseKeys "
+                        f"within {wait_ready_timeout} s; refusing to return an empty key set"
+                    )
+                # Polling caller: return an empty list so it simply retries next cycle.
                 self.log.warning(
                     "Indexer GetInUseKeys returned no key IDs — indexer(s) not "
                     "ready (transient); returning empty set for caller to retry"
                 )
                 return []
-            raise Exception("Indexer GetInUseKeys returned no key IDs")
+            raise Exception(f"Indexer GetInUseKeys returned no {key_type or ''} key IDs".replace("  ", " "))
 
         resolved_key_ids = sorted(key_ids)
-        self.log.info(f"Resolved in-use indexer key IDs: {resolved_key_ids}")
+        self.log.info(f"Resolved in-use indexer {key_type or ''} key IDs: {resolved_key_ids}")
         return resolved_key_ids
 
-    def get_new_indexer_in_use_key_ids(self, index_nodes, previous_key_ids):
-        current_key_ids = set(self.get_indexer_in_use_key_ids(index_nodes))
+    def get_new_indexer_in_use_key_ids(self, index_nodes, previous_key_ids, key_type=None,
+                                       wait_ready_timeout=300):
+        current_key_ids = set(self.get_indexer_in_use_key_ids(index_nodes, key_type=key_type,
+                                                               wait_ready_timeout=wait_ready_timeout))
         previous_key_ids = {str(key_id) for key_id in previous_key_ids}
         new_key_ids = sorted(current_key_ids.difference(previous_key_ids))
         self.log.info(
@@ -3316,22 +3529,58 @@ class GSIEncryptionAtRestBase:
         )
         return new_key_ids
 
-    def poll_for_new_indexer_key_ids(self, index_nodes, baseline_key_ids, timeout=300, label=""):
+    def poll_for_new_indexer_key_ids(self, index_nodes, baseline_key_ids, timeout=300, label="",
+                                     key_type=None):
+        """Wait until a key ID not in baseline_key_ids is in use (rotation, enable).
+
+        key_type: None (any), "bucket", "other" (config/metadata) or "log".
+        Tolerates nodes that are down/restarting and keys not reported yet.
+        """
         baseline = {str(k) for k in baseline_key_ids}
         deadline = time.time() + timeout
         while time.time() < deadline:
-            new_ids = self.get_new_indexer_in_use_key_ids(index_nodes, baseline_key_ids)
+            try:
+                new_ids = self.get_new_indexer_in_use_key_ids(index_nodes, baseline_key_ids, key_type=key_type,
+                                                              wait_ready_timeout=0)
+            except Exception as ex:
+                if "returned no" not in str(ex):
+                    raise
+                new_ids = []  # no key of this type in use yet (e.g. just enabled)
             if new_ids:
                 self.log.info(
-                    f"{label}New indexer key IDs detected: {new_ids} "
+                    f"{label}New indexer {key_type or ''} key IDs detected: {new_ids} "
                     f"(baseline was {sorted(baseline)})"
                 )
                 return new_ids
-            self.sleep(15, f"{label}Waiting for new indexer key IDs (baseline: {sorted(baseline)})")
+            self.sleep(15, f"{label}Waiting for new indexer {key_type or ''} key IDs (baseline: {sorted(baseline)})")
         self.fail(
-            f"{label}No new indexer key IDs appeared within {timeout} s. "
+            f"{label}No new indexer {key_type or ''} key IDs appeared within {timeout} s. "
             f"Baseline: {sorted(baseline)}"
         )
+
+    def poll_for_indexer_key_ids_gone(self, index_nodes, old_key_ids, timeout=600, label="",
+                                      key_type=None):
+        """Wait until none of old_key_ids is in use on any index node (DEK drop /
+        re-encryption done). Every node must answer, so a node that is down or
+        restarting can't make old keys look gone."""
+        old = {str(k) for k in old_key_ids}
+        deadline = time.time() + timeout
+        remaining = sorted(old)
+        while time.time() < deadline:
+            try:
+                in_use = set(self.get_indexer_in_use_key_ids(index_nodes, key_type=key_type,
+                                                              wait_ready_timeout=0))
+            except Exception as ex:
+                if "returned no" not in str(ex):
+                    raise
+                in_use = set()  # nothing of this type in use any more
+            remaining = sorted(in_use & old)
+            if not remaining and not self.in_use_keys_skipped_nodes:
+                self.log.info(f"{label}Old indexer {key_type or ''} key IDs {sorted(old)} no longer in use")
+                return sorted(in_use)
+            self.sleep(15, f"{label}Waiting for old key IDs to go: still in use {remaining}, "
+                           f"not answering {self.in_use_keys_skipped_nodes}")
+        self.fail(f"{label}Old key IDs {remaining} still in use (or nodes not answering) after {timeout} s")
 
     def verify_prerequisites(self, min_index_nodes=3, check_encryption=True, step_prefix="[STEP 1]"):
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
@@ -3360,43 +3609,180 @@ class GSIEncryptionAtRestBase:
         query_node = self.get_nodes_from_services_map(service_type="n1ql")
         _defer = self.defer_build if defer_build is None else defer_build
         prefix = prefix_str + ''.join(random.choices(string.ascii_letters + string.digits, k=5))
-        query_definitions = self.gsi_util_obj.get_index_definition_list(
-            dataset=self.json_template, prefix=prefix, skip_primary=False
-        )
+        if self.bhive_index:
+            # Same dense/sparse, BHIVE/composite + scalar mix as the sanity test
+            # (vector helpers live on GSIEncryptionAtRestStaticTopology, the only
+            # caller of this method).
+            vector_defs = self._get_vector_query_definitions(prefix)
+            query_definitions = [d for defs in vector_defs for d in defs]
+            queries = self._get_vector_create_queries(*vector_defs, namespace, deploy_nodes)
+        else:
+            query_definitions = self.gsi_util_obj.get_index_definition_list(
+                dataset=self.json_template, prefix=prefix, skip_primary=False
+            )
+            create_kwargs = dict(
+                definition_list=query_definitions, namespace=namespace,
+                num_replica=self.num_index_replica, deploy_node_info=deploy_nodes,
+                defer_build=_defer
+            )
+            if randomise_replica_count:
+                create_kwargs['randomise_replica_count'] = True
+            queries = self.gsi_util_obj.get_create_index_list(**create_kwargs)
         select_queries = set(self.gsi_util_obj.get_select_queries(
             definition_list=query_definitions, namespace=namespace
         ))
-        create_kwargs = dict(
-            definition_list=query_definitions, namespace=namespace,
-            num_replica=self.num_index_replica, deploy_node_info=deploy_nodes,
-            defer_build=_defer
-        )
-        if randomise_replica_count:
-            create_kwargs['randomise_replica_count'] = True
-        queries = self.gsi_util_obj.get_create_index_list(**create_kwargs)
         self.gsi_util_obj.create_gsi_indexes(
             create_queries=queries, database=namespace, query_node=query_node
         )
         if wait_for_ready:
-            self.wait_until_indexes_online(timeout=1200, defer_build=_defer)
+            self.wait_until_indexes_online(
+                timeout=max(1200, self.index_online_timeout), defer_build=_defer
+            )
         suffix = " in Ready state" if wait_for_ready else ""
         self.log.info(f"{step_prefix} PASSED - Created {len(queries)} indexes{suffix}")
         return select_queries
 
-    def restart_index_nodes(self, index_nodes):
-        """Rolling restart of all indexer nodes one at a time."""
+    def _scan_result_digest(self, query):
+        """Row digest for a scan, compared across a restart. Vector (ANN) queries are
+        approximate, so only their row count is compared."""
+        rows = self.run_cbq_query(query=query, scan_consistency='request_plus').get('results', [])
+        if "VECTOR_DISTANCE" in query.upper():
+            return len(rows)
+        return sorted(json.dumps(row, sort_keys=True) for row in rows)
+
+    def _capture_read_back_state(self, index_nodes):
+        """Index stats per node, getIndexStatus entries and persisted stats, compared across
+        restart_index_nodes(validate_read_back=True)."""
+        index_stats = {}
+        for node_key, keyspaces in (self.get_index_stats(perNode=True) or {}).items():
+            for keyspace, indexes in keyspaces.items():
+                for index_name, stats in indexes.items():
+                    index_stats[(node_key, keyspace, index_name)] = stats
+        index_status = {}
+        for item in RestConnection(index_nodes[0]).get_indexer_metadata().get("status", []):
+            key = (item.get("bucket"), item.get("scope"), item.get("collection"), item.get("name"),
+                   item.get("replicaId", 0))
+            index_status[key] = (item.get("definition"), item.get("status"))
+        index_rest = self.index_rest  # get_persisted_stats repoints self.index_rest
+        persisted = {node.ip: self.get_persisted_stats(index_node=node) for node in index_nodes}
+        self.index_rest = index_rest
+        return index_stats, index_status, persisted
+
+    def restart_index_nodes(self, index_nodes, validate_read_back=False, select_queries=None,
+                            restart_mode="graceful", expect_rebuild=False):
+        """Rolling restart of all indexer nodes one at a time.
+
+        restart_mode: "graceful" (stop/start couchbase-server) or "kill" (kill -9 the
+        indexer; ns_server restarts it).
+        validate_read_back=True: prove the encrypted files read back after the restart:
+          - item counts (KV vs GSI, no pending mutations, replica counts)
+          - select_queries return the same rows as before the restart (index data)
+          - no index was rebuilt from KV: num_docs_indexed starts at 0 and counts every
+            doc written after startup, so recovery from the snapshot keeps it near 0 and
+            a rebuild takes it to items_count (expect_rebuild=True: every index rebuilt)
+          - getIndexStatus has the same indexes and definitions, all Ready (metadata store)
+          - persisted stats (last_known_scan_time) are restored (persisted stats file)
+        Workloads must be stopped before calling it with validate_read_back=True.
+        """
+        if validate_read_back:
+            scan_results_before = {}
+            for query in select_queries or []:
+                try:
+                    scan_results_before[query] = self._scan_result_digest(query)
+                except Exception as ex:
+                    self.log.warning(f"[RESTART] Scan failed before restart, not compared: {query[:100]}: {ex}")
+            # Restart only after a disk snapshot covers every doc (MOI snapshots on an
+            # interval) and the stats persister has written the stats file after the scans.
+            if self.gsi_type == "memory_optimized":
+                moi_interval = int(RestConnection(index_nodes[0]).get_index_settings().get(
+                    "indexer.settings.persisted_snapshot.moi.interval", 600000)) // 1000
+                self.sleep(moi_interval + 15, "[RESTART] Waiting for an MOI disk snapshot")
+            for node in index_nodes:
+                stats_file = f"{RestConnection(node).get_index_path()}/@2i/indexstats/stats"
+                shell = RemoteMachineShellConnection(node, verbose=False)
+                try:
+                    out, _ = shell.execute_command("date +%s")
+                    node_now = int(out[0].strip())
+                    deadline = time.time() + 960  # indexer.statsPersistenceInterval default 900s
+                    while True:
+                        out, _ = shell.execute_command(f"stat -c %Y {stats_file} 2>/dev/null || echo 0")
+                        if int(out[0].strip()) > node_now or time.time() > deadline:
+                            break
+                        self.sleep(15, f"[RESTART] Waiting for stats to be persisted on {node.ip}")
+                finally:
+                    shell.disconnect()
+                if int(out[0].strip()) <= node_now:
+                    self.log.warning(f"[RESTART] {stats_file} on {node.ip} not rewritten after the scans; "
+                                     f"persisted stats may differ after the restart")
+            state_before = self._capture_read_back_state(index_nodes)
+
         for node in index_nodes:
-            self.log.info(f"[RESTART] Stopping indexer on node {node.ip}...")
             remote = RemoteMachineShellConnection(node)
-            remote.stop_server()
-            self.sleep(20, f"Waiting after stopping {node.ip}")
-            self.log.info(f"[RESTART] Starting indexer on node {node.ip}...")
-            remote.start_server()
+            if restart_mode == "kill":
+                self.log.info(f"[RESTART] Killing indexer (kill -9) on node {node.ip}...")
+                remote.execute_command("pkill -9 -x indexer")
+            else:
+                self.log.info(f"[RESTART] Stopping indexer on node {node.ip}...")
+                remote.stop_server()
+                self.sleep(20, f"Waiting after stopping {node.ip}")
+                self.log.info(f"[RESTART] Starting indexer on node {node.ip}...")
+                remote.start_server()
             remote.disconnect()
-            self.sleep(20, f"Waiting for {node.ip} to come back up")
+            self.wait_for_indexer_ready([node], timeout=900, label="[RESTART] ")
         self.log.info("[RESTART] All index nodes restarted. Waiting for indexes to be online...")
         self.wait_until_indexes_online(timeout=1200)
         self.log.info("[RESTART] All indexes back online after restart")
+        if not validate_read_back:
+            return
+
+        self.log.info("[RESTART] Validating encrypted index data reads back after restart...")
+        self.item_count_related_validations()
+        stats_before, status_before, persisted_before = state_before
+        stats_after, status_after, persisted_after = self._capture_read_back_state(index_nodes)
+        problems = []
+
+        # Index data: rebuilt from KV instead of recovered from the snapshot
+        rebuilt, recovered = [], []
+        for key, stats in stats_after.items():
+            items = stats.get("items_count", 0)
+            if not items:
+                continue
+            docs_indexed = stats.get("num_docs_indexed", 0)
+            (rebuilt if docs_indexed >= 0.1 * items else recovered).append(
+                f"{key}: num_docs_indexed={docs_indexed}, items_count={items}")
+        if expect_rebuild and recovered:
+            problems.append(f"indexes recovered from snapshot, expected a rebuild: {recovered}")
+        if not expect_rebuild and rebuilt:
+            problems.append(f"indexes rebuilt from KV instead of recovered from snapshot: {rebuilt}")
+        missing = sorted(set(stats_before) - set(stats_after))
+        if missing:
+            problems.append(f"indexes missing from stats after restart: {missing}")
+
+        # Metadata store: same indexes and definitions, all Ready
+        if set(status_after) != set(status_before):
+            problems.append(f"getIndexStatus index set changed: before={sorted(status_before)}, "
+                            f"after={sorted(status_after)}")
+        for key, (definition, status) in status_after.items():
+            if status != "Ready":
+                problems.append(f"{key} status {status} after restart")
+            if key in status_before and definition != status_before[key][0]:
+                problems.append(f"{key} definition changed: {status_before[key][0]} -> {definition}")
+
+        # Persisted stats file: values restored
+        for ip, before in persisted_before.items():
+            for stat, value in before.items():
+                if value and persisted_after.get(ip, {}).get(stat) != value:
+                    problems.append(f"persisted stat {stat} on {ip}: {value} -> "
+                                    f"{persisted_after.get(ip, {}).get(stat)}")
+
+        # Index data: scans return the same rows
+        for query, digest in scan_results_before.items():
+            if self._scan_result_digest(query) != digest:
+                problems.append(f"scan results changed after restart: {query[:100]}")
+
+        if problems:
+            self.fail("[RESTART] Read-back after restart failed:\n  " + "\n  ".join(problems))
+        self.log.info("[RESTART] PASSED - index data, metadata and persisted stats read back after restart")
 
     def run_scan_validation(self, select_queries, validate_item_count=False, expected_doc_count=None):
         if expected_doc_count is None:
@@ -3541,64 +3927,6 @@ class GSIEncryptionAtRestBase:
 
         return encrypted_bucket_names
 
-    def _should_skip_encryption_key_id_check(self):
-        """Return True when the on-disk key-id encryption check is not a valid
-        assertion for the current test and should be skipped.
-
-        Both situations below leave files legitimately encrypted under a DEK
-        other than the current in-use key, so grepping a file body for the
-        current key id yields a false KEY_NOT_FOUND even though the file is
-        properly encrypted:
-
-        1. DEK rotation / drop / force re-encryption tests — older Plasma/Magma
-           sstables keep a PREVIOUS, rotated-out DEK until compaction rewrites
-           them.
-        2. Rebalance tests — any rebalance (in / out / swap) MOVES index data:
-           shards migrate onto a newly added node or off a removed one and are
-           re-encrypted under the destination node's DEK. That churn (plus the
-           LSM old-sstable effect) leaves files under a non-current DEK during
-           and after the movement, regardless of direction.
-
-        Detection is driven by the test's own parameters/name so no per-call-site
-        change is needed. An explicit ``skip_encryption_key_id_check`` input
-        param forces the behaviour either way. Non-rotation, non-rebalance tests
-        keep the full key-id validation.
-        """
-        forced = self.input.param("skip_encryption_key_id_check", None)
-        if forced is not None:
-            return bool(forced)
-
-        # Case 2: any rebalance moves index data. 'out' removes a node, 'swap'
-        # removes one while adding another, and 'in' adds a node — all three
-        # redistribute shards that get re-encrypted under the destination DEK,
-        # so the current-key check is not a valid assertion for any of them.
-        rebalance_type = str(self.input.param("rebalance_type", "") or "").lower()
-        if rebalance_type in ("in", "out", "swap"):
-            return True
-
-        # Case 1: the test deliberately rotates/drops DEKs (by param) ...
-        rotation_params = (
-            "dek_drop_scenario",
-            "kek_rotation_interval_seconds",
-            "key_rotation_interval",
-            "key_expiry_interval",
-        )
-        for p in rotation_params:
-            if self.input.param(p, None):
-                return True
-
-        # ... or by test method name. Markers are matched as substrings, so
-        # "rotation" covers key_rotation/dek_rotation/multi_rotation/
-        # concurrent_key_rotation, "drop" covers drop_dek/dek_drop/key_drop,
-        # "rtz" covers return-to-zero (drop-all) tests, and "key_op" covers
-        # concurrent_key_op.
-        name = (getattr(self, "_testMethodName", "") or "").lower()
-        rotation_markers = (
-            "rotation", "drop", "rtz", "key_op",
-            "reencrypt", "re_encrypt", "expiry", "force_reencryption",
-        )
-        return any(marker in name for marker in rotation_markers)
-
     def validate_file_encryption_with_key(self, index_nodes, expected_key_id=None, step_prefix="",
                                             encrypted_bucket_names=None, raise_on_failure=False):
         """
@@ -3625,22 +3953,6 @@ class GSIEncryptionAtRestBase:
             self.log.info(f"{step_prefix}No encryption-enabled buckets found; skipping file encryption validation")
             return True
 
-        # Skip the on-disk key-id check for DEK rotation/drop tests and for
-        # rebalance-out/swap tests: both legitimately leave files encrypted under
-        # a previous / destination DEK (rotated-out old sstables, or shards moved
-        # off a rebalanced-out node and re-encrypted elsewhere), so a match
-        # against the current in-use key is not a valid assertion and produces
-        # false KEY_NOT_FOUND failures. Non-rotation, non-node-removal tests keep
-        # the full key-id validation.
-        if self._should_skip_encryption_key_id_check():
-            self.log.info(
-                f"{step_prefix}Skipping on-disk key-id encryption validation — this "
-                "test rotates/drops DEKs or rebalances a node out, so files may be "
-                "encrypted under a previous/destination DEK and a specific key-id "
-                "match is not a valid assertion here."
-            )
-            return True
-
         if expected_key_id is None:
             expected_header_key_ids = self.get_indexer_in_use_key_ids(index_nodes)
             self.log.info(
@@ -3658,6 +3970,17 @@ class GSIEncryptionAtRestBase:
                 f"{step_prefix}Validating file encryption with expected key ID {expected_key_id} "
                 f"using header key identifiers {expected_header_key_ids}..."
             )
+
+        # GetInUseKeys is the source of truth: a file may carry any key the indexer
+        # still reports in use (old keys linger after rotation/drop/rebalance until
+        # their data is rewritten), so those keys are always allowed.
+        if expected_key_id is not None:
+            try:
+                in_use = self.get_indexer_in_use_key_ids(index_nodes, key_type="bucket")
+            except Exception as ex:
+                self.log.warning(f"{step_prefix}Could not read in-use bucket keys: {ex}")
+                in_use = []
+            expected_header_key_ids = sorted(set(expected_header_key_ids) | set(in_use))
 
         self.log.info(f"{step_prefix}Encrypted buckets to validate: {encrypted_bucket_names}")
 

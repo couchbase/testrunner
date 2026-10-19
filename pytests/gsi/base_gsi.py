@@ -420,11 +420,9 @@ class BaseSecondaryIndexingTests(QueryTests):
         # validate against the "other" key (metadata_key_id) rather than the
         # per-bucket/index data key. A genuinely-plaintext metadata store while
         # "other" encryption is enabled still fails, so real regressions are kept.
-        other_enabled = bool(getattr(self, "enable_other_encryption_at_rest", False)) or (
-            getattr(self, "other_encryption_at_rest_id", None) not in (None, False)
-        )
+        other_enabled, live_other_key_ids = self._other_encryption_state(index_nodes)
         if other_enabled:
-            metadata_expected_key = metadata_key_id if metadata_key_id else expected_key_id
+            metadata_expected_key = metadata_key_id or live_other_key_ids or expected_key_id
             _safe_run("metadata_repo",
                       helper.verify_gsi_metadata_repo_encrypted,
                       index_nodes, expected_key_id=metadata_expected_key)
@@ -541,6 +539,98 @@ class BaseSecondaryIndexingTests(QueryTests):
                     if dest:
                         copied.append(dest)
         return copied
+
+    def _require_files_for_present_indexes(self, results, index_nodes, encrypted_bucket_names):
+        """Turn a "skipped" (nothing found) result into "failed" only where the node
+        hosts an index that must produce those files. Codebooks only exist for vector
+        indexes, BHIVE files only for BHIVE indexes, and so on, so absence is fine
+        everywhere else. .error files, plaintext, naming and /stats/storage checks
+        are never required."""
+        # get_indexer_metadata returns {} (no "status") on an HTTP error, so a missing
+        # "status" is a failed read too. Try each node until one answers.
+        statuses, last_error = None, None
+        deadline = time.time() + 120
+        while statuses is None and time.time() < deadline:
+            for node in index_nodes:
+                try:
+                    metadata = RestConnection(node).get_indexer_metadata()
+                except Exception as ex:
+                    last_error = f"{node.ip}: {ex}"
+                    continue
+                if "status" in metadata:
+                    statuses = metadata["status"]
+                    break
+                last_error = f"{node.ip}: no 'status' in getIndexStatus response"
+            else:
+                self.sleep(10, "Waiting for getIndexStatus to answer")
+        if statuses is None:
+            # Without the index list we can't tell a missing file from an index that
+            # never produces it, so record a failure instead of letting "skipped" pass.
+            reason = (f"could not confirm which indexes are hosted "
+                      f"(getIndexStatus failed for 120 s: {last_error})")
+            self.log.error(f"File presence check: {reason}")
+            results["file_presence"] = {node.ip: {"status": "failed", "reason": reason}
+                                        for node in index_nodes}
+            return
+        encrypted = set(encrypted_bucket_names or [])
+        other_enabled, _ = self._other_encryption_state(index_nodes)
+        needs = {node.ip: set() for node in index_nodes}
+        for index in statuses:
+            if encrypted and index.get("bucket") not in encrypted:
+                continue
+            index_type = str(index.get("indexType", "")).lower()
+            definition = str(index.get("definition", "")).upper()
+            is_bhive = index_type in ("bhive", "hyperscale vector index")
+            is_moi = "memory" in index_type or index_type in ("memdb", "moi")
+            is_vector = is_bhive or "VECTOR" in definition
+            for host in index.get("hosts", []):
+                ip = str(host).split(":")[0]
+                if ip not in needs:
+                    continue
+                if is_moi:
+                    needs[ip].add("snapshots")
+                elif is_bhive:
+                    needs[ip].update(("bhive_pindex_lss", "bhive_vindex_magma"))
+                else:
+                    needs[ip].add("data_files_key_id")
+                if is_vector:
+                    needs[ip].add("codebook")
+                if other_enabled:
+                    needs[ip].add("metadata_repo")
+        for category, node_results in results.items():
+            if not isinstance(node_results, dict):
+                continue
+            for ip, node_result in node_results.items():
+                if (isinstance(node_result, dict) and node_result.get("status") == "skipped"
+                        and category in needs.get(ip, ())
+                        and not (category == "data_files_key_id" and  # plasma data kept under @2i/shards
+                                 results.get("plasma_shard_data", {}).get(ip, {}).get("status") == "passed")):
+                    node_result["status"] = "failed"
+                    node_result["reason"] = (f"no files found but node hosts indexes that "
+                                             f"produce them ({node_result.get('reason')})")
+
+    def _other_encryption_state(self, index_nodes):
+        """(enabled, in-use "other" key IDs or None) for the GSI metadata store.
+
+        Live state wins over the setUp params, since tests enable/disable "other"
+        encryption at runtime: GetInUseKeys lists the "other" keys the metadata store
+        is encrypted with (none when it is plaintext). Falls back to the params when
+        the indexers can't all answer."""
+        enabled = bool(getattr(self, "enable_other_encryption_at_rest", False)) or (
+            getattr(self, "other_encryption_at_rest_id", None) not in (None, False)
+        )
+        if not hasattr(self, "get_indexer_in_use_key_ids"):
+            return enabled, None
+        try:
+            live_key_ids = self.get_indexer_in_use_key_ids(index_nodes, key_type="other", wait_ready_timeout=0)
+        except Exception as ex:
+            if "returned no" not in str(ex):
+                self.log.warning(f"Could not read in-use 'other' keys: {ex}")
+                return enabled, None
+            live_key_ids = []
+        if self.in_use_keys_skipped_nodes:
+            return enabled, None
+        return bool(live_key_ids), live_key_ids
 
     def _finalize_encryption_results(self, engine_label, results, fail_on_error,
                                       index_nodes=None):
@@ -736,6 +826,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             expected_key_id, encrypted_bucket_names, query_node,
             per_node_bkm=per_node_bkm, metadata_key_id=metadata_key_id
         )
+        self._require_files_for_present_indexes(results, index_nodes, encrypted_bucket_names)
         return self._finalize_encryption_results(
             "MOI", results, fail_on_error, index_nodes=index_nodes
         )
@@ -861,20 +952,25 @@ class BaseSecondaryIndexingTests(QueryTests):
             expected_key_id, encrypted_bucket_names, query_node,
             per_node_bkm=per_node_bkm, metadata_key_id=metadata_key_id
         )
+        self._require_files_for_present_indexes(results, index_nodes, encrypted_bucket_names)
         return self._finalize_encryption_results(
             "PLASMA/BHIVE", results, fail_on_error, index_nodes=index_nodes
         )
 
     def validate_log_encryption_files_encrypted(self, index_nodes,
                                                 expected_key_id=None,
-                                                fail_on_error=True):
+                                                fail_on_error=True,
+                                                require_files=()):
         """
+        require_files: categories (e.g. "indexer_stats_log", "request_handler_cache")
+        where finding no file is a failure instead of "skipped".
         Validate disk-side categories governed by the cluster-level
         log-encryption secret (independent of per-bucket encryption):
 
           - indexer_stats_log       header magic + key ID on indexer_stats.log
-          - projector_stats_log     header magic + key ID on projector_stats.log
+          - projector_stats_log     header magic + key ID on projector_stats.log (KV nodes)
           - request_handler_cache   header magic + key ID under @2i/cache
+          - persisted_stats         header magic + key ID on @2i/indexstats/stats
 
         Call this only when log-encryption is enabled on the cluster. With
         only bucket-encryption enabled these files are written in cleartext
@@ -914,12 +1010,22 @@ class BaseSecondaryIndexingTests(QueryTests):
         _safe_run("indexer_stats_log",
                   helper.verify_gsi_indexer_stats_log_encrypted,
                   index_nodes, expected_key_id=expected_key_id)
+        kv_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True) or []
         _safe_run("projector_stats_log",
                   helper.verify_gsi_projector_stats_log_encrypted,
-                  index_nodes, expected_key_id=expected_key_id)
+                  kv_nodes, expected_key_id=expected_key_id)
         _safe_run("request_handler_cache",
                   helper.verify_gsi_request_handler_cache_encrypted,
                   index_nodes, expected_key_id=expected_key_id)
+        _safe_run("persisted_stats",
+                  helper.verify_gsi_persisted_stats_encrypted,
+                  index_nodes, expected_key_id=expected_key_id)
+
+        for category in require_files:
+            for node_result in results.get(category, {}).values():
+                if isinstance(node_result, dict) and node_result.get("status") == "skipped":
+                    node_result["status"] = "failed"
+                    node_result["reason"] = f"no file found ({node_result.get('reason')})"
 
         self._log_encryption_summary(results)
         passed_lines, skipped_lines, failed_lines = \
