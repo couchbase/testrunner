@@ -497,6 +497,264 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
             ))
         return create_queries
 
+    # =========================================================================
+    # MB-69501: index tools (cbindexperf, cbindexplan) must not write files when
+    # any encryption at rest (bucket, log, audit, other) is on. config is ignored.
+    # =========================================================================
+
+    TOOLS_REFUSED_MSG = "file output is not supported when encryption at rest is enabled."
+    TOOLS_STATUS_UNKNOWN_MSG = "could not determine encryption-at-rest status"
+    TOOLS_INDEX = "tools_idx"
+    TOOLS_ENCRYPTION_KINDS = ("bucket", "log", "audit", "other")
+
+    def _run_tool(self, node, workdir, tool, args):
+        """run_cb_tool; cbindexperf also gets CBAUTH_REVRPC_URL, which it does not set
+        itself (cbindex and cbindexplan do), as indexing's CI does before running it."""
+        env = None
+        if tool == "cbindexperf":
+            env = {"CBAUTH_REVRPC_URL": f"http://{self.username}:{self.password}@{node.ip}:8091/cbindexperf"}
+        return self.gsi_encryption_helper.run_cb_tool(node, workdir, tool, args, env=env)
+
+    def _tool_files(self, node, workdir):
+        """Names of the files a tool run left in workdir."""
+        return {path.rsplit("/", 1)[-1]
+                for path in self.gsi_encryption_helper.get_files_in_directory(node, workdir)}
+
+    def _tools_setup(self, node):
+        """Unencrypted bucket with one index, the tool inputs on node, and one key
+        usable for bucket, log, audit and other encryption. Returns (base_dir, secret_id)."""
+        bucket = self.test_bucket
+        self.create_bucket_with_encryption(bucket, enable_encryption=False)
+        self.run_cbq_query(query=f"CREATE INDEX {self.TOOLS_INDEX} ON `{bucket}`(name)")
+        self.wait_until_indexes_online()
+
+        base_dir = "/tmp/gsi_ear_tools_" + ''.join(random.SystemRandom().choices(string.ascii_lowercase + string.digits, k=6))
+        # Formats: cbindexperf README (ScanSpecs) and gsi_replica_indexes' cbindexplan index spec
+        perf_config = {"Concurrency": 1, "Clients": 1, "ScanSpecs": [
+            {"Type": "All", "Id": 1, "Bucket": bucket, "Index": self.TOOLS_INDEX, "Limit": 1, "Repeat": 0}]}
+        index_spec = [{"name": "tools_plan_idx", "bucket": bucket, "isPrimary": False, "secExprs": ["age"],
+                       "isArrayIndex": False, "replica": 1, "numDoc": 1000, "DocKeySize": 200,
+                       "SecKeySize": 200, "ArrKeySize": 0, "ArrSize": 0, "MutationRate": 0, "ScanRate": 0}]
+        shell = RemoteMachineShellConnection(node)
+        try:
+            shell.create_file(f"{base_dir}/perf_config.json", json.dumps(perf_config))
+            shell.create_file(f"{base_dir}/index_spec.json", json.dumps(index_spec))
+        finally:
+            shell.disconnect()
+
+        secret_id = self.create_new_encryption_key(
+            usage=["bucket-encryption", "log-encryption", "audit-encryption", "other-encryption"])
+        return base_dir, secret_id
+
+    def _tools_cleanup(self, node, base_dir, secret_id, kinds):
+        for kind in kinds:
+            try:
+                self.set_encryption_at_rest(kind, secret_id, enable=False, bucket=self.test_bucket)
+            except Exception as ex:
+                self.log.warning(f"Could not turn {kind} encryption off: {ex}")
+        try:
+            self.rest.delete_secret(secret_id)
+        except Exception as ex:
+            self.log.warning(f"Could not delete secret {secret_id}: {ex}")
+        shell = RemoteMachineShellConnection(node)
+        try:
+            shell.remove_folders([base_dir])
+        finally:
+            shell.disconnect()
+
+    def _run_tool_file_outputs(self, node, base_dir, label):
+        """Run every file-writing option of cbindexplan and cbindexperf, each in its own
+        empty directory. Returns {option: (output, exit code, files left, expected file)}."""
+        cluster = f"{node.ip}:8091"  # the tools' encryption check only speaks http
+        plan = (f"-command=plan -memQuota=4G -indexes={base_dir}/index_spec.json -cluster={cluster} "
+                f"-username={self.username} -password={self.password}")
+        perf = (f"-configfile={base_dir}/perf_config.json -cluster={cluster} "
+                f"-auth={self.username}:{self.password}")
+        options = {
+            "cbindexplan -output": ("cbindexplan", f"{plan} -output=plan.json", "plan.json"),
+            "cbindexplan -ddl": ("cbindexplan", f"{plan} -ddl=plan.sql", "plan.sql"),
+            "cbindexperf -resultfile": ("cbindexperf", f"{perf} -resultfile=results.json", "results.json"),
+            "cbindexperf -statsfile": ("cbindexperf", f"{perf} -statsfile=stats.txt", "stats.txt"),
+            "cbindexperf -cpuprofile": ("cbindexperf", f"{perf} -cpuprofile=cpu.prof", "cpu.prof"),
+            "cbindexperf -memprofile": ("cbindexperf", f"{perf} -memprofile=mem.prof", "mem.prof"),
+        }
+        results = {}
+        for i, (option, (tool, args, expected)) in enumerate(options.items()):
+            workdir = f"{base_dir}/{label}_{i}"
+            output, exit_code = self._run_tool(node, workdir, tool, args)
+            results[option] = (output, exit_code, self._tool_files(node, workdir), expected, workdir)
+        return results
+
+    def _assert_tool_outputs(self, node, results, expect_refused, label):
+        failures = []
+        for option, (output, exit_code, files, expected, workdir) in results.items():
+            self.log.info(f"[{label}] {option}: exit code {exit_code}, files {sorted(files)}")
+            if expect_refused:
+                if self.TOOLS_REFUSED_MSG not in output:
+                    failures.append(f"{option}: no refusal message")
+                if exit_code != 0:
+                    failures.append(f"{option}: exit code {exit_code} (tools exit 0 on refusal)")
+                if files:
+                    failures.append(f"{option}: wrote {sorted(files)}")
+                continue
+            if self.TOOLS_REFUSED_MSG in output:
+                failures.append(f"{option}: refused with no encryption on")
+            elif expected not in files:
+                failures.append(f"{option}: {expected} not written (files: {sorted(files)})")
+            elif option == "cbindexplan -output":
+                shell = RemoteMachineShellConnection(node)
+                try:
+                    out, _ = shell.execute_command(f"cat {workdir}/{expected}")
+                finally:
+                    shell.disconnect()
+                try:
+                    json.loads("".join(out))
+                except ValueError as ex:
+                    failures.append(f"{option}: {expected} is not valid JSON: {ex}")
+        self.assertFalse(failures, f"[{label}] tool file output check failed: {failures}")
+
+    def test_gsi_tools_file_output_encryption(self):
+        """
+        MB-69501: cbindexperf and cbindexplan write no files while any encryption at
+        rest is on, and write them as before when only config encryption is on.
+
+        Steps:
+        1.  Unencrypted bucket + index; tool inputs on the node; one key for all types
+        2.  Control: config encryption on (default), log/audit/other/bucket off ->
+            every file option writes its file
+        3.  For bucket, log, audit, other in turn:
+            a. turn it on -> every file option is refused and writes nothing
+            b. cbindexperf with no file output (-resultfile=) is not refused
+            c. cbindex -type=list still works and writes nothing
+            d. turn it off -> cbindexplan -output writes again
+        """
+        self.log.info("STARTING TEST: test_gsi_tools_file_output_encryption")
+        node = self.get_nodes_from_services_map(service_type="index")
+        cluster = f"{node.ip}:8091"
+        base_dir, secret_id = self._tools_setup(node)
+        try:
+            # STEP 2: control
+            methods = self.get_encryption_at_rest_methods()
+            self.assertNotIn(methods["config"], (None, "disabled"),
+                             f"[STEP 2] Expected config encryption on by default: {methods}")
+            self.assertTrue(all(methods[k] == "disabled" for k in ("log", "audit", "other")),
+                            f"[STEP 2] Expected log/audit/other encryption off: {methods}")
+            self.assertFalse(self.is_bucket_encryption_enabled(self.test_bucket),
+                             "[STEP 2] Expected the bucket to be unencrypted")
+            results = self._run_tool_file_outputs(node, base_dir, "control")
+            self._assert_tool_outputs(node, results, expect_refused=False, label="control")
+
+            # STEP 3: each encryption type alone
+            for kind in self.TOOLS_ENCRYPTION_KINDS:
+                self.set_encryption_at_rest(kind, secret_id, enable=True, bucket=self.test_bucket)
+                self.get_encryption_at_rest_methods()
+                results = self._run_tool_file_outputs(node, base_dir, f"{kind}_on")
+                self._assert_tool_outputs(node, results, expect_refused=True, label=f"{kind} on")
+
+                output, exit_code = self._run_tool(
+                    node, f"{base_dir}/{kind}_no_file_output", "cbindexperf",
+                    f"-configfile={base_dir}/perf_config.json -cluster={cluster} "
+                    f"-auth={self.username}:{self.password} -resultfile=")
+                self.assertNotIn(self.TOOLS_REFUSED_MSG, output,
+                                 f"[{kind} on] cbindexperf refused with no file output")
+                self.assertIn("rows/sec", output,
+                              f"[{kind} on] cbindexperf -resultfile= did not scan: {output[-500:]}")
+                self.log.info(f"[{kind} on] cbindexperf -resultfile= exit code {exit_code}, "
+                              f"scans completed (Throughput line present)")
+
+                workdir = f"{base_dir}/{kind}_cbindex"
+                output, exit_code = self._run_tool(
+                    node, workdir, "cbindex",
+                    f"-auth={self.username}:{self.password} -server={cluster} -type=list")
+                self.assertEqual(exit_code, 0, f"[{kind} on] cbindex -type=list failed: {output}")
+                self.assertFalse(self._tool_files(node, workdir), f"[{kind} on] cbindex wrote files")
+
+                self.set_encryption_at_rest(kind, secret_id, enable=False, bucket=self.test_bucket)
+                workdir = f"{base_dir}/{kind}_off"
+                output, _ = self._run_tool(
+                    node, workdir, "cbindexplan",
+                    f"-command=plan -memQuota=4G -indexes={base_dir}/index_spec.json -cluster={cluster} "
+                    f"-username={self.username} -password={self.password} -output=plan.json")
+                self.assertIn("plan.json", self._tool_files(node, workdir),
+                              f"[{kind} off] cbindexplan -output still not written: {output}")
+        finally:
+            self._tools_cleanup(node, base_dir, secret_id, self.TOOLS_ENCRYPTION_KINDS)
+        self.log.info("TEST PASSED: test_gsi_tools_file_output_encryption")
+
+    def test_gsi_tools_ear_check_edge_cases(self):
+        """
+        MB-69501: input checks and fail-open behaviour of the tools' encryption check.
+        Behaviour that looks unintended is logged as a warning, not failed on.
+
+        Steps:
+        1.  Unencrypted bucket + index; save a plan with cbindexplan -command=retrieve
+        2.  Turn bucket encryption on
+        3.  cbindexplan -output without -cluster -> "-cluster is required", no file
+        4.  cbindexplan -plan <saved> -output (offline): recorded
+        5.  cbindexperf -cluster without a port: recorded
+        6.  cbindexperf -auth without ':' (check skipped): recorded
+        7.  Wrong password, then unreachable cluster: "could not determine encryption-at-rest
+            status" is logged and the tool is not refused (fail-open); files recorded
+        """
+        self.log.info("STARTING TEST: test_gsi_tools_ear_check_edge_cases")
+        node = self.get_nodes_from_services_map(service_type="index")
+        base_dir, secret_id = self._tools_setup(node)
+        cluster = f"{node.ip}:8091"
+        creds = f"-username={self.username} -password={self.password}"
+        plan = f"-command=plan -memQuota=4G -indexes={base_dir}/index_spec.json"
+        perf = f"-configfile={base_dir}/perf_config.json"
+        auth = f"-auth={self.username}:{self.password}"
+
+        def record(step, workdir, tool, args):
+            output, exit_code = self._run_tool(node, workdir, tool, args)
+            files = self._tool_files(node, workdir)
+            self.log.warning(f"{step} {tool} {args}: exit code {exit_code}, files {sorted(files)}, "
+                             f"output: {output[-500:]}")
+            return output
+
+        try:
+            # STEP 1: saved plan, written while encryption is off
+            output, _ = self._run_tool(node, base_dir, "cbindexplan",
+                                           f"-command=retrieve -cluster={cluster} {creds} -output=saved_plan.json")
+            self.assertIn("saved_plan.json", self._tool_files(node, base_dir),
+                          f"[STEP 1] Could not save a plan with encryption off: {output}")
+
+            # STEP 2
+            self.set_encryption_at_rest("bucket", secret_id, enable=True, bucket=self.test_bucket)
+
+            # STEP 3
+            workdir = f"{base_dir}/no_cluster"
+            output, _ = self._run_tool(node, workdir, "cbindexplan", f"{plan} -output=plan.json")
+            self.assertIn("-cluster is required with file output", output,
+                          f"[STEP 3] cbindexplan -output without -cluster not rejected: {output}")
+            self.assertFalse(self._tool_files(node, workdir), "[STEP 3] cbindexplan wrote a file without -cluster")
+
+            # STEPS 4-6: recorded for the indexing team
+            record("[STEP 4] offline plan output:", f"{base_dir}/offline_plan", "cbindexplan",
+                   f"-command=plan -memQuota=4G -plan={base_dir}/saved_plan.json -indexes={base_dir}/index_spec.json "
+                   f"-output=plan.json")
+            record("[STEP 5] cluster without port:", f"{base_dir}/no_port", "cbindexperf",
+                   f"{perf} -cluster={node.ip} {auth}")
+            record("[STEP 6] auth without ':':", f"{base_dir}/bad_auth", "cbindexperf",
+                   f"{perf} -cluster={cluster} -auth={self.username}")
+
+            # STEP 7: fail-open
+            for label, plan_args, perf_args in (
+                    ("wrong password", f"-cluster={cluster} -username={self.username} -password=wrong_password",
+                     f"-cluster={cluster} -auth={self.username}:wrong_password"),
+                    ("unreachable cluster", f"-cluster={node.ip}:1 {creds}", f"-cluster={node.ip}:1 {auth}")):
+                for tool, args in (("cbindexplan", f"{plan} {plan_args} -output=plan.json"),
+                                   ("cbindexperf", f"{perf} {perf_args} -resultfile=results.json")):
+                    output = record(f"[STEP 7] {label}:", f"{base_dir}/{label.replace(' ', '_')}_{tool}",
+                                    tool, args)
+                    self.assertIn(self.TOOLS_STATUS_UNKNOWN_MSG, output,
+                                  f"[STEP 7] {tool} with {label}: encryption status error not logged")
+                    self.assertNotIn(self.TOOLS_REFUSED_MSG, output,
+                                     f"[STEP 7] {tool} with {label}: refused although the status is unknown")
+        finally:
+            self._tools_cleanup(node, base_dir, secret_id, ("bucket",))
+        self.log.info("TEST PASSED: test_gsi_tools_ear_check_edge_cases")
+
     def test_gsi_encryption_at_rest_sanity(self):
         """
         Encryption at rest sanity test case - supports single or multiple buckets.

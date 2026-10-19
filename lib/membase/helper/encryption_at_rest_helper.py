@@ -14,8 +14,13 @@ class EncryptionUtil:
 
     @staticmethod
     def generate_random_name(prefix, length=8):
+        # SystemRandom draws from os.urandom, not the shared random module
+        # instance that QueryTests.setUp() -> generate_docs_employee() reseeds
+        # deterministically (random.seed(count)) on every test run — using
+        # random.choice here produced the identical "random" suffix across
+        # independent test processes (MB-69501: secret name collisions).
         chars = string.ascii_letters + string.digits
-        suffix = ''.join(random.choice(chars) for _ in range(length))
+        suffix = ''.join(random.SystemRandom().choices(chars, k=length))
         return prefix + suffix
 
     @staticmethod

@@ -263,8 +263,36 @@ class GSIEncryptionHelpers:
         cmd = f"find {self._shell_quote(directory)} -type f -name '{file_pattern}' 2>/dev/null | head -20"
         output, _ = shell.execute_command(cmd)
         shell.disconnect()
-        
+
         return [f.strip() for f in output if f.strip()]
+
+    def run_cb_tool(self, node, workdir, tool, args, timeout=120, env=None):
+        """
+        Run a Couchbase command-line tool (cbindexplan, cbindexperf, cbindex, ...)
+        from the server's bin directory, in workdir (created if missing), on Linux.
+        env: extra environment variables, e.g. {"CBAUTH_REVRPC_URL": ...} which
+        cbindexperf needs (cbindex and cbindexplan set it themselves).
+
+        Returns:
+            tuple: (output: str with stdout and stderr, exit_code: int or None).
+            Exit code 124 means it was killed after timeout seconds.
+        """
+        from lib.testconstants import LINUX_COUCHBASE_BIN_PATH, LINUX_NONROOT_CB_BIN_PATH
+        env_prefix = " ".join(f"{k}={shlex.quote(str(v))}" for k, v in (env or {}).items())
+        shell = RemoteMachineShellConnection(node, verbose=False)
+        try:
+            bin_path = LINUX_NONROOT_CB_BIN_PATH if shell.nonroot else LINUX_COUCHBASE_BIN_PATH
+            out, err = shell.execute_command(
+                f"mkdir -p {workdir} && cd {workdir} && {env_prefix} timeout {timeout} {bin_path}{tool} {args} 2>&1; "
+                f"echo EXIT_CODE=$?")
+        finally:
+            shell.disconnect()
+        lines = [line.rstrip() for line in (out or []) + (err or [])]
+        exit_codes = [line.split("=", 1)[1] for line in lines if line.startswith("EXIT_CODE=")]
+        exit_code = int(exit_codes[-1]) if exit_codes else None
+        output = "\n".join(line for line in lines if not line.startswith("EXIT_CODE="))
+        self.log.info(f"{tool} {args} (in {workdir}) -> exit code {exit_code}\n{output[-2000:]}")
+        return output, exit_code
 
     def verify_gsi_storage_files_encrypted(self, index_nodes, gsi_type="forestdb", expected_key_id=None):
         """
@@ -3404,10 +3432,12 @@ class GSIEncryptionAtRestBase:
 
         return bucket_name
 
-    def create_new_encryption_key(self):
+    def create_new_encryption_key(self, usage=None):
+        """usage: secret usages, e.g. ["log-encryption"]; default bucket-encryption."""
         params = EncryptionUtil.create_secret_params(
             name=EncryptionUtil.generate_random_name("RotationKey"),
-            rotationIntervalInSeconds=self.secret_rotation_interval if hasattr(self, 'secret_rotation_interval') else 60
+            rotationIntervalInSeconds=self.secret_rotation_interval if hasattr(self, 'secret_rotation_interval') else 60,
+            usage=usage
         )
         self.log.info(f"Creating new encryption key with params: {params}")
         status, response = self.rest.create_secret(params)
@@ -3421,6 +3451,39 @@ class GSIEncryptionAtRestBase:
 
         self.log.info(f"Created new encryption key with ID: {new_key_id}")
         return new_key_id
+
+    def get_encryption_at_rest_methods(self):
+        """{"config"|"log"|"audit"|"other": encryptionMethod} from
+        GET /settings/security/encryptionAtRest ("disabled", "nodeSecretManager"
+        or "encryptionKey")."""
+        status, settings = self.rest.get_encryption_at_rest_config()
+        if not status:
+            raise Exception(f"Reading encryption at rest settings failed: {settings}")
+        if isinstance(settings, (str, bytes, bytearray)):
+            settings = json.loads(settings)
+        methods = {kind: settings.get(kind, {}).get("encryptionMethod")
+                   for kind in ("config", "log", "audit", "other")}
+        self.log.info(f"Encryption at rest methods: {methods}")
+        return methods
+
+    def set_encryption_at_rest(self, kind, secret_id, enable, bucket=None):
+        """Turn "bucket" (needs bucket), "log", "audit" or "other" encryption at rest
+        on with secret_id, or off."""
+        params = {"encryptionMethod": "encryptionKey", "encryptionKeyId": secret_id}
+        calls = {
+            "bucket": (lambda: self.rest.enable_bucket_encryption(bucket, secret_id),
+                       lambda: self.rest.disable_bucket_encryption(bucket)),
+            "log": (lambda: self.rest.configure_log_encryption_at_rest(params),
+                    self.rest.disable_log_encryption),
+            "audit": (lambda: self.rest.configure_audit_encryption_at_rest(params),
+                      self.rest.disable_audit_encryption),
+            "other": (lambda: self.rest.configure_other_encryption_at_rest(params),
+                      self.rest.disable_other_encryption),
+        }
+        status, response = calls[kind][0 if enable else 1]()
+        if not status:
+            raise Exception(f"{'Enabling' if enable else 'Disabling'} {kind} encryption failed: {response}")
+        self.log.info(f"{kind} encryption at rest {'enabled' if enable else 'disabled'}")
 
     def set_bucket_dek_rotation_config(self, bucket_name, new_key_id, dek_rotation_interval=120, dek_lifetime=120):
         self.log.info(f"Rotating bucket '{bucket_name}' encryption to key ID {new_key_id}")
