@@ -960,7 +960,8 @@ class BaseSecondaryIndexingTests(QueryTests):
     def validate_log_encryption_files_encrypted(self, index_nodes,
                                                 expected_key_id=None,
                                                 fail_on_error=True,
-                                                require_files=()):
+                                                require_files=(),
+                                                kv_nodes=None):
         """
         require_files: categories (e.g. "indexer_stats_log", "request_handler_cache")
         where finding no file is a failure instead of "skipped".
@@ -983,6 +984,9 @@ class BaseSecondaryIndexingTests(QueryTests):
             fail_on_error: If True, raises ``AssertionError`` with a
                 consolidated summary on any failure. If False, returns the
                 results dict unconditionally.
+            kv_nodes: List of KV server objects for projector_stats_log
+                validation. Projector runs on KV nodes, not index nodes.
+                When None, falls back to the cluster services map.
 
         Returns:
             dict: per-category ``{node_ip -> result_dict}`` plus an
@@ -992,6 +996,17 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.log.info("=== Starting GSI log-encryption file validation ===")
         helper = self.gsi_encryption_helper
         results = {}
+
+        kv_nodes_error = None
+        if kv_nodes is None:
+            try:
+                kv_nodes = self.get_nodes_from_services_map(
+                    service_type="kv", get_all_nodes=True)
+            except Exception as exc:
+                kv_nodes_error = exc
+                self.log.error(
+                    f"Could not resolve KV nodes from services map: {exc!r} "
+                    "— projector_stats_log check recorded as failed")
 
         def _safe_run(category, fn, *args, **kwargs):
             try:
@@ -1010,10 +1025,17 @@ class BaseSecondaryIndexingTests(QueryTests):
         _safe_run("indexer_stats_log",
                   helper.verify_gsi_indexer_stats_log_encrypted,
                   index_nodes, expected_key_id=expected_key_id)
-        kv_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True) or []
-        _safe_run("projector_stats_log",
-                  helper.verify_gsi_projector_stats_log_encrypted,
-                  kv_nodes, expected_key_id=expected_key_id)
+        if kv_nodes_error is not None:
+            results["projector_stats_log"] = {
+                "_helper_error": {
+                    "status": "failed",
+                    "reason": f"could not resolve KV nodes: {kv_nodes_error!r}",
+                }
+            }
+        else:
+            _safe_run("projector_stats_log",
+                      helper.verify_gsi_projector_stats_log_encrypted,
+                      kv_nodes, expected_key_id=expected_key_id)
         _safe_run("request_handler_cache",
                   helper.verify_gsi_request_handler_cache_encrypted,
                   index_nodes, expected_key_id=expected_key_id)

@@ -7375,31 +7375,6 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
         )
         return sorted((row["name"], row["state"]) for row in result["results"])
 
-    def _list_request_handler_cache_files(self, node):
-        cache_dir = f"{RestConnection(node).get_index_path()}/@2i/cache"
-        shell = RemoteMachineShellConnection(node)
-        try:
-            out, _ = shell.execute_command(
-                f"find {cache_dir}/meta {cache_dir}/stats -type f 2>/dev/null | head -20")
-        finally:
-            shell.disconnect()
-        return [line.strip() for line in out if line.strip()]
-
-    def _populate_request_handler_cache(self, index_nodes, timeout=180, interval=15):
-        """The request-handler cache is written when the indexer serves metadata/stats
-        requests (/getIndexStatus), not by scans. Call it on every index node and wait
-        until cache files exist, so cache checks never pass on an empty directory."""
-        deadline = time.time() + timeout
-        missing = [node.ip for node in index_nodes]
-        while time.time() < deadline:
-            for node in index_nodes:
-                RestConnection(node).get_indexer_metadata()
-            missing = [node.ip for node in index_nodes if not self._list_request_handler_cache_files(node)]
-            if not missing:
-                return
-            self.sleep(interval, f"Waiting for request-handler cache files on {missing}")
-        self.fail(f"No request-handler cache files under @2i/cache on {missing} after calling getIndexStatus")
-
     def _wait_for_log_files_plaintext(self, index_nodes, timeout=300, interval=15):
         """Poll every interval seconds, for up to timeout seconds, until indexer_stats.log
         (and its .enc sibling, if any) and the request-handler cache files carry no
@@ -8830,3 +8805,97 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
         self._bucket_key_op("disable", bucket_2, index_nodes, "[STEP 5] ")
         corrupt_and_expect_backup("[STEP 5] ")
         self.log.info("TEST PASSED: test_gsi_encryption_at_rest_corrupt_backup_lifecycle")
+
+    def _wait_for_log_data_encrypted(self, timeout=300, interval=15, label=""):
+        """Wait until ns_server reports every log-key file as encrypted."""
+        deadline = time.time() + timeout
+        data_status = None
+        while time.time() < deadline:
+            status, config = self.rest.get_encryption_at_rest_config()
+            if isinstance(config, (bytes, bytearray)):
+                config = json.loads(config)
+            if status and isinstance(config, dict):
+                data_status = config.get("log", {}).get("info", {}).get("dataStatus")
+            if data_status == "encrypted":
+                return
+            self.sleep(interval, f"{label}Waiting for log dataStatus=encrypted (now {data_status})")
+        self.fail(f"{label}Log data not encrypted after {timeout}s (dataStatus={data_status})")
+
+    def test_gsi_log_encryption_cbcollect_decodes(self):
+        """
+        Log-key files are readable by the support tools and read back by the indexer.
+
+        Steps:
+        1.  Bucket + indexes on every index node, scans; getIndexStatus on every index
+            node so the request-handler cache is written
+        2.  Force log encryption; wait until ns_server reports log data encrypted
+        3.  verify_cbcollect_decodes on every node: each file's header names the node's
+            log key, stats logs decode with cbcat and arrive decrypted in cbcollect_info;
+            verify_category_on_nodes per log-key category (projector on kv nodes)
+        4.  Stop one index node and kill the indexer on another: it still lists the
+            stopped node's indexes from its encrypted request-handler cache, and its
+            indexer.log (read through cbcat) has no encryption read errors
+        5.  Start the stopped node; scans + item counts
+        """
+        self.log.info("STARTING TEST: test_gsi_log_encryption_cbcollect_decodes")
+        if not getattr(self, "enable_log_encryption_at_rest", False):
+            self.skipTest("Log encryption at rest not enabled. Set enable_log_encryption_at_rest=True")
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        self.assertGreaterEqual(len(index_nodes), 2, f"Need at least 2 index nodes, found {len(index_nodes)}")
+        helper = self.gsi_encryption_helper
+
+        # STEP 1: bucket, indexes, scans; getIndexStatus populates the request-handler cache
+        self.set_indexer_snapshot_settings(index_nodes)
+        _, select_queries = self._setup_bucket_and_indexes('logdecode_', index_nodes)
+        self.run_scan_validation(select_queries, validate_item_count=True)
+        self._populate_request_handler_cache(index_nodes)
+
+        # STEP 2: force-encrypt the files written before the log key was in use
+        status, response = self.rest.force_log_encryption_at_rest()
+        self.assertTrue(status, f"forceEncryptionAtRest/log failed: {response}")
+        self._wait_for_log_data_encrypted(label="[STEP 2] ")
+
+        # STEP 3: headers, cbcat and cbcollect_info on every node; then the same files
+        # through verify_category_on_nodes, the per-category check topology tests call
+        self.verify_cbcollect_decodes(self.servers[:self.nodes_init])
+        kv_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+        for category, category_nodes in (("stats_log", index_nodes), ("request_cache", index_nodes),
+                                         ("persisted_stats", index_nodes), ("projector_stats_log", kv_nodes)):
+            results = self.verify_category_on_nodes(category, category_nodes)
+            failed = {ip: r for ip, r in results.items() if r.get("status") != "passed"}
+            self.assertFalse(failed, f"[STEP 3] verify_category_on_nodes({category!r}) failed: {failed}")
+        self.log.info("[STEP 3] PASSED - log-key files carry each node's log key and decode")
+
+        # STEP 4: read back the encrypted request-handler cache with a peer down
+        survivor, peer = index_nodes[0], index_nodes[1]
+
+        def indexes_on_peer():
+            statuses = RestConnection(survivor).get_indexer_metadata().get("status", [])
+            return {s["name"] for s in statuses
+                    if any(str(host).startswith(f"{peer.ip}:") for host in s.get("hosts", []))}
+
+        peer_indexes = indexes_on_peer()
+        self.assertTrue(peer_indexes, f"[STEP 4] {survivor.ip} reports no indexes on {peer.ip}")
+        peer_shell = RemoteMachineShellConnection(peer)
+        try:
+            peer_shell.stop_server()
+            self.sleep(20, f"[STEP 4] Waiting after stopping {peer.ip}")
+            self._kill_all_processes_index(survivor)
+            self.sleep(10, f"[STEP 4] Waiting for the indexer on {survivor.ip} to restart")
+            self.wait_for_indexer_ready([survivor], timeout=900, label="[STEP 4] ")
+            missing = peer_indexes - indexes_on_peer()
+            self.assertFalse(missing, f"[STEP 4] {survivor.ip} no longer lists {peer.ip}'s indexes "
+                                      f"{missing} after restart (request-handler cache not read back)")
+            errors = helper.grep_with_cbcat(survivor, f"{helper.get_log_path(survivor)}/indexer.log",
+                                            self.ENCRYPTION_ERROR_PATTERNS_INDEXER)
+            self.assertFalse(errors, f"[STEP 4] Encryption read errors in indexer.log on {survivor.ip}: {errors}")
+        finally:
+            peer_shell.start_server()
+            peer_shell.disconnect()
+        self.log.info(f"[STEP 4] PASSED - {survivor.ip} served {sorted(peer_indexes)} from its encrypted cache")
+
+        # STEP 5
+        self.wait_for_indexer_ready([peer], timeout=900, label="[STEP 5] ")
+        self.wait_until_indexes_online(timeout=1200)
+        self.run_scan_validation(select_queries, validate_item_count=True)
+        self.log.info("TEST PASSED: test_gsi_log_encryption_cbcollect_decodes")

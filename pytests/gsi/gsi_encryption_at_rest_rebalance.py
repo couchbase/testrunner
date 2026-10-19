@@ -881,6 +881,29 @@ class GSIEncryptionAtRestRebalance(GSIEncryptionAtRestBase, BaseSecondaryIndexin
             if not validation_passed:
                 raise Exception("File encryption validation failed after rebalance")
 
+        if getattr(self, "enable_log_encryption_at_rest", False):
+            self.log.info("[POST-REBALANCE] Validating log-key encrypted files...")
+            post_rebal_index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+            kv_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+            self._populate_request_handler_cache(post_rebal_index_nodes)
+            log_file_failures = []
+            for category, category_nodes in (
+                    ("stats_log", post_rebal_index_nodes),
+                    ("request_cache", post_rebal_index_nodes),
+                    ("persisted_stats", post_rebal_index_nodes),
+                    ("projector_stats_log", kv_nodes)):
+                expect_files = category in ("stats_log", "projector_stats_log")
+                results = self.verify_category_on_nodes(
+                    category, category_nodes, expect_files=expect_files)
+                failed = {ip: r for ip, r in results.items()
+                          if isinstance(r, dict) and r.get("status") == "failed"}
+                if failed:
+                    self.log.error(f"[POST-REBALANCE] {category} failed: {failed}")
+                    log_file_failures.append(category)
+            if log_file_failures:
+                raise Exception(f"Log-key file validation failed for: {log_file_failures}")
+            self.log.info("[POST-REBALANCE] PASSED - log-key files encrypted on all nodes")
+
         self.log.info("Rebalance and validation completed successfully")
 
     def test_gsi_encryption_at_rest_sanity(self):

@@ -3285,6 +3285,100 @@ class GSIEncryptionHelpers:
             finally:
                 shell.disconnect()
 
+    # A decoded stats log line: "<timestamp> <label> {json}"
+    # Per-index lines include "(replica N):instId" before the JSON body.
+    STATS_LOG_LINE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\S+ .+[{\[]")
+
+    def get_bin_path(self, node):
+        """Couchbase bin directory for a node based on OS type."""
+        from lib.testconstants import (LINUX_COUCHBASE_BIN_PATH, LINUX_NONROOT_CB_BIN_PATH,
+                                       WIN_COUCHBASE_BIN_PATH)
+        shell = RemoteMachineShellConnection(node, verbose=False)
+        os_type = shell.extract_remote_info().type.lower()
+        nonroot = shell.nonroot
+        shell.disconnect()
+        if os_type == 'windows':
+            return WIN_COUCHBASE_BIN_PATH
+        return LINUX_NONROOT_CB_BIN_PATH if nonroot else LINUX_COUCHBASE_BIN_PATH
+
+    def _run_cbcat(self, node, args):
+        """Run cbcat on node. Runs from /tmp so a tool crash cannot leave
+        erl_crash.dump in the logs directory."""
+        shell = RemoteMachineShellConnection(node, verbose=False)
+        try:
+            out, _ = shell.execute_command(f"cd /tmp && {self.get_bin_path(node)}cbcat {args} 2>&1")
+        finally:
+            shell.disconnect()
+        return [line.rstrip("\n") for line in out or []]
+
+    def get_encryption_header_key_id(self, node, file_path):
+        """
+        Read the key ID from a file's encryption header with
+        ``cbcat --dump-encryption-header``.
+
+        Works for stats logs, the request-handler cache and persisted stats.
+        cbcat prints the header even for files whose content it cannot decode.
+
+        Returns:
+            tuple: (encrypted: bool, key_id: str|None, details: str)
+        """
+        out = self._run_cbcat(
+            node, f"--dump-encryption-header {self._shell_quote(file_path)} | head -8")
+        details = " | ".join(line.strip() for line in out if line.strip())
+        if not any(line.strip() == "Encrypted:" for line in out):
+            return False, None, details
+        for line in out:
+            match = re.match(r"^\s*Key ID:\s*(\S+)", line)
+            if match:
+                return True, match.group(1), details
+        return True, None, details
+
+    def decode_with_cbcat(self, node, file_path, max_lines=20):
+        """
+        Decode a stats log (indexer_stats.log, projector_stats.log or a rotation)
+        with cbcat and check the content is stats lines. Plaintext ``.gz``
+        rotations are read with zcat.
+
+        cbcat cannot decode the request-handler cache or persisted stats
+        ("EncryptedFileReader: Missing Chunk data"); prove those read back with
+        an indexer restart instead.
+
+        Returns:
+            tuple: (decoded: bool, lines: list[str] or failure details: str)
+        """
+        qp = self._shell_quote(file_path)
+        if file_path.endswith(".gz"):
+            shell = RemoteMachineShellConnection(node, verbose=False)
+            try:
+                out, _ = shell.execute_command(f"zcat {qp} 2>&1 | head -{max_lines}")
+            finally:
+                shell.disconnect()
+        else:
+            out = self._run_cbcat(node, f"{qp} | head -{max_lines}")
+        lines = [line.strip() for line in out or [] if line.strip()]
+        if not lines:
+            return False, "no output"
+        if any(self.ENCRYPTION_MAGIC_BYTES in line or "Fatal error" in line for line in lines):
+            return False, " | ".join(lines[:3])
+        bad = [line for line in lines if not self.STATS_LOG_LINE_RE.match(line)]
+        if bad:
+            return False, f"not stats log lines: {bad[:2]}"
+        return True, lines
+
+    def grep_with_cbcat(self, node, file_path, patterns, max_hits=5):
+        """
+        grep -E an (optionally encrypted) log through cbcat. Plain grep finds nothing
+        in an encrypted log, so use this for indexer.log/projector.log when log
+        encryption is on. cbcat passes plaintext files through unchanged.
+
+        Returns:
+            list[str]: matching lines (at most max_hits).
+        """
+        expr = shlex.quote("|".join(patterns))
+        out = self._run_cbcat(
+            node, f"{self._shell_quote(file_path)} | grep -E {expr} | head -{max_hits}")
+        return [line.strip() for line in out if line.strip()]
+
 
 # ---------------------------------------------------------------------------
 # EAR test-suite base mixin
@@ -4433,3 +4527,315 @@ class GSIEncryptionAtRestBase:
             f"{step_prefix}Index files for bucket '{bucket_name}' (UUID={bucket_uuid}) "
             f"were still encrypted after {timeout}s. Force decryption did not complete in time."
         )
+
+    # Files encrypted with the log key: category -> (service that writes them,
+    # base dir ("logs" or "@2i"), globs under it). Every node has its own log DEK.
+    LOG_KEY_FILE_CATEGORIES = {
+        "stats_log": ("index", "logs", ("indexer_stats.log*",)),
+        "projector_stats_log": ("kv", "logs", ("projector_stats.log*",)),
+        "request_cache": ("index", "@2i", ("cache/meta/*", "cache/stats/*")),
+        "persisted_stats": ("index", "@2i", ("indexstats/stats",)),
+    }
+    # Categories whose content cbcat can decode and cbcollect collects
+    STATS_LOG_FILE_NAMES = {
+        "stats_log": "indexer_stats.log",
+        "projector_stats_log": "projector_stats.log",
+    }
+
+    def _list_request_handler_cache_files(self, node):
+        cache_dir = f"{RestConnection(node).get_index_path()}/@2i/cache"
+        shell = RemoteMachineShellConnection(node)
+        try:
+            out, _ = shell.execute_command(
+                f"find {cache_dir}/meta {cache_dir}/stats -type f 2>/dev/null | head -20")
+        finally:
+            shell.disconnect()
+        return [line.strip() for line in out if line.strip()]
+
+    def _populate_request_handler_cache(self, index_nodes, timeout=180, interval=15):
+        """The request-handler cache is written when the indexer serves metadata/stats
+        requests (/getIndexStatus), not by scans. Call it on every index node and wait
+        until cache files exist, so cache checks never pass on an empty directory."""
+        deadline = time.time() + timeout
+        missing = [node.ip for node in index_nodes]
+        while time.time() < deadline:
+            for node in index_nodes:
+                RestConnection(node).get_indexer_metadata()
+            missing = [node.ip for node in index_nodes if not self._list_request_handler_cache_files(node)]
+            if not missing:
+                return
+            self.sleep(interval, f"Waiting for request-handler cache files on {missing}")
+        self.fail(f"No request-handler cache files under @2i/cache on {missing} after calling getIndexStatus")
+
+    def _list_log_key_files(self, node, category):
+        """Files on node for a LOG_KEY_FILE_CATEGORIES category, skipping *.tmp."""
+        _, base, globs = self.LOG_KEY_FILE_CATEGORIES[category]
+        if base == "logs":
+            base_dir = self.gsi_encryption_helper.get_log_path(node)
+        else:
+            base_dir = f"{RestConnection(node).get_index_path()}/@2i"
+        paths = " ".join(f"{base_dir}/{pattern}" for pattern in globs)
+        shell = RemoteMachineShellConnection(node, verbose=False)
+        try:
+            out, _ = shell.execute_command(f"ls -1d {paths} 2>/dev/null | grep -v '\\.tmp$'")
+        finally:
+            shell.disconnect()
+        return [line.strip() for line in out if line.strip()]
+
+    def _check_log_key_files(self, node, category, allowed_key_ids=None, expect_encrypted=True):
+        """
+        Check every file of a log-key category on one node.
+
+        expect_encrypted=True: each file has an encryption header whose key ID is in
+        allowed_key_ids (when given); stats logs must also decode with cbcat.
+        expect_encrypted=False: no file has an encryption header.
+        Finding no file fails.
+
+        Returns:
+            dict: {"status", "passed_count", "total_checked", "failed_files", "reason"}
+        """
+        helper = self.gsi_encryption_helper
+        files = self._list_log_key_files(node, category)
+        if not files:
+            return {"status": "failed", "reason": f"no {category} files found",
+                    "passed_count": 0, "total_checked": 0, "failed_files": []}
+        failed_files = []
+        for path in files:
+            encrypted, key_id, details = helper.get_encryption_header_key_id(node, path)
+            if not expect_encrypted:
+                if encrypted:
+                    failed_files.append((path, f"still encrypted with key {key_id}"))
+                continue
+            if not encrypted:
+                failed_files.append((path, f"not encrypted: {details}"))
+            elif allowed_key_ids is not None and key_id not in allowed_key_ids:
+                failed_files.append((path, f"key {key_id} not in allowed {sorted(allowed_key_ids)}"))
+            elif category in self.STATS_LOG_FILE_NAMES:
+                decoded, info = helper.decode_with_cbcat(node, path)
+                if not decoded:
+                    failed_files.append((path, f"cbcat could not decode: {info}"))
+        for path, reason in failed_files:
+            self.log.error(f"[{category}] {node.ip}: {path}: {reason}")
+        return {"status": "failed" if failed_files else "passed",
+                "passed_count": len(files) - len(failed_files),
+                "total_checked": len(files),
+                "failed_files": failed_files,
+                "reason": f"{len(failed_files)} of {len(files)} files failed" if failed_files else ""}
+
+    def _check_cbcollect_bundle(self, node, categories):
+        """
+        Run cbcollect_info on node and check each stats log in the bundle
+        (ns_server.<name>) is decrypted: collected via cbbrowse_logs, no encryption
+        header, and contains the first line of the oldest on-disk rotation.
+        """
+        helper = self.gsi_encryption_helper
+        results = {}
+        zip_path = f"/tmp/gsi_ear_cbcollect_{node.ip.replace('.', '_')}.zip"
+        shell = RemoteMachineShellConnection(node)
+        try:
+            shell.execute_command(f"rm -f {zip_path}")
+            self.log.info(f"Running cbcollect_info on {node.ip} -> {zip_path}")
+            shell.execute_cbcollect_info(zip_path)
+            for category in categories:
+                name = self.STATS_LOG_FILE_NAMES[category]
+                entry = f"{zip_path} '*/ns_server.{name}'"
+                failures = []
+                head, _ = shell.execute_command(f"unzip -p {entry} 2>&1 | head -4")
+                if not any(f"couchbase logs ({name})" in line for line in head):
+                    failures.append(f"ns_server.{name} missing or not collected via cbbrowse_logs: {head}")
+                encrypted, _ = shell.execute_command(
+                    f"unzip -p {entry} | grep -c '{helper.ENCRYPTION_MAGIC_BYTES}'")
+                if encrypted and encrypted[0].strip() != "0":
+                    failures.append(f"ns_server.{name} has {encrypted[0].strip()} encrypted chunk(s)")
+                files = self._list_log_key_files(node, category)
+                rotations = sorted(files, key=lambda p: int((re.search(r"\.log\.(\d+)", p) or [0, 0])[1]))
+                if rotations:
+                    decoded, lines = helper.decode_with_cbcat(node, rotations[-1], max_lines=1)
+                    if decoded:
+                        oldest_prefix = " ".join(lines[0].split(" ")[:2])
+                        found, _ = shell.execute_command(
+                            f"unzip -p {entry} | grep -cF -- {shlex.quote(oldest_prefix)}")
+                        if not found or found[0].strip() == "0":
+                            failures.append(f"ns_server.{name} lacks the oldest rotation's first line "
+                                            f"'{oldest_prefix}' ({rotations[-1]})")
+                for failure in failures:
+                    self.log.error(f"[cbcollect_{category}] {node.ip}: {failure}")
+                results[f"cbcollect_{category}"] = {
+                    "status": "failed" if failures else "passed",
+                    "passed_count": 0 if failures else 1, "total_checked": 1,
+                    "failed_files": [(f"{zip_path}:ns_server.{name}", f) for f in failures],
+                    "reason": "; ".join(failures)}
+        finally:
+            shell.execute_command(f"rm -f {zip_path}")
+            shell.disconnect()
+        return results
+
+    def verify_cbcollect_decodes(self, nodes, categories=None, fail_on_error=True):
+        """
+        Check GSI files encrypted with the log key are readable by the support tools.
+
+        Per node (categories picked by the node's services):
+          - index nodes: indexer_stats.log*, @2i/cache/{meta,stats}/*, @2i/indexstats/stats
+          - kv nodes: projector_stats.log*
+        Each file's encryption header (cbcat --dump-encryption-header) must name the
+        node's own log key (GetInUseKeys "{log }"; kv-only nodes have no indexer to
+        ask, so there the header must exist and cbcat must decode the file).
+        Stats logs must decode with cbcat and arrive decrypted in a cbcollect_info
+        bundle. cbcat cannot decode the request-handler cache or persisted stats, so
+        only their headers are checked here; prove they read back with an indexer restart.
+
+        Args:
+            nodes: servers to check.
+            categories: subset of LOG_KEY_FILE_CATEGORIES (default: all).
+            fail_on_error: raise AssertionError with a summary on any failure.
+
+        Returns:
+            dict: {category -> {node_ip -> result_dict}} plus "_overall".
+        """
+        categories = categories or tuple(self.LOG_KEY_FILE_CATEGORIES)
+        service_ips = {
+            service: {n.ip for n in self.get_nodes_from_services_map(
+                service_type=service, get_all_nodes=True) or []}
+            for service in ("index", "kv")}
+        results = {}
+        for node in nodes:
+            allowed = None
+            if node.ip in service_ips["index"]:
+                try:
+                    allowed = self.get_indexer_in_use_key_ids([node], strict=True, key_type="log")
+                except Exception as exc:
+                    self.log.warning(
+                        f"Could not resolve in-use log key IDs for {node.ip} "
+                        f"(e.g. mid-restart): {exc!r} — checking without a key-ID filter")
+            node_categories = [c for c in categories
+                               if node.ip in service_ips[self.LOG_KEY_FILE_CATEGORIES[c][0]]]
+            for category in node_categories:
+                results.setdefault(category, {})[node.ip] = self._check_log_key_files(
+                    node, category, allowed_key_ids=allowed)
+            stats_categories = [c for c in node_categories if c in self.STATS_LOG_FILE_NAMES]
+            if stats_categories:
+                for category, result in self._check_cbcollect_bundle(node, stats_categories).items():
+                    results.setdefault(category, {})[node.ip] = result
+            non_collected = [c for c in node_categories if c not in self.STATS_LOG_FILE_NAMES]
+            for category in non_collected:
+                self.log.warning(
+                    f"[cbcollect] {node.ip}: {category} files are not collected by "
+                    f"cbcollect_info — skipping bundle check")
+
+        self._log_encryption_summary(results)
+        passed_lines, skipped_lines, failed_lines = self._build_encryption_summary_lines(results)
+        results["_overall"] = {"failed": bool(failed_lines), "passed_summary": passed_lines,
+                               "skipped_summary": skipped_lines, "failure_summary": failed_lines}
+        block = self._format_encryption_summary_block(
+            "GSI LOG-KEY FILES DECODE (CBCAT / CBCOLLECT) SUMMARY",
+            passed_lines, skipped_lines, failed_lines)
+        if failed_lines:
+            self.log.error(block)
+            if fail_on_error:
+                raise AssertionError(block)
+        else:
+            self.log.info(block)
+        return results
+
+    def _node_data_key_ids(self, node):
+        """Bucket (index data) key IDs the indexer on node reports in use: every
+        GetInUseKeys entry that is not the log or other key."""
+        status, response = RestConnection(node).get_indexer_in_use_encryption_keys()
+        if not status or not isinstance(response, dict):
+            raise Exception(f"GetInUseKeys failed on {node.ip}: {response}")
+        data_entries = {k: v for k, v in response.items()
+                        if not self._is_key_type_entry(k, "log") and not self._is_key_type_entry(k, "other")}
+        key_ids = set()
+        self.extract_in_use_key_ids(data_entries, key_ids)
+        return sorted(key_ids)
+
+    def verify_category_on_nodes(self, category, nodes, allowed_key_ids=None,
+                                 expect_files=True, expect_encrypted=True):
+        """
+        Run one GSI file-type encryption check on any node list, so rebalance,
+        failover and upgrade tests can check source, destination and KV nodes.
+
+        Args:
+            category:
+                'stats_log', 'projector_stats_log', 'request_cache', 'persisted_stats':
+                    files encrypted with the log key; header key read with cbcat,
+                    stats logs also decoded. 'projector_stats_log' fails on a node
+                    without the kv service (projector only runs there).
+                'codebook': vector index codebooks (bucket key).
+                'storage': index data via validate_engine_encryption (bucket key);
+                    it already fails on missing files for the indexes a node hosts.
+            nodes: servers to check.
+            allowed_key_ids: None = each node's own in-use keys from GetInUseKeys
+                (log key for log categories, bucket keys for 'codebook'/'storage';
+                kv-only nodes have no indexer to ask, so only header + decode there).
+                A list applies to every node; a dict {node_ip: [ids]} per node.
+            expect_files: finding no file fails instead of "skipped".
+            expect_encrypted: False asserts log-key files carry no encryption header
+                (after disabling log encryption). Not supported for 'codebook' or
+                'storage' yet.
+
+        Returns:
+            dict: {node_ip: result_dict}; for 'storage' the engine dispatcher's
+            {check_name: {node_ip: result_dict}}.
+        """
+        data_categories = ("codebook", "storage")
+        if category not in self.LOG_KEY_FILE_CATEGORIES and category not in data_categories:
+            raise ValueError(f"Unknown category {category!r}; expected one of "
+                             f"{list(self.LOG_KEY_FILE_CATEGORIES) + list(data_categories)}")
+        if category in data_categories and not expect_encrypted:
+            raise ValueError(f"expect_encrypted=False is not supported for {category!r} yet")
+
+        def allowed_for(node):
+            if isinstance(allowed_key_ids, dict):
+                return allowed_key_ids.get(node.ip)
+            if allowed_key_ids is not None:
+                return allowed_key_ids
+            if category in data_categories:
+                return self._node_data_key_ids(node)
+            if node.ip in index_ips and expect_encrypted:
+                try:
+                    return self.get_indexer_in_use_key_ids([node], strict=True, key_type="log")
+                except Exception as exc:
+                    self.log.warning(
+                        f"Could not resolve in-use log key IDs for {node.ip} "
+                        f"(e.g. mid-restart): {exc!r} — checking without a key-ID filter")
+                    return None
+            return None
+
+        index_ips = {n.ip for n in self.get_nodes_from_services_map(
+            service_type="index", get_all_nodes=True) or []}
+        if category == "storage":
+            union = sorted({k for node in nodes for k in (allowed_for(node) or [])})
+            engine = _GSI_TYPE_TO_ENGINE.get(self.gsi_type)
+            return self.validate_engine_encryption(engine, nodes, expected_key_id=union or None,
+                                                   fail_on_error=False)
+
+        results = {}
+        if category == "codebook":
+            for node in nodes:
+                results.update(self.gsi_encryption_helper.verify_gsi_codebook_encrypted(
+                    [node], expected_key_id=allowed_for(node)))
+        else:
+            service = self.LOG_KEY_FILE_CATEGORIES[category][0]
+            service_ips = index_ips if service == "index" else {
+                n.ip for n in self.get_nodes_from_services_map(
+                    service_type=service, get_all_nodes=True) or []}
+            for node in nodes:
+                if node.ip not in service_ips:
+                    results[node.ip] = {"status": "failed", "passed_count": 0, "total_checked": 0,
+                                        "failed_files": [],
+                                        "reason": f"{node.ip} has no {service} service; {category} "
+                                                  f"is only written on {service} nodes"}
+                    continue
+                results[node.ip] = self._check_log_key_files(
+                    node, category, allowed_key_ids=allowed_for(node),
+                    expect_encrypted=expect_encrypted)
+        for result in results.values():
+            nothing_found = result.get("status") == "skipped" or (
+                result.get("total_checked") == 0 and "files found" in str(result.get("reason")))
+            if nothing_found:
+                result["status"] = "failed" if expect_files else "skipped"
+        for ip, result in results.items():
+            log_fn = self.log.error if result.get("status") == "failed" else self.log.info
+            log_fn(f"[{category}] {ip}: {result.get('status')} {result.get('reason') or ''}")
+        return results
