@@ -414,6 +414,15 @@ class EnterpriseBackupRestoreBWCTest(EnterpriseBackupRestoreBase, NewUpgradeBase
         self.backup_cluster_validate()
         if self.bk_with_ttl:
             self.sleep(int(self.bk_with_ttl) + 10, "wait items to be expired in backup")
+            # The restore goes into the same live bucket the data was backed up
+            # from. By now the TTL'd docs have expired there and the expiry
+            # pager/compactor has reaped some of them (a different number every
+            # run). Without --force-updates cbbackupmgr does not re-apply a
+            # backed-up doc over those reaped copies, so the restore reports
+            # success but the bucket stays short (e.g. 97920/100000), and the
+            # count never recovers. Restoring with --force-updates brings back
+            # every doc (verified on a single node: 99221 -> 100000).
+            self.backupset.force_updates = True
         compare_function = "=="
         if self.replace_ttl_with:
             compare_function = "<="
