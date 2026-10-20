@@ -624,7 +624,12 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         In FTS, fuzzy queries are performed on match and term queries
         """
         fts_query = {}
-        es_query = {'fuzzy': {}}
+        # FTS "match" + "fuzziness" analyzes match_str before fuzzy-matching
+        # analyzed/tokenized terms. ES's term-level "fuzzy" query does not
+        # analyze its input, so it can't be compared against an analyzed FTS
+        # match -- use ES's "match" query with "fuzziness" instead, which
+        # applies the same analyzed fuzzy-matching semantics.
+        es_query = {'match': {}}
         fuzziness = random.randint(0, 2)
         fieldname = self.get_random_value(self.fields['str'] +
                                           self.fields['text'])
@@ -638,9 +643,9 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         fts_query['match'] = match_str
         fts_query['fuzziness'] = fuzziness
 
-        es_query['fuzzy'][fieldname] = {}
-        es_query['fuzzy'][fieldname]['value'] = match_str
-        es_query['fuzzy'][fieldname]['fuzziness'] = fuzziness
+        es_query['match'][fieldname] = {}
+        es_query['match'][fieldname]['query'] = match_str
+        es_query['match'][fieldname]['fuzziness'] = fuzziness
 
         return fts_query, es_query
 
