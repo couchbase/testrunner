@@ -69,6 +69,10 @@ class SwapRebalanceBase(unittest.TestCase):
             info = rest.get_nodes_self()
             rest.init_cluster(username=serverInfo.rest_username, password=serverInfo.rest_password)
             rest.init_cluster_memoryQuota(memoryQuota=int(info.mcdMemoryReserved * node_ram_ratio))
+            # Disable auto-failover (enabled by default with a 120s timeout) so
+            # the deliberate memcached kills in SwapRebalanceFailedTests don't
+            # race the cluster's own failover and leave nodes inactiveFailed.
+            rest.update_autofailover_settings(False, 120)
             SwapRebalanceBase.enable_diag_eval_on_non_local_hosts(self, serverInfo)
             # Add built-in user
             testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}]
@@ -122,7 +126,17 @@ class SwapRebalanceBase(unittest.TestCase):
                 self.assertTrue(stopped, msg="unable to stop rebalance")
         BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
         for server in self.servers:
-            ClusterOperationHelper.cleanup_cluster([server])
+            try:
+                ClusterOperationHelper.cleanup_cluster([server])
+            except Exception as e:
+                # A node left inactiveFailed by a previous test (e.g.
+                # test_add_back_failed_node's do_node_cleanup=False) can't be
+                # used as its own cleanup master ("No active nodes left").
+                # Don't let that abort reset() and cascade into every
+                # subsequent test; the other servers' cleanup passes still
+                # bring the cluster back to a clean state.
+                self.log.warning("cleanup_cluster failed for {0}, "
+                                 "continuing: {1}".format(server, e))
             if server.data_path:
                 rest = RestConnection(server)
                 rest.set_data_path(data_path=server.data_path)
@@ -312,10 +326,14 @@ class SwapRebalanceBase(unittest.TestCase):
             status, content = ClusterOperationHelper.find_orchestrator(master)
             self.assertTrue(status, msg="Unable to find orchestrator: {0}:{1}".\
                 format(status, content))
-            if self.num_swap is len(current_nodes):
-                optNodesIds.append(content)
-            else:
-                optNodesIds[0] = content
+            # pick_nodes() may already have picked the orchestrator when
+            # num_swap > 1; avoid listing it twice in ejectedNodes, which the
+            # server rejects with {"mismatch":1}.
+            if content not in optNodesIds:
+                if self.num_swap is len(current_nodes):
+                    optNodesIds.append(content)
+                else:
+                    optNodesIds[0] = content
 
         for node in optNodesIds:
             self.log.info("removing node {0} and rebalance afterwards".format(node))
@@ -401,11 +419,15 @@ class SwapRebalanceBase(unittest.TestCase):
             status, content = ClusterOperationHelper.find_orchestrator(master)
             self.assertTrue(status, msg="Unable to find orchestrator: {0}:{1}".\
             format(status, content))
-            # When swapping all the nodes
-            if self.num_swap is len(current_nodes):
-                optNodesIds.append(content)
-            else:
-                optNodesIds[0] = content
+            # pick_nodes() may already have picked the orchestrator when
+            # num_swap > 1; avoid listing it twice in ejectedNodes, which the
+            # server rejects with {"mismatch":1}.
+            if content not in optNodesIds:
+                # When swapping all the nodes
+                if self.num_swap is len(current_nodes):
+                    optNodesIds.append(content)
+                else:
+                    optNodesIds[0] = content
 
         for node in optNodesIds:
             self.log.info("removing node {0} and rebalance afterwards".format(node))
@@ -532,11 +554,15 @@ class SwapRebalanceBase(unittest.TestCase):
             status, content = ClusterOperationHelper.find_orchestrator(master)
             self.assertTrue(status, msg="Unable to find orchestrator: {0}:{1}".\
                 format(status, content))
-            # When swapping all the nodes
-            if self.num_swap is len(current_nodes):
-                optNodesIds.append(content)
-            else:
-                optNodesIds[0] = content
+            # pick_nodes() may already have picked the orchestrator when
+            # num_swap > 1; avoid listing it twice in ejectedNodes, which the
+            # server rejects with {"mismatch":1}.
+            if content not in optNodesIds:
+                # When swapping all the nodes
+                if self.num_swap is len(current_nodes):
+                    optNodesIds.append(content)
+                else:
+                    optNodesIds[0] = content
             master = not_failed_over[-1]
 
         self.log.info("DATA ACCESS PHASE")
@@ -620,7 +646,11 @@ class SwapRebalanceBase(unittest.TestCase):
             status, content = ClusterOperationHelper.find_orchestrator(master)
             self.assertTrue(status, msg="Unable to find orchestrator: {0}:{1}".\
             format(status, content))
-            optNodesIds[0] = content
+            # pick_nodes() may already have picked the orchestrator when
+            # failover_factor > 1; avoid listing it twice in ejectedNodes,
+            # which the server rejects with {"mismatch":1}.
+            if content not in optNodesIds:
+                optNodesIds[0] = content
 
         self.log.info("FAILOVER PHASE")
         # Failover selected nodes
