@@ -341,16 +341,19 @@ class x509main:
             return r.status_code, r.text
         elif client_cert:
             try:
+                # Present the full chain (leaf+intermediate+root), not just the
+                # leaf cert: mandatory client-cert validation needs it to build
+                # trust back to the root, otherwise the TLS handshake fails.
                 if verb == 'GET':
-                    r = requests.get(final_url, verify=verify, cert=(x509main.CLIENT_CERT_PEM, x509main.CLIENT_CERT_KEY), data=data)
+                    r = requests.get(final_url, verify=verify, cert=(x509main.SRC_CHAIN_FILE, x509main.CLIENT_CERT_KEY), data=data)
                 elif verb == 'POST':
-                    r = requests.post(final_url, verify=verify, cert=(x509main.CLIENT_CERT_PEM, x509main.CLIENT_CERT_KEY), data=data)
+                    r = requests.post(final_url, verify=verify, cert=(x509main.SRC_CHAIN_FILE, x509main.CLIENT_CERT_KEY), data=data)
                 elif verb == 'PUT':
                     header = {'Content-type': 'Content-Type: application/json'}
-                    r = requests.put(final_url, verify=verify, cert=(x509main.CLIENT_CERT_PEM, x509main.CLIENT_CERT_KEY), data=data, headers=header)
+                    r = requests.put(final_url, verify=verify, cert=(x509main.SRC_CHAIN_FILE, x509main.CLIENT_CERT_KEY), data=data, headers=header)
                 elif verb == 'DELETE':
                     header = {'Content-type': 'Content-Type: application/json'}
-                    r = requests.delete(final_url, verify=verify, cert=(x509main.CLIENT_CERT_PEM, x509main.CLIENT_CERT_KEY), headers=header)
+                    r = requests.delete(final_url, verify=verify, cert=(x509main.SRC_CHAIN_FILE, x509main.CLIENT_CERT_KEY), headers=header)
                 return r.status_code, r.text
             except Exception as ex:
                 log.info ("into exception form validate_ssl_login with client cert")
@@ -368,6 +371,33 @@ class x509main:
                 log.info ("into exception form validate_ssl_login")
                 log.info (" Exception is {0}".format(ex))
                 return 'error','error'
+
+    def _validate_mandatory_state_ssl_login(self):
+        final_url = "https://" + str(self.host.ip) + ":18091/pools/default"
+        status, text = self._validate_ssl_login(final_url=final_url, client_cert=True, verb='GET', verify=True)
+        if status != 200:
+            log.info ("Not able to login to /pools/default via SSL code")
+            return status, text
+
+        final_url = "https://" + str(self.host.ip) + ":18091/settings/clientCertAuth"
+        status, text = self._validate_ssl_login(final_url=final_url, client_cert=True, verb='GET', verify=True)
+        if status != 200:
+            log.info ("Not able to GET /settings/clientCertAuth via SSL code")
+            return status, text
+
+        final_url = "https://" + str(self.host.ip) + ":18091/pools/default/"
+        status, text = self._validate_ssl_login(final_url=final_url, client_cert=True, verb='POST', verify=True, data={"memoryQuota": "2000"})
+        if status != 200:
+            log.info ("Not able to POST to /pools/default via SSL code")
+            return status, text
+
+        final_url = "https://" + str(self.host.ip) + ":18091/pools/default/"
+        status, text = self._validate_ssl_login(final_url=final_url, client_cert=True, verb='GET', verify=True)
+        if status != 200:
+            log.info ("Not able to GET /pools/default/ via SSL code")
+            return status, text
+
+        return status
 
     '''
     Call in curl requests to execute rest api's
