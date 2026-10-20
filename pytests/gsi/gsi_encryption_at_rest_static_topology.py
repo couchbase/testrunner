@@ -18,6 +18,7 @@ __git_user__ = "pavan-couchbase"
 __created_on__ = "16/04/26"
 """
 
+import json
 import random
 import re
 import string
@@ -1248,6 +1249,54 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
         self.log.info(f"Encryption toggled on both buckets and lifecycle ops succeeded")
         self.log.info("=" * 80)
 
+    def _corrupt_data_dirs(self, node):
+        """MB-69503: corrupt-index backup dirs of the Plasma (@2i) and BHIVE (@2i/@bhive) engines."""
+        storage_dir = RestConnection(node).get_indexer_internal_stats()['indexer.storage_dir']
+        return [f"{storage_dir}/.corruptData", f"{storage_dir}/@bhive/.corruptData"]
+
+    def _existing_corrupt_data_dirs(self, node):
+        shell = RemoteMachineShellConnection(node)
+        try:
+            out, _ = shell.execute_command(f"ls -d {' '.join(self._corrupt_data_dirs(node))} 2>/dev/null")
+        finally:
+            shell.disconnect()
+        return [line.strip() for line in out if line.strip()]
+
+    def _plant_corrupt_data_backup(self, index_nodes):
+        """MB-69503: create a dummy backup under .corruptData (owned like its engine dir),
+        as a backup taken before encryption or left by a crash during cleanup would be."""
+        for node in index_nodes:
+            shell = RemoteMachineShellConnection(node)
+            try:
+                for corrupt_dir in self._corrupt_data_dirs(node):
+                    engine_dir = corrupt_dir.rsplit("/", 1)[0]
+                    shell.execute_command(
+                        f"[ -d {engine_dir} ] && mkdir -p {corrupt_dir}/ear_test_backup && "
+                        f"touch {corrupt_dir}/ear_test_backup/data && "
+                        f"chown -R --reference={engine_dir} {corrupt_dir}")
+            finally:
+                shell.disconnect()
+            self.assertTrue(self._existing_corrupt_data_dirs(node),
+                            f"Could not create a .corruptData backup on {node.ip}")
+
+    def _wait_for_corrupt_data_removed(self, index_nodes, label, timeout=300):
+        """MB-69503: .corruptData must be removed while any bucket has an active key."""
+        self._wait_until_no_problems(
+            lambda: [f"{node.ip}:{d}" for node in index_nodes for d in self._existing_corrupt_data_dirs(node)],
+            f"{label}.corruptData removal: ", timeout=timeout)
+
+    CORRUPT_BACKUP_LOG_PATTERNS = ("backupCorruptIndexDataFiles.*take backup of corrupt data files",
+                                   "backupCorruptIndexDataFiles.*skipping backup: bucket encryption is active")
+
+    def _assert_corrupt_backup_skipped(self, node, label, counts_before):
+        """MB-69503: with a bucket encrypted, a corrupt partition is not backed up.
+        counts_before: _indexer_log_count of CORRUPT_BACKUP_LOG_PATTERNS before the corruption."""
+        self.assertFalse(self._existing_corrupt_data_dirs(node),
+                         f"{label}.corruptData exists on {node.ip} while bucket encryption is active")
+        for pattern, before in zip(self.CORRUPT_BACKUP_LOG_PATTERNS, counts_before):
+            self.assertGreater(self._indexer_log_count(node, pattern), before,
+                               f"{label}'{pattern}' not logged on {node.ip} after the corruption")
+
     def test_gsi_encryption_at_rest_storage_corruption(self):
         """
         Encryption at rest - multi-bucket with storage corruption recovery.
@@ -1258,16 +1307,20 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
 
         Steps:
         1.  Verify prerequisites (3+ index nodes, encryption enabled)
-        2.  Set indexer snapshot settings + enable corrupt index backup flag
+        2.  Set indexer snapshot settings + enable corrupt index backup flag;
+            plant a .corruptData backup (MB-69503)
         3.  Create bucket_A WITH encryption, bucket_B WITH encryption, load docs
+        3b. .corruptData removed once a bucket key is active (MB-69503)
         4.  Create indexes on both buckets, wait for Ready
         5.  Baseline scans on both buckets + file encryption validation
         6.  Induce plasma shard corruption on a randomly chosen index node
         7.  Kill indexer on that node to trigger corruption detection + recovery
         8.  Wait for all indexes to return to Ready state
+        8b. Corrupt partition not backed up while encrypted (MB-69503)
         9.  Post-recovery mutations: upsert new docs, delete some docs, update some docs
         10. Scans on all indexes post-recovery + compare pre/post-mutation counts
-        11. Lifecycle ops (alter/drop/build) on each namespace
+        11. Plant .corruptData, restart: startup sweep removes it (MB-69503);
+            lifecycle ops (alter/drop/build) on each namespace
         12. Item count validation
         """
         self.log.info("=" * 80)
@@ -1289,6 +1342,8 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
                 rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": 60000})
                 rest.set_index_settings({"indexer.settings.persisted_snapshot_init_build.moi.interval": 60000})
             self.enable_corrupt_index_backup()
+            # MB-69503: a backup left from before encryption; must go once a bucket key is active
+            self._plant_corrupt_data_backup(index_nodes)
             self.log.info("[STEP 2] PASSED - corrupt index backup enabled")
         except Exception as e:
             self.log.error(f"[STEP 2] FAILED: {str(e)}")
@@ -1328,6 +1383,9 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
         except Exception as e:
             self.log.error(f"[STEP 3] FAILED: {str(e)}")
             raise
+
+        # ========== STEP 3b (MB-69503): .corruptData removed once a bucket key is active ==========
+        self._wait_for_corrupt_data_removed(index_nodes, "[STEP 3b] ")
 
         # ========== STEP 4: Create indexes on both buckets ==========
         all_select_queries = set()
@@ -1382,6 +1440,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
             self.log.info("[STEP 6] Inducing plasma shard corruption on a randomly chosen index node...")
             corrupt_node = random.choice(index_nodes)
             self.log.info(f"[STEP 6] Chosen node for corruption: {corrupt_node.ip}")
+            backup_log_counts = [self._indexer_log_count(corrupt_node, p) for p in self.CORRUPT_BACKUP_LOG_PATTERNS]
             self.corrupt_plasma_metadata(corrupt_node)
             self.log.info(f"[STEP 6] PASSED - Corruption induced on {corrupt_node.ip}")
         except Exception as e:
@@ -1406,6 +1465,9 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
         except Exception as e:
             self.log.error(f"[STEP 8] FAILED: {str(e)}")
             raise
+
+        # ========== STEP 8b (MB-69503): no backup of the corrupt partition while encrypted ==========
+        self._assert_corrupt_backup_skipped(corrupt_node, "[STEP 8b] ", backup_log_counts)
 
         # ========== STEP 9: Mutations post-recovery (upsert/delete/update) on both buckets ==========
         upsert_count = 10
@@ -1486,7 +1548,10 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
         # ========== STEP 11: Restart indexers then lifecycle ops on each namespace ==========
         try:
             self.log.info("[STEP 11] Restarting indexer nodes before lifecycle ops...")
+            # MB-69503: the startup sweep removes a backup left behind (e.g. crash during cleanup)
+            self._plant_corrupt_data_backup(index_nodes)
             self.restart_index_nodes(index_nodes)
+            self._wait_for_corrupt_data_removed(index_nodes, "[STEP 11] ", timeout=120)
             self.log.info("[STEP 11] Running index lifecycle ops (alter/drop/build) on each namespace...")
             for namespace in [namespace_a, namespace_b]:
                 self._run_index_lifecycle_ops(namespace, index_nodes, query_node)
@@ -7357,3 +7422,1153 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
         self.run_scan_validation(select_queries)
         self.item_count_related_validations()
         self.log.info("TEST PASSED: test_gsi_encryption_at_rest_other_key_lifecycle")
+
+    # =========================================================================
+    # MB-69179 / MB-72106 / MB-69519 / MB-69497 / MB-69248 / MB-69178 / MB-69247
+    # =========================================================================
+
+    def _wait_until_no_problems(self, get_problems, label, timeout=600):
+        """Poll get_problems() (returns a list) until it is empty; fail with the last list."""
+        end_time = time.time() + timeout
+        problems = get_problems()
+        while problems and time.time() < end_time:
+            time.sleep(10)
+            problems = get_problems()
+        if problems:
+            self.fail(f"{label}Not done after {timeout}s: {problems}")
+
+    def _load_docs(self, bucket_name, key_prefix="doc_"):
+        """Load num_of_docs_per_collection docs into bucket_name._default._default."""
+        gen_create = SDKDataLoader(
+            num_ops=self.num_of_docs_per_collection,
+            percent_create=100, percent_update=0, percent_delete=0,
+            scope="_default", collection="_default",
+            json_template=self.json_template, output=True,
+            username=self.username, password=self.password, key_prefix=key_prefix
+        )
+        if self.use_magma_loader:  # vector datasets load only through the magma loader
+            self.cluster.async_load_gen_docs(self.master, bucket_name, gen_create, timeout_secs=300,
+                                             use_magma_loader=True).result()
+            return
+        for task in self.data_ops_javasdk_loader_in_batches_to_collection(bucket_name, gen_create, 10**4):
+            task.result()
+
+    def _create_bucket_with_indexes(self, bucket_name, index_nodes, prefix, key_id=None):
+        """Create bucket_name (encrypted with key_id, plaintext if None), load docs into it,
+        create indexes and wait for Ready. Returns the select queries."""
+        self.create_bucket_with_encryption(bucket_name, enable_encryption=False)
+        if key_id is not None:
+            status, response = self.rest.enable_bucket_encryption(bucket_name, key_id)
+            self.assertTrue(status, f"Failed to encrypt {bucket_name} with key {key_id}: {response}")
+        self._load_docs(bucket_name)
+        return self.create_indexes_on_namespace(f"default:{bucket_name}._default._default", index_nodes,
+                                                prefix, step_prefix=f"[{bucket_name}]", wait_for_ready=True)
+
+    def _drop_key_timeout(self, timeout):
+        """timeout plus the worst-case BHIVE DEK drop: recovery.max_disksnaps + 2 recovery points,
+        forced every timekeeper.forceCommitInterval on an idle bucket (MB-73573)."""
+        if not self.bhive_index:
+            return timeout
+        cfg = RestConnection(self.get_nodes_from_services_map(service_type="index")).get_indexer_internal_stats()
+        return timeout + (int(cfg.get("indexer.recovery.max_disksnaps", 4)) + 2) * int(
+            cfg.get("indexer.timekeeper.forceCommitInterval", 300000)) // 1000
+
+    def _bucket_key_op(self, op, bucket_name, index_nodes, label, before_drop=None):
+        """Run one bucket key operation and wait for the indexer to converge:
+        "enable" (encrypt + force-encrypt, no "" key left), "drop" (DEK drop: new key in
+        use, old keys gone) or "disable" (disable + DEK drop: this bucket's keys gone).
+        before_drop: called after "disable", before the DEK drop."""
+        if op == "enable":
+            status, response = self.rest.enable_bucket_encryption(bucket_name, self.encryption_at_rest_id)
+            self.assertTrue(status, f"{label}Failed to enable encryption: {response}")
+            status, response = self.rest.force_bucket_encryption_at_rest(bucket_name)
+            self.assertTrue(status, f"{label}forceEncryptionAtRest failed: {response}")
+            self.validate_mixed_bucket_encrypted_keys(index_nodes, [bucket_name], timeout=self._drop_key_timeout(900),
+                                                      step_prefix=label)
+            return
+        old_keys = (self._bucket_in_use_key_ids(index_nodes, [bucket_name])[bucket_name] if op == "disable"
+                    else self.get_indexer_in_use_key_ids(index_nodes, key_type="bucket"))
+        if op == "disable":
+            status, response = self.rest.disable_bucket_encryption(bucket_name)
+            self.assertTrue(status, f"{label}Failed to disable encryption: {response}")
+            if before_drop:
+                before_drop()
+        status, response = self.rest.trigger_data_reencryption(bucket_name)
+        self.assertTrue(status, f"{label}dropEncryptionAtRestDeks failed: {response}")
+        if op == "drop":
+            self.poll_for_new_indexer_key_ids(index_nodes, old_keys, timeout=self._drop_key_timeout(600), label=label,
+                                              key_type="bucket")
+        self.poll_for_indexer_key_ids_gone(index_nodes, old_keys, timeout=self._drop_key_timeout(900), label=label,
+                                           key_type="bucket")
+
+    def _assert_no_temp_files_under_storage(self, index_nodes, suffixes):
+        for node in index_nodes:
+            self.gsi_encryption_helper.assert_no_temp_files(
+                node, f"{RestConnection(node).get_index_path()}/@2i",
+                suffixes=self.gsi_encryption_helper.TEMP_FILE_SUFFIXES + tuple(suffixes))
+
+    def _wait_for_stats_log_chains(self, index_nodes, expect, label, timeout=600, max_gap_secs=None,
+                                   expected_content=None, projector_max_gap_secs=None):
+        """MB-69179 / MB-72106 / MB-69519: every indexer_stats.log generation (index nodes)
+        and projector_stats.log generation (KV nodes) is `expect` ("encrypted" with a log
+        key in use, or "plaintext" with rotated ones as .N.gz); then no temp files (F5).
+        max_gap_secs (MB-72103): indexer_stats.log generations are also contiguous in time;
+        projector_max_gap_secs: the same for projector_stats.log generations."""
+        helper = self.gsi_encryption_helper
+        kv_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+
+        def problems():
+            log_keys = (self.get_indexer_in_use_key_ids(index_nodes, key_type="log")
+                        if expect == "encrypted" else None)
+            if expect == "encrypted" and not log_keys:
+                return ["no in-use log keys reported yet"]
+            found = []
+            # Log keys are per node: projector (KV node) keys are not in the indexers' list
+            for nodes, log_name, keys, max_gap in ((index_nodes, "indexer_stats.log", log_keys, max_gap_secs),
+                                                   (kv_nodes, "projector_stats.log", None, projector_max_gap_secs)):
+                for node in nodes:
+                    found += helper.verify_stats_log_chain(
+                        node, log_name, expect, keys, max_gap,
+                        expected_lines=(expected_content or {}).get((node.ip, log_name)))[1]
+            return found
+
+        self._wait_until_no_problems(problems, label, timeout)
+        for node in {node.ip: node for node in index_nodes + kv_nodes}.values():
+            helper.assert_no_temp_files(node, helper.get_log_path(node),
+                                        prefixes=("indexer_stats.log", "projector_stats.log"))
+
+    def _stats_log_key_ids(self, node, log_name):
+        """MB-69519: header key ID of each encrypted <log_name> generation (ID length at
+        byte 27, ID from byte 28)."""
+        log_dir = self.gsi_encryption_helper.get_log_path(node)
+        shell = RemoteMachineShellConnection(node)
+        try:
+            out, _ = shell.execute_command(
+                f"for f in {log_dir}/{log_name} {log_dir}/{log_name}.*; do case $f in *.gz|*.tmp) continue;; esac; "
+                f"[ -f $f ] && dd if=$f bs=1 skip=28 count=$(od -An -tu1 -j27 -N1 $f | tr -d ' ') 2>/dev/null; echo; done")
+        finally:
+            shell.disconnect()
+        return {line.strip() for line in out if line.strip()}
+
+    def test_gsi_encryption_at_rest_stats_log_lifecycle(self):
+        """
+        MB-69179 / MB-72106 / MB-69519 / MB-72103: indexer_stats.log (index nodes) and
+        projector_stats.log (KV nodes), the active file and every rotated generation,
+        through the log key lifecycle, while size-based rotation keeps running.
+
+        Steps:
+        1. Prerequisites (log encryption enabled); bucket + indexes; shrink
+           indexer.statsLogFsize, dump stats every second and restart the indexers so
+           size-based rotation runs continuously
+        2. Force-encrypt the log key: every generation encrypted with a log key in use,
+           plaintext .N.gz rotations re-encrypted as .N; no temp files
+           (projector_stats.log is rotated the same way); content unchanged
+        3. Drop log DEKs drop_rounds times while rotating: old log keys gone, every
+           generation on a key in use, indexer and projector generations contiguous in
+           time (MB-72103)
+        3b. Drop log DEKs and kill -9 the indexers and projectors during the
+            re-encryption; drop again: completes, no corrupted generation, content
+            unchanged (MB-72103, MB-69179, MB-69519)
+        4. Restart indexers and kill the projectors: stats logs reopened and still
+           encrypted; scans
+        5. Disable log encryption + drop DEKs while rotating: every generation plaintext,
+           rotated ones as .N.gz, contiguous in time; no temp files; restart (read back); scans
+        """
+        self.log.info("STARTING TEST: test_gsi_encryption_at_rest_stats_log_lifecycle")
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        if not getattr(self, "enable_log_encryption_at_rest", False):
+            self.skipTest("Log encryption at rest not enabled. Set enable_log_encryption_at_rest=True")
+        stats_log_fsize = int(self.input.param("stats_log_fsize", 8192))
+        drop_rounds = int(self.input.param("drop_rounds", 3))
+        max_gap_secs = int(self.input.param("stats_log_max_gap", 60))
+        log_dir = self.gsi_encryption_helper.get_log_path(index_nodes[0])
+        kv_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+        test_since = {n.ip: self._node_now(n) for n in index_nodes + kv_nodes}  # logs persist across tests
+
+        # STEP 1
+        bucket_name, select_queries = self._setup_bucket_and_indexes('statslog_', index_nodes)
+        default_fsize = RestConnection(index_nodes[0]).get_indexer_internal_stats().get(
+            'indexer.statsLogFsize', 33554432)
+        dump_interval_key = "indexer.settings.statsLogDumpInterval"
+        default_dump_interval = RestConnection(index_nodes[0]).get_index_settings()[dump_interval_key]
+        # MB-69519 / MB-72103: projector_stats.log (KV nodes) rotates the same way
+        proj_dump_interval_key = "projector.statsLogDumpInterval"
+        default_proj_fsize = RestConnection(index_nodes[0]).get_indexer_internal_stats().get(
+            'projector.statsLogFsize', 33554432)
+        default_proj_dump_interval = RestConnection(index_nodes[0]).get_index_settings().get(
+            proj_dump_interval_key, 60)
+
+        def set_dump_interval(seconds):
+            RestConnection(index_nodes[0]).set_index_settings({dump_interval_key: seconds,
+                                                               proj_dump_interval_key: seconds})
+
+        def capture_content():
+            # Read before a key change; compared after it (expected_content)
+            return {(node.ip, log_name): self.gsi_encryption_helper.read_stats_log_lines(node, log_name)
+                    for nodes, log_name in ((index_nodes, "indexer_stats.log"), (kv_nodes, "projector_stats.log"))
+                    for node in nodes}
+
+        def log_data_status():
+            status, cfg = self.rest.get_encryption_at_rest_config()
+            cfg = json.loads(cfg) if isinstance(cfg, (bytes, bytearray)) else cfg
+            return cfg.get("log", {}).get("info", {}).get("dataStatus")
+
+        set_dump_interval(1)
+        for node in index_nodes:
+            RestConnection(node).set_index_settings_internal({"indexer.statsLogFsize": stats_log_fsize,
+                                                              "projector.statsLogFsize": stats_log_fsize})
+        try:
+            # stats logs left by earlier runs, encrypted with unknown keys (projector: rotated files only)
+            for node in index_nodes + self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True):
+                shell = RemoteMachineShellConnection(node)
+                shell.execute_command(f"rm -f {log_dir}/indexer_stats.log* {log_dir}/projector_stats.log.*")
+                shell.disconnect()
+            # statsLogFsize is read only when the indexer / projector starts
+            self.restart_index_nodes(index_nodes)
+            for kv_node in kv_nodes:
+                self._kill_projector_process(kv_node)
+
+            chains = ((index_nodes, "indexer_stats.log"), (kv_nodes, "projector_stats.log"))
+
+            def rotated(node, log_name):
+                shell = RemoteMachineShellConnection(node)
+                try:
+                    out, _ = shell.execute_command(f"ls -1 {log_dir}/{log_name}.* 2>/dev/null | wc -l")
+                finally:
+                    shell.disconnect()
+                return int((out or ["0"])[0].strip() or 0)
+
+            def too_few_rotations():
+                return [f"{n.ip}:{log}" for nodes, log in chains for n in nodes if rotated(n, log) < 3]
+
+            def kill_9(label):
+                for nodes, process in ((index_nodes, "indexer"), (kv_nodes, "projector")):
+                    for node in nodes:
+                        shell = RemoteMachineShellConnection(node)
+                        try:
+                            shell.execute_command(f"pkill -9 -x {process}")
+                        finally:
+                            shell.disconnect()
+                self.wait_for_indexer_ready(index_nodes, timeout=900, label=label)
+
+            def wait_projector_keys_off(old_keys, label, timeout=300):
+                # MB-69519: every projector generation's header key moves off the pre-drop
+                # keys; keys still there after timeout are logged as a warning
+                end_time = time.time() + timeout
+                while True:
+                    stale = {n.ip: self._stats_log_key_ids(n, "projector_stats.log") & old_keys[n.ip]
+                             for n in kv_nodes}
+                    stale = {ip: keys for ip, keys in stale.items() if keys}
+                    if not stale or time.time() >= end_time:
+                        break
+                    time.sleep(15)
+                if stale:
+                    self.log.warning(f"{label}projector_stats.log still on pre-drop header keys after "
+                                     f"{timeout}s: {stale}")
+
+            self._wait_until_no_problems(too_few_rotations, "[STEP 1] stats log rotations: ")
+
+            # STEP 2: force-encrypt; content unchanged (slower dumps so the captured
+            # lines are not all rotated out before the compare)
+            # MB-69179: disable, then re-enable mid-run with the same settings
+            status, cfg = self.rest.get_encryption_at_rest_config()
+            log_cfg = (json.loads(cfg) if isinstance(cfg, (bytes, bytearray)) else cfg)["log"]
+            self.assertTrue(self.rest.disable_log_encryption()[0], "[STEP 2] Disabling log encryption failed")
+            self.assertTrue(self.rest.trigger_log_reencryption()[0], "[STEP 2] dropEncryptionAtRestDeks/log failed")
+            self._wait_for_stats_log_chains(index_nodes, "plaintext", "[STEP 2] ")
+            set_dump_interval(300)
+            self.sleep(15, "[STEP 2] Slowing the stats dump before capturing the content")
+            captured = capture_content()
+            self.assertTrue(self.rest.configure_log_encryption_at_rest(
+                {k: log_cfg[k] for k in ("encryptionMethod", "encryptionKeyId", "dekLifetime", "dekRotationInterval")
+                 if k in log_cfg})[0], "[STEP 2] Re-enabling log encryption failed")
+
+            def not_force_rotated():
+                # Enable force-rotates the active file: its plaintext content goes to .1.gz
+                # and the new active file has the encryption header
+                bad = []
+                for nodes, log_name in chains:
+                    for node in nodes:
+                        shell = RemoteMachineShellConnection(node)
+                        try:
+                            out, _ = shell.execute_command(f"zcat {log_dir}/{log_name}.1.gz | tail -1")
+                        finally:
+                            shell.disconnect()
+                        if not (self.gsi_encryption_helper.verify_file_encryption_magic_bytes(
+                                node, f"{log_dir}/{log_name}")[0] and [l.rstrip("\r\n") for l in out if l.strip()]
+                                == captured[(node.ip, log_name)][-1:]):
+                            bad.append(f"{node.ip}:{log_name}")
+                return bad
+
+            self._wait_until_no_problems(not_force_rotated, "[STEP 2] stats log not force-rotated on enable: ", 120)
+            # MB-72106: kill -9 with a mixed chain (encrypted active, plaintext .N.gz): stats logging
+            # continues, the next rotation is an encrypted .1, no generation is both .N and .N.gz
+            disabled = self._indexer_log_total(index_nodes, "Error in NewDedupeLogStatsWithFileHandler")
+            kill_9("[STEP 2] ")
+            self.wait_until_indexes_online(timeout=1800)
+            set_dump_interval(1)
+            self._wait_until_no_problems(lambda: [n.ip for n in index_nodes if not self.gsi_encryption_helper.
+                                                  verify_file_encryption_magic_bytes(n, f"{log_dir}/indexer_stats.log.1")[0]],
+                                         "[STEP 2] No encrypted indexer_stats.log.1 after the restart: ", 120)
+            self.assertEqual(self._indexer_log_total(index_nodes, "Error in NewDedupeLogStatsWithFileHandler"), disabled,
+                             "[STEP 2] Stats logging disabled after the restart")
+            fcount = int(RestConnection(index_nodes[0]).get_indexer_internal_stats().get("indexer.statsLogFcount", 10))
+            for node in index_nodes:
+                shell = RemoteMachineShellConnection(node)
+                try:
+                    out, _ = shell.execute_command(f"ls -1 {log_dir}/indexer_stats.log.* | sed 's/[.]gz$//' | sort | uniq -d")
+                finally:
+                    shell.disconnect()
+                self.assertFalse([l for l in out if l.strip()], f"[STEP 2] Generation both .N and .N.gz on {node.ip}: {out}")
+                self.assertLessEqual(rotated(node, "indexer_stats.log"), fcount, f"[STEP 2] Over statsLogFcount on {node.ip}")
+            set_dump_interval(300)
+            self.sleep(15, "[STEP 2] Slowing the stats dump before capturing the content")
+            captured = capture_content()
+            status, response = self.rest.force_log_encryption_at_rest()
+            self.assertTrue(status, f"forceEncryptionAtRest/log failed: {response}")
+            self._wait_for_stats_log_chains(index_nodes, "encrypted", "[STEP 2] ", expected_content=captured)
+            set_dump_interval(1)
+
+            # STEP 3: drop log DEKs while rotating -> rotated generations re-encrypted (MB-72103)
+            old_log_keys = self.get_indexer_in_use_key_ids(index_nodes, key_type="log")
+            step3_proj_keys = {n.ip: self._stats_log_key_ids(n, "projector_stats.log") for n in kv_nodes}
+            for drop_round in range(drop_rounds):
+                status, response = self.rest.trigger_log_reencryption()
+                self.assertTrue(status, f"dropEncryptionAtRestDeks/log round {drop_round + 1} failed: {response}")
+                self.sleep(1, "[STEP 3] Letting rotation run between drops")
+            self.run_scan_validation(select_queries)  # MB-72103: scans work during the passes
+            self.poll_for_new_indexer_key_ids(index_nodes, old_log_keys, timeout=600,
+                                              label="[STEP 3] ", key_type="log")
+            self.poll_for_indexer_key_ids_gone(index_nodes, old_log_keys, timeout=600,
+                                               label="[STEP 3] ", key_type="log")
+            self._wait_for_stats_log_chains(index_nodes, "encrypted", "[STEP 3] ", max_gap_secs=max_gap_secs,
+                                            projector_max_gap_secs=max_gap_secs)
+            wait_projector_keys_off(step3_proj_keys, "[STEP 3] ")
+            fcount = RestConnection(index_nodes[0]).get_indexer_internal_stats()
+            over = [f"{n.ip}:{log}" for nodes, log in chains for n in nodes
+                    if rotated(n, log) > int(fcount.get(log.split("_")[0] + ".statsLogFcount", 10))]
+            self.assertFalse(over, f"[STEP 3] More rotated generations than statsLogFcount: {over}")
+
+            # STEP 3b: kill -9 indexer + projector during the re-encryption; the next drop
+            # completes, every generation decodes and the content is unchanged
+            set_dump_interval(300)
+            self.sleep(15, "[STEP 3b] Slowing the stats dump before capturing the content")
+            captured = capture_content()
+            proj_logs = ("EncryptionMgr: initialized for kdt=.*log",
+                         "statsManager:handleEncryptionUpdateKey keyId=.* keyChanged=true",
+                         "statsManager:handleEncryptionDropKey active=.* err=<nil>")
+            proj_keys = {n.ip: self._stats_log_key_ids(n, "projector_stats.log") for n in kv_nodes}
+            proj_since = {n.ip: self._node_now(n) for n in kv_nodes}
+            old_log_keys = self.get_indexer_in_use_key_ids(index_nodes, key_type="log")
+            status, response = self.rest.trigger_log_reencryption()
+            self.assertTrue(status, f"[STEP 3b] dropEncryptionAtRestDeks/log failed: {response}")
+            self.sleep(2, "[STEP 3b] Letting the re-encryption start")
+            kill_9("[STEP 3b] ")
+            status, response = self.rest.trigger_log_reencryption()
+            self.assertTrue(status, f"[STEP 3b] dropEncryptionAtRestDeks/log retry failed: {response}")
+            self.poll_for_new_indexer_key_ids(index_nodes, old_log_keys, timeout=600,
+                                              label="[STEP 3b] ", key_type="log")
+            self.poll_for_indexer_key_ids_gone(index_nodes, old_log_keys, timeout=600,
+                                               label="[STEP 3b] ", key_type="log")
+            self._wait_for_stats_log_chains(index_nodes, "encrypted", "[STEP 3b] ", expected_content=captured)
+            # MB-69519: every projector generation (active too, dumps slowed so not by size
+            # rotation) on a new header key ID; projector.log update/drop/restart lines
+            wait_projector_keys_off(proj_keys, "[STEP 3b] ")
+            for node in kv_nodes:
+                for p in proj_logs:
+                    self.assertGreater(self._indexer_log_count(node, p, "projector.log", proj_since[node.ip]), 0,
+                                       f"[STEP 3b] '{p}' not logged in projector.log on {node.ip}")
+            self._wait_until_no_problems(lambda: [] if log_data_status() == "encrypted" else [log_data_status()],
+                                         "[STEP 3b] log dataStatus: ", 300)
+            set_dump_interval(1)
+
+            # STEP 4: restart -> encrypted active files reopened and appended to
+            last_lines = {(n.ip, log): self.gsi_encryption_helper.read_stats_log_lines(n, log)[-1:]
+                          for nodes, log in chains for n in nodes}
+            kill_9("[STEP 4] ")
+            self.wait_until_indexes_online(timeout=1800)
+            self.sleep(90, "[STEP 4] Waiting for the reopened stats logs to be written")
+            self._wait_for_stats_log_chains(index_nodes, "encrypted", "[STEP 4] ")
+            for nodes, log in chains:  # MB-69519 / MB-72103: restarted processes keep writing; chain decodes
+                for node in nodes:
+                    lines = self.gsi_encryption_helper.read_stats_log_lines(node, log)
+                    self.assertTrue(lines[-1:] != last_lines[(node.ip, log)]
+                                    and not any(l.startswith("READ_FAILED:") for l in lines),
+                                    f"[STEP 4] {log} on {node.ip} not decodable or not written after kill -9")
+            self.run_scan_validation(select_queries)
+            self._load_docs(bucket_name, key_prefix="p4_")  # MB-69519: DCP flows after projector restart
+            self.item_count_related_validations()
+
+            # STEP 5: disable + drop DEKs -> decryption; content unchanged (MB-69179, MB-69519).
+            # Slower dumps so the captured lines are not all rotated out before the compare.
+            set_dump_interval(300)
+            self.sleep(15, "[STEP 5] Slowing the stats dump before capturing the content")
+            captured = capture_content()
+            log_keys = self.get_indexer_in_use_key_ids(index_nodes, key_type="log")
+            status, response = self.rest.disable_log_encryption()
+            self.assertTrue(status, f"Disabling log encryption failed: {response}")
+            status, response = self.rest.trigger_log_reencryption()
+            self.assertTrue(status, f"dropEncryptionAtRestDeks/log (decrypt) failed: {response}")
+            self.poll_for_indexer_key_ids_gone(index_nodes, log_keys, timeout=600,
+                                               label="[STEP 5] ", key_type="log")
+            self._wait_for_stats_log_chains(index_nodes, "plaintext", "[STEP 5] ", expected_content=captured)
+            self.restart_index_nodes(index_nodes, validate_read_back=True)
+            self.run_scan_validation(select_queries)
+            for kv_node in kv_nodes:  # MB-69519: projector restarts and DCP flows with log encryption off
+                self._kill_projector_process(kv_node)
+            self._load_docs(bucket_name, key_prefix="p5_")
+            self.item_count_related_validations()
+            # MB-69519 / MB-72103: no stats-log read/rewrite/key errors
+            errors = ("LogStatsFileHandler.(Open|skipRotate)", "common::(Reencrypt|Decrypt)StatsLogFiles")
+            for nodes, log_name, patterns in (
+                    (index_nodes, "indexer.log", errors + (
+                        "Error in NewDedupeLogStatsWithFileHandler", "transcrypt:", "no key data for keyID",
+                        "StatsManager::handleEncryptionDropKey (reencrypt|decrypt)StatsLogFiles")),
+                    (kv_nodes, "projector.log", errors + ("EncryptionMgr:GetKeyCipherById key:.* err:",
+                                                          "statsManager:handleEncryptionDropKey reencryptStatsLogFiles"))):
+                for node in nodes:
+                    for p in patterns:
+                        self.assertEqual(self._indexer_log_count(node, p, log_name, test_since[node.ip]), 0,
+                                         f"'{p}' in {log_name} on {node.ip}")
+        finally:
+            RestConnection(index_nodes[0]).set_index_settings({dump_interval_key: default_dump_interval,
+                                                               proj_dump_interval_key: default_proj_dump_interval})
+            for node in index_nodes:
+                RestConnection(node).set_index_settings_internal({"indexer.statsLogFsize": default_fsize,
+                                                                  "projector.statsLogFsize": default_proj_fsize})
+        self.log.info("TEST PASSED: test_gsi_encryption_at_rest_stats_log_lifecycle")
+
+    def _wait_for_codebooks(self, index_nodes, expect, label, timeout=600):
+        """MB-69497: vector codebooks are `expect` ("encrypted" with a bucket key in use, or
+        "plaintext"); then no codebook temp file (F5)."""
+        helper = self.gsi_encryption_helper
+
+        def problems():
+            if expect == "encrypted":
+                bucket_keys = self.get_indexer_in_use_key_ids(index_nodes, key_type="bucket")
+                if not bucket_keys:
+                    return ["no in-use bucket keys reported yet"]
+                results = helper.verify_gsi_codebook_encrypted(index_nodes, expected_key_id=bucket_keys)
+                found = [f"{ip}: {r}" for ip, r in results.items() if r.get("status") == "failed"]
+                any_files = any(r.get("status") == "passed" for r in results.values())
+            else:
+                found, any_files = [], False
+                for node in index_nodes:
+                    is_plaintext, encrypted = helper.verify_files_plaintext(
+                        node, f"{RestConnection(node).get_index_path()}/@2i", pattern="*.codebook")
+                    any_files = any_files or is_plaintext or bool(encrypted)
+                    found += [f"{node.ip}:{path}" for path in encrypted]
+            return found if any_files else found + ["no codebook files found"]
+
+        self._wait_until_no_problems(problems, label, timeout)
+        self._assert_no_temp_files_under_storage(index_nodes, (".codebook.tmp",))
+
+    def test_gsi_encryption_at_rest_codebook_lifecycle(self):
+        """
+        MB-69497: vector index codebooks (BHIVE and composite) through the bucket key
+        lifecycle. Run with bhive_index=True.
+
+        Steps:
+        1. Unencrypted bucket, vector indexes trained: codebooks plaintext
+        2. Enable + force-encrypt: codebooks encrypted in place with a key in use
+        3. Drop DEKs: codebooks re-encrypted; restart (read back, no retraining); scans
+        3b. Corrupt one encrypted codebook, restart that indexer: reported as corrupted
+            (no crash loop), index recovers; item counts and scans
+        4. Disable + drop DEKs: codebooks and BHIVE data plaintext; restart (read back); scans
+        Each key op / restart is also confirmed in indexer.log (handleEncryptionDropKey done for
+        codebooks, recoverCodebook isEncrypted true/false); scan results equal across restarts.
+        """
+        self.log.info("STARTING TEST: test_gsi_encryption_at_rest_codebook_lifecycle")
+        index_nodes = self.verify_prerequisites()
+        if not self.bhive_index:
+            self.skipTest("Needs vector indexes. Set bhive_index=True")
+        bucket_name = self.test_bucket
+
+        select_queries = self._create_bucket_with_indexes(bucket_name, index_nodes, 'cb_')
+        namespace = f"default:{bucket_name}._default._default"
+        drop_defs = self._get_vector_query_definitions('cbdrop')[0]  # MB-69248: dropped during disable
+        self.gsi_util_obj.create_gsi_indexes(create_queries=self._get_vector_create_queries(
+            drop_defs, [], [], [], [], namespace, [f"{n.ip}:{self.node_port}" for n in index_nodes]),
+            database=namespace, query_node=self.get_nodes_from_services_map(service_type="n1ql"))
+        self.wait_until_indexes_online(timeout=self.index_online_timeout)
+        self._wait_for_codebooks(index_nodes, "plaintext", "[STEP 1] ")
+        codebook_errors = ("CodebookEncryptionKey re-encryption failed",
+                           "Error observed while (decryptCodebookByChunk|IsFileEncrypted)",
+                           "Codebook corrupted and unrecoverable")
+        errors_before = [self._indexer_log_total(index_nodes, p) for p in codebook_errors]
+        recovered = "recoverCodebook: reading from disk is successful for path: .* isEncrypted: "
+        codebook_logs = {"enable": "StorageMgr::handleEncryptionDropKey done for codebooks", "drop": recovered + "true",
+                         "disable": recovered + "false"}
+        for step, op, expect in ((2, "enable", "encrypted"), (3, "drop", "encrypted"),
+                                 (4, "disable", "plaintext")):
+            label = f"[STEP {step}] "
+            log_count = self._indexer_log_total(index_nodes, codebook_logs[op])
+            pre_op_keys = self._bucket_in_use_key_ids(index_nodes, [bucket_name])[bucket_name]
+            self._bucket_key_op(op, bucket_name, index_nodes, label, before_drop=lambda: [self.run_cbq_query(
+                query=f"DROP INDEX `{d.index_name}` ON `{bucket_name}`",
+                server=self.get_nodes_from_services_map(service_type="n1ql")) for d in drop_defs])
+            self._wait_for_codebooks(index_nodes, expect, label)
+            if op == "disable":  # MB-69248: BHIVE index data plaintext too; "" back in use
+                self.validate_files_not_encrypted(index_nodes, bucket_name, timeout=600, step_prefix=label,
+                                                  old_key_ids=pre_op_keys)
+                self.assertEqual(self._bucket_in_use_ids_raw(index_nodes, bucket_name), {""}, f"{label}In-use keys")
+            if op == "drop":  # MB-69248: rotate; the old DEK is dropped when its lifetime expires
+                old_keys, scans_before = (self.get_indexer_in_use_key_ids(index_nodes, key_type="bucket"),
+                                          self._scan_results(select_queries))
+                self.set_bucket_dek_rotation_config(bucket_name, self.encryption_at_rest_id, 30, 150)
+                self.poll_for_indexer_key_ids_gone(index_nodes, old_keys, timeout=self._drop_key_timeout(900),
+                                                   label=label, key_type="bucket")
+                self.set_bucket_dek_rotation_config(bucket_name, self.encryption_at_rest_id, 36000, 36000)
+                self._assert_same_scan_results(scans_before, label)
+            if op != "enable":
+                self._kill9_indexers_recover_from_snapshot(index_nodes, select_queries, label, done="Slice::recoverCodebook: reading from disk is successful", failed="NewBhiveSlice:GetKeyIdList")
+            self.assertGreater(self._indexer_log_total(index_nodes, codebook_logs[op]), log_count,
+                               f"{label}'{codebook_logs[op]}' not logged in indexer.log")
+            self.run_scan_validation(select_queries)
+            if op == "drop":  # 3b corrupts a codebook on purpose: check steps 2-3, re-baseline after it
+                for pattern, count in zip(codebook_errors, errors_before):
+                    self.assertEqual(self._indexer_log_total(index_nodes, pattern), count, f"{label}'{pattern}' in indexer.log")
+                self._corrupt_codebook_and_recover(index_nodes, select_queries, "[STEP 3b] ")
+                errors_before = [self._indexer_log_total(index_nodes, p) for p in codebook_errors]
+        for pattern, count in zip(codebook_errors, errors_before):  # MB-69497
+            self.assertEqual(self._indexer_log_total(index_nodes, pattern), count, f"'{pattern}' in indexer.log")
+        self.log.info("TEST PASSED: test_gsi_encryption_at_rest_codebook_lifecycle")
+
+    def _corrupt_codebook_and_recover(self, index_nodes, select_queries, label):
+        """MB-69497: an encrypted codebook that cannot be decrypted is reported as
+        corrupted at warmup (no crash loop) and the index recovers."""
+        node, path = None, None
+        for index_node in index_nodes:
+            shell = RemoteMachineShellConnection(index_node)
+            try:
+                out, _ = shell.execute_command(
+                    f"find {RestConnection(index_node).get_index_path()}/@2i -type f "
+                    f"-path '*_0.index/codebook/*' ! -name '*.tmp' 2>/dev/null | head -1")
+            finally:
+                shell.disconnect()
+            found = [line.strip() for line in out if line.strip()]
+            if found:
+                node, path = index_node, found[0]
+                break
+        self.assertTrue(path, f"{label}No codebook file found on the index nodes")
+        corrupted_log = "codebook appears to be corrupted"
+        log_count = self._indexer_log_count(node, corrupted_log)
+        # The induced decrypt error is expected in indexer.log for the rest of the suite
+        type(self).allowed_encryption_log_patterns = ("Error observed while decryptCodebookByChunk",)
+        shell = RemoteMachineShellConnection(node)
+        try:
+            shell.execute_command(f"size=$(stat -c %s '{path}') && dd if=/dev/urandom of='{path}' bs=1 "
+                                  f"count=64 seek=$((size / 2)) conv=notrunc")
+        finally:
+            shell.disconnect()
+        self.log.info(f"{label}Corrupted {path} on {node.ip}; restarting its indexer")
+        self._kill_all_processes_index(server=node)
+        self.sleep(30, f"{label}Waiting for the indexer to restart on {node.ip}")
+        self.wait_for_indexer_ready([node], timeout=900, label=label)
+        self.wait_until_indexes_online(timeout=int(self.input.param("index_online_timeout", 2400)))
+        self.assertGreater(self._indexer_log_count(node, corrupted_log), log_count,
+                           f"{label}'{corrupted_log}' not logged on {node.ip}")
+        self.item_count_related_validations()
+        self.run_scan_validation(select_queries)
+
+    def _bucket_in_use_key_ids(self, index_nodes, bucket_names):
+        """{bucket: set(key IDs)} from every index node's GetInUseKeys."""
+        keys = {name: set() for name in bucket_names}
+        for node_map in self._build_per_node_bucket_key_map_safe(index_nodes, bucket_names).values():
+            for name in bucket_names:
+                keys[name].update(str(k) for k in (node_map.get(name) or {}).get("key_ids", []) if k)
+        return keys
+
+    def _node_now(self, node):
+        shell = RemoteMachineShellConnection(node)
+        try:
+            return shell.execute_command("date +%Y-%m-%dT%H:%M:%S")[0][0].strip()
+        finally:
+            shell.disconnect()
+
+    def _indexer_log_count(self, node, pattern, log_name="indexer.log", since=""):
+        """Lines matching pattern (grep -E) in the node's indexer.log*, logged at or after
+        since (node local time, see _node_now). Files with the encryption header (log
+        encryption on) are read with cbcat."""
+        log_dir = self.gsi_encryption_helper.get_log_path(node)
+        cbcat = ("/opt/couchbase/bin/cbcat --password - --with-gosecrets "
+                 "/opt/couchbase/var/lib/couchbase/config/gosecrets.cfg")
+        shell = RemoteMachineShellConnection(node)
+        try:
+            out, _ = shell.execute_command(
+                f"for f in {log_dir}/{log_name}*; do "
+                f"if head -c 64 \"$f\" | grep -qa 'Couchbase Encrypted'; then {cbcat} \"$f\" </dev/null; "
+                f"else zcat -f \"$f\"; fi; done 2>/dev/null | grep -E '{pattern}' | awk -v s='{since}' '$1 >= s' | wc -l")
+        finally:
+            shell.disconnect()
+        return int(next((line.strip() for line in out if line.strip().isdigit()), 0))
+
+    def _indexer_log_total(self, nodes, pattern):
+        return sum(self._indexer_log_count(node, pattern) for node in nodes)
+
+    def _indexer_log_has(self, node, pattern):
+        """True if pattern (grep -E) appears in the node's indexer.log*."""
+        return self._indexer_log_count(node, pattern) > 0
+
+    def _scan_results(self, select_queries):
+        """Per query: the sorted rows, or only the row count for vector (ANN) queries and
+        queries with LIMIT, whose rows may legitimately differ between runs."""
+        results = {}
+        for query in select_queries:
+            rows = self.run_cbq_query(query=query, scan_consistency='request_plus').get('results', [])
+            if re.search(r"VECTOR_DISTANCE|ANN_DISTANCE|\bLIMIT\b", query, re.IGNORECASE):
+                results[query] = len(rows)
+            else:
+                results[query] = sorted(json.dumps(row, sort_keys=True) for row in rows)
+        return results
+
+    def _assert_same_scan_results(self, before, label):
+        """Scan results now equal `before` (from _scan_results before a restart)."""
+        after = self._scan_results(list(before))
+        changed = [query[:100] for query in before if before[query] != after[query]]
+        self.assertFalse(changed, f"{label}Scan results changed across the restart: {changed}")
+
+    def _assert_in_indexer_log(self, node, patterns, label):
+        """Each pattern (grep -E) appears in the node's indexer.log*."""
+        for pattern in patterns:
+            self.assertTrue(self._indexer_log_has(node, pattern),
+                            f"{label}'{pattern}' not in indexer.log on {node.ip}")
+
+    def test_gsi_encryption_at_rest_bhive_multi_bucket_keys(self):
+        """
+        MB-69248: BHIVE indexes on two buckets encrypted with different keys.
+        Run with bhive_index=True.
+
+        Steps:
+        1. Set indexer.encryption.maxStorageDropKeyRetry / dropKeyRetryInterval;
+           indexer.log confirms both
+        2. bucket_A on the test key, bucket_B on a second key; BHIVE indexes on both
+        3. Each bucket's files carry only its own bucket's key
+        4. Drop DEKs on bucket_A: A's old keys gone, B's keys untouched; files
+           re-validated per bucket
+        5. Restart (read back); scans
+        """
+        self.log.info("STARTING TEST: test_gsi_encryption_at_rest_bhive_multi_bucket_keys")
+        index_nodes = self.verify_prerequisites()
+        moi = self.gsi_type == "memory_optimized"
+        storage = "memdb" if moi else "bhive" if self.bhive_index else "plasma"
+        retry_keys = ("indexer.encryption.maxStorageDropKeyRetry", "indexer.encryption.dropKeyRetryInterval")
+        current = RestConnection(index_nodes[0]).get_index_settings()
+        original_retry = {k: current[k] for k in retry_keys if k in current}
+        try:
+            if storage == "plasma":  # MB-70886: shard affinity, so instances of the buckets share Plasma shards
+                self.enable_shard_based_rebalance()
+            if moi:  # MB-69247: MOI keys are on disk only in snapshots
+                self.set_indexer_snapshot_settings(index_nodes, step_prefix="[STEP 1]")
+            max_retry = int(self.input.param("max_drop_key_retry", 2))
+            retry_interval = int(self.input.param("drop_key_retry_interval", 10))
+
+            # STEP 1: drop-key retry settings; negative values clamp to 0 (MB-69248)
+            clamp = ("setMaxDropKeyRetry set to 0", "setDropKeyRetryInterval set to 0")
+            clamped = [self._indexer_log_total(index_nodes, p) for p in clamp]
+            RestConnection(index_nodes[0]).set_index_settings({"indexer.encryption.maxStorageDropKeyRetry": -1,
+                                                               "indexer.encryption.dropKeyRetryInterval": -1})
+            self.sleep(15, "[STEP 1] Waiting for the indexer to apply the negative retry settings")
+            for pattern, count in zip(clamp, clamped):
+                self.assertGreater(self._indexer_log_total(index_nodes, pattern), count, f"[STEP 1] '{pattern}' not logged")
+            applied = [f"setMaxDropKeyRetry set to {max_retry}", f"setDropKeyRetryInterval set to {retry_interval}"]
+            applied_before = {node.ip: [self._indexer_log_count(node, p) for p in applied] for node in index_nodes}
+            for node in index_nodes:
+                RestConnection(node).set_index_settings({
+                    "indexer.encryption.maxStorageDropKeyRetry": max_retry,
+                    "indexer.encryption.dropKeyRetryInterval": retry_interval})
+            self.sleep(15, "[STEP 1] Waiting for the indexer to apply the retry settings")
+            for node in index_nodes:
+                for pattern, count in zip(applied, applied_before[node.ip]):
+                    self.assertGreater(self._indexer_log_count(node, pattern), count,
+                                       f"[STEP 1] '{pattern}' not logged on {node.ip}")
+
+            # STEP 2: two buckets, different keys
+            persisted = "persistCodebookToDisk: Persistance to disk is successful .* isEncrypted:true keyid:[^ ]+"
+            persisted_count = self._indexer_log_total(index_nodes, persisted)
+            bucket_a = self.test_bucket
+            bucket_b = f"{self.test_bucket}_2"
+            select_queries = self._create_bucket_with_indexes(bucket_a, index_nodes, 'mb_', self.encryption_at_rest_id)
+            select_queries.update(self._create_bucket_with_indexes(bucket_b, index_nodes, 'mb_',
+                                                                   self.create_new_encryption_key()))
+            bucket_c = f"{self.test_bucket}_3"  # unencrypted, on the same nodes (not BHIVE: shared bhive-shards)
+            if storage != "bhive":
+                select_queries.update(self._create_bucket_with_indexes(bucket_c, index_nodes, 'mb_'))
+            if moi:
+                self.sleep(int(self.input.param("snapshot_wait", 90)), "[STEP 2] Waiting for MOI snapshots")
+
+            def assert_no_cross_bucket_keys(label):  # MB-69248: no file of one bucket carries the other's key
+                keys = self._bucket_in_use_key_ids(index_nodes, [bucket_a, bucket_b])
+                for owner, other in ((bucket_a, bucket_b), (bucket_b, bucket_a)):
+                    uuid = self.rest.get_bucket_json(owner)['uuid']
+                    for node in index_nodes:
+                        path = f"{RestConnection(node).get_index_path()}/@2i"
+                        shell = RemoteMachineShellConnection(node)
+                        try:
+                            out, _ = shell.execute_command(f"grep -rlF {' '.join('-e ' + k for k in keys[other])} "
+                                                           f"{path}/{uuid}_* {path}/@bhive/{uuid}_* 2>/dev/null")
+                        finally:
+                            shell.disconnect()
+                        self.assertFalse([l for l in out if l.strip()], f"{label}{owner} files on {node.ip} carry {other} keys")
+
+            # STEP 3: per-bucket key isolation on disk
+            bucket_keys = self._bucket_in_use_key_ids(index_nodes, [bucket_a, bucket_b])
+            self.assertTrue(bucket_keys[bucket_a] and bucket_keys[bucket_b],
+                            f"[STEP 3] Missing in-use keys per bucket: {bucket_keys}")
+            self.assertFalse(bucket_keys[bucket_a] & bucket_keys[bucket_b],
+                             f"[STEP 3] Buckets share key IDs: {bucket_keys}")
+            self.validate_file_encryption_with_key(index_nodes, encrypted_bucket_names=[bucket_a, bucket_b],
+                                                   step_prefix="[STEP 3] ", raise_on_failure=True)
+            if storage != "bhive":
+                self.validate_files_not_encrypted(index_nodes, bucket_c, timeout=60, step_prefix="[STEP 3] ")
+            assert_no_cross_bucket_keys("[STEP 3] ")
+            if self.bhive_index:  # MB-69497: codebooks trained on an encrypted bucket are written encrypted
+                self._wait_for_codebooks(index_nodes, "encrypted", "[STEP 3] ")
+                self.assertGreater(self._indexer_log_total(index_nodes, persisted), persisted_count,
+                                   f"[STEP 3] '{persisted}' not logged")
+
+            # STEP 4: drop DEKs on bucket_A only
+            status, response = self.rest.trigger_data_reencryption(bucket_a)
+            self.assertTrue(status, f"dropEncryptionAtRestDeks on {bucket_a} failed: {response}")
+            self.poll_for_indexer_key_ids_gone(index_nodes, bucket_keys[bucket_a], timeout=self._drop_key_timeout(900),
+                                               label="[STEP 4] ", key_type="bucket")
+            after = self._bucket_in_use_key_ids(index_nodes, [bucket_a, bucket_b])
+            self.assertTrue(after[bucket_a], f"[STEP 4] No key in use for {bucket_a} after the drop: {after}")
+            self.assertEqual(after[bucket_b], bucket_keys[bucket_b],
+                             f"[STEP 4] {bucket_b} keys changed by a DEK drop on {bucket_a}")
+            self.validate_file_encryption_with_key(index_nodes, encrypted_bucket_names=[bucket_a, bucket_b],
+                                                   step_prefix="[STEP 4] ", raise_on_failure=True)
+            assert_no_cross_bucket_keys("[STEP 4] ")
+            self._assert_no_temp_files_under_storage(index_nodes, ())
+
+            # STEP 5: kill -9, recovery from disk (MB-69247 MOI snapshot, MB-69248 BHIVE codebook,
+            # MB-70886 Plasma recovery point, not reset)
+            self._kill9_indexers_recover_from_snapshot(index_nodes, select_queries, "[STEP 5] ", **{
+                "memdb": {},
+                "bhive": dict(done="Slice::recoverCodebook: reading from disk is successful",
+                              failed="NewBhiveSlice:GetKeyIdList"),
+                "plasma": dict(done="plasmaSlice::doRecovery .* Warmup took",
+                               failed="plasmaSlice::doRecovery .* Unable to find recovery point|newPlasmaSlice:GetKeyIdList")}[storage])
+            if not moi:
+                # MB-69248 / MB-70886: writes take the active key of the bucket UUID in the instance path
+                path_cb = f"{storage}Slice::GetActiveKeyByPathCb path: "
+                total = self._indexer_log_total(index_nodes, path_cb)
+                self.assertTrue(total and self._indexer_log_total(
+                    index_nodes, path_cb + r".*([0-9a-f]{32})_[^ ]* bucketUUID: \1") == total,
+                    "[STEP 5] GetActiveKeyByPathCb resolved a bucket UUID other than the one in the path")
+            self.run_scan_validation(select_queries)
+        finally:
+            if original_retry:
+                for node in index_nodes:
+                    RestConnection(node).set_index_settings(original_retry)
+            if storage == "plasma":
+                self.disable_shard_based_rebalance()
+        self.log.info("TEST PASSED: test_gsi_encryption_at_rest_bhive_multi_bucket_keys")
+
+    def _assert_encryption_bootstrap_order(self, node, label):
+        """MB-69178 / MB-69208: in the latest indexer start, EncryptionMgr caches the keys,
+        waits for bootstrap and recovers the in-use keys before it handles queued key ops."""
+        markers = ["EncryptionMgr:refreshAllBucketKeys caching keys for buckets",
+                   "EncryptionMgr:refreshAllBucketKeys cached keys for bucket",
+                   "EncryptionMgr:cached keys for log", "EncryptionMgr:runQueue caching done",
+                   "EncryptionMgr:runQueue bootstrap done", "EncryptionMgr:recoverInUseKeys done",
+                   "EncryptionMgr:runQueue key recovery done"]
+        log_file = f"{self.gsi_encryption_helper.get_log_path(node)}/indexer.log"
+        shell = RemoteMachineShellConnection(node)
+        try:
+            out, _ = shell.execute_command(
+                f"tail -n +$(grep -n 'Indexer::NewIndexer Status Warmup' {log_file} | tail -1 | cut -d: -f1) "
+                f"{log_file} | grep -o -E '{'|'.join(markers)}|StorageMgr::handleEncryption(Update|Drop)Key keydatatype'")
+        finally:
+            shell.disconnect()
+        seen = []
+        for line in out:
+            if line.strip() and line.strip() not in seen:
+                seen.append(line.strip())
+        order = [line for line in seen if not line.startswith("StorageMgr")]
+        self.assertEqual(order, markers, f"{label}EncryptionMgr bootstrap order on {node.ip}: {seen}")
+        handled = [i for i, line in enumerate(seen) if line.startswith("StorageMgr")]
+        self.assertTrue(not handled or handled[0] > seen.index(markers[-1]),
+                        f"{label}Key op handled before key recovery on {node.ip}: {seen}")
+
+    def test_gsi_encryption_at_rest_back_to_back_key_ops(self):
+        """
+        MB-69178: key operations the indexer must queue or handle without index data.
+
+        Steps:
+        1. bucket_A encrypted, indexes, scans
+        2. drop_count DEK drops back to back on bucket_A (ns_server serializes them): all old
+           keys leave GetInUseKeys; scans + item counts
+        3. bucket_B encrypted and indexed after the indexer is up: its key is in use
+           and its files are encrypted
+        4. bucket_C encrypted with no indexes: a DEK drop still completes (oldest DEK replaced)
+        5. Restart (read back): EncryptionMgr bootstrap order in indexer.log; scans
+        """
+        self.log.info("STARTING TEST: test_gsi_encryption_at_rest_back_to_back_key_ops")
+        # MB-69178: expected when a bucket is created after the indexer started (STEP 3)
+        self.allowed_encryption_log_patterns = ("getKeyCipherById.*could not find keydatatype",)
+        index_nodes = self.verify_prerequisites()
+        drop_count = int(self.input.param("drop_count", 3))
+        key_errors = "EncryptionMgr:getKeyCipherById (retry )?for key:.* err:"
+
+        def log_counts(patterns):
+            return {p: self._indexer_log_total(index_nodes, p) for p in patterns}
+
+        def assert_logged(before, label):
+            for p, n in before.items():
+                self.assertGreater(self._indexer_log_total(index_nodes, p), n, f"{label}'{p}' not in indexer.log")
+
+        # STEP 1
+        bucket_a, select_queries = self._setup_bucket_and_indexes('b2b_', index_nodes)
+
+        # STEP 2: back-to-back DEK drops
+        old_keys = self.get_indexer_in_use_key_ids(index_nodes, key_type="bucket")
+        for attempt in range(drop_count):
+            status, response = self.rest.trigger_data_reencryption(bucket_a)
+            self.assertTrue(status, f"[STEP 2] DEK drop {attempt + 1} failed: {response}")
+        self.poll_for_indexer_key_ids_gone(index_nodes, old_keys, timeout=1200,
+                                           label="[STEP 2] ", key_type="bucket")
+        self.run_scan_validation(select_queries)
+        self.item_count_related_validations()
+
+        # STEP 3: bucket created and indexed after the indexer started
+        bucket_b = f"{self.test_bucket}_2"
+        force_logs = log_counts(("EncryptionMgr:DropKeysCallback:Received for keydatatype",
+                                 "StorageMgr::handleEncryptionDropKey keydatatype",
+                                 "EncryptionMgr:trackDropKeys complete for keydatatype"))
+        select_queries.update(self._create_bucket_with_indexes(bucket_b, index_nodes, 'b2b_new_'))
+        self._bucket_key_op("enable", bucket_b, index_nodes, "[STEP 3] ")  # force-encrypt existing index data
+        assert_logged(force_logs, "[STEP 3] ")
+        self.assertTrue(self._bucket_in_use_key_ids(index_nodes, [bucket_b])[bucket_b],
+                        f"[STEP 3] No key in use for {bucket_b} created after indexer start")
+        self.validate_file_encryption_with_key(index_nodes, encrypted_bucket_names=[bucket_a, bucket_b],
+                                               step_prefix="[STEP 3] ", raise_on_failure=True)
+
+        # STEP 4: DEK drop on a bucket with no indexes completes
+        bucket_c = f"{self.test_bucket}_3"
+        self.create_bucket_with_encryption(bucket_c, enable_encryption=True)
+        self._wait_until_no_problems(lambda: [] if self.rest.get_bucket_json(bucket_c).get(
+            'encryptionAtRestInfo', {}).get('oldestDekCreationDatetime') else [bucket_c], "[STEP 4] DEK created: ", 120)
+        oldest_before = self.rest.get_bucket_json(bucket_c).get(
+            'encryptionAtRestInfo', {}).get('oldestDekCreationDatetime')
+        status, response = self.rest.trigger_data_reencryption(bucket_c)
+        self.assertTrue(status, f"[STEP 4] DEK drop on {bucket_c} failed: {response}")
+
+        def drop_pending():
+            info = self.rest.get_bucket_json(bucket_c).get('encryptionAtRestInfo', {})
+            # dekNumber is summed over nodes; every old DEK is gone once the oldest one changes
+            done = not info.get('issues') and info.get('oldestDekCreationDatetime') != oldest_before
+            return [] if done else [info]
+
+        self._wait_until_no_problems(drop_pending, f"[STEP 4] DEK drop on {bucket_c} (no indexes): ")
+
+        # STEP 4b: rotate bucket_A's DEK without dropping old keys; scans unchanged after each
+        rotate_logs = log_counts(("EncryptionMgr:RefreshKeysCallback:Starting for keydatatype",
+                                  "StorageMgr::handleEncryptionUpdateKey keydatatype",
+                                  "EncryptionMgr:trackUpdateKeys complete for keydatatype"))
+        key_errors_before = self._indexer_log_total(index_nodes, key_errors)
+        scans_before = self._scan_results(select_queries)
+        self.set_bucket_dek_rotation_config(bucket_a, self.encryption_at_rest_id,
+                                            dek_rotation_interval=self.kek_rotation_interval_seconds,
+                                            dek_lifetime=self.kek_rotation_interval_seconds * 5)
+        for _ in range(int(self.input.param("rotations", 3))):
+            self.poll_for_new_indexer_key_ids(index_nodes, self.get_indexer_in_use_key_ids(index_nodes, key_type="bucket"),
+                                              timeout=600, label="[STEP 4b] ", key_type="bucket")
+            self._assert_same_scan_results(scans_before, "[STEP 4b] ")
+        self.set_bucket_dek_rotation_config(bucket_a, self.encryption_at_rest_id,
+                                            dek_rotation_interval=36000, dek_lifetime=36000)
+        assert_logged(rotate_logs, "[STEP 4b] ")
+
+        # STEP 5: kill -9 -> recovery from disk, no rebuild from 0, no key lookup errors
+        rollbacks = self._indexer_log_total(index_nodes, "StorageMgr::rollbackAllToZero")
+        for node in index_nodes:
+            shell = RemoteMachineShellConnection(node)
+            try:
+                shell.execute_command("pkill -9 -x indexer")
+            finally:
+                shell.disconnect()
+        self.wait_for_indexer_ready(index_nodes, timeout=900, label="[STEP 5] ")
+        self.wait_until_indexes_online(timeout=1800)
+        self.item_count_related_validations()
+        self._assert_same_scan_results(scans_before, "[STEP 5] ")
+        self.assertEqual(self._indexer_log_total(index_nodes, "StorageMgr::rollbackAllToZero"), rollbacks,
+                         "[STEP 5] Indexes rebuilt from 0 after kill -9")
+        self.assertEqual(self._indexer_log_total(index_nodes, key_errors), key_errors_before,
+                         "[STEP 5] getKeyCipherById errors in indexer.log")
+        for node in index_nodes:
+            self._assert_encryption_bootstrap_order(node, "[STEP 5] ")
+        self.run_scan_validation(select_queries)
+
+        # STEP 6 (MB-70886): disable -> plaintext, "" in use; re-enable -> encrypted again
+        pre_disable_keys = self._bucket_in_use_key_ids(index_nodes, [bucket_b])[bucket_b]
+        self._bucket_key_op("disable", bucket_b, index_nodes, "[STEP 6] ")
+        self.validate_files_not_encrypted(index_nodes, bucket_b, timeout=600, step_prefix="[STEP 6] ",
+                                          old_key_ids=pre_disable_keys)
+        self.assertEqual(self._bucket_in_use_ids_raw(index_nodes, bucket_b), {""}, "[STEP 6] In-use keys")
+        self._bucket_key_op("enable", bucket_b, index_nodes, "[STEP 6] ")
+        self.validate_file_encryption_with_key(index_nodes, encrypted_bucket_names=[bucket_b],
+                                               step_prefix="[STEP 6] ", raise_on_failure=True)
+        self.log.info("TEST PASSED: test_gsi_encryption_at_rest_back_to_back_key_ops")
+
+    def _bucket_in_use_ids_raw(self, index_nodes, bucket_name):
+        """MB-69247: GetInUseKeys IDs of bucket_name's service_bucket entry ("" = unencrypted data)."""
+        tag = "{service_bucket %s}" % self.rest.get_bucket_json(bucket_name)['uuid']
+        ids = set()
+        for node in index_nodes:
+            status, response = RestConnection(node).get_indexer_in_use_encryption_keys()
+            ids.update(response.get(tag, []) if status and isinstance(response, dict) else [])
+        return ids
+
+    def _kill9_indexers_recover_from_snapshot(self, index_nodes, select_queries, label,
+                                              done="MemDBSlice::loadSnapshot .* finished reading",
+                                              failed="failed to recover from the snapshot"):
+        """MB-69247 / MB-69248: kill -9 every indexer; indexes recover from disk (`done` logged,
+        `failed` not; MOI snapshot by default, BHIVE codebook), same scan results and item counts."""
+        before = [self._indexer_log_total(index_nodes, p) for p in (done, failed)]
+        scans_before = self._scan_results(select_queries)
+        for node in index_nodes:
+            shell = RemoteMachineShellConnection(node)
+            try:
+                shell.execute_command("pkill -9 -x indexer")
+            finally:
+                shell.disconnect()
+        self.wait_for_indexer_ready(index_nodes, timeout=900, label=label)
+        self.wait_until_indexes_online(timeout=1800)
+        self.assertGreater(self._indexer_log_total(index_nodes, done), before[0], f"{label}No MOI snapshot recovery")
+        self.assertEqual(self._indexer_log_total(index_nodes, failed), before[1], f"{label}MOI snapshot recovery failed")
+        self.item_count_related_validations()
+        self._assert_same_scan_results(scans_before, label)
+
+    def test_gsi_encryption_at_rest_moi_lifecycle(self):
+        """
+        MB-69247: MOI snapshots through enable-after-create, indexer paused, and disable.
+        Run with gsi_type=memory_optimized.
+
+        Steps:
+        1. Unencrypted bucket, MOI indexes, snapshot written: snapshot files plaintext
+        2. Enable + force-encrypt; next snapshot encrypted; restart recovers from the
+           encrypted snapshot (read back)
+        3. Shrink the indexer memory quota and load until the indexer is Paused; a DEK
+           drop is rejected ("handleEncryptionUpdateKey aborted" and
+           "handleEncryptionDropKeys aborted"); restore the quota: indexer Active, old
+           keys gone, item counts
+        4. Disable; restart while the encrypted snapshot is still on disk (read back);
+           drop DEKs: snapshot files plaintext; no MOI re-encryption temp files; restart
+           (read back); scans
+        Scan results equal across every restart.
+        """
+        self.log.info("STARTING TEST: test_gsi_encryption_at_rest_moi_lifecycle")
+        index_nodes = self.verify_prerequisites()
+        if self.gsi_type != "memory_optimized":
+            self.skipTest("Needs MOI. Set gsi_type=memory_optimized")
+        bucket_name = self.test_bucket
+        snapshot_wait = int(self.input.param("snapshot_wait", 90))
+        paused_quota = int(self.input.param("moi_paused_quota", 256))
+        storage_errors = ("StorageMgr::handleEncryptionDropKey .*err:",
+                          "StorageMgr::handleEncryptionUpdateKey SetCurrentEncryptionKey failed")
+        errors_before = [self._indexer_log_total(index_nodes, p) for p in storage_errors]
+
+        # STEP 1
+        self.set_indexer_snapshot_settings(index_nodes, step_prefix="[STEP 1]")
+        select_queries = self._create_bucket_with_indexes(bucket_name, index_nodes, 'moi_')
+        self.run_cbq_query(query=f"CREATE INDEX moi_drop_me ON `{bucket_name}`(meta().id)",
+                           server=self.get_nodes_from_services_map(service_type="n1ql"))
+        self.sleep(snapshot_wait, "[STEP 1] Waiting for an MOI snapshot")
+        self.validate_files_not_encrypted(index_nodes, bucket_name, timeout=60, step_prefix="[STEP 1] ")
+        self.assertEqual(self._bucket_in_use_ids_raw(index_nodes, bucket_name), {""}, "[STEP 1] In-use keys")
+
+        # STEP 2: enable after the indexes exist
+        # MB-69247 mixed state: snapshots paused, enable: "" and the key both in use;
+        # snapshots on again: only the key once the next snapshot is written
+        for node in index_nodes:
+            RestConnection(node).set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": 3600000})
+        status, response = self.rest.enable_bucket_encryption(bucket_name, self.encryption_at_rest_id)
+        self.assertTrue(status, f"[STEP 2] Failed to enable encryption: {response}")
+        self._wait_until_no_problems(lambda: [] if (lambda ids: "" in ids and len(ids) > 1)(
+            self._bucket_in_use_ids_raw(index_nodes, bucket_name)) else ["no mixed state"], "[STEP 2] ", 300)
+        self.set_indexer_snapshot_settings(index_nodes, step_prefix="[STEP 2]")
+        status, response = self.rest.force_bucket_encryption_at_rest(bucket_name)  # drops "" (DropInUseKeys)
+        self.assertTrue(status, f"[STEP 2] forceEncryptionAtRest failed: {response}")
+        self.validate_mixed_bucket_encrypted_keys(index_nodes, [bucket_name], timeout=900, step_prefix="[STEP 2] ")
+        self.validate_file_encryption_with_key(index_nodes, encrypted_bucket_names=[bucket_name],
+                                               step_prefix="[STEP 2] ", raise_on_failure=True)
+        self._kill9_indexers_recover_from_snapshot(index_nodes, select_queries, "[STEP 2] ")
+        self.validate_file_encryption_with_key(index_nodes, encrypted_bucket_names=[bucket_name],
+                                               step_prefix="[STEP 2] ", raise_on_failure=True)
+        # MB-69247: rotate the DEK (old one kept, dropped in step 3); restart before the drop
+        old_keys = self.get_indexer_in_use_key_ids(index_nodes, key_type="bucket")
+        self.set_bucket_dek_rotation_config(bucket_name, self.encryption_at_rest_id, 30, 36000)
+        self.poll_for_new_indexer_key_ids(index_nodes, old_keys, timeout=600, label="[STEP 2] ", key_type="bucket")
+        self.set_bucket_dek_rotation_config(bucket_name, self.encryption_at_rest_id, 36000, 36000)
+        self.sleep(snapshot_wait, "[STEP 2] Waiting for a snapshot on the rotated key")
+        self._kill9_indexers_recover_from_snapshot(index_nodes, select_queries, "[STEP 2] ")
+
+        # STEP 3: key op while the MOI indexer is paused for memory
+        original_quota = self.get_indexer_mem_quota()
+        self.rest.set_service_memoryQuota(service='indexMemoryQuota', memoryQuota=paused_quota)
+        try:
+            paused = []  # one paused indexer is enough to reject the DEK drop
+
+            def not_paused():
+                self._load_docs(bucket_name, key_prefix=f"p{int(time.time()) % 10**6}_")  # magma loader keySize is 20
+                paused[:] = [node for node in index_nodes
+                             if RestConnection(node).get_indexer_stats().get("indexer_state") == "Paused"]
+                return [] if paused else [node.ip for node in index_nodes]
+
+            self._wait_until_no_problems(not_paused, "[STEP 3] Indexer not Paused: ", timeout=1800)
+            old_keys = self.get_indexer_in_use_key_ids(index_nodes, key_type="bucket")
+            aborted_logs = ("handleEncryptionUpdateKey aborted", "handleEncryptionDropKeys aborted")
+            aborted_before = {(node.ip, pattern): self._indexer_log_count(node, pattern)
+                              for node in paused for pattern in aborted_logs}
+            # ns_server retries a rejected DEK drop after dek_removal_min_interval (3 h by default)
+            self.rest.diag_eval('ns_config:set({cb_cluster_secrets, {dek_removal_min_interval, {serviceBucketDek, <<"%s">>}}}, 60).'
+                                % self.rest.get_bucket_json(bucket_name)['uuid'])
+            status, response = self.rest.trigger_data_reencryption(bucket_name)
+            self.assertTrue(status, f"[STEP 3] dropEncryptionAtRestDeks failed: {response}")
+            self.sleep(60, "[STEP 3] Waiting for the DEK drop to reach the paused indexer")
+            for node in paused:
+                for pattern in aborted_logs:
+                    self.assertGreater(self._indexer_log_count(node, pattern), aborted_before[(node.ip, pattern)],
+                                       f"[STEP 3] '{pattern}' not logged on paused indexer {node.ip}")
+        finally:
+            self.rest.set_service_memoryQuota(service='indexMemoryQuota', memoryQuota=original_quota)
+        self.wait_for_indexer_ready(index_nodes, timeout=900, label="[STEP 3] ")
+        self.wait_until_indexes_online(timeout=1800)
+        self.run_cbq_query(query=f"DROP INDEX moi_drop_me ON `{bucket_name}`",  # MB-69247: during the key op
+                           server=self.get_nodes_from_services_map(service_type="n1ql"))
+        self.poll_for_indexer_key_ids_gone(index_nodes, old_keys, timeout=1200,
+                                           label="[STEP 3] ", key_type="bucket")
+        self.item_count_related_validations()
+        self._kill9_indexers_recover_from_snapshot(index_nodes, select_queries, "[STEP 3] ")
+        drop_errors = self._indexer_log_total(index_nodes, "EncryptionMgr:trackDropKeys err:")
+
+        # STEP 4: disable; restart before a new (plaintext) snapshot is written: recovery
+        # from the encrypted snapshot (snapshots paused meanwhile)
+        for node in index_nodes:
+            RestConnection(node).set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": 3600000})
+        self.validate_file_encryption_with_key(index_nodes, encrypted_bucket_names=[bucket_name],
+                                               step_prefix="[STEP 4] ", raise_on_failure=True)
+
+        def restart_on_encrypted_snapshot():
+            scans_before = self._scan_results(select_queries)
+            self.restart_index_nodes(index_nodes, validate_read_back=True)
+            self._assert_same_scan_results(scans_before, "[STEP 4] ")
+            self.set_indexer_snapshot_settings(index_nodes, step_prefix="[STEP 4]")
+
+        # then drop DEKs -> plaintext snapshots
+        self._bucket_key_op("disable", bucket_name, index_nodes, "[STEP 4] ",
+                            before_drop=restart_on_encrypted_snapshot)
+        self.validate_files_not_encrypted(index_nodes, bucket_name, timeout=600, step_prefix="[STEP 4] ")
+        self.assertEqual(self._bucket_in_use_ids_raw(index_nodes, bucket_name), {""}, "[STEP 4] In-use keys")
+        self._assert_no_temp_files_under_storage(index_nodes, (".aes.tmp", ".bak"))
+        # MB-69247: no storage key-op errors; no failed DEK drop after the paused step
+        for pattern, before in zip(storage_errors, errors_before):
+            self.assertEqual(self._indexer_log_total(index_nodes, pattern), before, f"[STEP 4] '{pattern}' in indexer.log")
+        self.assertEqual(self._indexer_log_total(index_nodes, "EncryptionMgr:trackDropKeys err:"), drop_errors,
+                         "[STEP 4] DEK drop failed after the indexer was unpaused")
+        scans_before = self._scan_results(select_queries)
+        self.restart_index_nodes(index_nodes, validate_read_back=True)
+        self._assert_same_scan_results(scans_before, "[STEP 4] ")
+        self.run_scan_validation(select_queries)
+        self.log.info("TEST PASSED: test_gsi_encryption_at_rest_moi_lifecycle")
+
+    def test_gsi_encryption_at_rest_corrupt_backup_lifecycle(self):
+        """
+        MB-69503: corrupt-index backups follow bucket encryption only.
+        Run with log or other encryption only (no bucket key); bhive_index=True also covers @bhive.
+
+        Steps:
+        1. Corrupt-index backup on; unencrypted bucket + indexes (no bucket key active)
+        2. Corrupt a partition, kill the indexer: backup taken; restart (startup sweep): kept
+        3. Plant .corruptData; encrypt a different bucket (bucket_2): .corruptData removed
+           ("cleanupCorruptDataDirIfEncrypted removed"); then enable + force-encrypt the bucket.
+           Backup setting off: planted .corruptData kept across restart; on again: swept
+        4. Disable + drop DEKs on bucket only (bucket_2 still encrypted); corrupt again:
+           no backup ("skipping backup: bucket encryption is active")
+        5. Disable + drop DEKs on bucket_2; corrupt again, kill the indexer: backup taken again
+        """
+        self.log.info("STARTING TEST: test_gsi_encryption_at_rest_corrupt_backup_lifecycle")
+        index_nodes = self.verify_prerequisites()
+        bucket_name = self.test_bucket
+
+        def corrupt_and_expect_backup(label, expect_backup=True):
+            # As the indexing test TestIdxCorruptBackup: a fatal "error" file in one
+            # partition's mainIndex makes recovery treat it as corrupt and back it up
+            storage_dir = self._corrupt_data_dirs(corrupt_node)[0].rsplit("/", 1)[0]
+            if self.bhive_index:
+                storage_dir += "/@bhive"
+            shell = RemoteMachineShellConnection(corrupt_node)
+            try:
+                out, _ = shell.execute_command(
+                    f"d=$(ls -d {storage_dir}/*.index/mainIndex 2>/dev/null | head -1) && [ -n \"$d\" ] && "
+                    f"echo 'Fatal error: Automation Induced Storage Corruption' > $d/error && echo $d")
+            finally:
+                shell.disconnect()
+            self.assertTrue([l for l in out if l.strip()],
+                            f"{label}No partition mainIndex under {storage_dir} on {corrupt_node.ip} to corrupt")
+            skip_log = "backupCorruptIndexDataFiles.*skipping backup: bucket encryption is active"
+            skip_count = self._indexer_log_count(corrupt_node, skip_log)
+            self._kill_all_processes_index(server=corrupt_node)
+            self.sleep(30, f"{label}Waiting for the indexer to restart on {corrupt_node.ip}")
+            self.wait_until_indexes_online(timeout=1800)
+            if expect_backup:
+                self.assertTrue(self._existing_corrupt_data_dirs(corrupt_node),
+                                f"{label}No corrupt-index backup on {corrupt_node.ip} without a bucket key")
+                if self.bhive_index:
+                    self.assertTrue(any("@bhive" in d for d in self._existing_corrupt_data_dirs(corrupt_node)),
+                                    f"{label}No @bhive/.corruptData backup on {corrupt_node.ip}")
+            else:
+                self.assertFalse(self._existing_corrupt_data_dirs(corrupt_node),
+                                 f"{label}Corrupt-index backup taken on {corrupt_node.ip} with a bucket encrypted")
+                self.assertGreater(self._indexer_log_count(corrupt_node, skip_log), skip_count,
+                                   f"{label}'{skip_log}' not logged on {corrupt_node.ip}")
+            self.run_scan_validation(select_queries)
+
+        # STEP 1
+        self.enable_corrupt_index_backup()
+        select_queries = self._create_bucket_with_indexes(bucket_name, index_nodes, 'cbk_')
+        hosts = {host.split(":")[0] for idx in self.rest.get_indexer_metadata()['status']
+                 if idx.get('bucket') == bucket_name for host in idx.get('hosts', [])}
+        self.assertTrue(hosts, f"[STEP 1] No index hosts found for {bucket_name}")
+        corrupt_node = random.choice([n for n in index_nodes if n.ip in hosts])
+
+        # STEP 2: log key only -> backup taken and kept by the startup sweep
+        corrupt_and_expect_backup("[STEP 2] ")
+        self.restart_index_nodes(index_nodes)
+        self.assertTrue(self._existing_corrupt_data_dirs(corrupt_node),
+                        "[STEP 2] Startup sweep removed .corruptData with no bucket key active")
+
+        # STEP 3: encrypting a different bucket removes .corruptData (@2i and @bhive)
+        self._plant_corrupt_data_backup(index_nodes)
+        if self.bhive_index:
+            self.assertTrue(any("@bhive" in d for n in index_nodes for d in self._existing_corrupt_data_dirs(n)),
+                            "[STEP 3] No @bhive/.corruptData planted")
+        removed_log = "cleanupCorruptDataDirIfEncrypted removed"
+        removed_count = self._indexer_log_count(corrupt_node, removed_log)
+        bucket_2 = f"{bucket_name}_2"
+        select_queries.update(self._create_bucket_with_indexes(bucket_2, index_nodes, 'cbk2_',
+                                                               self.encryption_at_rest_id))
+        self._wait_for_corrupt_data_removed(index_nodes, "[STEP 3] ")
+        self.assertGreater(self._indexer_log_count(corrupt_node, removed_log), removed_count,
+                           f"[STEP 3] '{removed_log}' not logged on {corrupt_node.ip}")
+        self._bucket_key_op("enable", bucket_name, index_nodes, "[STEP 3] ")
+
+        # Retain setting on: cleanup is a no-op, planted .corruptData kept across restart
+        retain = "indexer.encryption.test_retain_corrupt_index_backup"
+        RestConnection(index_nodes[0]).set_index_settings({retain: True})
+        self._plant_corrupt_data_backup(index_nodes)
+        self.restart_index_nodes(index_nodes)
+        self.assertTrue(all(self._existing_corrupt_data_dirs(n) for n in index_nodes),
+                        f"[STEP 3] .corruptData removed with {retain} on")
+        RestConnection(index_nodes[0]).set_index_settings({retain: False})
+        self.restart_index_nodes(index_nodes)
+        self._wait_for_corrupt_data_removed(index_nodes, "[STEP 3] ", timeout=120)
+
+        # STEP 4: bucket_2 still encrypted -> backups stay off
+        self._bucket_key_op("disable", bucket_name, index_nodes, "[STEP 4] ")
+        corrupt_and_expect_backup("[STEP 4] ", expect_backup=False)
+
+        # STEP 5: no bucket key on any bucket -> backups resume
+        self._bucket_key_op("disable", bucket_2, index_nodes, "[STEP 5] ")
+        corrupt_and_expect_backup("[STEP 5] ")
+        self.log.info("TEST PASSED: test_gsi_encryption_at_rest_corrupt_backup_lifecycle")

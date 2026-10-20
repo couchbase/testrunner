@@ -7,6 +7,7 @@ import re
 import shlex
 import string
 import time
+from datetime import datetime
 
 from lib.membase.helper.encryption_at_rest_helper import EncryptionUtil
 from lib.remote.remote_util import RemoteMachineShellConnection
@@ -1985,6 +1986,201 @@ class GSIEncryptionHelpers:
                 "failed_files": failed_files,
             }
         return results
+
+    # Scratch files written while files are re-encrypted, decrypted or compressed:
+    # *.tmp (also .enc/.reenc/.dec/.gz/.aes/.codebook.tmp), MOI *.bak, persisted stats stats_new.
+    TEMP_FILE_SUFFIXES = (".tmp", ".bak", "stats_new")
+
+    def assert_no_temp_files(self, node, directory, suffixes=TEMP_FILE_SUFFIXES, prefixes=("",),
+                             require_dir=True, timeout=60):
+        """F5: raise if files named <prefix>*<suffix> remain under directory.
+
+        Call after a re-encryption, decryption or compression step: a leftover
+        scratch file means the rewrite did not finish cleanly.
+        prefixes: limit to GSI files in a shared directory (e.g. the logs dir).
+        require_dir: a missing directory fails, so a wrong path never passes.
+        timeout: a file still being rewritten is briefly present; leftovers are
+        re-checked every 10s and fail only if still there after timeout seconds.
+        """
+        name_filters = " -o ".join(f"-name '{prefix}*{suffix}'" for prefix in prefixes for suffix in suffixes)
+        quoted = self._shell_quote(directory)
+        end_time = time.time() + timeout
+        while True:
+            shell = RemoteMachineShellConnection(node, verbose=False)
+            try:
+                out, _ = shell.execute_command(
+                    f"[ -d {quoted} ] || echo NO_DIR; "
+                    f"find {quoted} -type f \\( {name_filters} \\) 2>/dev/null"
+                )
+            finally:
+                shell.disconnect()
+            leftovers = [line.strip() for line in out if line.strip()]
+            if "NO_DIR" in leftovers:
+                if require_dir:
+                    raise Exception(f"Temp file check: {directory} does not exist on {node.ip}")
+                return
+            if not leftovers or time.time() >= end_time:
+                break
+            time.sleep(10)
+        if leftovers:
+            raise Exception(f"Temp files left behind on {node.ip} under {directory}: {leftovers}")
+        self.log.info(f"No temp files {list(suffixes)} on {node.ip} under {directory}")
+
+    def verify_files_plaintext(self, node, directory, pattern="*"):
+        """F4: check every file under directory matching pattern has no encryption header.
+
+        Returns (ok, still_encrypted_files). Finding no files returns (False, [])
+        so a wrong path or missing file never passes as plaintext.
+        """
+        shell = RemoteMachineShellConnection(node, verbose=False)
+        try:
+            out, _ = shell.execute_command(
+                f"find {self._shell_quote(directory)} -type f -name '{pattern}' 2>/dev/null"
+            )
+        finally:
+            shell.disconnect()
+        files = [line.strip() for line in out if line.strip()]
+        if not files:
+            self.log.error(f"No files matching '{pattern}' under {directory} on {node.ip}")
+            return False, []
+        still_encrypted = [path for path in files
+                           if self.verify_file_encryption_magic_bytes(node, path)[0]]
+        if still_encrypted:
+            self.log.error(f"Files still encrypted on {node.ip}: {still_encrypted}")
+        else:
+            self.log.info(f"{len(files)} file(s) matching '{pattern}' under {directory} "
+                          f"on {node.ip} are plaintext")
+        return not still_encrypted, still_encrypted
+
+    def read_stats_log_lines(self, node, log_name):
+        """All lines of the stats log chain, oldest generation first: cbcat for encrypted
+        files, gzip -dc for .gz (checks the whole file's CRC), plain read otherwise. A file
+        that fails to decode gives a
+        'READ_FAILED:<file>' line."""
+        cbcat = ("/opt/couchbase/bin/cbcat --password - --with-gosecrets "
+                 "/opt/couchbase/var/lib/couchbase/config/gosecrets.cfg")
+        shell = RemoteMachineShellConnection(node, verbose=False)
+        try:
+            out, _ = shell.execute_command(
+                f"cd {self._shell_quote(self.get_log_path(node))} && "
+                f"for f in $(ls {log_name}.* 2>/dev/null | grep -v '[.]tmp$' | sort -t. -k3,3nr) {log_name}; do "
+                f"if head -c 64 $f | grep -qa 'Couchbase Encrypted'; then {cbcat} $f </dev/null; "
+                f"elif [ \"${{f%.gz}}\" != \"$f\" ]; then gzip -dc $f; else cat $f; fi "
+                f"|| echo READ_FAILED:$f; echo; done")
+        finally:
+            shell.disconnect()
+        return [line.rstrip("\r\n") for line in out if line.strip()]
+
+    def verify_stats_log_chain(self, node, log_name, expect, allowed_key_ids=None, max_gap_secs=None,
+                               expected_lines=None):
+        """Check the active stats log and every rotated generation (MB-69179, MB-72106).
+
+        expect="encrypted": every file has the encryption header (and one of
+        allowed_key_ids, if given); no plaintext <log>.N.gz is left.
+        expect="plaintext": no file has the header; rotated generations are
+        gzip-compressed <log>.N.gz.
+        Both: no generation exists as both <log>.N and <log>.N.gz.
+        max_gap_secs (MB-72103): read oldest to newest generation (cbcat if encrypted);
+        timestamps of adjacent generations must neither overlap nor gap by more than this.
+        expected_lines (read_stats_log_lines before the key change): the whole content read
+        back now must hold those lines unchanged and in order; only the oldest may have
+        rotated out, and no line may appear twice (MB-69179, MB-69519).
+
+        Returns (ok, problems).
+        """
+        log_dir = self.get_log_path(node)
+        shell = RemoteMachineShellConnection(node, verbose=False)
+        try:
+            out, _ = shell.execute_command(
+                f"find {self._shell_quote(log_dir)} -maxdepth 1 -type f -name '{log_name}*' "
+                f"! -name '*.tmp' 2>/dev/null"
+            )
+        finally:
+            shell.disconnect()
+        files = sorted(line.strip() for line in out if line.strip())
+        if not files:
+            return False, [f"no {log_name} files in {log_dir} on {node.ip}"]
+        problems = []
+        generations = {}
+        allowed_key_ids = self._normalize_key_ids(allowed_key_ids)
+        for path in files:
+            suffix = path.split("/")[-1][len(log_name):]
+            generation = suffix[1:].replace(".gz", "") if suffix else ""
+            generations.setdefault(generation, []).append(path)
+            is_gz = path.endswith(".gz")
+            if expect == "encrypted":
+                if is_gz:
+                    problems.append(f"{path}: plaintext .gz left")
+                    continue
+                is_encrypted, details = self.verify_file_encryption_magic_bytes(node, path)
+                if not is_encrypted:
+                    problems.append(f"{path}: not encrypted ({details})")
+                elif allowed_key_ids and not self.verify_file_header_contains_any(
+                        node, path, allowed_key_ids)[0]:
+                    problems.append(f"{path}: header key not in {allowed_key_ids}")
+            else:
+                if self.verify_file_encryption_magic_bytes(node, path)[0]:
+                    problems.append(f"{path}: still encrypted")
+                elif is_gz:
+                    shell = RemoteMachineShellConnection(node, verbose=False)
+                    try:
+                        out, _ = shell.execute_command(
+                            f"gzip -t {self._shell_quote(path)} 2>/dev/null && echo GZ_OK")
+                    finally:
+                        shell.disconnect()
+                    if "GZ_OK" not in "".join(out):
+                        problems.append(f"{path}: not a valid gzip file")
+                elif generation:
+                    problems.append(f"{path}: rotated plaintext generation is not .gz")
+        for generation, paths in generations.items():
+            if len(paths) > 1:
+                problems.append(f"generation {generation} exists as {paths}")
+        if max_gap_secs is not None and not problems:
+            reader = ("/opt/couchbase/bin/cbcat --password - --with-gosecrets "
+                      "/opt/couchbase/var/lib/couchbase/config/gosecrets.cfg"
+                      if expect == "encrypted" else "zcat -f")
+            spans = []
+            shell = RemoteMachineShellConnection(node, verbose=False)
+            try:
+                for generation in sorted((g for g in generations if g), key=int, reverse=True) + [""]:
+                    path = generations[generation][0]
+                    out, _ = shell.execute_command(
+                        f"{reader} {self._shell_quote(path)} </dev/null | grep -oE "
+                        f"'^[0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}}T[0-9:.]+[-+][0-9]{{2}}:[0-9]{{2}}' | sed -n '1p;$p'")
+                    stamps = [datetime.fromisoformat(line.strip()) for line in out if line.strip()]
+                    if stamps:
+                        spans.append((path, stamps[0], stamps[-1]))
+                    elif generation:
+                        problems.append(f"{path}: no readable timestamps")
+            finally:
+                shell.disconnect()
+            for (older, _, older_last), (newer, newer_first, _) in zip(spans, spans[1:]):
+                gap = (newer_first - older_last).total_seconds()
+                if gap < 0 or gap > max_gap_secs:
+                    problems.append(f"{older} -> {newer}: {gap:.0f}s between generations")
+        if expected_lines and not problems:
+            lines = self.read_stats_log_lines(node, log_name)
+            before = expected_lines[:-1]  # the last line may have been only partly written
+            failed = [line for line in lines if line.startswith("READ_FAILED:")]
+            if failed:
+                problems.append(f"could not decode: {failed}")
+            elif not lines or lines[0] not in before:
+                problems.append(f"oldest line is not in the content captured before the key change "
+                                f"(changed, lost, or all captured lines rotated out): {lines[:1]}")
+            else:
+                expected = before[before.index(lines[0]):]
+                diff = next((i for i, (a, b) in enumerate(zip(expected, lines)) if a != b),
+                            None if len(lines) >= len(expected) else len(lines))
+                if diff is not None:
+                    problems.append(f"content changed at captured line {diff}: before "
+                                    f"{expected[diff][:120]!r}, now {lines[diff][:120] if diff < len(lines) else None!r}")
+                elif len(set(lines)) != len(lines):
+                    problems.append("a line appears twice after the key change")
+        if problems:
+            self.log.error(f"{log_name} chain on {node.ip} not {expect}: {problems}")
+        else:
+            self.log.info(f"{log_name} chain on {node.ip} is {expect}: {files}")
+        return not problems, problems
 
     def _extract_string_values(self, obj, sink):
         """Recursively pull printable string values out of a JSON-y object."""
@@ -4069,7 +4265,8 @@ class GSIEncryptionAtRestBase:
         self.log.info(f"{step_prefix}File encryption validation completed successfully")
         return True
 
-    def validate_files_not_encrypted(self, index_nodes, bucket_name, timeout=300, poll_interval=15, step_prefix=""):
+    def validate_files_not_encrypted(self, index_nodes, bucket_name, timeout=300, poll_interval=15, step_prefix="",
+                                     old_key_ids=None):
         """
         Poll index nodes until all index files for bucket_name are confirmed NOT encrypted.
 
@@ -4085,7 +4282,10 @@ class GSIEncryptionAtRestBase:
             timeout: Max seconds to wait (default 300 / 5 min).
             poll_interval: Seconds between polls (default 15).
             step_prefix: Log prefix string.
+            old_key_ids: key IDs the bucket was encrypted with; Plasma/BHIVE data files carry
+                no header, so a file whose body still contains one of them is still encrypted.
         """
+        old_key_ids = [str(k) for k in (old_key_ids or []) if k]
         self.log.info(
             f"{step_prefix}Polling until all index files for bucket '{bucket_name}' "
             f"are decrypted (timeout={timeout}s)..."
@@ -4104,6 +4304,7 @@ class GSIEncryptionAtRestBase:
 
         while time.time() < deadline:
             still_encrypted = []
+            total_files = 0
             for node in index_nodes:
                 rest = RestConnection(node)
                 index_path = rest.get_index_path()
@@ -4117,12 +4318,26 @@ class GSIEncryptionAtRestBase:
                     shell.disconnect()
 
                 files = [l.strip() for l in out if l.strip()]
+                total_files += len(files)
                 if not files:
                     self.log.info(
                         f"{step_prefix}{node.ip}: no index files found for UUID {bucket_uuid} — "
                         f"treating as decrypted"
                     )
                     continue
+                if old_key_ids:
+                    keys = " ".join(f"-e {shlex.quote(k)}" for k in old_key_ids)
+                    shell = RemoteMachineShellConnection(node, verbose=False)
+                    try:
+                        out, _ = shell.execute_command(
+                            f"find {storage_dir} -type f 2>/dev/null | grep -i '{bucket_uuid}' | "
+                            f"LC_ALL=C xargs -r grep -aFl {keys} 2>/dev/null"
+                        )
+                    finally:
+                        shell.disconnect()
+                    for fpath in (l.strip() for l in out if l.strip()):
+                        still_encrypted.append((node.ip, fpath))
+                        self.log.info(f"{step_prefix}{node.ip}: file still carries an old key ID: {fpath}")
 
                 for fpath in files:
                     is_enc, details = self.gsi_encryption_helper.verify_file_encryption_magic_bytes(
@@ -4131,6 +4346,12 @@ class GSIEncryptionAtRestBase:
                     if is_enc:
                         still_encrypted.append((node.ip, fpath))
                         self.log.info(f"{step_prefix}{node.ip}: file still encrypted: {fpath}")
+
+            if not total_files:
+                self.log.info(f"{step_prefix}No index files found for UUID {bucket_uuid} on any node, "
+                              f"waiting {poll_interval}s before retry...")
+                time.sleep(poll_interval)
+                continue
 
             if not still_encrypted:
                 self.log.info(
