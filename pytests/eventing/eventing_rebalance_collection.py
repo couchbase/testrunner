@@ -15,7 +15,7 @@ log = logging.getLogger()
 class EventingRebalanceCollection(EventingBaseTest):
     def setUp(self):
         super(EventingRebalanceCollection, self).setUp()
-        self.hostname="http://qa.sc.couchbase.com/"
+        self.hostname="https://postman-echo.com/"
         self.create_n_scope(self.dst_bucket_name,5)
         self.create_n_scope(self.src_bucket_name,5)
         self.create_n_collections(self.dst_bucket_name,"scope_1",5)
