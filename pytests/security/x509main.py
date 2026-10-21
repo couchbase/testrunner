@@ -137,6 +137,7 @@ class x509main:
                     fin.write("\nDNS.0 = {0}".format(server.ip))
                 elif wildcard_dns:
                     fin.write("\nDNS.0 = {0}".format(wildcard_dns))
+                    fin.write("\nIP.0 = {0}".format(server.ip.replace('[', '').replace(']', '')))
                 else:
                     fin.write("\nIP.0 = {0}".format(server.ip.replace('[', '').replace(']', '')))
 
@@ -208,6 +209,7 @@ class x509main:
             output, error = shell.execute_command("cat " + x509main.CACERTFILEPATH + client_ip + ".pem " + x509main.CACERTFILEPATH + "int.pem " + x509main.CACERTFILEPATH + "ca.pem > " + x509main.CACERTFILEPATH + "long_chain" + client_ip + ".pem")
             log.info ('Output message is {0} and error message is {1}'.format(output, error))
             os.remove("./pytests/security/clientconf2.conf")
+        shell.disconnect()
 
     # Top level method for setup of nodes in the cluster
     def setup_cluster_nodes_ssl(self, servers=[], reload_cert=False):
@@ -257,6 +259,7 @@ class x509main:
         else:
             #install_path = x509main.LININSTALLPATH
             install_path = str(self.get_data_path(host)) + "/"
+        shell.disconnect()
         return install_path
 
     # create inbox folder for host
@@ -264,10 +267,10 @@ class x509main:
         shell = RemoteMachineShellConnection(self.host)
         final_path = self.install_path + x509main.CHAINFILEPATH
         shell.create_directory(final_path)
+        shell.disconnect()
 
     # delete all file inbox folder and remove inbox folder
     def _delete_inbox_folder(self):
-        shell = RemoteMachineShellConnection(self.host)
         final_path = self.install_path + x509main.CHAINFILEPATH
         shell = RemoteMachineShellConnection(self.host)
         os_type = shell.extract_remote_info().distribution_type
@@ -280,11 +283,13 @@ class x509main:
             shell.execute_command('rm -rf ' + final_path)
         else:
             shell.execute_command('rm -rf ' + final_path)
+        shell.disconnect()
 
     # Function to simply copy from source to destination
     def _copy_node_key_chain_cert(self, host, src_path, dest_path):
         shell = RemoteMachineShellConnection(host)
         shell.copy_file_local_to_remote(src_path, dest_path)
+        shell.disconnect()
 
     def _create_rest_headers(self, username="Administrator", password="password"):
         authorization = base64.encodebytes(('%s:%s' % (username, password)).encode()).decode()
@@ -484,6 +489,7 @@ class x509main:
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
                     options=options, cluster_host="localhost", user=user, password=password)
         log.info (" -- Output of command ssl-manage with --set-client-auth is {0} and erorr is {1}".format(output, error))
+        remote_client.disconnect()
 
     def non_local_CA_upload(self, allow=False, server=None):
         """
