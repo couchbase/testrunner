@@ -5897,3 +5897,43 @@ class IcebergQueryTests(QueryTests):
         non_null = result['results'][0].get('non_null_count', 0)
         self.assertGreater(total, 0, "Total count should be > 0")
         self.assertLessEqual(non_null, total, "Non-null count should be <= total")
+
+    def test_mb74663_large_table_no_truncation(self):
+        """MB-74663: Iceberg scan over a table with >131072 rows returns all rows.
+
+        iceberg-go's ToArrowRecords iterator is single-use; re-ranging it on every
+        loadNextRecord call broke after the first Arrow batch (~131072 rows), either
+        silently truncating results or failing with 'context canceled'.  The fix
+        converts the iter.Seq2 once with iter.Pull2 and pulls one batch per call.
+
+        Requires initial_doc_count >= 200000 (two Arrow batches) to exercise the fix.
+        """
+        arrow_batch_size = 131072
+        expected_count = self.initial_doc_count
+        if expected_count <= arrow_batch_size:
+            self.fail(
+                f"test_mb74663 requires initial_doc_count > {arrow_batch_size}; "
+                f"got {expected_count}. Pass initial_doc_count=200000 in the conf."
+            )
+
+        count_query = f"SELECT COUNT(*) AS c FROM {self.external_collection_name}"
+        run_results = []
+        for i in range(5):
+            result = self.run_cbq_query(count_query, query_params={"timeout": "600s"})
+            self.assertEqual(result['status'], 'success',
+                             f"Run {i + 1}/5 failed with status {result.get('status')}: {result}")
+            actual = result['results'][0].get('c', -1)
+            run_results.append(actual)
+            self.assertEqual(actual, expected_count,
+                             f"Run {i + 1}/5: expected COUNT={expected_count}, got {actual} "
+                             f"(first Arrow batch={arrow_batch_size} indicates truncation)")
+
+        self.log.info(f"MB-74663: COUNT(*) correct on all 5 runs: {run_results}")
+
+        select_query = (
+            f"SELECT id, name FROM {self.external_collection_name} "
+            f"WHERE id > {expected_count - 10} ORDER BY id"
+        )
+        select_result = self.run_cbq_query(select_query, query_params={"timeout": "600s"})
+        self.assertEqual(select_result['status'], 'success',
+                         f"Filter query failed (context canceled regression): {select_result}")
