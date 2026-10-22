@@ -6772,6 +6772,217 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
         self.log.info(f"DGM + key toggle + compaction succeeded on buckets '{bucket_1}', '{bucket_2}'")
         self.log.info("=" * 80)
 
+    def test_gsi_persisted_stats_log_encryption_lifecycle(self):
+        """
+        MB-69769: Validate the full plaintext -> encrypted -> re-keyed ->
+        disabled lifecycle of the persisted stats file (@2i/indexstats/stats).
+
+        Steps:
+          1-2. Create bucket, load docs, build indexes. Stats file is plaintext.
+          3.   Assert persisted stats is plaintext.
+          4.   Enable log encryption + DEK drop to force immediate encrypted write.
+          5.   Assert encrypted with in-use log DEK.
+          6-7. Graceful restart x1, verify read-back, still encrypted.
+          8-9. Graceful restart x2, still encrypted, scans work.
+          10.  Force re-encrypt via another DEK drop; verify new DEK.
+          11.  Kill -9 restart; verify encrypted stats survives crash + scans work.
+          12.  Disable log encryption + restart; verify plaintext again + scans.
+        """
+        self.log.info("=" * 80)
+        self.log.info("STARTING TEST: test_gsi_persisted_stats_log_encryption_lifecycle")
+        self.log.info("=" * 80)
+
+        # ========== STEP 1: Verify prerequisites (no log encryption yet) ==========
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        self.assertGreaterEqual(len(index_nodes), 1,
+            f"Need at least 1 index node, found {len(index_nodes)}")
+        self.log.info(
+            f"[STEP 1] PASSED - {len(index_nodes)} index node(s), log encryption not yet enabled"
+        )
+
+        # ========== STEP 2: Create bucket, load docs, build indexes ==========
+        bucket_name = self.test_bucket
+        self.log.info(f"[STEP 2] Creating bucket '{bucket_name}' without encryption...")
+        self.create_bucket_with_encryption(bucket_name, enable_encryption=False)
+        namespace = f"default:{bucket_name}._default._default"
+        try:
+            self.set_indexer_snapshot_settings(index_nodes, step_prefix="[STEP 2] ")
+        except Exception as e:
+            self.log.warning(f"[STEP 2] set_indexer_snapshot_settings failed (non-fatal): {e}")
+
+        self.log.info(f"[STEP 2] Loading {self.num_of_docs_per_collection} docs and creating indexes...")
+        from couchbase_helper.documentgenerator import SDKDataLoader
+        gen = SDKDataLoader(
+            num_ops=self.num_of_docs_per_collection,
+            percent_create=100,
+            percent_update=0,
+            percent_delete=0,
+            scope="_default",
+            collection="_default",
+            json_template=self.json_template,
+            output=True,
+            username=self.username,
+            password=self.password,
+        )
+        tasks = self.data_ops_javasdk_loader_in_batches(
+            sdk_data_loader=gen, batch_size=10**4, dataset=self.json_template
+        )
+        for task in tasks:
+            task.result()
+        query_definitions = self.gsi_util_obj.get_index_definition_list(
+            dataset=self.json_template,
+            prefix="persisted_stats",
+            similarity=self.similarity if hasattr(self, "similarity") else None,
+        )
+        create_queries = self.gsi_util_obj.get_create_index_list(
+            definition_list=query_definitions,
+            namespace=namespace,
+        )
+        select_queries = self.gsi_util_obj.get_select_queries(
+            definition_list=query_definitions,
+            namespace=namespace,
+        )
+        self.gsi_util_obj.create_gsi_indexes(
+            create_queries=create_queries,
+            database=bucket_name,
+            query_node=query_node,
+        )
+        self.wait_until_indexes_online(timeout=600)
+        # Flush stats to disk
+        self.sleep(30, "[STEP 2] Waiting for stats to flush to disk")
+        self.log.info("[STEP 2] PASSED - Docs loaded and indexes built")
+
+        # ========== STEP 3: Verify persisted stats file is plaintext ==========
+        self.log.info("[STEP 3] Verifying persisted stats (@2i/indexstats/stats) is plaintext...")
+        results = self.gsi_encryption_helper.verify_gsi_persisted_stats_encrypted(index_nodes)
+        encrypted_nodes = [ip for ip, r in results.items() if r["status"] == "passed"]
+        if encrypted_nodes:
+            self.fail(
+                f"[STEP 3] Persisted stats already encrypted on {encrypted_nodes} "
+                f"before log encryption was enabled"
+            )
+        self.log.info("[STEP 3] PASSED - Persisted stats file is plaintext on all index nodes")
+
+        # ========== STEP 4: Enable log encryption at runtime ==========
+        self.log.info("[STEP 4] Creating log-encryption secret and enabling log encryption...")
+        log_secret_id = self.create_new_encryption_key(usage=["log-encryption"])
+        self.set_encryption_at_rest("log", log_secret_id, enable=True)
+        status, _ = self.rest.trigger_log_reencryption()
+        self.assertTrue(status, "[STEP 4] trigger_log_reencryption (DEK drop) failed")
+        self.sleep(10, "[STEP 4] Waiting for DEK drop to persist stats file")
+        self.log.info(f"[STEP 4] PASSED - Log encryption enabled, DEK drop triggered")
+
+        # ========== STEP 5: Verify persisted stats file is now encrypted ==========
+        self.log.info("[STEP 5] Verifying persisted stats is encrypted after enabling log EAR...")
+        expected_key_ids = self.get_indexer_in_use_key_ids(index_nodes, key_type="log")
+        self.assertTrue(expected_key_ids, "[STEP 5] No in-use log key IDs reported")
+        results = self.gsi_encryption_helper.verify_gsi_persisted_stats_encrypted(
+            index_nodes, expected_key_id=expected_key_ids
+        )
+        failures = [
+            f"{ip}: {r['reason']}" for ip, r in results.items()
+            if r["status"] not in ("passed", "skipped")
+        ]
+        if failures:
+            self.fail(f"[STEP 5] Persisted stats not encrypted as expected: {failures}")
+        self.log.info("[STEP 5] PASSED - Persisted stats encrypted on all index nodes")
+
+        # ========== STEP 6: Restart indexer once ==========
+        self.log.info("[STEP 6] Restarting indexer (first restart) to verify read-back of encrypted stats...")
+        self.restart_index_nodes(index_nodes, validate_read_back=True)
+        self.log.info("[STEP 6] PASSED - Indexer restarted and indexes back online")
+
+        # ========== STEP 7: Verify persisted stats still encrypted after first restart ==========
+        self.log.info("[STEP 7] Verifying persisted stats still encrypted after first restart...")
+        expected_key_ids = self.get_indexer_in_use_key_ids(index_nodes, key_type="log")
+        results = self.gsi_encryption_helper.verify_gsi_persisted_stats_encrypted(
+            index_nodes, expected_key_id=expected_key_ids
+        )
+        failures = [
+            f"{ip}: {r['reason']}" for ip, r in results.items()
+            if r["status"] not in ("passed", "skipped")
+        ]
+        if failures:
+            self.fail(f"[STEP 7] Persisted stats not encrypted after first restart: {failures}")
+        self.log.info("[STEP 7] PASSED - Persisted stats encrypted after first restart")
+
+        # ========== STEP 8: Restart indexer a second time ==========
+        self.log.info("[STEP 8] Restarting indexer (second restart)...")
+        self.restart_index_nodes(index_nodes, validate_read_back=True)
+        self.log.info("[STEP 8] PASSED - Second restart complete")
+
+        # ========== STEP 9: Verify still encrypted, scans work ==========
+        self.log.info("[STEP 9] Verifying persisted stats encrypted after second restart + running scans...")
+        expected_key_ids = self.get_indexer_in_use_key_ids(index_nodes, key_type="log")
+        results = self.gsi_encryption_helper.verify_gsi_persisted_stats_encrypted(
+            index_nodes, expected_key_id=expected_key_ids
+        )
+        failures = [
+            f"{ip}: {r['reason']}" for ip, r in results.items()
+            if r["status"] not in ("passed", "skipped")
+        ]
+        if failures:
+            self.fail(f"[STEP 9] Persisted stats not encrypted after second restart: {failures}")
+        self.run_scan_validation(set(select_queries))
+        self.log.info("[STEP 9] PASSED - Persisted stats encrypted, scans succeeded")
+
+        # ========== STEP 10: Force re-encrypt via DEK drop ==========
+        self.log.info("[STEP 10] Triggering DEK drop to force re-encryption with a new DEK...")
+        old_key_ids = set(expected_key_ids)
+        status, _ = self.rest.trigger_log_reencryption()
+        self.assertTrue(status, "[STEP 10] trigger_log_reencryption (force re-encrypt) failed")
+        self.sleep(10, "[STEP 10] Waiting for DEK drop to complete")
+        new_key_ids = self.get_indexer_in_use_key_ids(index_nodes, key_type="log")
+        self.assertTrue(new_key_ids, "[STEP 10] No in-use log key IDs after DEK drop")
+        results = self.gsi_encryption_helper.verify_gsi_persisted_stats_encrypted(
+            index_nodes, expected_key_id=new_key_ids
+        )
+        failures = [
+            f"{ip}: {r['reason']}" for ip, r in results.items()
+            if r["status"] not in ("passed", "skipped")
+        ]
+        if failures:
+            self.fail(f"[STEP 10] Persisted stats not re-encrypted after DEK drop: {failures}")
+        self.log.info(f"[STEP 10] PASSED - Re-encrypted (old={old_key_ids}, new={set(new_key_ids)})")
+
+        # ========== STEP 11: Kill -9 restart ==========
+        self.log.info("[STEP 11] Kill -9 restart to test crash recovery of encrypted stats...")
+        self.restart_index_nodes(index_nodes, restart_mode="kill", validate_read_back=True)
+        expected_key_ids = self.get_indexer_in_use_key_ids(index_nodes, key_type="log")
+        results = self.gsi_encryption_helper.verify_gsi_persisted_stats_encrypted(
+            index_nodes, expected_key_id=expected_key_ids
+        )
+        failures = [
+            f"{ip}: {r['reason']}" for ip, r in results.items()
+            if r["status"] not in ("passed", "skipped")
+        ]
+        if failures:
+            self.fail(f"[STEP 11] Persisted stats not encrypted after kill -9: {failures}")
+        self.run_scan_validation(set(select_queries))
+        self.log.info("[STEP 11] PASSED - Survived kill -9, scans succeeded")
+
+        # ========== STEP 12: Disable log encryption + DEK drop (decrypt) ==========
+        self.log.info("[STEP 12] Disabling log encryption and triggering DEK drop (decrypt)...")
+        self.set_encryption_at_rest("log", log_secret_id, enable=False)
+        status, _ = self.rest.trigger_log_reencryption()
+        self.assertTrue(status, "[STEP 12] trigger_log_reencryption (decrypt) failed")
+        self.sleep(10, "[STEP 12] Waiting for decrypt to complete")
+        results = self.gsi_encryption_helper.verify_gsi_persisted_stats_encrypted(index_nodes)
+        encrypted_nodes = [ip for ip, r in results.items() if r["status"] == "passed"]
+        if encrypted_nodes:
+            self.fail(
+                f"[STEP 12] Persisted stats still encrypted on {encrypted_nodes} "
+                f"after disabling log encryption"
+            )
+        self.restart_index_nodes(index_nodes, validate_read_back=True)
+        self.run_scan_validation(set(select_queries))
+        self.log.info("[STEP 12] PASSED - Persisted stats plaintext after disable, scans work")
+
+        self.log.info("=" * 80)
+        self.log.info("TEST PASSED: test_gsi_persisted_stats_log_encryption_lifecycle")
+        self.log.info("=" * 80)
+
     def test_gsi_log_encryption_files_encrypted(self):
         """
         Validate that indexer_stats.log, projector_stats.log, and the

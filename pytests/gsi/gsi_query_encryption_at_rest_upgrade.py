@@ -35,6 +35,7 @@ import time
 import requests
 
 from couchbase_helper.query_definitions import QueryDefinition
+from TestInput import TestInputSingleton
 from .upgrade_gsi import UpgradeSecondaryIndex
 from pytests.tuqquery.n1ql_encryption_helpers import N1QLEncryptionHelpers
 from pytests.security.crl_base import CRLBase
@@ -58,6 +59,8 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex, CRLBase):
     def setUp(self):
         # Explicit call (not super) so CRLBase.setUp() does not run via MRO —
         # same pattern as QueryCRLTests. CRLBase fields are initialised below.
+        if not TestInputSingleton.input.param("upgrade_to", None):
+            self.skipTest("upgrade_to must be passed via -p (e.g. -p upgrade_to=8.1.0-XXXX)")
         UpgradeSecondaryIndex.setUp(self)
         self.encryption_helper = N1QLEncryptionHelpers(self.log)
         self.log.info("==============  GSIQueryEncryptionAtRestUpgrade setUp ==============")
@@ -756,6 +759,25 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex, CRLBase):
         if isinstance(response, dict):
             for v in response.values():
                 GSIQueryEncryptionAtRestUpgrade._extract_indexer_key_ids(v, out_set)
+
+    def _get_indexer_log_in_use_key_ids(self, index_nodes):
+        """Union of the indexer's log-encryption in-use DEK IDs."""
+        keys = set()
+        for node in index_nodes:
+            try:
+                rest = RestConnection(node)
+                status, response = rest.get_indexer_in_use_encryption_keys()
+                if not status or not isinstance(response, dict):
+                    continue
+                for label, ids in response.items():
+                    if str(label).strip("{} ").split()[0] != "log":
+                        continue
+                    self._extract_indexer_key_ids(ids, keys)
+            except Exception as e:
+                self.log.warning(
+                    f"get_indexer_in_use_encryption_keys (log) on {node.ip} failed: {e}"
+                )
+        return sorted(keys)
 
     def _get_indexer_other_in_use_key_ids(self, index_nodes):
         """Union of the indexer's cluster/file-level ("other") in-use DEK IDs.
@@ -3034,3 +3056,168 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex, CRLBase):
             self.disable_shard_based_rebalance()
             self.sleep(10)
         self._run_upgrade_test(mode='online')
+
+    def test_stats_log_upgrade_plaintext_to_encrypted(self):
+        """
+        MB-69769: Verify that the persisted stats file (@2i/indexstats/stats)
+        written as plaintext on a pre-8.1 build is correctly read back and
+        re-encrypted after an upgrade to 8.1+ and enabling log encryption.
+
+        Steps:
+          1. Start on initial_version (8.0 or older).  Create a bucket, load
+             docs, build indexes so the indexer writes a plaintext stats file.
+          2. Assert persisted stats file is plaintext on all index nodes.
+          3. Upgrade all nodes to upgrade_to (8.1+) via offline upgrade.
+          4. Enable log encryption and trigger a DEK drop to force an
+             immediate encrypted write of the persisted stats file.
+          5. Assert persisted stats file is encrypted with the in-use log DEK.
+          6. Restart each indexer once; verify read-back.
+          7. Assert still encrypted; verify scans succeed.
+        """
+
+        self.log.info("=" * 80)
+        self.log.info("STARTING TEST: test_stats_log_upgrade_plaintext_to_encrypted")
+        self.log.info(f"  initial_version={self.initial_version} -> upgrade_to={self.upgrade_to}")
+        self.log.info("=" * 80)
+
+        # ========== STEP 1: Create bucket + load docs + build indexes ==========
+        self.log.info("[STEP 1] Creating bucket, loading docs and building indexes...")
+        self.bucket_params = self._create_bucket_params(
+            server=self.master, size=self.bucket_size,
+            replicas=self.num_replicas, bucket_type=self.bucket_type,
+            enable_replica_index=self.enable_replica_index,
+            eviction_policy=self.eviction_policy, lww=self.lww,
+        )
+        self.cluster.create_standard_bucket(
+            name=self.test_bucket, port=11222, bucket_params=self.bucket_params,
+        )
+        self.sleep(10, "Wait after bucket creation")
+        self.prepare_collection_for_indexing(
+            num_scopes=1, num_collections=1,
+            num_of_docs_per_collection=self.num_of_docs_per_collection,
+            json_template=self.json_template,
+            bucket_name=self.test_bucket,
+            load_default_coll=True,
+        )
+        self.sleep(10)
+
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+
+        select_queries = set()
+        scalar_queries = self.create_index_in_batches(
+            num_batches=1, replica_count=0, scalar=True,
+            dataset=self.json_template, bhive=False,
+        )
+        select_queries.update(scalar_queries)
+        self.wait_until_indexes_online(timeout=600)
+        # Give stats manager time to write the plaintext stats file
+        self.sleep(30, "[STEP 1] Waiting for stats flush to disk")
+        self.log.info("[STEP 1] PASSED")
+
+        # ========== STEP 2: Assert persisted stats file is plaintext pre-upgrade ==========
+        self.log.info("[STEP 2] Asserting persisted stats (@2i/indexstats/stats) is plaintext...")
+        results = self.gsi_encryption_helper.verify_gsi_persisted_stats_encrypted(index_nodes)
+        encrypted_nodes = [ip for ip, r in results.items() if r["status"] == "passed"]
+        if encrypted_nodes:
+            self.log.warning(
+                f"[STEP 2] Persisted stats already encrypted on {encrypted_nodes} "
+                f"before upgrade — initial_version={self.initial_version} may support log EAR"
+            )
+        else:
+            self.log.info("[STEP 2] PASSED - Persisted stats file is plaintext pre-upgrade")
+
+        # ========== STEP 3: Upgrade all nodes (offline) ==========
+        self.log.info(f"[STEP 3] Upgrading all nodes to {self.upgrade_to} (offline)...")
+        all_nodes = (
+            self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+            + index_nodes
+            + self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)
+        )
+        # Deduplicate while preserving order
+        seen = set()
+        upgrade_nodes = []
+        for n in all_nodes:
+            if n.ip not in seen:
+                seen.add(n.ip)
+                upgrade_nodes.append(n)
+
+        for node in upgrade_nodes:
+            self._upgrade_node(node, mode='offline')
+
+        # Re-discover index nodes on the upgraded cluster
+        self.sleep(30, "[STEP 3] Settling after full upgrade")
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        self.wait_until_indexes_online(timeout=900)
+        self.log.info("[STEP 3] PASSED - All nodes upgraded")
+
+        # ========== STEP 4: Enable log encryption on upgraded cluster ==========
+        self.log.info("[STEP 4] Enabling log encryption at rest on upgraded cluster...")
+        from lib.membase.helper.encryption_at_rest_helper import EncryptionUtil
+        log_key_params = EncryptionUtil.create_secret_params(
+            name=EncryptionUtil.generate_random_name("MB69769UpgLogKey"),
+            usage=["log-encryption"],
+            rotationIntervalInSeconds=getattr(self, "secret_rotation_interval", 60),
+        )
+        status, response = self.rest.create_secret(log_key_params)
+        if not status:
+            self.fail(f"[STEP 4] Failed to create log-encryption secret: {response}")
+        import json as _json
+        log_key_id = _json.loads(response).get("id")
+        self.assertIsNotNone(log_key_id, "[STEP 4] Log-encryption secret returned no ID")
+        log_rest_params = {
+            "encryptionMethod": "encryptionKey",
+            "encryptionKeyId": log_key_id,
+            "dekLifetime": 31536000,
+            "dekRotationInterval": 2592000,
+        }
+        status, _ = self.rest.configure_log_encryption_at_rest(log_rest_params)
+        self.assertTrue(status, "[STEP 4] configure_log_encryption_at_rest failed")
+        status, _ = self.rest.trigger_log_reencryption()
+        self.assertTrue(status, "[STEP 4] trigger_log_reencryption (DEK drop) failed")
+        self.sleep(10, "[STEP 4] Waiting for DEK drop to persist stats file")
+        self.log.info(f"[STEP 4] PASSED - Log encryption enabled, DEK drop triggered")
+
+        # ========== STEP 5: Assert persisted stats file is now encrypted ==========
+        self.log.info("[STEP 5] Verifying persisted stats is encrypted post-upgrade...")
+        expected_key_ids = self._get_indexer_log_in_use_key_ids(index_nodes)
+        self.assertTrue(expected_key_ids, "[STEP 5] No in-use log key IDs reported")
+        results = self.gsi_encryption_helper.verify_gsi_persisted_stats_encrypted(
+            index_nodes, expected_key_id=expected_key_ids
+        )
+        failures = [
+            f"{ip}: {r['reason']}" for ip, r in results.items()
+            if r["status"] not in ("passed", "skipped")
+        ]
+        if failures:
+            self.fail(f"[STEP 5] Persisted stats not encrypted as expected: {failures}")
+        self.log.info("[STEP 5] PASSED - Persisted stats encrypted on all index nodes")
+
+        # ========== STEP 6: Restart indexer, verify read-back ==========
+        self.log.info("[STEP 6] Restarting indexers to verify encrypted stats file read-back...")
+        self.gsi_encryption_helper.restart_index_nodes(index_nodes, timeout=900)
+        self.wait_until_indexes_online(timeout=900)
+        self.log.info("[STEP 6] PASSED - Indexers restarted, indexes online")
+
+        # ========== STEP 7: Verify still encrypted + scans work ==========
+        self.log.info("[STEP 7] Verifying persisted stats still encrypted + running scans...")
+        expected_key_ids = self._get_indexer_log_in_use_key_ids(index_nodes)
+        results = self.gsi_encryption_helper.verify_gsi_persisted_stats_encrypted(
+            index_nodes, expected_key_id=expected_key_ids
+        )
+        failures = [
+            f"{ip}: {r['reason']}" for ip, r in results.items()
+            if r["status"] not in ("passed", "skipped")
+        ]
+        if failures:
+            self.fail(f"[STEP 7] Persisted stats not encrypted after restart: {failures}")
+        for q in list(select_queries)[:5]:
+            try:
+                self.run_cbq_query(query=q, server=query_node, verbose=False)
+            except Exception as e:
+                self.fail(f"[STEP 7] Scan failed after upgrade+restart: {q!r}: {e}")
+        self.log.info("[STEP 7] PASSED - Stats file encrypted, scans succeeded")
+
+        self.log.info("=" * 80)
+        self.log.info("TEST PASSED: test_stats_log_upgrade_plaintext_to_encrypted")
+        self.log.info("=" * 80)
