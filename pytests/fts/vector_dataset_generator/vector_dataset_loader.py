@@ -153,7 +153,7 @@ class GoVectorLoader:
             try:
                 print(f"Running docker container {docker_image} with name {container_name}")
                 docker_output = self.docker_client.containers.run(docker_image, docker_run_params,
-                                                                  name=container_name)
+                                                                  name=container_name, remove=True)
                 # print(docker_output)
             except Exception as e:
                 print(f"Exception while running docker container: {e}")

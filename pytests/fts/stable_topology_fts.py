@@ -3831,8 +3831,14 @@ class StableTopFTS(FTSBaseTest):
         self.wait_for_indexing_complete_simple(item_count=3000, index=test_index_multi)
 
         test_query = {"query": "mutated:1"}
-        hits, _, _, _ = test_index.execute_query(test_query)
-        hits_multi, _, _, _ = test_index_multi.execute_query(test_query)
+        # updates don't change doc count, so poll until the mutations are searchable
+        deadline = time.time() + int(self._input.param("index_wait_timeout", 300))
+        while True:
+            hits, _, _, _ = test_index.execute_query(test_query)
+            hits_multi, _, _, _ = test_index_multi.execute_query(test_query)
+            if (hits == 1000 and hits_multi == 3000) or time.time() > deadline:
+                break
+            self.sleep(5, f"waiting for updates to be indexed: {hits}/1000, {hits_multi}/3000")
 
         errors = []
         try:
@@ -3880,6 +3886,7 @@ class StableTopFTS(FTSBaseTest):
                 self._fill_collection(bucket=bucket, scope=scope_name, collection=collection_name)
 
         self._fill_collection(bucket=bucket, scope=test_scope, collection=test_collection, num_docs=1000, start_seq_num=1)
+        self.wait_for_indexing_complete_simple(item_count=2000, index=test_index)
 
         test_query = {"match": "emp", "field": "type"}
         hits, _, _, _ = test_index.execute_query(test_query)

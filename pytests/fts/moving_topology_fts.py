@@ -1831,6 +1831,7 @@ class MovingTopFTS(FTSBaseTest):
         node = self._cb_cluster.get_random_fts_node()
         NodeHelper.kill_cbft_process(node)
         self._cb_cluster.set_bypass_fts_node(node)
+        self.wait_for_indexing_complete()
         self.run_query_and_compare(index)
         frest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
         err = self.validate_partition_distribution(frest)
@@ -2125,7 +2126,13 @@ class MovingTopFTS(FTSBaseTest):
         self.async_perform_update_delete(self.upd_del_fields)
         if self._update:
             self.sleep(60, "Waiting for updates to get indexed...")
-        self.wait_for_indexing_complete()
+        # Persistence is stopped on two nodes above, so the bucket stat still
+        # reports the pre-delete count and this wait would never converge. The
+        # delete pass removes a known percentage, so wait on that number.
+        expected = self._find_expected_indexed_items_number()
+        if self._delete:
+            expected = int(expected * (100 - self._perc_del) / 100)
+        self.wait_for_indexing_complete(expected)
 
         # Run FTS Query to fetch the initial count of mutated items
         query = "{\"query\": \"mutated:>0\"}"
@@ -2160,8 +2167,14 @@ class MovingTopFTS(FTSBaseTest):
             node=self._input.servers[1])
         failover_task.result()
 
-        # Wait for Failover & FTS index rollback to complete
-        self.wait_for_indexing_complete()
+        # Wait for Failover & FTS index rollback to complete. FTS follows KV
+        # back through the rollback but ES cannot roll back, so it stays at the
+        # pre-rollback count forever - compare FTS against the bucket only.
+        saved_compare_es, self.compare_es = self.compare_es, False
+        try:
+            self.wait_for_indexing_complete()
+        finally:
+            self.compare_es = saved_compare_es
         frest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
         err = self.validate_partition_distribution(frest)
         if len(err) > 0:

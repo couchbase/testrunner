@@ -77,14 +77,17 @@ class VectorSearch(FTSBaseTest):
 
         if self.prefilter_docs:
             if self.conjuction_query_with_prefilter:
-                fts_vector_query["knn"][0]["filter"] = {}
-                fts_vector_query["knn"][0]["filter"]["conjuncts"] = []
-                first_query = self.prefilter_query.copy()
-                first_query["max"] = int(first_query["max"] / 2)
-
-                self.prefilter_query["min"] = int(self.prefilter_query["max"]/2 + 1)
-                fts_vector_query["knn"][0]["filter"]["conjuncts"].append(first_query)
-                fts_vector_query["knn"][0]["filter"]["conjuncts"].append(self.prefilter_query)
+                # Widen each conjunct outwards so the AND is exactly the
+                # [min, max) band the groundtruth covers.
+                lo = int(self.prefilter_query["min"])
+                hi = int(self.prefilter_query["max"])
+                span = max(1, (hi - lo) // 4)
+                lower_conjunct = dict(self.prefilter_query)
+                lower_conjunct["min"] = lo - span
+                upper_conjunct = dict(self.prefilter_query)
+                upper_conjunct["max"] = hi + span
+                fts_vector_query["knn"][0]["filter"] = {
+                    "conjuncts": [lower_conjunct, upper_conjunct]}
                 self.log.info(f"conjunction query with prefilter is : {fts_vector_query}")
             else:
                 fts_vector_query["knn"][0]["filter"] = self.prefilter_query
@@ -332,7 +335,7 @@ class VectorSearch(FTSBaseTest):
             hits, matches, time_taken, status = index.execute_query(query=self.query['query'], knn=self.query['knn'],
                                                                     explain=self.query['explain'], return_raw_hits=True,
                                                                     fields=self.query['fields'])
-            if type(status) == str or status['failed'] != 0:
+            if not isinstance(status, dict) or status.get('failed', 0) != 0:
                 print(f"debug : status : {status}\n")
                 time.sleep(5)
                 num_retries -= 1
@@ -928,7 +931,7 @@ class VectorSearch(FTSBaseTest):
                     iv = list(iv)
                 self.run_n1ql_search_function = False
                 n1ql_hits, hits, matches, _ = self.run_vector_query(vector=iv, index=index['index_obj'],
-
+                                                                    continue_on_failure=True,
                                                                     validate_result_count=False,
                                                                     load_invalid_base64_string=True)
                 if n1ql_hits != -1 and hits != -1:
@@ -1668,7 +1671,6 @@ class VectorSearch(FTSBaseTest):
 
                                                                                       validate_fts_with_faiss=perform_faiss_validation)
                 if n1ql_hits != self.k or hits != self.k:
-                    self.sleep(3000, "Wait before failing")
                     self.fail("Could not get expected number of hits, Expected: {}, N1QL hits: {}, " \
                               " FTS query hits: {}".format(self.k, n1ql_hits, hits))
 

@@ -278,6 +278,7 @@ class FTSCallable:
         """
         found = False
         retry = TestInputSingleton.input.param("index_retry", 20)
+        wait_timeout = int(TestInputSingleton.input.param("index_wait_timeout", 1200))
         for index in self.cb_cluster.get_indexes():
             if idx is not None and index.name != idx.name or index.index_type == "alias" or index.index_type == "fulltext-alias":
                 continue
@@ -285,7 +286,15 @@ class FTSCallable:
             retry_count = retry
             prev_count = 0
             es_index_count = 0
+            index_doc_count = bucket_doc_count = 0
+            # retry_count resets on every change in the index count, so slow but
+            # steady indexing would otherwise never time out
+            deadline = time.time() + wait_timeout
             while retry_count > 0:
+                if time.time() > deadline:
+                    raise Exception("Timed out after %ss waiting for FTS index '%s': docs in bucket %s, "
+                                    "docs in index %s" % (wait_timeout, index.name, bucket_doc_count,
+                                                          index_doc_count))
                 try:
                     index_doc_count = index.get_indexed_doc_count()
                     if CbServer.capella_run:
@@ -338,7 +347,7 @@ class FTSCallable:
             # updates scenario - where doc count remains unchanged
             retry_mut_count = 20
             if item_count == None:
-                while True and retry_count:
+                while retry_count and retry_mut_count > 0:
                     num_mutations_to_index = index.get_num_mutations_to_index()
                     if num_mutations_to_index > 0:
                         self.sleep(5, "num_mutations_to_index: {0} > 0".format(num_mutations_to_index))
@@ -845,7 +854,7 @@ class FTSCallable:
 
         goloader_object = GoVectorLoader(node, username,password, bucket,scope,collection,vector_dataset,xattr,prefix,
                                          start_index,end_index,base64Flag)
-        goloader_object.load_data("upgrade")
+        goloader_object.load_data("upgrade_" + uuid.uuid4().hex[:8])
 
     def delete_doc_by_key(self,node,start,end,percent,bucket_name = "default",scope_name="_default",collection_name="_default"):
         server = RestConnection(node)

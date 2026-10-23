@@ -2253,6 +2253,13 @@ class CouchbaseCluster:
                 if "kv" in entry_services and "fts" in entry_services:
                     mixed_nodes.append("(from cluster spec: %s)" % entry)
                     break
+        elif (TestInputSingleton.input.param("initial-services-setting", "") or "").strip():
+            # upgrade tests assign services via initial-services-setting, not the ini
+            upgrade_spec = TestInputSingleton.input.param("initial-services-setting", "")
+            for entry in upgrade_spec.split("-"):
+                entry_services = entry.split(",")
+                if "kv" in entry_services and "fts" in entry_services:
+                    mixed_nodes.append("(from initial-services-setting: %s)" % entry)
         else:
             for node in all_servers:
                 node_services = (getattr(node, "services", "") or "kv").split(",")
@@ -2287,7 +2294,10 @@ class CouchbaseCluster:
             if fts_shares_a_kv_node or "fts" in master_services:
                 charged += fts_quota
             if charged > reserved:
-                trimmed = max(MIN_KV_QUOTA, kv_quota - (charged - reserved))
+                # never drop kv below what existing buckets already use
+                bucket_ram = rest.get_pools_default().get("storageTotals", {}).get(
+                    "ram", {}).get("quotaUsedPerNode", 0) // (1024 * 1024)
+                trimmed = max(MIN_KV_QUOTA, bucket_ram, kv_quota - (charged - reserved))
                 self.__log.warning(
                     "quotas charged to a kv+fts node total %sMB but a node can "
                     "only back %sMB; using kv quota %s instead of %s"
@@ -5436,7 +5446,10 @@ class FTSBaseTest(unittest.TestCase):
 
                     if self.bulk_collections and index.collections:
                         container_doc_count = self._num_items * len(index.collections)
-                    elif item_count and self.bulk_collections:
+                    elif item_count:
+                        # An explicit expected count from the caller wins over the
+                        # live bucket stat, which can lag or be deliberately frozen
+                        # (partial_rollback stops persistence before deleting).
                         container_doc_count = item_count
                     elif index.collections:
                         container_doc_count = index.get_src_collections_doc_count(extra_collections=extra_collections)
