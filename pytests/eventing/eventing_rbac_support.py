@@ -177,7 +177,8 @@ class EventingRBACSupport(EventingBaseTest):
         self.rest.add_set_builtin_user(user_id="john", payload=payload)
         self.load_data_to_collection(self.docs_per_day * 20, "src_bucket._default._default",
                                      is_delete=True)
-        self.verify_doc_count_collections("dst_bucket._default._default", 0)
+        # document count should be same as user doesn't have permissions to delete documents in dst_bucket
+        self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * 20)
         self.undeploy_function(body, username="john", password="asdasd")
         self.delete_function(body, username="john", password="asdasd")
 
@@ -205,8 +206,7 @@ class EventingRBACSupport(EventingBaseTest):
             self.deploy_function(body, username="john", password="asdasd")
         except Exception as e:
             self.log.info(e)
-            assert "ERR_FORBIDDEN" in str(e) and "User who created the function does not exist in the system" in str(e), True
-        self.delete_function(body, username="john", password="asdasd")
+            assert ("ERR_FORBIDDEN" in str(e) and "Owner of the function doesn't exist" in e.args[0].decode('utf-8'))
 
     def test_function_scope_modification_after_function_creation(self):
         body = self.create_save_function_body(self.function_name, self.handler_code,
