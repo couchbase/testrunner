@@ -836,6 +836,9 @@ class RemoteMachineShellConnection(KeepRefs):
             RemoteMachineHelper(self).is_process_running(name)
             o, r = self.execute_command(command="killall -9 {0}".format(name))
             self.log_command_output(o, r)
+            if r and r[0] and "command not found" in r[0]:
+                o, r = self.execute_command(command="pkill -9 -f {0}".format(name))
+                self.log_command_output(o, r)
         return o, r
 
     def reboot_node(self):
