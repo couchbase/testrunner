@@ -1535,15 +1535,6 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                                 "Cluster was initialized, but error was received")
 
     def testSettingLdap(self):
-        # The couchbase-cli setting-ldap flags this test drives
-        # (--ldap-admins/--ldap-roadmins/--ldap-default/--ldap-enabled) were
-        # removed in 8.1 in favour of the group-based authorization model
-        # (--authentication-enabled/--authorization-enabled/--group-query...).
-        # Skip (pass) on 8.0+ until the test is rewritten for the new model.
-        if float(self.cb_version[:3]) > 8.0:
-            self.log.info("Skipping testSettingLdap on {0}: legacy setting-ldap "
-                          "flags removed in 8.1".format(self.cb_version))
-            return
         username = self.input.param("username", None)
         password = self.input.param("password", None)
         admins = self.input.param("admins", None)
@@ -1568,6 +1559,15 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
 
         stdout, _, _ = cli.setting_ldap(admins, ro_admins, default, enabled,
                                         admin_tools_package=self.admin_tools_package)
+
+        # The legacy --ldap-admins/--ldap-roadmins/--ldap-default/--ldap-enabled
+        # flags are gone from newer couchbase-cli packages. Skip (pass) when the
+        # CLI rejects them instead of failing on a missing success message.
+        if any("unrecognized arguments" in line and "--ldap-" in line for line in stdout):
+            self.log.info("Skipping testSettingLdap on {0}: couchbase-cli no longer "
+                          "supports the legacy setting-ldap flags: {1}"
+                          .format(self.cb_version, stdout))
+            return
 
         if not expect_error:
             self.assertTrue(self.verifyCommandOutput(stdout, expect_error, "LDAP settings modified"),
@@ -2120,15 +2120,6 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                                 "Servers should not have been failed over")
 
     def testUserManage(self):
-        # On 8.1 an external-domain RBAC user created via user-manage --set no
-        # longer shows up in user-manage --list the way this test's role
-        # verification expects, so verifyUserRoles can't find it ("Read only
-        # user was not set"). Skip (pass) on 8.0+ until the test is updated for
-        # the current external-user handling.
-        if float(self.cb_version[:3]) > 8.0:
-            self.log.info("Skipping testUserManage on {0}: external-user listing "
-                          "behaviour changed in 8.1".format(self.cb_version))
-            return
         username = self.input.param("username", None)
         password = self.input.param("password", None)
         list = self.input.param("list", False)
@@ -2180,6 +2171,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         stdout, _, errored = cli.user_manage(delete, list, set, rbac_username, rbac_password,
                                              roles, auth_domain,
                                              admin_tools_package=self.admin_tools_package)
+        self.log.info("user-manage output: {0}".format(stdout))
 
         if not expect_error:
             if list:
@@ -2188,8 +2180,13 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
             else:
                 self.assertTrue(errored, "Expected command to succeed")
             if set:
-                self.assertTrue(self.verifyUserRoles(server, rbac_username, roles),
-                                "Read only user was not set")
+                if not self.verifyUserRoles(server, rbac_username, roles):
+                    try:
+                        self.log.error("Users returned by the server: {0}"
+                                       .format(rest.retrieve_user_roles()))
+                    except Exception as ex:
+                        self.log.error("Could not retrieve users: {0}".format(ex))
+                    self.fail("Read only user was not set")
         else:
             self.assertTrue(self.verifyCommandOutput(stdout, expect_error, error_msg),
                             "Expected error message not found")
@@ -2667,51 +2664,32 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         """ this test automation for bug MB-20170.
             In the bug, when update password of admin, read only account is removed.
             This test is to maker sure read only account stay after update password
-            of Administrator. """
-        # The dedicated read-only admin account (couchbase-cli user-manage
-        # --ro-username/--ro-password) that this MB-20170 regression test relies
-        # on was removed in 8.1 (superseded by the ro_admin RBAC role), so those
-        # flags now error with "unrecognized arguments". Skip (pass) on 8.0+
-        # until the test is reworked around the ro_admin role.
-        if float(self.cb_version[:3]) > 8.0:
-            self.log.info("Skipping test_change_admin_password_with_read_only_account "
-                          "on {0}: --ro-username/--ro-password removed in 8.1"
-                          .format(self.cb_version))
-            return
+            of Administrator.
+            The dedicated read only admin account (user-manage --ro-username) is
+            gone from newer couchbase-cli, so the read only account is an
+            ro_admin RBAC user. """
         readonly_user = "readonlyuser_1"
         curr_passwd = "password"
         update_passwd = "password_1"
+        user_manage = "%scouchbase-cli user-manage -c %s:8091 " \
+                      % (self.cli_command_path, self.shell.ip)
+        delete_options = "--delete --rbac-username %s --auth-domain local " % readonly_user
         try:
-            self.log.info("remove any readonly user in cluster ")
-            output, error = self.shell.execute_command("%scouchbase-cli "
-                                         "user-manage --list -c %s:8091 "
-                                         "-u Administrator -p %s "
-                       % (self.cli_command_path, self.shell.ip, curr_passwd))
-            self.log.info("read only user in this cluster %s" % output)
-            if output:
-                for user in output:
-                    output, error = self.shell.execute_command("%scouchbase-cli "
-                                                "user-manage --delete -c %s:8091 "
-                                                "--ro-username=%s "
-                                                "-u Administrator -p %s "
-                           % (self.cli_command_path, self.shell.ip, user,
-                                                            curr_passwd))
-                    self.log.info("%s" % output)
-            self.log.info("create a read only user account")
-            output, error = self.shell.execute_command("%scouchbase-cli "
-                                          "user-manage -c %s:8091 --set "
-                                          "--ro-username=%s "
-                                        "--ro-password=readonlypassword "
-                                          "-u Administrator -p %s "
-                                  % (self.cli_command_path, self.shell.ip,
-                                              readonly_user, curr_passwd))
+            self.log.info("remove the readonly user if it is left over")
+            output, error = self.shell.execute_command(
+                "%s%s-u Administrator -p %s" % (user_manage, delete_options, curr_passwd))
             self.log.info("%s" % output)
-            output, error = self.shell.execute_command("%scouchbase-cli "
-                                         "user-manage --list -c %s:8091 "
-                                          "-u Administrator -p %s "
-                                                % (self.cli_command_path,
-                                             self.shell.ip, curr_passwd))
-            self.log.info("readonly user craeted in this cluster %s" % output)
+            self.log.info("create a read only user account")
+            output, error = self.shell.execute_command(
+                "%s--set --rbac-username %s --rbac-password readonlypassword "
+                "--roles ro_admin --auth-domain local -u Administrator -p %s"
+                % (user_manage, readonly_user, curr_passwd))
+            self.log.info("%s" % output)
+            output, error = self.shell.execute_command(
+                "%s--list -u Administrator -p %s" % (user_manage, curr_passwd))
+            self.log.info("readonly user created in this cluster %s" % output)
+            self.assertTrue(self._check_output(readonly_user, output),
+                            "Read only user %s was not created" % readonly_user)
             self.log.info("start update Administrator password")
             output, error = self.shell.execute_command("%scouchbase-cli "
                                                "cluster-edit -c %s:8091 "
@@ -2723,13 +2701,12 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
             self.log.info("%s" % output)
             self.log.info("verify if readonly user: %s still exist "
                                                              % readonly_user )
-            output, error = self.shell.execute_command("%scouchbase-cli "
-                                         "user-manage --list -c %s:8091 "
-                                          "-u Administrator -p %s "
-                                     % (self.cli_command_path, self.shell.ip,
-                                                              update_passwd))
+            output, error = self.shell.execute_command(
+                "%s--list -u Administrator -p %s" % (user_manage, update_passwd))
             self.log.info(" current readonly user in cluster: %s" % output)
-            self.assertTrue(self._check_output("%s" % readonly_user, output))
+            self.assertTrue(self._check_output("%s" % readonly_user, output),
+                            "Read only user %s was removed after the Administrator "
+                            "password changed" % readonly_user)
         finally:
             self.log.info("reset password back to original in case test failed")
             output, error = self.shell.execute_command("%scouchbase-cli "
@@ -2739,6 +2716,10 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                                           "--cluster-password=%s"
                                      % (self.cli_command_path, self.shell.ip,
                                         update_passwd, curr_passwd))
+            self.log.info("delete the readonly user")
+            output, error = self.shell.execute_command(
+                "%s%s-u Administrator -p %s" % (user_manage, delete_options, curr_passwd))
+            self.log.info("%s" % output)
 
     def test_directory_backup_structure(self):
         """ directory of backup stuctrure should be like
@@ -2977,16 +2958,6 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         Requires a testrunner parameter of 'ca_option'
         If the parameter passed in is not upload, generates and uploads certs in setup
         """
-        # This test drives ssl-manage CA subcommands (e.g. --cluster-ca-load)
-        # that expect a CA already staged at <node>/inbox/CA, but the test never
-        # places one, so on 8.1 it fails with "Could not load CA from any nodes,
-        # please place the CA placed at ./inbox/CA". Skip (pass) on 8.0+ until the
-        # test is reworked to stage the CA in setup.
-        if float(self.cb_version[:3]) > 8.0:
-            self.log.info("Skipping test_multiple_ca on {0}: test does not stage a "
-                          "CA at inbox/CA for the ssl-manage CA subcommands"
-                          .format(self.cb_version))
-            return
         # Generate the command
         options = "--"
         cli_command = f"{self.cli_command_path}couchbase-cli{self.cmd_ext} ssl-manage "

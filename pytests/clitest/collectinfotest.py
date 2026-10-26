@@ -255,7 +255,7 @@ class CollectinfoTests(CliBaseTest):
                 for output_line in output:
                     output_line = output_line.split()
                     file_size = int(output_line[0])
-                    if "dist_cfg" in output_line[1]:
+                    if "dist_cfg" in output_line[1] or "master_events.log" in output_line[1]:
                         continue
                     if self.debug_logs:
                         print(("File size: ", file_size))

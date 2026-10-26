@@ -2804,11 +2804,15 @@ class RestConnection(object):
             for node_stat in json_output['nodes']:
                 stat_dict[node_stat['hostname']] = dict()
                 stat_dict[node_stat['hostname']]['services'] = node_stat['services']
-                stat_dict[node_stat['hostname']]['cpu_utilization'] = node_stat['systemStats']['cpu_utilization_rate']
-                stat_dict[node_stat['hostname']]['mem_free'] = node_stat['systemStats']['mem_free']
-                stat_dict[node_stat['hostname']]['mem_total'] = node_stat['systemStats']['mem_total']
-                stat_dict[node_stat['hostname']]['swap_mem_used'] = node_stat['systemStats']['swap_used']
-                stat_dict[node_stat['hostname']]['swap_mem_total'] = node_stat['systemStats']['swap_total']
+                # A node that was just added may not report all systemStats yet
+                system_stats = node_stat.get('systemStats', {})
+                for stat_name, system_stat_name in (('cpu_utilization', 'cpu_utilization_rate'),
+                                                    ('mem_free', 'mem_free'),
+                                                    ('mem_total', 'mem_total'),
+                                                    ('swap_mem_used', 'swap_used'),
+                                                    ('swap_mem_total', 'swap_total')):
+                    if system_stat_name in system_stats:
+                        stat_dict[node_stat['hostname']][stat_name] = system_stats[system_stat_name]
         return stat_dict
 
     def get_pools(self):
@@ -6372,7 +6376,11 @@ class RestConnection(object):
     Delete user from couchbase role assignment
     user_id=userid of user to act on'''
     def delete_user_roles(self, user_id):
-        url = "settings/rbac/users/local/" + user_id
+        # user_id may already carry its domain, e.g. external/<user>
+        if "/" in user_id:
+            url = "settings/rbac/users/" + user_id
+        else:
+            url = "settings/rbac/users/local/" + user_id
         api = self.baseUrl + url
         status, content, header = self._http_request(api, 'DELETE')
         if not status:

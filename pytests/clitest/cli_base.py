@@ -333,6 +333,7 @@ class CliBaseTest(BaseTestCase):
                 if "SUCCESS" in line and message in line:
                     return True
             log.info("Did not receive expected success message `SUCCESS: %s`", message)
+            log.info("The command output was:%s", output)
             return False
 
     def verifyWarningOutput(self, output, message):
@@ -732,8 +733,13 @@ class CliBaseTest(BaseTestCase):
         rest = RestConnection(server)
         status, content, header = rbacmain(server)._retrieve_user_roles()
         content = json.loads(content)
-        temp = rbacmain()._parse_get_user_response(content, username, username, roles)
-        return temp
+        # Compare role names only: the server returns each role with an extra
+        # 'origins' key, and users created through couchbase-cli have no 'name'.
+        expected_roles = {role.split("[")[0] for role in roles.split(":")}
+        for user in content:
+            if user['id'] == username:
+                return expected_roles.issubset({role['role'] for role in user['roles']})
+        return False
 
     def verifyLdapSettings(self, server, admins, ro_admins, default, enabled):
         rest = RestConnection(server)
