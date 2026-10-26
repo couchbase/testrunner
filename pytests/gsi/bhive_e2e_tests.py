@@ -1569,6 +1569,88 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
         self.drop_all_indexes()
 
 
+    def test_bhive_meta_id_predicate_with_fetch(self):
+        """
+        MB-74638: Hyperscale (BHIVE) ANN query returned 0 rows (status success) when it had a
+        META().id predicate AND projected a document field (non-covered, docs fetched). The
+        predicate was pushed to the indexer, which panicked in ExplodeArray3 for an index with
+        no INCLUDE columns.
+
+        Steps:
+        1. Load 10k siftBigANN docs and create a Hyperscale index on embedding
+        2. Run the control query (no WHERE, projects a field) and record its ids
+        3. Run the ANN query with various META().id predicates; each must return LIMIT rows
+           (same as the control) and the id set must satisfy the predicate
+        4. Assert no new ExplodeArray3 panics were logged in indexer.log
+        5. Negative control: covered query (key only) with META().id predicate
+        """
+        limit = 5
+        similarity = "L2_SQUARED"
+        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        buckets = self._create_test_buckets(num_buckets=1)
+        for bucket in buckets:
+            self.prepare_collection_for_indexing(bucket_name=bucket, num_scopes=1, num_collections=1,
+                                                 num_of_docs_per_collection=self.num_of_docs_per_collection,
+                                                 json_template=self.json_template, load_default_coll=False)
+        namespace = self.namespaces[0]
+        keyspace = ".".join(f"`{part}`" for part in namespace.split(':')[-1].split('.'))
+
+        create_query = (f"CREATE VECTOR INDEX hs_emb ON {keyspace}(embedding VECTOR) "
+                        f"WITH {{'dimension': 128, 'similarity': '{similarity}', 'description': 'IVF,SQ8'}}")
+        self.run_cbq_query(query=create_query, server=query_node)
+        self.wait_until_indexes_online()
+        self.item_count_related_validations()
+
+        # Fetch one embedding up front and inline it, as a non-constant vector may be rejected
+        # (needs a primary index, dropped right after so it cannot influence the ANN plans)
+        self.run_cbq_query(query=f"CREATE PRIMARY INDEX pri_tmp ON {keyspace}", server=query_node)
+        self.wait_until_indexes_online()
+        res = self.run_cbq_query(query=f"SELECT RAW x.embedding FROM {keyspace} x LIMIT 1", server=query_node)
+        query_vector = res["results"][0]
+        self.run_cbq_query(query=f"DROP INDEX pri_tmp ON {keyspace}", server=query_node)
+
+        def ann_query(predicate=""):
+            return (f"SELECT META(d).id AS id, d.embedding[0] AS e0 FROM {keyspace} d USE INDEX (hs_emb) "
+                    f"{predicate} ORDER BY APPROX_VECTOR_DISTANCE(d.embedding, {query_vector}, '{similarity}') "
+                    f"LIMIT {limit}")
+
+        control = self.run_cbq_query(query=ann_query(), server=query_node)["results"]
+        self.assertEqual(len(control), limit, f"Control query returned {len(control)} rows, expected {limit}")
+
+        panic_pattern = "ExplodeArray3"
+        panics_before = self.count_indexer_log_occurrences(panic_pattern)
+
+        # (predicate, python check on a returned id)
+        predicates = [
+            ("WHERE META(d).id >= '0'", lambda i: i >= '0'),
+            ("WHERE META(d).id != 'x'", lambda i: i != 'x'),
+            ("WHERE META(d).id NOT LIKE 'x%'", lambda i: not i.startswith('x')),
+            ("WHERE NOT (META(d).id >= 'a' AND META(d).id < 'b')", lambda i: not ('a' <= i < 'b')),
+        ]
+        failures = []
+        for predicate, check in predicates:
+            query = ann_query(predicate)
+            results = self.run_cbq_query(query=query, server=query_node)["results"]
+            ids = [r["id"] for r in results]
+            self.log.info(f"{predicate}: {len(ids)} rows")
+            if len(ids) != limit:
+                failures.append(f"{predicate}: got {len(ids)} rows, expected {limit}")
+            elif not all(check(i) for i in ids):
+                failures.append(f"{predicate}: ids {ids} violate predicate")
+
+        panics_after = self.count_indexer_log_occurrences(panic_pattern)
+        self.assertEqual(panics_after, panics_before,
+                         f"{panics_after - panics_before} new {panic_pattern} panics in indexer.log")
+
+        # Negative control: covered (key only) query is unaffected
+        covered = (f"SELECT META(d).id AS id FROM {keyspace} d USE INDEX (hs_emb) WHERE META(d).id >= '0' "
+                   f"ORDER BY APPROX_VECTOR_DISTANCE(d.embedding, {query_vector}, '{similarity}') LIMIT {limit}")
+        covered_results = self.run_cbq_query(query=covered, server=query_node)["results"]
+        self.assertEqual(len(covered_results), limit, "Covered query returned unexpected row count")
+
+        self.assertFalse(failures, f"META().id predicate queries failed: {failures}")
+        self.drop_all_indexes()
+
     def test_maximum_dimension_support(self):
         self.log.info("Step 1: Setting up the cluster with required services")
         self.log.info("Step 2: Creating buckets and collections")
