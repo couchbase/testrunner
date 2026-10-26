@@ -2019,7 +2019,8 @@ class ESRunQueryCompare(Task):
                 username=username,
                 password=password,
                 doc_id_prefix=doc_prefix,
-                batch_size=1000
+                batch_size=1000,
+                use_ssl=CbServer.use_https
             )
 
             # Run hierarchical validation

@@ -22,6 +22,7 @@ from .fts_base import (FTSBaseTest, FTSIndex, INDEX_DEFAULTS, QUERY,
                        LazyIndexUpdateHelper)
 from lib.membase.api.exception import FTSException, ServerUnavailableException
 from lib.membase.api.rest_client import RestConnection
+from lib.testops.capabilities import Capability
 from couchbase_helper.documentgenerator import SDKDataLoader
 
 
@@ -96,6 +97,11 @@ class StableTopFTS(FTSBaseTest):
         self.index_src=None
         self.validation_data = None
         if TestInputSingleton.input.param("custom_queries_enabled", False):
+            # customScriptQueriesEnabled is an FTS managerOptions write, which needs
+            # cluster-settings access (the Capella DB user gets 403 Forbidden)
+            if not self.target.supports(Capability.CLUSTER_SETTINGS):
+                self.skipTest("UDF needs FTS managerOptions access to enable "
+                              "customScriptQueriesEnabled, unavailable on this target")
             from .udf_datagen.udf_datagen import generate_docs, compute_ground_truth
             self._udf = UDFHelper(self)
             docs = generate_docs()

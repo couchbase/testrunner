@@ -12,7 +12,7 @@ from typing import Iterator, Tuple, Dict, Optional, List, Any
 from couchbase.cluster import Cluster
 from couchbase.auth import PasswordAuthenticator
 from couchbase.options import ClusterOptions, QueryOptions
-from couchbase.exceptions import CouchbaseException
+from couchbase.exceptions import CouchbaseException, QueryIndexNotFoundException
 
 
 class HierarchicalDocumentFetcher:
@@ -37,9 +37,19 @@ class HierarchicalDocumentFetcher:
         self.use_ssl = use_ssl
         self.log = logging.getLogger("HierarchicalDocumentFetcher")
 
-        # Connection string
-        protocol = "couchbases" if use_ssl else "couchbase"
-        self.connection_string = f"{protocol}://{node_ip}"
+        # Connection string. TLS-only clusters (Capella): test certs may not chain
+        # to the SDK's bundled CA, so skip verification as the REST client does.
+        if use_ssl:
+            self.connection_string = f"couchbases://{node_ip}?ssl=no_verify"
+        else:
+            self.connection_string = f"couchbase://{node_ip}"
+
+    def _connect(self) -> Cluster:
+        options = ClusterOptions(PasswordAuthenticator(self.username, self.password))
+        if self.use_ssl:
+            # WAN latency (Capella) needs the longer profile timeouts
+            options.apply_profile("wan_development")
+        return Cluster(self.connection_string, options)
 
     def fetch_documents_iterator(
         self,
@@ -87,14 +97,14 @@ class HierarchicalDocumentFetcher:
 
         try:
             # Connect to cluster
-            auth = PasswordAuthenticator(self.username, self.password)
-            cluster = Cluster(self.connection_string, ClusterOptions(auth))
+            cluster = self._connect()
 
             # Build N1QL query
             keyspace = f"`{bucket}`.`{scope}`.`{collection}`"
 
             docs_fetched = 0
             last_doc_id: Optional[str] = None
+            primary_index_created = False
 
             while True:
                 # Prefer keyset pagination over OFFSET for stability/performance at high counts.
@@ -137,6 +147,14 @@ class HierarchicalDocumentFetcher:
                         # Materialize the page so failures don't occur mid-yield.
                         rows = list(result)
                         break
+                    except QueryIndexNotFoundException:
+                        # No index and no sequential-scan fallback (Capella):
+                        # create a primary index once and retry the page.
+                        if primary_index_created:
+                            raise
+                        self.log.warning(f"No index on {keyspace}; creating a primary index")
+                        cluster.query(f"CREATE PRIMARY INDEX IF NOT EXISTS ON {keyspace}").execute()
+                        primary_index_created = True
                     except Exception as e:
                         if not _is_retryable_cb_error(e) or attempt >= max_retries:
                             raise
@@ -198,8 +216,7 @@ class HierarchicalDocumentFetcher:
             Tuple of (doc_id, doc_content_dict)
         """
         try:
-            auth = PasswordAuthenticator(self.username, self.password)
-            cluster = Cluster(self.connection_string, ClusterOptions(auth))
+            cluster = self._connect()
             cb_bucket = cluster.bucket(bucket)
             cb_collection = cb_bucket.scope(scope).collection(collection)
 

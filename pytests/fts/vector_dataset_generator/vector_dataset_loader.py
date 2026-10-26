@@ -46,9 +46,14 @@ class VectorLoader:
                 raise RuntimeError("Docker is unavailable; cannot run VectorLoader container.")
             docker_image = "sequoiatools/vectorloader:v1.1"
             dataset_name = self.dataset[0]
+            # The image keeps -i as a raw string, so "-i False" is truthy and still
+            # takes the cbimport path (scp + cbimport over SSH). Capella has no SSH,
+            # so leave -i out there and let the image default to SDK upserts.
+            cbimport_arg = "" if self.capella_run and not self.use_cbimport \
+                else f"-i {self.use_cbimport} "
             docker_run_params = f"-n {self.node.ip} -u {self.username} -p {self.password} " \
                                 f"-b {self.bucket} -sc {self.scope} -coll {self.collection} " \
-                                f"-ds {dataset_name} -c {self.capella_run} -cbs {self.create_bucket_struct} -i {self.use_cbimport} " \
+                                f"-ds {dataset_name} -c {self.capella_run} -cbs {self.create_bucket_struct} {cbimport_arg}" \
                                 f"-iter {self.iterations} -sk {int(self.start_key)}"
 
             if len(self.percentages_to_resize) > 0:

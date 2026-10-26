@@ -206,7 +206,14 @@ class CapellaAPI:
 
     def create_bucket(self, cluster_id, bucket_params):
         resp = self.api.create_bucket(self.tenant_id, self.project_id, cluster_id, bucket_params)
-        resp.raise_for_status()
+        try:
+            resp.raise_for_status()
+        except Exception as e:
+            # raise_for_status() hides the body, which carries the real reason
+            self.log.error(f"Bucket create failed: {resp.status_code} {resp.reason} "
+                           f"for {resp.url}\nresponse body: {resp.text}\nparams: {bucket_params}")
+            raise Exception(f"Bucket create failed ({resp.status_code} {resp.reason}): "
+                            f"{resp.text}") from e
 
     def get_bucket_id(self, cluster_id, bucket_name):
         resp = self.api.get_buckets(self.tenant_id, self.project_id, cluster_id)

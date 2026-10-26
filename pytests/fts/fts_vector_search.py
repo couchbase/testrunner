@@ -480,6 +480,9 @@ class VectorSearch(FTSBaseTest):
         self.skip_validation_if_no_query_hits = self.input.param("skip_validation_if_no_query_hits", True)
         self.gpu_index = self.input.param("gpu_index", False)
         self.vector_index_optimized_for = self.input.param("vector_index_optimized_for", None)
+        if isinstance(self.vector_index_optimized_for, str):
+            # values with a comma ("""ivf,rabitq""") arrive with the conf's quotes kept
+            self.vector_index_optimized_for = self.vector_index_optimized_for.strip('"')
         self.validate_memory_leak = self.input.param("validate_memory_leak", False)
 
         self.rrf = self.input.param("rrf", False)

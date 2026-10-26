@@ -79,6 +79,10 @@ from lib.SystemEventLogLib.Events import EventHelper
 from lib import global_vars
 from lib.capella.utils import CapellaAPI, CapellaCredentials
 import lib.capella.utils as capella_utils
+from lib.testops.capabilities import Capability
+
+# cbft's default bleveMaxResultWindow, in force wherever it can't be raised on the node
+BLEVE_DEFAULT_MAX_RESULT_WINDOW = 10000
 
 try:
     from couchbase.auth import PasswordAuthenticator as _CbPasswordAuthenticator
@@ -1683,6 +1687,12 @@ class FTSIndex:
         query_json['explain'] = explain
         if max_matches is not None and max_matches != 'None':
             query_json['size'] = int(max_matches)
+            # On-prem setup raises bleveMaxResultWindow via FTS managerOptions
+            # (_set_bleve_max_result_window), which Capella forbids, so Capella keeps
+            # the default and rejects any larger size outright. total_hits is
+            # unaffected by size, so hit-count checks still hold.
+            if CbServer.capella_run and query_json['size'] > BLEVE_DEFAULT_MAX_RESULT_WINDOW:
+                query_json['size'] = BLEVE_DEFAULT_MAX_RESULT_WINDOW
         else:
             del query_json['size']
         if max_limit_matches is not None:
@@ -5459,8 +5469,71 @@ class LazyIndexUpdateHelper:
             return "rebuild", new_mapping
         return "unknown", new_mapping
 
+class RestCollectionsClient(object):
+    """Drop-in for CollectionsCLI on targets without a node shell (Capella).
+
+    CollectionsCLI runs couchbase-cli over SSH; this keeps its call shapes
+    (get_bucket_scopes -> (scopes, stderr, success), create/delete raise on
+    failure) but goes through the bucket scopes REST API instead.
+    """
+
+    def __init__(self, node):
+        self.log = logger.Logger.get_logger()
+        self.rest = CollectionsRest(node)
+
+    def get_bucket_scopes(self, bucket="default", admin_tools_package=False):
+        scopes = self.rest.get_bucket_scopes(bucket)
+        return scopes, None, True
+
+    def create_scope(self, bucket="default", scope="scope0", admin_tools_package=False):
+        if not self.rest.create_scope(bucket, scope):
+            raise Exception("Create scope failed : {0}->{1}".format(bucket, scope))
+        return True
+
+    def create_collection(self, bucket="default", scope="scope0", collection="mycollection0",
+                          max_ttl=None, admin_tools_package=False):
+        params = {"maxTTL": max_ttl} if max_ttl is not None else None
+        if not self.rest.create_collection(bucket, scope, collection, params):
+            raise Exception("Create collection failed : {0}->{1}->{2}".format(bucket, scope, collection))
+        return True
+
+    def delete_collection(self, bucket="default", scope='_default', collection='_default',
+                          admin_tools_package=False):
+        if not self.rest.delete_collection(bucket, scope, collection):
+            raise Exception("Drop collection failed : {0}->{1}->{2}".format(bucket, scope, collection))
+        return True
+
+    def delete_scope(self, bucket="default", scope='_default', admin_tools_package=False):
+        if not self.rest.delete_scope(bucket, scope):
+            raise Exception("Drop scope failed : {0}->{1}".format(bucket, scope))
+        return True
+
+
 class FTSBaseTest(unittest.TestCase):
     es_index_name = None
+    # Set when this suite provisioned the Capella cluster itself, so
+    # suite_tearDown never deletes a cluster that was handed in via cluster_id.
+    capella_cluster_provisioned = False
+
+    @property
+    def target(self):
+        """Dual-run facade (on-prem + Capella), built lazily on first access.
+
+        FTSBaseTest does not inherit BaseTestCase, so it carries its own copy of
+        the hook from basetestcase.OnPremBaseTestCase. Tests that never read
+        self.target construct nothing.
+        """
+        run_target = getattr(self, "_run_target", None)
+        if run_target is None:
+            if not hasattr(self, "log"):
+                raise RuntimeError("self.target was accessed before FTSBaseTest.setUp(); "
+                                   "call super().setUp() first")
+            from testops.run_target import RunTarget
+            self.log.info("DUALRUN-FLOW: self.target first access -> constructing RunTarget")
+            run_target = RunTarget(self)
+            self._run_target = run_target
+            self.addCleanup(run_target.close)
+        return run_target
 
     @staticmethod
     def get_es_index_name():
@@ -5473,8 +5546,12 @@ class FTSBaseTest(unittest.TestCase):
     def setUp(self):
         unittest.TestCase.setUp(self)
         self._input = TestInputSingleton.input
+        # RunTarget and its backends read test.input
+        self.input = self._input
         self.capella_run = self._input.param("capella_run", CbServer.capella_run)
         CbServer.capella_run = self.capella_run
+        if self.capella_run and self._input.param("cluster_id", None):
+            CbServer.capella_cluster_id = self._input.param("cluster_id", None)
         self.cluster_profile = self._input.param("cluster_profile", CbServer.cluster_profile)
         CbServer.cluster_profile = self.cluster_profile
         self.set_impossible_params()
@@ -5536,7 +5613,10 @@ class FTSBaseTest(unittest.TestCase):
         # test that died in setUp closes 8091 cluster-wide.
         self._clear_leftover_node_encryption()
         first_node = copy.deepcopy(self.master)
-        self.cli_client = CollectionsCLI(self.master)
+        if self.target.supports(Capability.NODE_SHELL):
+            self.cli_client = CollectionsCLI(self.master)
+        else:
+            self.cli_client = RestCollectionsClient(self.master)
         self.collection_rest = CollectionsRest(self.master)
         self.multiple_ca = self._input.param("multiple_ca", False)
         self._cb_cluster = CouchbaseCluster("C1",
@@ -5650,6 +5730,11 @@ class FTSBaseTest(unittest.TestCase):
         self.docker_containers = []
 
         if self.search_history:
+            # searchHistoryEnabled is an FTS managerOptions write, which needs
+            # cluster-settings access (the Capella DB user gets 403 Forbidden)
+            if not self.target.supports(Capability.CLUSTER_SETTINGS):
+                self.skipTest("search history needs FTS managerOptions access, "
+                              "unavailable on this target")
             self.enable_search_history()
 
     def create_capella_config(self):
@@ -5661,9 +5746,50 @@ class FTSBaseTest(unittest.TestCase):
             else:
                 services_count[service] = 1
 
+        # Capella rejects a deploy with fewer than 3 data nodes
+        # (ErrTopologyInvalidKVNodesCount), while the on-prem specs in FTS confs
+        # usually carry a single kv node. Top up the first kv group so the same
+        # conf provisions on both targets.
+        min_kv_nodes = 3
+        kv_groups = [g for g in services_count if "kv" in g.split(",")]
+        kv_nodes = sum(services_count[g] for g in kv_groups)
+        if kv_nodes < min_kv_nodes:
+            kv_group = kv_groups[0] if kv_groups else "kv"
+            services_count[kv_group] = services_count.get(kv_group, 0) + min_kv_nodes - kv_nodes
+            self.log.warning("Capella needs at least {0} data nodes; spec had {1}, "
+                             "provisioning {2}".format(min_kv_nodes, kv_nodes, services_count))
+
+        # On-prem, N1QL reads with no index (e.g. the hierarchical validator's
+        # read-back) fall back to a sequential scan; Capella refuses them with
+        # "No index available". Co-locate the index service with query so a
+        # primary index can be created.
+        all_services = {s for g in services_count for s in g.split(",")}
+        if "n1ql" in all_services and "index" not in all_services:
+            n1ql_group = next(g for g in services_count if "n1ql" in g.split(","))
+            index_group = ",".join(sorted(n1ql_group.split(",") + ["index"]))
+            services_count[index_group] = services_count.pop(n1ql_group)
+            self.log.warning("Capella has no sequential scans; adding the index service: "
+                             "provisioning {0}".format(services_count))
+
         config = capella_utils.create_capella_config(self._input, services_count)
 
         return config
+
+    def _adopt_capella_servers(self, servers):
+        """Swap the INI's placeholder servers for the live Capella nodes.
+
+        The cluster can have more nodes than the INI lists (Capella needs at
+        least 3 data nodes on top of the search/query nodes), so extra nodes are
+        appended. INI entries beyond the node count stay as dummies.
+        """
+        for server in self._input.servers:
+            server.dummy = True
+        for i, server in enumerate(servers):
+            server.services = ",".join(server.services)
+            if i < len(self._input.servers):
+                self._input.servers[i] = server
+            else:
+                self._input.servers.append(server)
 
     def capella_servers_setup(self):
         CbServer.use_https = True
@@ -5681,17 +5807,14 @@ class FTSBaseTest(unittest.TestCase):
 
         self.cluster_id = cluster_id
         CbServer.capella_cluster_id = cluster_id
+        FTSBaseTest.capella_cluster_provisioned = True
 
         self.capella_api.create_db_user(cluster_id, self._input.membase_settings.rest_username,
                                         self._input.membase_settings.rest_password)
 
         servers = self.capella_api.get_nodes_formatted(cluster_id, self._input.membase_settings.rest_username,
                                                        self._input.membase_settings.rest_password)
-        for server in self._input.servers:
-            server.dummy = True
-        for i, server in enumerate(servers):
-            server.services = ",".join(server.services)
-            self._input.servers[i] = server
+        self._adopt_capella_servers(servers)
 
     def __setup_for_test_capella(self):
         no_buckets = self._input.param("no_buckets", False)
@@ -5732,11 +5855,7 @@ class FTSBaseTest(unittest.TestCase):
         self.capella_api = CapellaAPI(capella_credentials)
         servers = self.capella_api.get_nodes_formatted(self.cluster_id, self._input.membase_settings.rest_username,
                                                        self._input.membase_settings.rest_password)
-        for server in self._input.servers:
-            server.dummy = True
-        for i, server in enumerate(servers):
-            server.services = ",".join(server.services)
-            self._input.servers[i] = server
+        self._adopt_capella_servers(servers)
 
     def _create_server_groups(self):
         if self.server_grouping:
@@ -5901,8 +6020,13 @@ class FTSBaseTest(unittest.TestCase):
             self.log.info("{0} : {1} \n {2} \n\n".format(server.ip, len(processes), processes))
 
     def suite_tearDown(self):
-        if self.capella_run:
+        # Only delete a cluster this suite provisioned; a reused cluster_id belongs
+        # to whoever passed it in.
+        if self.capella_run and FTSBaseTest.capella_cluster_provisioned \
+                and not self._input.param("skip_cluster_teardown", False):
             self.capella_api.delete_cluster(self.cluster_id)
+            CbServer.capella_cluster_id = None
+            FTSBaseTest.capella_cluster_provisioned = False
 
         if self.measure_code_coverage:
             self.log.info("In suite tearDown")
@@ -5967,7 +6091,11 @@ class FTSBaseTest(unittest.TestCase):
         # collect logs before tearing down clusters
         if self._input.param("get-cbcollect-info", False) and \
                 self.__is_test_failed() or collect_logs:
-            NodeHelper.collect_logs(self._input.servers)
+            if self.target.supports(Capability.NODE_SHELL):
+                NodeHelper.collect_logs(self._input.servers)
+            else:
+                # no node shell (Capella): control-plane log collection
+                self.target.collect_logs()
 
         # ---backup pindex_data if the test has failed
         # if self._input.param('backup_pindex_data', False) and \
@@ -6256,8 +6384,11 @@ class FTSBaseTest(unittest.TestCase):
         # that one is the separate index_replicas param. A bucket replica needs a
         # second kv node to live on, so cap it to the topology rather than leaving
         # the bucket permanently under-replicated.
+        # On Capella the conf spec is not the live topology: create_capella_config
+        # tops kv up to Capella's 3-node minimum, and the bucket API rejects
+        # replicas=0, so the spec-based cap does not apply there.
         kv_nodes = sum(1 for s in self._cluster_services if "kv" in s.split(","))
-        if self._num_replicas > kv_nodes - 1:
+        if not self.capella_run and self._num_replicas > kv_nodes - 1:
             self.log.warning(
                 "replicas=%s needs %s kv nodes but the cluster has %s; creating "
                 "buckets with %s replica(s) instead"
@@ -6546,6 +6677,21 @@ class FTSBaseTest(unittest.TestCase):
             bucket_size = int(float(cluster_quota - 1250) * float(quota_percent / 100.0) / float(num_buckets))
         else:
             bucket_size = int((float(cluster_quota) - 1250) / float(num_buckets))
+
+        # Capella caps collections per bucket by the bucket's RAM quota (about one
+        # per MB: a 256MB bucket refuses the 257th with a 429). Raising the ratio
+        # is a cluster-settings call the Capella DB user can't make, so size the
+        # bucket for the requested collections instead; on-prem has no such cap.
+        if self.capella_run and self.bulk_collections:
+            # headroom for _default and the _system scope's collections
+            needed = self.num_scopes * self.num_collections_per_scope + 64
+            if bucket_size < needed:
+                self.log.warning("Capella allows about one collection per MB of bucket "
+                                 "quota; raising bucket size from {0}MB to {1}MB for "
+                                 "{2} collections".format(
+                                     bucket_size, needed,
+                                     self.num_scopes * self.num_collections_per_scope))
+                bucket_size = needed
         return bucket_size
 
     def __create_buckets(self):
@@ -8338,7 +8484,10 @@ class FTSBaseTest(unittest.TestCase):
             f"-pc {percent_create} "
             f"-nt {num_threads} "
             f"-dt {dataset_type} "
-            f"-dpx {doc_prefix}"
+            f"-dpx {doc_prefix} "
+            # same TLS / Capella flags SDKLoadDocumentsTask passes
+            f"--secure {CbServer.use_https} "
+            f"-cpl {CbServer.capella_run}"
         )
 
         self.log.info("Executing java_sdk_client command:")
@@ -8564,7 +8713,8 @@ class FTSBaseTest(unittest.TestCase):
                 username=username,
                 password=password,
                 doc_id_prefix=doc_prefix,
-                batch_size=1000
+                batch_size=1000,
+                use_ssl=CbServer.use_https
             )
 
             # Run hierarchical validation
@@ -9174,14 +9324,17 @@ class FTSBaseTest(unittest.TestCase):
                 fail_count += 1
                 failed_queries.append(task.query_index + 1)
 
-        if fail_count > 3 and not skip_validation:
-
-            self.fail("%s out of %s queries failed! - %s" % (fail_count,
-                                                             num_queries,
-                                                             failed_queries))
+        # Tolerate up to query_failure_tolerance percent of failed queries (a flat
+        # count let a 1-query run pass with every query failed).
+        tolerance_pct = float(self._input.param("query_failure_tolerance", 5))
+        allowed_failures = int(num_queries * tolerance_pct / 100)
+        if fail_count > allowed_failures and not skip_validation:
+            self.fail("%s out of %s queries failed (tolerance %s%% = %s)! - %s"
+                      % (fail_count, num_queries, tolerance_pct, allowed_failures,
+                         failed_queries))
         else:
-            self.log.info("SUCCESS: %s out of %s queries passed"
-                          % (num_queries - fail_count, num_queries))
+            self.log.info("SUCCESS: %s out of %s queries passed (%s failure(s) tolerated)"
+                          % (num_queries - fail_count, num_queries, fail_count))
 
 
     def grab_fts_diag(self):
@@ -9411,6 +9564,11 @@ class FTSBaseTest(unittest.TestCase):
 
         bucketvsdataset = {}
         self.log.info(f"containers - {containers}")
+        # The cbimport path copies the dataset to a node over SSH and runs
+        # cbimport there; without a node shell the loader must upsert via the SDK.
+        if use_cbimport and not self.target.supports(Capability.NODE_SHELL):
+            self.log.info("No node shell on this target; loading vectors via SDK, not cbimport")
+            use_cbimport = False
         for count, bucket in enumerate(containers['buckets']):
             bucket_name = bucket['name']
             bucketvsdataset['bucket_name'] = dataset[count % len(dataset)]
@@ -10009,7 +10167,15 @@ class FTSBaseTest(unittest.TestCase):
         """Return (cluster, default_collection) via Couchbase Python SDK v4."""
         master = self._cb_cluster.get_master_node()
         auth = _CbPasswordAuthenticator(master.rest_username, master.rest_password)
-        cluster = _CbCluster(f'couchbase://{master.ip}', _CbClusterOptions(auth))
+        options = _CbClusterOptions(auth)
+        if CbServer.use_https:
+            # TLS-only clusters (Capella): test certs may not chain to the SDK's
+            # bundled CA, and WAN latency needs the longer profile timeouts
+            options.apply_profile("wan_development")
+            conn_str = f'couchbases://{master.ip}?ssl=no_verify'
+        else:
+            conn_str = f'couchbase://{master.ip}'
+        cluster = _CbCluster(conn_str, options)
         collection = cluster.bucket('default').default_collection()
         return cluster, collection
 
