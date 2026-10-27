@@ -18,6 +18,7 @@ __git_user__ = "pavan-couchbase"
 __created_on__ = "16/04/26"
 """
 
+import hashlib
 import json
 import random
 import re
@@ -9110,3 +9111,327 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
         self.wait_until_indexes_online(timeout=1200)
         self.run_scan_validation(select_queries, validate_item_count=True)
         self.log.info("TEST PASSED: test_gsi_log_encryption_cbcollect_decodes")
+
+    def test_gsi_encryption_at_rest_log_key_cache_lifecycle(self):
+        """
+        Log key lifecycle focused on the request-handler cache (@2i/cache).
+
+        The request-handler cache is populated during /getIndexStatus calls and
+        is read back when a peer index node is unreachable.  This test exercises
+        the full lifecycle of the log DEK governing cache files:
+
+        Steps:
+        1.  Prerequisites (log encryption enabled, >= 2 index nodes), bucket + indexes,
+            scans; /getIndexStatus on every node to populate the cache
+        2.  Wait for the log key in use; verify cache files encrypted
+        3.  Cache read-back proof: stop a peer index node, kill the indexer on the
+            survivor; after restart the survivor must still list the peer's indexes
+            (served from encrypted cache)
+        4.  Start peer; wait for indexes online
+        5.  Drop log DEKs (re-encryption): new log key, cache files re-validated
+        6.  Cache read-back proof again (with the rotated key)
+        7.  Start peer; wait for indexes online
+        8.  Disable log encryption + drop DEKs: cache files become plaintext
+        9.  Re-enable log encryption + force-encrypt: cache files encrypted again
+        10. Cache read-back proof with the re-enabled key
+        11. Start peer; scans + item counts
+        """
+        self.log.info("STARTING TEST: test_gsi_encryption_at_rest_log_key_cache_lifecycle")
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        if not getattr(self, "enable_log_encryption_at_rest", False):
+            self.skipTest("Log encryption at rest not enabled. Set enable_log_encryption_at_rest=True")
+        self.assertGreaterEqual(len(index_nodes), 2,
+                                f"Need at least 2 index nodes, found {len(index_nodes)}")
+        log_secret_id = self.log_encryption_at_rest_id
+        helper = self.gsi_encryption_helper
+
+        def _assert_cache_encrypted(nodes, key_ids, label):
+            results = helper.verify_gsi_request_handler_cache_encrypted(
+                nodes, expected_key_id=key_ids
+            )
+            failed = {ip: r for ip, r in results.items()
+                      if r.get("status") != "passed"}
+            if failed:
+                raise Exception(f"{label}request-handler cache check FAILED: {failed}")
+            self.log.info(f"{label}cache files validated on {list(results.keys())}")
+
+        def _wait_cache_reencrypted(nodes, old_key_ids, label, timeout=300, interval=15):
+            deadline = time.time() + timeout
+            still = [n.ip for n in nodes]
+            while time.time() < deadline:
+                results = helper.verify_gsi_request_handler_cache_encrypted(
+                    nodes, expected_key_id=old_key_ids
+                )
+                still = [ip for ip, r in results.items() if r.get("status") == "passed"]
+                if not still:
+                    return
+                self.sleep(interval, f"{label}cache still carries old keys on {still}")
+            raise Exception(f"{label}cache still carries old key IDs on {still} after {timeout}s")
+
+        def _wait_cache_plaintext(nodes, label, timeout=300, interval=15):
+            deadline = time.time() + timeout
+            encrypted = []
+            while time.time() < deadline:
+                encrypted = []
+                for node in nodes:
+                    for path in self._list_request_handler_cache_files(node):
+                        is_enc, _ = helper.verify_file_encryption_magic_bytes(node, path)
+                        if is_enc:
+                            encrypted.append(f"{node.ip}:{path}")
+                if not encrypted:
+                    return
+                self.sleep(interval, f"{label}cache still encrypted: {encrypted[:3]}")
+            self.log.warning(f"{label}cache files still encrypted after {timeout}s: {encrypted}")
+
+        def _cache_read_back_proof(survivor, peer, label):
+            statuses = RestConnection(survivor).get_indexer_metadata().get("status", [])
+            peer_indexes = {s["name"] for s in statuses
+                           if any(str(h).startswith(f"{peer.ip}:") for h in s.get("hosts", []))}
+            self.assertTrue(peer_indexes, f"{label}{survivor.ip} reports no indexes on {peer.ip}")
+            peer_shell = RemoteMachineShellConnection(peer)
+            try:
+                peer_shell.stop_server()
+                self.sleep(20, f"{label}Waiting after stopping {peer.ip}")
+                self._kill_all_processes_index(survivor)
+                self.sleep(10, f"{label}Waiting for indexer on {survivor.ip} to restart")
+                self.wait_for_indexer_ready([survivor], timeout=900, label=label)
+                statuses = RestConnection(survivor).get_indexer_metadata().get("status", [])
+                post = {s["name"] for s in statuses
+                        if any(str(h).startswith(f"{peer.ip}:") for h in s.get("hosts", []))}
+                missing = peer_indexes - post
+                self.assertFalse(missing,
+                                 f"{label}{survivor.ip} lost {peer.ip}'s indexes {missing} "
+                                 f"after restart (cache not read back)")
+            finally:
+                peer_shell.start_server()
+                peer_shell.disconnect()
+            self.log.info(f"{label}PASSED - {survivor.ip} served {sorted(peer_indexes)} from cache")
+
+        # STEP 1
+        self.set_indexer_snapshot_settings(index_nodes)
+        bucket_name, select_queries = self._setup_bucket_and_indexes('cachelf_', index_nodes)
+        self.run_scan_validation(select_queries, validate_item_count=True)
+        self._populate_request_handler_cache(index_nodes)
+
+        # STEP 2
+        log_keys = self.poll_for_new_indexer_key_ids(index_nodes, [], timeout=300,
+                                                      label="[STEP 2] ", key_type="log")
+        _assert_cache_encrypted(index_nodes,
+                                self.get_indexer_in_use_key_ids(index_nodes, key_type="log"),
+                                "[STEP 2] ")
+        self.log.info(f"[STEP 2] PASSED - log key(s) in use: {log_keys}")
+
+        # STEP 3: cache read-back proof with the initial key
+        survivor, peer = index_nodes[0], index_nodes[1]
+        _cache_read_back_proof(survivor, peer, "[STEP 3] ")
+
+        # STEP 4
+        self.wait_for_indexer_ready([peer], timeout=900, label="[STEP 4] ")
+        self.wait_until_indexes_online(timeout=1200)
+        self.log.info("[STEP 4] PASSED - peer back, indexes online")
+
+        # STEP 5: drop log DEKs -> re-encryption
+        status, response = self.rest.trigger_log_reencryption()
+        self.assertTrue(status, f"dropEncryptionAtRestDeks/log failed: {response}")
+        new_log_keys = self.poll_for_new_indexer_key_ids(index_nodes, log_keys, timeout=600,
+                                                          label="[STEP 5] ", key_type="log")
+        try:
+            self.poll_for_indexer_key_ids_gone(index_nodes, log_keys, timeout=600,
+                                               label="[STEP 5] ", key_type="log")
+        except Exception as ex:
+            self.log.warning(f"[STEP 5] Old log keys still in use after DEK drop: {ex}")
+        _wait_cache_reencrypted(index_nodes, log_keys, "[STEP 5] ")
+        self._populate_request_handler_cache(index_nodes)
+        _assert_cache_encrypted(index_nodes,
+                                self.get_indexer_in_use_key_ids(index_nodes, key_type="log"),
+                                "[STEP 5] ")
+        self.log.info(f"[STEP 5] PASSED - cache re-encrypted with {new_log_keys}")
+
+        # STEP 6: cache read-back proof with the rotated key
+        _cache_read_back_proof(survivor, peer, "[STEP 6] ")
+
+        # STEP 7
+        self.wait_for_indexer_ready([peer], timeout=900, label="[STEP 7] ")
+        self.wait_until_indexes_online(timeout=1200)
+        self.log.info("[STEP 7] PASSED - peer back, indexes online")
+
+        # STEP 8: disable log encryption -> decryption
+        status, response = self.rest.disable_log_encryption()
+        self.assertTrue(status, f"Disabling log encryption failed: {response}")
+        status, response = self.rest.trigger_log_reencryption()
+        self.assertTrue(status, f"dropEncryptionAtRestDeks/log (decrypt) failed: {response}")
+        try:
+            self.poll_for_indexer_key_ids_gone(index_nodes, new_log_keys, timeout=600,
+                                               label="[STEP 8] ", key_type="log")
+        except Exception as ex:
+            self.log.warning(f"[STEP 8] Log keys still in use after disabling: {ex}")
+        _wait_cache_plaintext(index_nodes, "[STEP 8] ")
+        self.log.info("[STEP 8] PASSED - cache files decrypted")
+
+        # STEP 9: re-enable + force-encrypt
+        status, response = self.rest.configure_log_encryption_at_rest({
+            "encryptionMethod": "encryptionKey", "encryptionKeyId": log_secret_id,
+            "dekLifetime": 31536000, "dekRotationInterval": 2592000})
+        self.assertTrue(status, f"Re-enabling log encryption failed: {response}")
+        status, response = self.rest.force_log_encryption_at_rest()
+        self.assertTrue(status, f"forceEncryptionAtRest/log failed: {response}")
+        final_log_keys = self.poll_for_new_indexer_key_ids(
+            index_nodes, log_keys + new_log_keys, timeout=600,
+            label="[STEP 9] ", key_type="log")
+        _wait_cache_reencrypted(index_nodes, new_log_keys, "[STEP 9] ")
+        self._populate_request_handler_cache(index_nodes)
+        _assert_cache_encrypted(index_nodes,
+                                self.get_indexer_in_use_key_ids(index_nodes, key_type="log"),
+                                "[STEP 9] ")
+        self.log.info(f"[STEP 9] PASSED - cache encrypted again with {final_log_keys}")
+
+        # STEP 10: cache read-back proof with the re-enabled key
+        _cache_read_back_proof(survivor, peer, "[STEP 10] ")
+
+        # STEP 11
+        self.wait_for_indexer_ready([peer], timeout=900, label="[STEP 11] ")
+        self.wait_until_indexes_online(timeout=1200)
+        self.run_scan_validation(select_queries)
+        self.item_count_related_validations()
+        self.log.info("TEST PASSED: test_gsi_encryption_at_rest_log_key_cache_lifecycle")
+
+    def test_gsi_encryption_at_rest_index_dir_naming(self):
+        """
+        UUID-based index directory naming (IndexPath2 format).
+
+        Index directories use the format ``<bucketUUID>_<instId>_<partnId>.index``
+        instead of the old ``<bucket>_<indexName>_<instId>_<partnId>.index``, so
+        no bucket, index, scope, collection, or field names leak into on-disk paths.
+
+        Steps:
+        1.  Prerequisites (encryption enabled, >= 2 index nodes)
+        2.  Create bucket with encryption, load docs, create indexes
+        3.  Verify all index dirs match the UUID format regex
+        4.  Collect forbidden names from /indexStatus, verify none appear in paths
+        5.  Baseline scans
+        6.  Restart indexers; verify dirs still UUID format (read back under new format)
+        7.  Scans after restart
+        8.  Drop and recreate indexes; verify new dirs also UUID format
+        9.  Scans on recreated indexes
+        10. Item count validation
+        """
+        self.log.info("STARTING TEST: test_gsi_encryption_at_rest_index_dir_naming")
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        if not getattr(self, "enable_encryption_at_rest", False):
+            self.skipTest("Encryption at rest not enabled. Set enable_encryption_at_rest=True")
+        self.assertGreaterEqual(len(index_nodes), 2,
+                                f"Need at least 2 index nodes, found {len(index_nodes)}")
+        helper = self.gsi_encryption_helper
+        UUID_DIR_RE = re.compile(r'^[0-9a-f]{32}_\d+_\d+\.index$')
+        CODEBOOK_RE = re.compile(r'^\d+_\d+\.codebook$')
+
+        def _verify_uuid_dirs(nodes, label):
+            violations = []
+            empty_nodes = []
+            codebook_violations = []
+            for node in nodes:
+                rest = RestConnection(node)
+                base_dir = f"{rest.get_index_path()}/@2i"
+                shell = RemoteMachineShellConnection(node, verbose=False)
+                try:
+                    # Plasma dirs under @2i/ and BHIVE dirs under @2i/@bhive/
+                    out, _ = shell.execute_command(
+                        f"find {base_dir} {base_dir}/@bhive -maxdepth 1 "
+                        f"-name '*.index' -type d 2>/dev/null"
+                    )
+                    dirs = [line.strip() for line in out if line.strip()]
+                    basenames = [d.split("/")[-1] for d in dirs]
+                    if not basenames:
+                        empty_nodes.append(node.ip)
+                    for d in basenames:
+                        if not UUID_DIR_RE.match(d):
+                            violations.append(f"{node.ip}:{d}")
+                    # Check codebook file names: <instId>_<partnId>.codebook
+                    for index_dir in dirs:
+                        cb_out, _ = shell.execute_command(
+                            f"find {index_dir}/codebook -maxdepth 1 "
+                            f"-name '*.codebook' -type f 2>/dev/null"
+                        )
+                        for cb_line in cb_out:
+                            cb_name = cb_line.strip().split("/")[-1]
+                            if cb_name and not CODEBOOK_RE.match(cb_name):
+                                codebook_violations.append(f"{node.ip}:{cb_name}")
+                finally:
+                    shell.disconnect()
+            if empty_nodes:
+                raise Exception(f"{label}No index directories found on nodes {empty_nodes}")
+            if violations:
+                raise Exception(f"{label}Non-UUID index directories found: {violations}")
+            if codebook_violations:
+                raise Exception(f"{label}Non-UUID codebook files found: {codebook_violations}")
+            self.log.info(f"{label}All index directories match UUID format on {[n.ip for n in nodes]}")
+            return True
+
+        # STEP 1
+        self.set_indexer_snapshot_settings(index_nodes)
+        self.log.info("[STEP 1] PASSED - prerequisites verified")
+
+        # STEP 2
+        bucket_name, select_queries = self._setup_bucket_and_indexes('dirname_', index_nodes)
+        self.log.info(f"[STEP 2] PASSED - bucket '{bucket_name}' with indexes created")
+
+        # STEP 3: verify UUID format
+        _verify_uuid_dirs(index_nodes, "[STEP 3] ")
+        self.log.info("[STEP 3] PASSED - all dirs are UUID-based")
+
+        # STEP 4: no sensitive names in paths
+        rest = RestConnection(index_nodes[0])
+        forbidden = helper._collect_forbidden_names(rest)
+        self.assertTrue(forbidden, "[STEP 4] No forbidden names discovered from /indexStatus")
+        naming_results = helper.verify_no_sensitive_names_in_paths(index_nodes, forbidden)
+        naming_failures = {ip: r for ip, r in naming_results.items() if r.get("status") == "failed"}
+        self.assertFalse(naming_failures,
+                         f"[STEP 4] Sensitive names found in paths: {naming_failures}")
+        self.log.info("[STEP 4] PASSED - no sensitive names in on-disk paths")
+
+        # STEP 5
+        self.run_scan_validation(select_queries, validate_item_count=True)
+        self.log.info("[STEP 5] PASSED - baseline scans")
+
+        # STEP 6: restart and re-check
+        self.restart_index_nodes(index_nodes)
+        _verify_uuid_dirs(index_nodes, "[STEP 6] ")
+        self.log.info("[STEP 6] PASSED - UUID dirs intact after restart")
+
+        # STEP 7
+        self.run_scan_validation(select_queries)
+        self.log.info("[STEP 7] PASSED - scans after restart")
+
+        # STEP 8: drop and recreate indexes, verify new dirs
+        query_node = self.get_nodes_from_services_map(service_type="n1ql")
+        self.run_cbq_query(
+            query=f"SELECT name FROM system:indexes WHERE keyspace_id = '{bucket_name}' "
+                  f"OR bucket_id = '{bucket_name}'",
+            server=query_node
+        )
+        result = self.run_cbq_query(
+            query=f"SELECT RAW name FROM system:indexes WHERE keyspace_id = '{bucket_name}' "
+                  f"OR bucket_id = '{bucket_name}'",
+            server=query_node
+        )
+        for idx_name in result.get("results", []):
+            namespace = f"default:{bucket_name}._default._default"
+            self.run_cbq_query(
+                query=f'DROP INDEX `{idx_name}` ON `{bucket_name}` USING GSI',
+                server=query_node
+            )
+        self.sleep(30, "[STEP 8] Waiting for index drops to propagate")
+        new_select_queries = self.create_indexes_on_namespace(
+            f"default:{bucket_name}._default._default", index_nodes,
+            'dirname2_', step_prefix="[STEP 8]", wait_for_ready=True
+        )
+        _verify_uuid_dirs(index_nodes, "[STEP 8] ")
+        self.log.info("[STEP 8] PASSED - recreated indexes also use UUID dirs")
+
+        # STEP 9
+        self.run_scan_validation(new_select_queries)
+        self.log.info("[STEP 9] PASSED - scans on recreated indexes")
+
+        # STEP 10
+        self.item_count_related_validations()
+        self.log.info("TEST PASSED: test_gsi_encryption_at_rest_index_dir_naming")

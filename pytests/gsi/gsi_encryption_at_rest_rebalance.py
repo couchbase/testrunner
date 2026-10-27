@@ -4921,3 +4921,123 @@ class GSIEncryptionAtRestRebalance(GSIEncryptionAtRestBase, BaseSecondaryIndexin
         self.log.info(f"Successfully completed swap rebalance ({self.rebalance_mode} mode) "
                       f"with encryption at rest in DGM state (desired_rr={self.desired_rr}%)")
         self.log.info("=" * 80)
+
+    def test_gsi_encryption_shards_after_fbr(self):
+        """
+        MB-69500: Verify encryption keys transfer correctly during file-based rebalance.
+
+        After a swap rebalance in file mode, the destination node must hold valid
+        encryption keys for every bucket UUID that was on the source node.  This
+        confirms that shard transfer ships the DEK metadata alongside the data files.
+
+        Steps:
+        1.  Prerequisites (encryption enabled, file mode, >= 3 index nodes)
+        2.  Enable shard-based rebalance (indexer.settings.enable_shard_affinity)
+        3.  Create encrypted bucket, load docs, create indexes, scans
+        4.  Capture per-node raw GetInUseKeys before rebalance
+        5.  Swap rebalance: remove source index node, add spare node
+        6.  Wait for indexes online on the new topology
+        7.  Capture per-node GetInUseKeys after rebalance; verify the dest node has
+            non-empty key IDs for the same bucket UUIDs as the source
+        8.  Scans on the new topology
+        9.  Validate file encryption on the dest node
+        10. Restart dest node; verify indexes come back and scans work
+        """
+        self.log.info("STARTING TEST: test_gsi_encryption_shards_after_fbr")
+
+        # STEP 1
+        index_nodes = self.verify_prerequisites(min_index_nodes=3)
+        if self.rebalance_mode != "file":
+            self.skipTest("This test requires rebalance_mode=file")
+
+        # STEP 2
+        self._enable_shard_rebalance_if_file_mode(step_prefix="[STEP 2]")
+
+        # STEP 3
+        self.set_indexer_snapshot_settings(index_nodes)
+        bucket_names, encrypted_bucket_names = self._create_encrypted_test_buckets(
+            num_buckets=self.bucket_count,
+            encrypt_all=self.encrypt_all_buckets
+        )
+        all_select_queries = set()
+        for namespace in self.namespaces:
+            select_queries = self.create_indexes_on_namespace(
+                namespace, index_nodes, 'fbr_',
+                step_prefix="[STEP 3]", wait_for_ready=True
+            )
+            all_select_queries.update(select_queries)
+        self.run_scan_validation(all_select_queries, validate_item_count=True)
+        self.log.info("[STEP 3] PASSED - bucket, indexes, scans")
+
+        # STEP 4: identify source/dest, capture source bucket key IDs before rebalance
+        node_services = self.get_nodes_services()
+        index_only_nodes = [n for n in index_nodes
+                            if 'kv' not in node_services.get(n.ip, '')]
+        self.assertTrue(index_only_nodes,
+                        "No index-only node available for swap (all index nodes also run kv)")
+        source_node = index_only_nodes[-1]
+        used_ips = {node.ip for node in self.servers[:self.nodes_init]}
+        spare_nodes = [s for s in self.servers[self.nodes_init:] if s.ip not in used_ips]
+        self.assertTrue(spare_nodes, "No spare nodes available for swap rebalance")
+        dest_node = spare_nodes[0]
+        source_bucket_key_ids = set(self.get_indexer_in_use_key_ids(
+            [source_node], key_type="bucket"))
+        self.assertTrue(source_bucket_key_ids,
+                        f"[STEP 4] No bucket key IDs on source {source_node.ip}")
+        self.log.info(f"[STEP 4] Source: {source_node.ip} (bucket keys: {source_bucket_key_ids}), "
+                      f"Dest: {dest_node.ip}")
+
+        # STEP 5: swap rebalance
+        self.log.info(f"[STEP 5] Swap rebalance: removing {source_node.ip}, adding {dest_node.ip}")
+        rebalance = self.cluster.async_rebalance(
+            self.servers[:self.nodes_init],
+            [dest_node],
+            [source_node],
+            services=["index"],
+            cluster_config=self.cluster_config if hasattr(self, 'cluster_config') else None
+        )
+        reached = rebalance.result()
+        self.assertTrue(reached, "Swap rebalance failed or did not complete")
+        self.log.info("[STEP 5] PASSED - swap rebalance completed")
+
+        # STEP 6
+        self.sleep(30, "[STEP 6] Waiting for indexes to settle after rebalance")
+        self.wait_until_indexes_online(timeout=1200)
+        self.log.info("[STEP 6] PASSED - indexes online on new topology")
+
+        # STEP 7: compare dest bucket key IDs vs source (DEKs are shipped via importShardKeys)
+        dest_bucket_key_ids = set(self.get_indexer_in_use_key_ids(
+            [dest_node], key_type="bucket"))
+        self.assertTrue(dest_bucket_key_ids,
+                        f"[STEP 7] No dest bucket key IDs on {dest_node.ip}")
+        missing = source_bucket_key_ids - dest_bucket_key_ids
+        if missing:
+            self.fail(
+                f"[STEP 7] Dest {dest_node.ip} missing source bucket key IDs {missing}. "
+                f"Source={source_bucket_key_ids}, Dest={dest_bucket_key_ids}")
+        self.log.info(f"[STEP 7] PASSED - dest bucket keys {dest_bucket_key_ids} "
+                      f"include source keys {source_bucket_key_ids}")
+
+        # STEP 8
+        self.run_scan_validation(all_select_queries)
+        self.log.info("[STEP 8] PASSED - scans on new topology")
+
+        # STEP 9: validate file encryption on dest
+        new_index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        dest_in_cluster = [n for n in new_index_nodes if n.ip == dest_node.ip]
+        if dest_in_cluster:
+            expected_key_ids = self.get_indexer_in_use_key_ids(dest_in_cluster)
+            validation_passed = self.validate_file_encryption_with_key(
+                dest_in_cluster, expected_key_id=expected_key_ids,
+                step_prefix="[STEP 9] ",
+                encrypted_bucket_names=encrypted_bucket_names
+            )
+            self.assertTrue(validation_passed, "[STEP 9] File encryption validation failed on dest")
+        self.log.info("[STEP 9] PASSED - file encryption validated on dest")
+
+        # STEP 10: restart dest node with read-back validation (no DCP rebuild expected)
+        self.restart_index_nodes(
+            dest_in_cluster if dest_in_cluster else [dest_node],
+            validate_read_back=True, select_queries=all_select_queries)
+        self.run_scan_validation(all_select_queries)
+        self.log.info("TEST PASSED: test_gsi_encryption_shards_after_fbr")
