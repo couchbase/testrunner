@@ -16,9 +16,13 @@ class CollectionsN1QL(object):
     def create_collection(self, keyspace="default", bucket_name="", scope_name="", collection_name="", poll_interval=1,
                           timeout=30):
         self.n1ql_helper.use_rest = self.use_rest
-        return self.n1ql_helper.create_collection(server=self.node, keyspace=keyspace, bucket_name=bucket_name,
-                                                  scope_name=scope_name, collection_name=collection_name,
-                                                  poll_interval=poll_interval, timeout=timeout)
+        result = self.n1ql_helper.create_collection(server=self.node, keyspace=keyspace, bucket_name=bucket_name,
+                                                    scope_name=scope_name, collection_name=collection_name,
+                                                    poll_interval=poll_interval, timeout=timeout)
+        if result:
+            # waiting for additional time according to https://issues.couchbase.com/browse/MB-39500
+            time.sleep(10)
+        return result
 
     def create_scope(self, keyspace="default", bucket_name="", scope_name="", poll_interval=1, timeout=30):
         self.n1ql_helper.use_rest = self.use_rest
