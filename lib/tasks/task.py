@@ -191,6 +191,13 @@ class NodeInitializeTask(Task):
             if cluster_setting["ftsMemoryQuota"] and \
                     int(cluster_setting["ftsMemoryQuota"]) >= 256:
                 fts_quota = int(cluster_setting["ftsMemoryQuota"])
+        # Explicit per-service quotas from the test params win over both the
+        # defaults above and whatever the cluster happens to be set to already.
+        if TestInputSingleton.input is not None:
+            index_quota = int(TestInputSingleton.input.param("index_quota",
+                                                             index_quota))
+            fts_quota = int(TestInputSingleton.input.param("fts_quota",
+                                                           fts_quota))
         kv_quota = int(info.mcdMemoryReserved * CLUSTER_QUOTA_RATIO)
         if self.index_quota_percent:
             index_quota = self.index_quota
