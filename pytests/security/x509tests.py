@@ -112,6 +112,13 @@ class x509tests(BaseTestCase):
                                                                 password="password")
             x509main(servers)._delete_inbox_folder()
 
+    def _setup_joining_nodes_certs(self, nodes):
+        # Once the cluster uses an uploaded CA, add_node verifies the joining
+        # node's server cert, so each node must trust the CA and have its
+        # cert reloaded before it joins; otherwise join fails with "unknown CA".
+        for node in nodes:
+            x509main(node).setup_master()
+
     def checkConfig(self, eventID, host, expectedResults):
         Audit = audit(eventID=eventID, host=host)
         currentState = Audit.getAuditStatus()
@@ -548,7 +555,7 @@ class x509tests(BaseTestCase):
             # Setup cluster1
             x509main(cluster1[0])._upload_cluster_ca_certificate("Administrator", 'password')
             x509main(cluster1[0])._setup_node_certificates()
-            x509main(cluster1[1])._setup_node_certificates(reload_cert=False)
+            self._setup_joining_nodes_certs([cluster1[1]])
 
             restCluster1.add_node('Administrator', 'password', cluster1[1].ip)
             known_nodes = ['ns_1@' + cluster1[0].ip, 'ns_1@' + cluster1[1].ip]
@@ -562,7 +569,7 @@ class x509tests(BaseTestCase):
             # default/self-signed cert, which cluster2[0] doesn't trust yet,
             # so joining it fails with "unknown CA").
             x509main(cluster2[0]).setup_master()
-            x509main(cluster2[1])._setup_node_certificates(reload_cert=False)
+            self._setup_joining_nodes_certs([cluster2[1]])
 
             restCluster2.add_node('Administrator', 'password', cluster2[1].ip)
             known_nodes = ['ns_1@' + cluster2[0].ip, 'ns_1@' + cluster2[1].ip]
@@ -668,6 +675,9 @@ class x509tests(BaseTestCase):
 
     def test_sdk_existing_cluster(self):
         servers_in = self.servers[1:]
+        if self.setup_once:
+            # setUp() already moved the master to the uploaded CA
+            self._setup_joining_nodes_certs(servers_in)
         self.cluster.rebalance(self.servers, servers_in, [])
 
         rest = RestConnection(self.master)
@@ -683,7 +693,7 @@ class x509tests(BaseTestCase):
     def test_sdk_cluster_incorrect_cert(self):
         rest = RestConnection(self.master)
         x509main(self.master).setup_master()
-        x509main().setup_cluster_nodes_ssl(self.servers)
+        self._setup_joining_nodes_certs(self.servers[1:])
         rest.create_bucket(bucket='default', ramQuotaMB=256)
 
         servers_in = self.servers[1:]
@@ -738,7 +748,7 @@ class x509tests(BaseTestCase):
     def test_root_crt_rotate_cluster(self):
         rest = RestConnection(self.master)
         x509main(self.master).setup_master()
-        x509main().setup_cluster_nodes_ssl(self.servers)
+        self._setup_joining_nodes_certs(self.servers[1:])
         rest.create_bucket(bucket='default', ramQuotaMB=256)
         self.sleep(30)
         servers_in = self.servers[1:]
@@ -769,7 +779,7 @@ class x509tests(BaseTestCase):
         #ntonencryptionBase().ntonencryption_cli(self.servers, 'disable')
         rest = RestConnection(self.master)
         x509main(self.master).setup_master()
-        x509main().setup_cluster_nodes_ssl(self.servers)
+        self._setup_joining_nodes_certs(self.servers[1:])
         rest.create_bucket(bucket='default', ramQuotaMB=256)
         self.sleep(30)
         servers_in = self.servers[1:]
