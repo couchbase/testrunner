@@ -3600,7 +3600,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         if 5.5 > float(cb_version[:3]):
             self.compression_mode = initial_compression_mode
 
-        rest.create_bucket(bucket='default', ramQuotaMB=512,
+        rest.create_bucket(bucket='default', ramQuotaMB=self.input.param('default-bucket-ram-quota', 512),
                            compressionMode=self.compression_mode)
         self.buckets = rest.get_buckets()
         self._load_all_buckets(self.master, gen, "create", 0)
