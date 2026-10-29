@@ -9435,3 +9435,130 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
         # STEP 10
         self.item_count_related_validations()
         self.log.info("TEST PASSED: test_gsi_encryption_at_rest_index_dir_naming")
+
+    def test_gsi_encryption_at_rest_kmip_sanity(self):
+        """
+        KMIP-backed encryption at rest sanity test.
+
+        Validates that GSI indexes work correctly when encryption at rest
+        uses a KMIP-managed key as KEK. The KMIP secret is created by
+        basetestcase.py setUp when create_KMIP_secret=True.
+
+        Steps:
+        1. Verify prerequisites (index nodes, encryption active)
+        2. Verify KMIP secret exists (self.KMIP_id set by setUp)
+        3. Create bucket, load docs, create indexes
+        4. Scan + file encryption validation
+        5. DEK rotation under KMIP KEK
+        6. Scan + file encryption post-rotation
+        7. Restart + read-back validation
+        8. Final scan + item count
+        """
+        STABLE_INTERVAL_S = 36000
+        ROTATION_INTERVAL_S = 120
+
+        self.log.info("=" * 80)
+        self.log.info("STARTING TEST: test_gsi_encryption_at_rest_kmip_sanity")
+        self.log.info("=" * 80)
+
+        # ========== STEP 1: Verify prerequisites ==========
+        index_nodes = self.verify_prerequisites(min_index_nodes=2)
+        key_id = self.encryption_at_rest_id
+
+        # ========== STEP 2: Verify KMIP secret was created ==========
+        kmip_id = getattr(self, 'KMIP_id', None)
+        self.assertIsNotNone(
+            kmip_id,
+            "[STEP 2] KMIP secret not created. Ensure create_KMIP_secret=True in conf"
+        )
+        self.log.info(f"[STEP 2] PASSED - KMIP secret ID: {kmip_id}, bucket key ID: {key_id}")
+
+        # ========== STEP 3: Snapshot settings + create bucket + indexes ==========
+        self.set_indexer_snapshot_settings(index_nodes)
+
+        bucket_name = self.test_bucket
+        self.create_bucket_with_encryption(bucket_name, enable_encryption=True)
+        bucket_info = self.rest.get_bucket_json(bucket_name)
+        encryption_key_id = bucket_info.get('encryptionAtRestKeyId', None)
+        self.assertEqual(
+            encryption_key_id, key_id,
+            f"[STEP 3] Bucket key {encryption_key_id} != expected {key_id}"
+        )
+
+        self.set_bucket_dek_rotation_config(
+            bucket_name, key_id,
+            dek_rotation_interval=STABLE_INTERVAL_S,
+            dek_lifetime=STABLE_INTERVAL_S
+        )
+
+        namespace = f"default:{bucket_name}._default._default"
+        gen_create = SDKDataLoader(
+            num_ops=self.num_of_docs_per_collection,
+            percent_create=100, percent_update=0, percent_delete=0,
+            scope="_default", collection="_default",
+            json_template=self.json_template, output=True,
+            username=self.username, password=self.password
+        )
+        if self.use_magma_loader:
+            self.cluster.async_load_gen_docs(
+                self.master, bucket=bucket_name, generator=gen_create,
+                pause_secs=1, timeout_secs=300, use_magma_loader=True
+            ).result()
+        else:
+            for task in self.data_ops_javasdk_loader_in_batches(
+                    sdk_data_loader=gen_create, batch_size=10**4, dataset=self.json_template):
+                task.result()
+
+        select_queries = self.create_indexes_on_namespace(
+            namespace, index_nodes, 'kmip_',
+            step_prefix="[STEP 3]", wait_for_ready=True
+        )
+        self.log.info("[STEP 3] PASSED - Bucket, docs, indexes created under KMIP KEK")
+
+        # ========== STEP 4: Baseline scan + file encryption validation ==========
+        baseline_keys = self.get_indexer_in_use_key_ids(index_nodes)
+        self.run_scan_validation(select_queries, validate_item_count=True)
+        self.validate_file_encryption_with_key(
+            index_nodes, expected_key_id=baseline_keys,
+            step_prefix="[STEP 4] ", raise_on_failure=True
+        )
+        self.log.info("[STEP 4] PASSED - Baseline scans and encryption validated")
+
+        # ========== STEP 5: DEK rotation under KMIP KEK ==========
+        self.log.info(f"[STEP 5] Triggering DEK rotation (interval={ROTATION_INTERVAL_S}s)...")
+        self.set_bucket_dek_rotation_config(
+            bucket_name, key_id,
+            dek_rotation_interval=ROTATION_INTERVAL_S,
+            dek_lifetime=ROTATION_INTERVAL_S
+        )
+        new_keys = self.poll_for_new_indexer_key_ids(
+            index_nodes, baseline_keys, timeout=600, label="[STEP 5] "
+        )
+        self.set_bucket_dek_rotation_config(
+            bucket_name, key_id,
+            dek_rotation_interval=STABLE_INTERVAL_S,
+            dek_lifetime=STABLE_INTERVAL_S
+        )
+        self.log.info(f"[STEP 5] PASSED - DEK rotation completed, new keys: {new_keys}")
+
+        # ========== STEP 6: Post-rotation scan + file encryption ==========
+        self.run_scan_validation(select_queries, validate_item_count=True)
+        post_rotation_keys = self.get_indexer_in_use_key_ids(index_nodes)
+        self.validate_file_encryption_with_key(
+            index_nodes, expected_key_id=post_rotation_keys,
+            step_prefix="[STEP 6] ", raise_on_failure=True
+        )
+        self.log.info("[STEP 6] PASSED - Post-rotation scans and encryption validated")
+
+        # ========== STEP 7: Restart + read-back ==========
+        self.log.info("[STEP 7] Restarting index nodes with read-back validation...")
+        self.restart_index_nodes(index_nodes, validate_read_back=True)
+        self.log.info("[STEP 7] PASSED - Restart and read-back OK under KMIP KEK")
+
+        # ========== STEP 8: Final scan + item count ==========
+        self.run_scan_validation(select_queries, validate_item_count=True)
+        self.log.info("[STEP 8] PASSED - Final scans and item counts OK")
+
+        self.log.info("=" * 80)
+        self.log.info("TEST PASSED: test_gsi_encryption_at_rest_kmip_sanity")
+        self.log.info("=" * 80)

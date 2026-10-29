@@ -5041,3 +5041,279 @@ class GSIEncryptionAtRestRebalance(GSIEncryptionAtRestBase, BaseSecondaryIndexin
             validate_read_back=True, select_queries=all_select_queries)
         self.run_scan_validation(all_select_queries)
         self.log.info("TEST PASSED: test_gsi_encryption_shards_after_fbr")
+
+    def test_gsi_ear_shard_cleanup_after_dcp_rebalance(self):
+        """
+        MB-70278: Verify that empty shard directories are cleaned up on the source
+        node after a DCP (non-file-based) rebalance-out with encryption at rest.
+
+        When indexes are moved via DCP rebalance the source node drops its index
+        instances but plasma may leave behind empty shard directories.  The fix
+        (indexing commit 28b1184) calls runCleanupEmptyShards() at the end of the
+        rebalance cleanup phase, which sends MsgDestroyEmptyShard to storage manager.
+        The test confirms:
+          1. The cleanup start/done log lines appear in indexer.log on the
+             surviving nodes (runCleanupEmptyShards runs cluster-side, not on
+             the ejected node). A shard dir still present on the ejected node
+             afterward is logged but not asserted on, since it may be a shard
+             legitimately shared with an index that wasn't moved.
+          2. Encryption remains intact on surviving index nodes.
+
+        Pre-rebalance key IDs on the surviving nodes are captured and logged
+        for diagnostics only; this test does not assert that a key used only
+        by the ejected node stops being referenced after rebalance.
+
+        Requires gsi_type=plasma and rebalance_mode=dcp (shard affinity off).
+        """
+        from lib.remote.remote_util import RemoteMachineShellConnection
+        CLEANUP_LOG_START  = "RebalanceServiceManager::runCleanupEmptyShards running empty shard cleanup"
+        CLEANUP_LOG_DONE   = "RebalanceServiceManager::runCleanupEmptyShards done with empty shard cleanup"
+        DESTROY_LOG        = "StorageMgr::handleDestroyEmptyShards destroying empty shards"
+
+        self.log.info("=" * 80)
+        self.log.info("STARTING TEST: test_gsi_ear_shard_cleanup_after_dcp_rebalance")
+        self.log.info("=" * 80)
+
+        # ========== STEP 1: Prerequisites ==========
+        index_nodes = self.verify_prerequisites(min_index_nodes=2)
+        if self.gsi_type != "plasma":
+            self.skipTest("Shard cleanup test requires gsi_type=plasma")
+
+        # ========== STEP 2: Disable shard-based rebalance (force DCP) ==========
+        self.log.info("[STEP 2] Disabling shard-based rebalance to force DCP mode...")
+        self.disable_shard_based_rebalance()
+        self.sleep(10, "[STEP 2] Waiting for settings to propagate")
+        self.log.info("[STEP 2] PASSED - DCP rebalance mode active")
+
+        # ========== STEP 3: Create encrypted bucket + load docs ==========
+        bucket_count = getattr(self, 'bucket_count', 1)
+        encrypt_all = getattr(self, 'encrypt_all_buckets', True)
+        self.log.info(f"[STEP 3] Creating {bucket_count} bucket(s) (encrypt_all={encrypt_all})...")
+        bucket_names, encrypted_bucket_names = self._create_encrypted_test_buckets(
+            num_buckets=bucket_count, encrypt_all=encrypt_all
+        )
+        bucket_name = bucket_names[0]
+        self.log.info(f"[STEP 3] PASSED - Buckets {bucket_names} created (encrypted: {encrypted_bucket_names})")
+
+        # ========== STEP 4: Create indexes with replicas so data lands on both index nodes ==========
+        self.log.info("[STEP 4] Creating indexes with num_index_replica=1...")
+        all_select_queries = set()
+        for namespace in self.namespaces:
+            select_queries = self.create_indexes_on_namespace(
+                namespace, index_nodes, 'dcp_cleanup_',
+                step_prefix="[STEP 4]", wait_for_ready=True
+            )
+            all_select_queries.update(select_queries)
+        self.sleep(30, "[STEP 4] Waiting for stats flush")
+        self.log.info("[STEP 4] PASSED - Indexes built with replicas on both index nodes")
+
+        # ========== STEP 5: Capture pre-rebalance shard state on the node to be ejected ==========
+        node_services = self.get_nodes_services()
+        index_only_nodes = [n for n in index_nodes
+                            if 'n1ql' not in node_services.get(n.ip, '')]
+        node_to_eject = index_only_nodes[-1] if index_only_nodes else index_nodes[-1]
+        surviving_nodes = [n for n in index_nodes if n.ip != node_to_eject.ip]
+        self.log.info(f"[STEP 5] Capturing shard dirs on source node {node_to_eject.ip}...")
+
+        node_rest = RestConnection(node_to_eject)
+        storage_dir = node_rest.get_indexer_internal_stats().get(
+            "indexer.storage_dir", "/data/@2i"
+        )
+        shard_path = f"{storage_dir}/shards"
+
+        shell_src = RemoteMachineShellConnection(node_to_eject)
+        out, _ = shell_src.execute_command(
+            f"ls {shard_path} 2>/dev/null || echo '__empty__'"
+        )
+        pre_rebalance_shards = set(
+            s.strip() for s in out if s.strip() and s.strip() != "__empty__"
+        )
+        shell_src.disconnect()
+        self.log.info(f"[STEP 5] Pre-rebalance shards on {node_to_eject.ip}: {pre_rebalance_shards}")
+
+        # ========== STEP 6: Log encryption key baseline on surviving nodes (diagnostics only) ==========
+        self.log.info("[STEP 6] Capturing encryption key baseline on surviving nodes...")
+        pre_key_ids = self.get_indexer_in_use_key_ids(surviving_nodes)
+        self.log.info(f"[STEP 6] Pre-rebalance key IDs on surviving nodes (not asserted on): {pre_key_ids}")
+
+        # ========== STEP 7: Baseline cleanup log counts, then rebalance out ==========
+        baseline_counts = {}
+        for node in surviving_nodes:
+            shell = RemoteMachineShellConnection(node)
+            _, log_dir = RestConnection(node).diag_eval(
+                "filename:absname(element(2, application:get_env(ns_server,error_logger_mf_dir)))."
+            )
+            log_dir = str(log_dir)
+            indexer_log = f"{log_dir}/indexer.log*"
+            started_count, _ = shell.execute_command(
+                f'zgrep "{CLEANUP_LOG_START}" {indexer_log} 2>/dev/null | wc -l'
+            )
+            done_count, _ = shell.execute_command(
+                f'zgrep "{CLEANUP_LOG_DONE}" {indexer_log} 2>/dev/null | wc -l'
+            )
+            destroy_count, _ = shell.execute_command(
+                f'zgrep "{DESTROY_LOG}" {indexer_log} 2>/dev/null | wc -l'
+            )
+            shell.disconnect()
+            baseline_counts[node.ip] = {
+                "started": int(started_count[0].strip()) if started_count else 0,
+                "done": int(done_count[0].strip()) if done_count else 0,
+                "destroy": int(destroy_count[0].strip()) if destroy_count else 0,
+            }
+        self.log.info(f"[STEP 7] Baseline cleanup log counts: {baseline_counts}")
+        self.log.info(f"[STEP 7] Rebalancing out {node_to_eject.ip} via DCP...")
+        rebalance = self.cluster.async_rebalance(
+            self.servers[:self.nodes_init], [], [node_to_eject],
+            cluster_config=self.cluster_config if hasattr(self, "cluster_config") else None,
+        )
+        try:
+            rebalance.result(timeout=1800)
+        except Exception as e:
+            self.fail(f"[STEP 7] Rebalance failed: {e}")
+        # Give the cleanup phase time to run (runCleanupEmptyShards can take up to 25 min)
+        self.log.info("[STEP 7] Rebalance complete. Waiting up to 25 min for shard cleanup...")
+        self.sleep(90, "[STEP 7] Initial settle after rebalance finish")
+        # Redirect self.master/self.rest to a surviving KV+N1QL node.
+        # surviving_nodes are index nodes — some may lack kv/n1ql.
+        # Query node_services via a surviving node (not the ejected master).
+        tmp_rest = RestConnection(surviving_nodes[0])
+        cluster_nodes = tmp_rest.get_nodes_services()
+        ejected_ip = node_to_eject.ip
+        new_master = None
+        kv_fallback = None
+        for s in self.servers[:self.nodes_init]:
+            if s.ip == ejected_ip:
+                continue
+            svc = cluster_nodes.get(f"{s.ip}:8091", [])
+            if 'kv' in svc and 'n1ql' in svc:
+                new_master = s
+                break
+            if 'kv' in svc and kv_fallback is None:
+                kv_fallback = s
+        if new_master is None:
+            new_master = kv_fallback or surviving_nodes[0]
+        self.master = new_master
+        self.rest = RestConnection(self.master)
+        self.n1ql_helper.master = new_master
+        self.log.info(f"[STEP 7] Redirected self.master to {self.master.ip}")
+        self.log.info("[STEP 7] PASSED - Rebalance out complete")
+
+        # ========== STEP 8: Assert cleanup log counts increased on surviving nodes ==========
+        self.log.info("[STEP 8] Checking indexer.log on surviving nodes for new cleanup log lines...")
+        started_increased = False
+        done_increased = False
+        for node in surviving_nodes:
+            shell = RemoteMachineShellConnection(node)
+            _, log_dir = RestConnection(node).diag_eval(
+                "filename:absname(element(2, application:get_env(ns_server,error_logger_mf_dir)))."
+            )
+            log_dir = str(log_dir)
+            indexer_log = f"{log_dir}/indexer.log*"
+
+            started_count, _ = shell.execute_command(
+                f'zgrep "{CLEANUP_LOG_START}" {indexer_log} 2>/dev/null | wc -l'
+            )
+            done_count, _ = shell.execute_command(
+                f'zgrep "{CLEANUP_LOG_DONE}" {indexer_log} 2>/dev/null | wc -l'
+            )
+            destroy_count, _ = shell.execute_command(
+                f'zgrep "{DESTROY_LOG}" {indexer_log} 2>/dev/null | wc -l'
+            )
+            shell.disconnect()
+
+            s = int(started_count[0].strip()) if started_count else 0
+            d = int(done_count[0].strip()) if done_count else 0
+            ds = int(destroy_count[0].strip()) if destroy_count else 0
+            base = baseline_counts.get(node.ip, {"started": 0, "done": 0, "destroy": 0})
+            self.log.info(
+                f"[STEP 8] {node.ip}: started={base['started']}->{s}, "
+                f"done={base['done']}->{d}, destroy={base['destroy']}->{ds}"
+            )
+            if s > base["started"]:
+                started_increased = True
+            if d > base["done"]:
+                done_increased = True
+
+        self.assertTrue(
+            started_increased,
+            "[STEP 8] Cleanup start log count did not increase on any surviving node after DCP rebalance"
+        )
+        self.assertTrue(
+            done_increased,
+            "[STEP 8] Cleanup done log count did not increase on any surviving node; "
+            "cleanup may have timed out after 25 min"
+        )
+        self.log.info("[STEP 8] PASSED - Cleanup log counts increased after DCP rebalance")
+
+        # ========== STEP 9: Assert empty shard dirs cleaned up on surviving nodes ==========
+        self.log.info("[STEP 9] Checking shard dirs on surviving nodes...")
+        leftover_empty = []
+        for node in surviving_nodes:
+            node_rest = RestConnection(node)
+            node_storage_dir = node_rest.get_indexer_internal_stats().get(
+                "indexer.storage_dir", "/data/@2i"
+            )
+            node_shard_path = f"{node_storage_dir}/shards"
+            shell = RemoteMachineShellConnection(node)
+            try:
+                out, _ = shell.execute_command(
+                    f"ls {node_shard_path} 2>/dev/null || echo '__empty__'"
+                )
+                post_shards = [
+                    s.strip() for s in out if s.strip() and s.strip() != "__empty__"
+                ]
+                if post_shards:
+                    self.log.info(f"[STEP 9] {node.ip}: shard dirs remaining: {post_shards}")
+                    for shard_dir in post_shards:
+                        shard_full = f"{node_shard_path}/{shard_dir}"
+                        idx_out, _ = shell.execute_command(
+                            f"ls {shard_full}/*.index 2>/dev/null | wc -l"
+                        )
+                        idx_count = int(idx_out[0].strip()) if idx_out else 0
+                        if idx_count == 0:
+                            leftover_empty.append(f"{node.ip}:{shard_dir}")
+                            self.log.warning(
+                                f"[STEP 9] {node.ip}: empty shard dir {shard_dir} "
+                                f"was NOT cleaned up"
+                            )
+                        else:
+                            self.log.info(
+                                f"[STEP 9] {node.ip}: shard dir {shard_dir} still has "
+                                f"{idx_count} index dir(s) — expected (shared shard)"
+                            )
+                else:
+                    self.log.info(f"[STEP 9] {node.ip}: no shard dirs remaining")
+            finally:
+                shell.disconnect()
+        if leftover_empty:
+            self.fail(
+                f"[STEP 9] Empty shard directories not cleaned up on surviving nodes: "
+                f"{leftover_empty}"
+            )
+        self.log.info("[STEP 9] PASSED - No empty shard dirs on surviving nodes")
+
+        # ========== STEP 10: Verify encryption intact on surviving nodes ==========
+        self.log.info("[STEP 10] Verifying encryption intact on surviving index nodes...")
+        self.validate_file_encryption_with_key(
+            index_nodes=surviving_nodes,
+            expected_key_id=None,
+            step_prefix="[STEP 10] ",
+            encrypted_bucket_names=encrypted_bucket_names,
+            raise_on_failure=True,
+        )
+        self.log.info("[STEP 10] PASSED - Encryption intact on surviving nodes")
+
+        # ========== STEP 11: Restart surviving nodes + read-back validation ==========
+        self.log.info("[STEP 11] Restarting surviving index nodes with read-back validation...")
+        self.restart_index_nodes(surviving_nodes, validate_read_back=True)
+        self.log.info("[STEP 11] PASSED - Restart and read-back OK")
+
+        # ========== STEP 12: Scans + item count on surviving cluster ==========
+        self.log.info("[STEP 12] Running scans on surviving cluster...")
+        self.run_scan_validation(all_select_queries, validate_item_count=True)
+        self.log.info("[STEP 12] PASSED - Scans and item counts OK")
+
+        self.log.info("=" * 80)
+        self.log.info("TEST PASSED: test_gsi_ear_shard_cleanup_after_dcp_rebalance")
+        self.log.info("=" * 80)
+
