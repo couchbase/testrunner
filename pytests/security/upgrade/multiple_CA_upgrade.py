@@ -48,11 +48,20 @@ class LdapContainer:
         o, e = shell.execute_command("docker rm $(docker ps -a -q)")
         log.info('Output of removing containers is {0} and error message is {1}'.format(o, e))
 
-    def start_ldap_container(self, shell):
+    def start_ldap_container(self, shell, tls_cipher_suite=None):
+        """
+        tls_cipher_suite: optional GnuTLS priority string for the container's
+        LDAPS listener, e.g. "NORMAL:-VERS-ALL:+VERS-TLS1.2" for a TLS 1.2-only
+        endpoint.
+        """
+        tls_env = ""
+        if tls_cipher_suite:
+            tls_env = " --env LDAP_TLS_CIPHER_SUITE='{0}'".format(tls_cipher_suite)
         o, e = shell.execute_command("docker run --name " + self.container_name +
                                      " --hostname " + self.hostname +
                                      " -p 389:389 -p 636:636 " +
                                      " --env LDAP_TLS_VERIFY_CLIENT=try" +
+                                     tls_env +
                                      " --detach osixia/openldap:1.5.0")
         log.info('Output of removing containers is {0} and error message is {1}'.format(o, e))
 

@@ -479,16 +479,83 @@ class NewUpgradeBaseTest(BaseTestCase):
                                      drain_rate, self.num_items * (self.num_replicas + 1)))
         self.change_settings()
 
+    def _upgrade_edition(self):
+        """Edition of the package the cluster is upgraded to.
+
+        Defaults to enterprise; a community cluster stays community unless
+        ce_to_ee is set, so offline/in-place CE upgrades fetch the CE build.
+        """
+        build_type = self.input.param("upgrade_build_type",
+                                      self.initial_build_type)
+        if self.ce_to_ee or build_type != "community":
+            return "enterprise"
+        return "community"
+
+    def ensure_docker(self, shell, retries=3):
+        """Install docker on the shell's node if it is missing and start it.
+
+        Returns True when this call installed docker, so the caller can
+        uninstall_docker() on cleanup and leave the node as it found it.
+        On RHEL 8+ "yum install docker" installs the podman shim, which
+        does not run the docker daemon; use Debian/Ubuntu or a node that
+        already has docker there.
+        """
+        o, _ = shell.execute_command("command -v docker", debug=False)
+        installed = False
+        if not o:
+            if shell.info.deliverable_type == "deb":
+                cmd = "export DEBIAN_FRONTEND=noninteractive; " \
+                      "apt-get -o DPkg::Lock::Timeout=300 update -q && " \
+                      "apt-get -o DPkg::Lock::Timeout=300 install -y -q docker.io"
+            elif shell.info.deliverable_type == "rpm":
+                cmd = "yum install -y docker || dnf install -y docker"
+            else:
+                raise Exception("Cannot install docker on {0} ({1})".format(
+                    shell.ip, shell.info.deliverable_type))
+            for attempt in range(retries):
+                self.log.info("Installing docker on {0}, attempt {1}".format(
+                    shell.ip, attempt + 1))
+                shell.execute_command(cmd, debug=False)
+                o, _ = shell.execute_command("command -v docker", debug=False)
+                if o:
+                    installed = True
+                    break
+                self.sleep(30, "apt/yum may be busy, retrying docker install")
+            if not installed:
+                raise Exception("Could not install docker on {0}".format(shell.ip))
+        shell.execute_command("systemctl start docker", debug=False)
+        o, e = shell.execute_command("docker info --format '{{.ServerVersion}}'",
+                                     debug=False)
+        if not o:
+            raise Exception("docker is not running on {0}: {1}".format(shell.ip, e))
+        self.log.info("docker {0} running on {1}".format(o[0], shell.ip))
+        return installed
+
+    def uninstall_docker(self, shell):
+        """Remove docker installed by ensure_docker, with its images and
+        containers."""
+        if shell.info.deliverable_type == "deb":
+            cmd = "export DEBIAN_FRONTEND=noninteractive; " \
+                  "apt-get -o DPkg::Lock::Timeout=300 purge -y -q docker.io && " \
+                  "apt-get -o DPkg::Lock::Timeout=300 autoremove -y -q"
+        else:
+            cmd = "yum remove -y docker || dnf remove -y docker"
+        shell.execute_command("systemctl stop docker docker.socket", debug=False)
+        shell.execute_command(cmd, debug=False)
+        shell.execute_command("rm -rf /var/lib/docker", debug=False)
+        self.log.info("Removed docker from {0}".format(shell.ip))
+
     def _get_build(self, server, version, remote, is_amazon=False, info=None):
         if info is None:
             info = remote.extract_remote_info()
+        edition = self._upgrade_edition()
         build_repo = CB_REPO
         if version[:5] in CB_RELEASE_BUILDS.keys():
             build_repo = CB_REPO + CB_VERSION_NAME[version[:3]] + "/"
         builds, changes = BuildQuery().get_all_builds(version=version, timeout=self.wait_timeout * 5, \
                                                       deliverable_type=info.deliverable_type,
                                                       architecture_type=info.architecture_type, \
-                                                      edition_type="couchbase-server-enterprise", repo=build_repo, \
+                                                      edition_type="couchbase-server-%s" % edition, repo=build_repo, \
                                                       distribution_version=info.distribution_version.lower())
         self.log.info("finding build %s for machine %s" % (version, server))
 
@@ -496,7 +563,7 @@ class NewUpgradeBaseTest(BaseTestCase):
             version = version + "-rel"
         if version[:5] in self.released_versions:
             appropriate_build = BuildQuery(). \
-                find_couchbase_release_build('%s-enterprise' % (self.product),
+                find_couchbase_release_build('%s-%s' % (self.product, edition),
                                              info.deliverable_type,
                                              info.architecture_type,
                                              version.strip(),
@@ -504,13 +571,25 @@ class NewUpgradeBaseTest(BaseTestCase):
                                              os_version=info.distribution_version)
         else:
             appropriate_build = BuildQuery(). \
-                find_build(builds, '%s-enterprise' % (self.product), info.deliverable_type,
+                find_build(builds, '%s-%s' % (self.product, edition), info.deliverable_type,
                            info.architecture_type, version.strip())
 
         if appropriate_build is None:
             self.log.info(
                 "builds are: %s \n. Remote is %s, %s. Result is: %s" % (builds, remote.ip, remote.username, version))
             raise Exception("Build %s for machine %s is not found" % (version, server))
+        # GA builds get purged from latestbuilds; fall back to releases/ the
+        # way install_utils.__get_build_url does for fresh installs
+        if version[:5] in CB_RELEASE_BUILDS and appropriate_build.url and \
+                not remote.is_url_live(appropriate_build.url, exit_if_not_live=False):
+            release, build_num = version.split("-")[:2]
+            file_name = appropriate_build.url.rsplit("/", 1)[1].replace(
+                "%s-%s" % (release, build_num), release)
+            release_url = "%s%s/%s" % (testconstants.CB_RELEASE_REPO, release, file_name)
+            if remote.is_url_live(release_url, exit_if_not_live=False):
+                self.log.info("%s is gone from latestbuilds, using %s"
+                              % (version, release_url))
+                appropriate_build.url = release_url
         return appropriate_build
 
     def _upgrade(self, upgrade_version, server, queue=None, skip_init=False, info=None,

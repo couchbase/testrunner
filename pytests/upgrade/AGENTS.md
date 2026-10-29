@@ -11,6 +11,7 @@ The upgrade test framework validates Couchbase Server upgrades by running variou
 | `newupgradebasetest.py` | Base class with shared upgrade test logic |
 | `upgrade_tests.py` | Main upgrade test implementation |
 | `upgrade_tests_collections.py` | Collection-specific upgrade tests |
+| `upgrade_cluster_ops.py` | NServ cluster-level upgrade checks: health, orchestration, settings persistence, compat/join, LDAP TLS |
 
 ## Test Execution Flow
 
@@ -316,6 +317,37 @@ offline_upgrade_type = "offline_shutdown"  # or "offline_failover"
 
 - **Offline Shutdown:** Stop cluster, upgrade all nodes, restart
 - **Offline Failover:** Graceful failover nodes, upgrade, add back
+
+## Cluster Ops Upgrade Checks (`upgrade_cluster_ops.py`)
+
+`UpgradeClusterOpsTests(UpgradeTests)` adds events for `test_upgrade` and the standalone `test_node_join_compat`.
+
+| Event | Use as | Checks |
+|-------|--------|--------|
+| `capture_cluster_snapshot` | initialize | Records the service topology (per-node service sets) and bucket list |
+| `configure_cluster_settings` | initialize | Sets n2n encryption (`n2n_level`), auto-failover, service quotas, `tlsMinVersion`, retry-rebalance, and stores what was read back |
+| `verify_cluster_settings_persisted` | in_between / after | Settings and topology match what was stored; n2n is on for every node; strict mode passes `check_if_services_obey_tls` |
+| `verify_mixed_mode_compat` | in_between | Compat stays at the source version until every node is upgraded; data writes still work |
+| `verify_cluster_health_post_upgrade` | after | All nodes active and healthy on the target version, compat at the target, no rebalance running, orchestrator present, topology and buckets unchanged |
+| `verify_rebalance_orchestration` | after | Rebalance out, rebalance back in, then a swap with a free target-version node |
+| `verify_autofailover_orchestration` | in_between / after | A stopped kv node is auto-failed-over within timeout + `af_tolerance`, then recovered (`af_recovery_type`) |
+| `verify_fts_index_post_upgrade` | after | The index from `create_fts_index` still indexes every doc in its bucket and `match_all` returns them all. Used instead of `run_fts_query_and_compare`, which needs an `[elastic]` node |
+| `setup_ldap_tls12_endpoint` | initialize | Starts a TLS 1.2-only openldap container (docker on `ldap_host`, default the initial master), proves it refuses TLS 1.3, and points the cluster's LDAP at it |
+| `verify_ldap_connectivity` | in_between / after | Checks the LDAP config left applied last time persisted, then applies each `ldap_variants` config (`default`, `tls12`, `tls12_middlebox`) and runs `settings/ldap/validate/connectivity` on every node. `tls12` / `tls12_middlebox` failures on affected builds (7.6.8-7.6.10, 8.0.0-8.0.2: middlebox_comp_mode is always passed, and Erlang 27+ rejects it with TLS 1.2 only) are logged, not failed |
+| `verify_old_node_join_rejected` | after | Installs `join_version` (default: the source version) on a free node; addNode must fail with `expected_join_error` (default "compatibility mismatch") and leave the topology unchanged |
+| `configure_rbac_roles` | initialize | Creates groups and local/external users with the roles ns_server migrates (`security_admin_local`, `security_admin_external`, `ro_admin`, ...) plus controls (`admin`, `data_reader`). On 7.9+ sources the deprecated roles are created in their substituted form |
+| `verify_rbac_roles` | in_between / after | Roles match `menelaus_users:upgrade_props` for the current compat: unchanged in mixed mode; at 7.9 (EE) `security_admin_local` -> `security_admin`+`user_admin_local`, `security_admin_external` -> `security_admin`+`user_admin_external`, `ro_admin` -> +`ro_security_admin`; at 8.5 `ui_access` is added to holders of a pre-8.5 UI role (not `admin`). The local user must still be able to list users |
+
+- A failed event is recorded and the rest of its `-` chain still runs, so one upgrade reports every check. Failures are asserted when the test ends; on its own, an event inside the upgrade thread cannot fail the test.
+- `verify_cluster_settings_persisted` also handshakes TLS 1.1/1.2/1.3 against 18091 on every node to check `tlsMinVersion` is still enforced.
+- Put `configure_cluster_settings` in `initialize_events`, not `before_events`. A single `before_events` entry runs concurrently with the upgrade.
+- `online_upgrade_type=failover_recovery`: upgrades one node at a time with graceful failover (hard for non-kv nodes), an in-place package upgrade and an add back with `upgrade_recovery_type` (default `delta`). The test master is upgraded last.
+- `online_upgrade_type=incremental` (overridden here): one node at a time, rebalance out, in-place package upgrade, rebalance back in with the same services, master last. The base `online_upgrade_incremental` re-adds nodes as kv only and drops the master.
+- Multi-hop: `upgrade_path=<hop>` is upgraded before `upgrade_version`. This works for swap, failover_recovery, incremental and offline, with a version and compat check after each hop.
+- `test_node_join_compat`: no upgrade. Installs `join_version` (default: the upgrade version) on a free node and calls addNode against an `initial_version` cluster. With `expect_join=False` the join must be rejected with `expected_join_error` (default "is not supported", the below-compat-floor message).
+- Design: an upgrade is the expensive step, so each conf row is one scenario (source x upgrade mode x n2n level) with all the cheap checks stacked on it, rather than one row per check.
+- Confs: `conf/upgrade/upgrade_cluster_ops_from_76x_80x.conf` (P0, every build), `upgrade_cluster_ops_from_76x_80x_extended.conf` (P1), `upgrade_min_path_compat.conf` (join compat floor, no upgrade), `upgrade_ce_cluster_ops_from_76x_80x.conf`. Pass the target with `-p upgrade_version=` (latest Totoro: `python3 ../TAF/scripts/latest_builds.py --branches totoro --top 1`).
+- Community edition: `upgrade_build_type=community` (or `initial_build_type=community`) makes `_get_build` fetch CE packages, so offline CE upgrades work. `ce_to_ee=True` still fetches EE.
 
 ## Required Test Parameters
 

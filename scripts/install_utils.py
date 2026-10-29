@@ -362,7 +362,8 @@ class NodeHelper:
             "for i in $(seq 1 {0}); do "
             "  if ! fuser /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock "
             "       >/dev/null 2>&1 "
-            "     && ! pgrep -f unattended-upgr >/dev/null 2>&1; then "
+            # [u] keeps pgrep -f from matching this bash -c command line
+            "     && ! pgrep -f '[u]nattended-upgr' >/dev/null 2>&1; then "
             "    echo apt-idle; exit 0; "
             "  fi; "
             "  sleep 5; "
