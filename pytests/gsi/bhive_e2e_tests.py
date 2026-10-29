@@ -1514,6 +1514,111 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
         self.assertFalse(failures, f"META().id predicate queries failed: {failures}")
         self.drop_all_indexes()
 
+    def _mb74831_instances(self, names):
+        """{instId: {name, status, progress}} for every instance (incl. replicas) of the named indexes"""
+        rest = RestConnection(self.master)
+        status, content, _ = rest._http_request(rest.baseUrl + "indexStatus", timeout=120)
+        instances = {}
+        if not status:
+            return instances
+        for idx in json.loads(content).get("indexes", []):
+            if idx["index"] in names:
+                instances[str(idx["instId"])] = {"name": idx["index"], "status": idx["status"],
+                                                 "progress": idx.get("progress", 0)}
+        return instances
+
+    def test_mixed_batch_build_retry_after_training(self):
+        """
+        MB-74831: non-vector indexes in a deferred build batch that also holds vector indexes were
+        never retried when the build after training failed with "Build Already In Progress", and
+        stayed in Created with progress 0 until BUILD INDEX was issued again by hand.
+
+        Steps:
+        1. Load siftBigANN docs, create deferred batch A (scalar) and batch B (primary, scalar,
+           composite vector, bhive)
+        2. BUILD batch A, wait build_gap_secs, BUILD batch B
+        3. Without issuing any further BUILD, wait for every index to reach Ready
+        4. Assert no instance (replicas included) is left unbuilt, and the indexes are usable
+        """
+        num_docs = self.input.param("num_docs", 100000)
+        dimension = self.input.param("vector_dim", 128)
+        description = self.input.param("vector_description", "IVF256,SQ8")
+        build_gap_secs = self.input.param("build_gap_secs", 5)
+        build_timeout = self.input.param("build_timeout_secs", 1200)
+        num_replica = self.input.param("num_replica", 0)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+
+        buckets = self._create_test_buckets(num_buckets=1)
+        for bucket in buckets:
+            self.prepare_collection_for_indexing(bucket_name=bucket, num_scopes=1, num_collections=1,
+                                                 num_of_docs_per_collection=num_docs,
+                                                 json_template=self.json_template, load_default_coll=False)
+        namespace = self.namespaces[0]
+        keyspace = ".".join(f"`{part}`" for part in namespace.split(':')[-1].split('.'))
+
+        replica = f', "num_replica": {num_replica}' if num_replica else ""
+        defer = f'"defer_build": true{replica}'
+        vec = f'"dimension": {dimension}, "similarity": "L2", "description": "{description}"'
+        batch_a = {
+            "a_cat_brand": "(category, brand)",
+            "a_ctry_color": "(country, color)",
+            "a_size_brand": "(size, brand)",
+            "a_brand_color": "(brand, color, size)",
+        }
+        batch_b_ddl = [
+            f"CREATE PRIMARY INDEX `#primary_b` ON {keyspace} WITH {{{defer}}}",
+            f"CREATE INDEX b_scalar ON {keyspace}(color, country) WITH {{{defer}}}",
+            f"CREATE INDEX b_cvi ON {keyspace}(category, embedding VECTOR) WITH {{{vec}, {defer}}}",
+            f"CREATE VECTOR INDEX b_bhive ON {keyspace}(embedding VECTOR) INCLUDE (size) "
+            f"WITH {{{vec}, {defer}}}",
+        ]
+        a_names = list(batch_a)
+        b_names = ["#primary_b", "b_scalar", "b_cvi", "b_bhive"]
+
+        def build(names):
+            cols = ", ".join(f"`{n}`" for n in names)
+            try:
+                self.run_cbq_query(query=f"BUILD INDEX ON {keyspace}({cols})", server=query_node)
+            except Exception as err:
+                # The transient error is expected when another build holds the keyspace
+                if "will be retried building in the background" not in str(err):
+                    raise
+                self.log.info(f"BUILD on {names} returned the expected transient error: {err}")
+
+        try:
+            for name, cols in batch_a.items():
+                self.run_cbq_query(query=f"CREATE INDEX `{name}` ON {keyspace}{cols} WITH {{{defer}}}",
+                                   server=query_node)
+            for ddl in batch_b_ddl:
+                self.run_cbq_query(query=ddl, server=query_node)
+            self.sleep(5, "Allowing indexes to be created")
+
+            build(a_names)
+            self.sleep(build_gap_secs, "Gap between BUILD statements")
+            build(b_names)
+
+            # No manual BUILD from here on: that is the workaround for the bug
+            all_names = a_names + b_names
+            deadline = time.time() + build_timeout
+            while time.time() < deadline:
+                instances = self._mb74831_instances(all_names)
+                if instances and all(v["status"] == "Ready" for v in instances.values()):
+                    break
+                time.sleep(15)
+            instances = self._mb74831_instances(all_names)
+            self.log.info(f"Final instance states: {instances}")
+            not_ready = {i: v for i, v in instances.items() if v["status"] != "Ready"}
+            self.assertFalse(not_ready, f"Instances not Ready within {build_timeout}s: {not_ready}")
+
+            for hint in ("`#primary_b`", "b_scalar"):
+                where = "" if hint == "`#primary_b`" else "WHERE color IS NOT MISSING AND country IS NOT MISSING"
+                count = self.run_cbq_query(
+                    query=f"SELECT COUNT(*) AS c FROM {keyspace} USE INDEX ({hint}) {where}",
+                    server=query_node)["results"][0]["c"]
+                self.assertEqual(count, num_docs, f"Unexpected doc count via {hint}: {count}")
+        finally:
+            self.drop_all_indexes()
+
     def test_maximum_dimension_support(self):
         self.log.info("Step 1: Setting up the cluster with required services")
         self.log.info("Step 2: Creating buckets and collections")
