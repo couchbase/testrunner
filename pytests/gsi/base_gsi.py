@@ -4451,6 +4451,11 @@ class BaseSecondaryIndexingTests(QueryTests):
         rest = RestConnection(indexer_node)
         rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": interval})
 
+    def set_padded_skiplist_nodes(self, enabled=True):
+        indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        rest = RestConnection(indexer_node)
+        rest.set_index_settings({"indexer.plasma.skiplist.usePaddedSkiplistNodes": enabled})
+
     def find_unique_slot_id_per_node(self):
         indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
         rest = RestConnection(indexer_node)
