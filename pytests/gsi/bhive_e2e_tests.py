@@ -1838,6 +1838,114 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
         finally:
             self.drop_all_indexes()
 
+    def test_bhive_order_limit_pushdown_inexact_include_spans(self):
+        """
+        MB-74706 / MB-74687: a covering BHIVE scan pushed ORDER BY APPROX_VECTOR_DISTANCE / LIMIT to the indexer
+        only when the INCLUDE spans were exact. Predicates that are fully covered but whose spans are
+        not exact (NOT IN $param, a function on an INCLUDE column) kept an Order operator in Query and
+        the indexer returned every probed candidate. The indexer now applies the include spans and
+        then the inline filter before top-K, so ORDER/LIMIT can be pushed.
+
+        Steps:
+        1. Load 10k siftBigANN docs, create a Hyperscale index with INCLUDE (id)
+        2. For each predicate EXPLAIN the query: the include spans must be exact or not as expected,
+           IndexScan3 must carry index_order and limit and the plan must have no Order operator
+        3. Run the query: LIMIT rows must come back and every id must satisfy the predicate
+        4. Control: an exact span (id >= N) keeps its pushdown and carries no inline filter (MB-74687)
+        """
+        num_docs = self.input.param("num_docs", 10000)
+        limit = self.input.param("limit", 5)
+        nprobes = self.input.param("nprobes", 8)
+        similarity = "L2_SQUARED"
+        index_name = "idx_bhive_inexact_include"
+        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+
+        buckets = self._create_test_buckets(num_buckets=1)
+        for bucket in buckets:
+            self.prepare_collection_for_indexing(bucket_name=bucket, num_scopes=1, num_collections=1,
+                                                 num_of_docs_per_collection=num_docs,
+                                                 json_template=self.json_template, load_default_coll=False)
+        namespace = self.namespaces[0]
+        keyspace = ".".join(f"`{part}`" for part in namespace.split(':')[-1].split('.'))
+
+        try:
+            self.run_cbq_query(
+                query=f"CREATE VECTOR INDEX {index_name} ON {keyspace}(embedding VECTOR) INCLUDE (id) "
+                      f"WITH {{'dimension': 128, 'similarity': '{similarity}', 'description': 'IVF,SQ8'}}",
+                server=query_node)
+            self.wait_until_indexes_online()
+            self.item_count_related_validations()
+
+            # Fetch one embedding up front and inline it, as a non-constant vector may be rejected
+            # (needs a primary index, dropped right after so it cannot influence the ANN plans)
+            self.run_cbq_query(query=f"CREATE PRIMARY INDEX pri_tmp ON {keyspace}", server=query_node)
+            self.wait_until_indexes_online()
+            res = self.run_cbq_query(query=f"SELECT RAW x.embedding FROM {keyspace} x LIMIT 1", server=query_node)
+            query_vector = res["results"][0]
+            self.run_cbq_query(query=f"DROP INDEX pri_tmp ON {keyspace}", server=query_node)
+
+            excluded = list(range(10))
+            # (predicate, query params, python check on a returned id, include spans are exact)
+            cases = [
+                ("d.id NOT IN $ex", {"$ex": json.dumps(excluded)}, lambda i: i not in excluded, False),
+                ("d.id % 2 = 0", {}, lambda i: i % 2 == 0, False),
+                (f"d.id >= {num_docs // 2}", {}, lambda i: i >= num_docs // 2, True),
+            ]
+            # run_cbq_query drops query_params on the REST path, so named parameters go through query_tool
+            rest = RestConnection(query_node)
+            failures = []
+            for predicate, params, check, exact in cases:
+                query = (f"SELECT d.id FROM {keyspace} d USE INDEX ({index_name} USING GSI) WHERE {predicate} "
+                         f"ORDER BY APPROX_VECTOR_DISTANCE(d.embedding, {query_vector}, '{similarity}', {nprobes}) "
+                         f"LIMIT {limit}")
+                explain = rest.query_tool("EXPLAIN " + query, query_params=dict(params))
+                self.assertNotIn("errors", explain, f"EXPLAIN failed for {predicate}: {explain}")
+                plan = explain["results"][0]["plan"]
+                scans = self._find_plan_nodes(plan, "IndexScan3", [])
+                orders = self._find_plan_nodes(plan, "Order", [])
+                if len(scans) != 1:
+                    failures.append(f"{predicate}: expected one IndexScan3, plan: {plan}")
+                    continue
+                scan = scans[0]
+                spans_exact = all(span.get("exact") for span in scan.get("spans_include", []))
+                if spans_exact != exact:
+                    failures.append(f"{predicate}: include spans exact={spans_exact}, expected {exact}, "
+                                    f"spans_include={scan.get('spans_include')}")
+                # MB-74687: exact include spans need no inline filter, inexact ones must carry the whole predicate
+                if exact == bool(scan.get("filter")):
+                    failures.append(f"{predicate}: include spans exact={exact} but IndexScan3 filter="
+                                    f"{scan.get('filter')}")
+                if not scan.get("index_order") or str(scan.get("limit")) != str(limit):
+                    failures.append(f"{predicate}: index_order/limit not pushed (exact spans={exact}), "
+                                    f"index_order={scan.get('index_order')} limit={scan.get('limit')}")
+                if orders:
+                    failures.append(f"{predicate}: plan still has an Order operator: {orders}")
+
+                response = rest.query_tool(query, query_params=dict(params))
+                self.assertNotIn("errors", response, f"Query failed for {predicate}: {response}")
+                ids = [r["id"] for r in response["results"]]
+                self.log.info(f"{predicate}: {len(ids)} rows {ids}")
+                if len(ids) != limit:
+                    failures.append(f"{predicate}: got {len(ids)} rows, expected {limit}")
+                elif not all(check(i) for i in ids):
+                    failures.append(f"{predicate}: ids {ids} violate predicate")
+            self.assertFalse(failures, f"MB-74706 ORDER/LIMIT pushdown failures: {failures}")
+        finally:
+            self.drop_all_indexes()
+
+    @staticmethod
+    def _find_plan_nodes(node, operator, found):
+        """Collects every plan node whose #operator equals `operator`"""
+        if isinstance(node, dict):
+            if node.get("#operator") == operator:
+                found.append(node)
+            for value in node.values():
+                BhiveVectorIndex._find_plan_nodes(value, operator, found)
+        elif isinstance(node, list):
+            for value in node:
+                BhiveVectorIndex._find_plan_nodes(value, operator, found)
+        return found
+
     def test_maximum_dimension_support(self):
         self.log.info("Step 1: Setting up the cluster with required services")
         self.log.info("Step 2: Creating buckets and collections")
