@@ -12,9 +12,9 @@ from pytests.security.x509main import x509main
 from TestInput import TestInputSingleton
 
 
-class IPCBase(BaseTestCase):
+class IPCMixin(object):
     """
-    Base class for Internal-identity Password Check (IPC) tests — MB-73874.
+    Shared fixtures for Internal-identity Password Check (IPC) tests — MB-73874.
 
     The feature under test: a Couchbase node recognises its own internal client
     certificate purely by a SAN rfc822Name of the form
@@ -35,10 +35,15 @@ class IPCBase(BaseTestCase):
     The default is NOT stored in config; it is derived at read time from
     cluster_compat_mode:is_cluster_85(), so it reports false on an 8.0 cluster
     and true once compat reaches 8.5. An explicitly set value always wins. This
-    base class therefore always reads the current value in setUp and restores it
-    in tearDown rather than assuming either state.
+    mixin therefore always reads the current value in setUp and restores it in
+    tearDown rather than assuming either state.
 
-    Extends the portable `BaseTestCase` alias, matching CRLBase's convention.
+    Holds no test lifecycle of its own, so it can sit on any test base. The
+    host's setUp calls _self_heal_stuck_client_cert_auth() before its own
+    super().setUp() and _ipc_setup() after it; its tearDown calls
+    _ipc_teardown() before super().tearDown(). IPCBase below does exactly that
+    on BaseTestCase; service suites with their own base (e.g. FTSBaseTest) do
+    the same.
     """
 
     # The reserved domain ns_server matches on. Deliberately a constant here
@@ -52,10 +57,7 @@ class IPCBase(BaseTestCase):
     MGMT_SSL_PORT = 18091
     KV_SSL_PORT = 11207
 
-    def setUp(self):
-        self._self_heal_stuck_client_cert_auth()
-        super(IPCBase, self).setUp()
-
+    def _ipc_setup(self):
         self.crl_utils = CRLUtils(log=self.log)
         self.rest = RestConnection(self.master)
 
@@ -77,36 +79,35 @@ class IPCBase(BaseTestCase):
         self.ca_cert, self.ca_key = self.crl_utils.generate_ca("IPCTestCA")
         self._trust_ca_on_cluster(self.ca_cert)
 
-    def tearDown(self):
+    def _ipc_teardown(self):
+        """Best-effort: logs every failure, never raises."""
+        if not hasattr(self, "rest"):
+            return
         try:
-            if hasattr(self, "rest"):
-                try:
-                    self._restore_ipc_setting()
-                except Exception as exc:
-                    self.log.warning("{0} restore error: {1}".format(
-                        self.IPC_SETTING, exc))
-                try:
-                    self._disable_client_cert_auth()
-                except Exception as exc:
-                    self.log.warning(
-                        "clientCertAuth disable error: {0}".format(exc))
-                try:
-                    self._cleanup_rbac_users()
-                except Exception as exc:
-                    self.log.warning(
-                        "RBAC user cleanup error: {0}".format(exc))
-                try:
-                    self._cleanup_temp_pem_files()
-                except Exception as exc:
-                    self.log.warning(
-                        "Temp PEM file cleanup error: {0}".format(exc))
-                try:
-                    self._cleanup_trusted_cas()
-                except Exception as exc:
-                    self.log.warning(
-                        "Trusted CA cleanup error: {0}".format(exc))
-        finally:
-            super(IPCBase, self).tearDown()
+            self._restore_ipc_setting()
+        except Exception as exc:
+            self.log.warning("{0} restore error: {1}".format(
+                self.IPC_SETTING, exc))
+        try:
+            self._disable_client_cert_auth()
+        except Exception as exc:
+            self.log.warning(
+                "clientCertAuth disable error: {0}".format(exc))
+        try:
+            self._cleanup_rbac_users()
+        except Exception as exc:
+            self.log.warning(
+                "RBAC user cleanup error: {0}".format(exc))
+        try:
+            self._cleanup_temp_pem_files()
+        except Exception as exc:
+            self.log.warning(
+                "Temp PEM file cleanup error: {0}".format(exc))
+        try:
+            self._cleanup_trusted_cas()
+        except Exception as exc:
+            self.log.warning(
+                "Trusted CA cleanup error: {0}".format(exc))
 
     # ── The setting under test ───────────────────────────────────────────────
 
@@ -500,3 +501,21 @@ class IPCBase(BaseTestCase):
                 self.log.warning("Failed to delete RBAC user {0}: {1}".format(
                     username, exc))
         self._rbac_users = []
+
+
+class IPCBase(IPCMixin, BaseTestCase):
+    """
+    IPCMixin on the portable `BaseTestCase` alias, matching CRLBase's
+    convention. See IPCMixin for what the feature does.
+    """
+
+    def setUp(self):
+        self._self_heal_stuck_client_cert_auth()
+        super(IPCBase, self).setUp()
+        self._ipc_setup()
+
+    def tearDown(self):
+        try:
+            self._ipc_teardown()
+        finally:
+            super(IPCBase, self).tearDown()
