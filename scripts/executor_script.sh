@@ -64,6 +64,15 @@ docker_pull() {
   return 1
 }
 
+# AWS_ONDEMAND dispatches append "_aws" to the slave label (testDispatcher.py:1041) so that
+# AWS jobs never land on the shared on-prem slaves. Every slave-name comparison below must
+# therefore match on the BASE label: an exact `[[ "${slave}" = "bhive_slave" ]]` silently
+# fails on AWS (the label is bhive_slave_aws), skipping the setup it guards -- which is how
+# `mvn clean install` of the magma DocLoader stopped running, leaving
+# magma_loader/DocLoader/target/magmadocloader/magmadocloader.jar absent and the loader
+# exiting with no output at all.
+slave_base="${slave%_aws}"
+
 support_ver="6.5"
 small_ver=${version_number:0:3}
 host_ip=$(hostname -I | awk '{print $1}')
@@ -198,7 +207,7 @@ cat /tmp/testexec_reformat.$$.ini
 # To make sure the files exists
 touch /tmp/testexec_reformat.$$.ini /tmp/testexec.$$.ini
 
-if [[ "${slave}" = "bhive_slave" ]]; then
+if [[ "${slave_base}" = "bhive_slave" ]]; then
   echo "Running on bhive_slave"
   export PATH=/opt/maven/bin:/opt/java-8/bin:/root/.pyenv/shims:/root/.pyenv/bin:$PATH
   echo "PATH is: $PATH"
@@ -273,8 +282,7 @@ else
     fi
 
     echo "Starting server installation"
-    if [[ "${slave}" = "bhive_slave" ]]; then
-      echo "Starting server installation"
+    if [[ "${slave_base}" = "bhive_slave_test" ]]; then
       set -x
       docker run --rm \
         -v /tmp/testexec.$$.ini:/testrunner/testexec.$$.ini \
