@@ -291,6 +291,7 @@ class ServerManager:
         try:
             # Use Couchbase transaction for atomic server allocation
             def allocate_servers(ctx):
+                server_list.clear()
                 # Count available servers within transaction
                 count_query = (
                     f"SELECT count(*) FROM `QE-server-pool` "
@@ -322,8 +323,11 @@ class ServerManager:
 
                 # Process results properly
                 for result in get_results.rows():
-                    # Extract the document data from the result
-                    doc_data = result['QE-server-pool']
+                    target_doc = ctx.get(self.default_collection, result['id'])
+                    doc_data = target_doc.content_as[dict]
+                    if doc_data.get('state') != 'available':
+                        raise Exception(
+                            f"{doc_data.get('ipaddr')} is no longer available")
 
                     # Update document state
                     doc_data['state'] = 'booked'
@@ -331,13 +335,8 @@ class ServerManager:
                     doc_data['username'] = username
 
                     # Replace document within transaction
-                    try:
-                        target_id = ctx.get(self.default_collection, result['id'])
-                        ctx.replace(target_id, doc_data)
-                        server_list.append(doc_data['ipaddr'])
-                    except Exception as e:
-                        # Make sure the transaction aborts without retry
-                        ctx.abort(Exception(f"Allocation failed: {e}"))
+                    ctx.replace(target_doc, doc_data)
+                    server_list.append(doc_data['ipaddr'])
 
             # Execute the transaction
             _ = self.cluster.transactions.run(allocate_servers)
