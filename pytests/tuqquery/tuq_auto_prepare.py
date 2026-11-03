@@ -2776,3 +2776,163 @@ class QueryAutoPrepareTests(QueryTests):
         finally:
             self.run_cbq_query(f"DROP INDEX {index_name} IF EXISTS ON {self.query_bucket}")
             self._set_auto_prepare(False)
+
+    # MB-74473: plan stability with a prepared statement that calls an inline UDF.
+    # Before the fix: the UDF's own system:prepareds entry did not update 'uses', was not
+    # regenerated from QUERY_METADATA after a query restart, and SELECT meta().plan on it panicked.
+    UDF_PS_NAME = "udf_ps_inline1"
+    # The inline UDF entry is named "__INLINE_UDF__<namespace>:<udf>". Match on the name: builds without
+    # the fix have no inlineUDF field, so filtering on it would hide the entry instead of the real symptom.
+    UDF_PS_ENTRY_LIKE = f"__INLINE_UDF__%{UDF_PS_NAME}"
+    UDF_PS_PREPARED = "udf_ps1"
+    UDF_PS_INDEXES = ["udf_ps_idx1", "udf_ps_idx2"]
+    UDF_PS_EXPECTED = [10, 20, 30]
+
+    def _setup_udf_plan_stability(self):
+        self._cleanup_udf_plan_stability()
+        left = [(1, 10, [1, 2, 3, 4]), (2, 20, [3, 3, 5, 10]), (3, 30, [3, 4, 20, 40]), (4, 40, [30, 30, 30])]
+        right = [(1, 10), (2, 20), (2, 21), (3, 30), (3, 31), (3, 32), (5, 50), (6, 60), (7, 70), (8, 80)]
+        values = [f'VALUES("udf_ps_l{i}", {{"c11": {c11}, "c12": {c12}, "a11": {a11}, "type": "left", "test_id": "udf_ps"}})'
+                  for i, (c11, c12, a11) in enumerate(left)]
+        values += [f'VALUES("udf_ps_r{i}", {{"c21": {c21}, "c22": {c22}, "type": "right", "test_id": "udf_ps"}})'
+                   for i, (c21, c22) in enumerate(right)]
+        self.run_cbq_query(f'UPSERT INTO {self.query_bucket} (KEY, VALUE) {", ".join(values)}')
+        self.run_cbq_query(f'CREATE INDEX {self.UDF_PS_INDEXES[0]} ON {self.query_bucket}(c11, c12) WHERE type = "left"')
+        self.run_cbq_query(f'CREATE INDEX {self.UDF_PS_INDEXES[1]} ON {self.query_bucket}(c21, c22) WHERE type = "right"')
+        self.wait_for_all_indexes_online()
+        self.run_cbq_query('UPDATE system:settings SET plan_stability.mode = "prepared_only"')
+        self.run_cbq_query(f'CREATE FUNCTION {self.UDF_PS_NAME}() {{ ( SELECT c21 FROM {self.query_bucket} '
+                           f'WHERE type = "right" AND c21 < 5 ) }}')
+        self.run_cbq_query(f'PREPARE {self.UDF_PS_PREPARED} FROM SELECT RAW s.c12 FROM {self.query_bucket} s '
+                           f'WHERE s.c11 > 0 AND s.type = "left" AND ANY v IN {self.UDF_PS_NAME}() '
+                           f'SATISFIES v.c21 = s.c11 END')
+        # QUERY_METADATA is (re)created by the mode change just above. Wait until the saved plan is
+        # actually persisted there, otherwise a query restart has nothing to regenerate from.
+        self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = false') >= 1,
+                        eval=True, delay=2, tries=30)
+
+    def _cleanup_udf_plan_stability(self):
+        self.run_cbq_query(f'DROP FUNCTION {self.UDF_PS_NAME} IF EXISTS')
+        for index_name in self.UDF_PS_INDEXES:
+            self.run_cbq_query(f'DROP INDEX {index_name} IF EXISTS ON {self.query_bucket}')
+        self.run_cbq_query(f'DELETE FROM {self.query_bucket} WHERE test_id = "udf_ps"')
+        self._cleanup_plan_stability_state()
+
+    def _udf_prepareds(self, node):
+        """Return (main entry, inline UDF entries) of system:prepareds on one query node."""
+        rows = self.run_cbq_query(
+            f'SELECT p.name, p.uses, p.inlineUDF FROM system:prepareds p '
+            f'WHERE p.node = "{node.ip}:{node.port}" '
+            f'AND (p.name = "{self.UDF_PS_PREPARED}" OR p.name LIKE "{self.UDF_PS_ENTRY_LIKE}")',
+            server=node)['results']
+        main = [r for r in rows if r['name'] == self.UDF_PS_PREPARED]
+        udfs = [r for r in rows if r['name'] != self.UDF_PS_PREPARED]
+        if len(main) != 1:
+            all_rows = self.run_cbq_query('SELECT name, uses, inlineUDF, node FROM system:prepareds',
+                                          server=node)['results']
+            self.fail(f'Expected one {self.UDF_PS_PREPARED} entry with node "{node.ip}:{node.port}", got {rows}. '
+                      f'All system:prepareds entries: {all_rows}')
+        return main[0], udfs
+
+    def _execute_udf_prepared(self, node):
+        result = self.run_cbq_query(f'EXECUTE {self.UDF_PS_PREPARED}', server=node)['results']
+        self.assertEqual(sorted(result), self.UDF_PS_EXPECTED, f'EXECUTE {self.UDF_PS_PREPARED} on {node.ip}')
+
+    def _assert_udf_meta_plan(self, node):
+        # Before the fix this query panicked (8.5.0-1295: code 5001, "Panic: runtime error: invalid memory
+        # address or nil pointer dereference"). With the fix (verified manually on 8.5.0-1305 and 8.5.0-1392)
+        # it succeeds but returns an empty plan ({}) for the inline UDF entry, so only success and the row
+        # count are checked.
+        try:
+            plans = self.run_cbq_query('SELECT meta().plan AS plan FROM system:prepareds '
+                                       f'WHERE name LIKE "{self.UDF_PS_ENTRY_LIKE}" AND node = "{node.ip}:{node.port}"',
+                                       server=node)['results']
+        except CBQError as ex:
+            self.fail(f'MB-74473: SELECT meta().plan for inline UDF entry failed on {node.ip}: {ex}')
+        self.assertEqual(len(plans), 1, f'MB-74473: expected one meta().plan row for the inline UDF entry '
+                                        f'on {node.ip}: {plans}')
+
+    def _restart_query_service(self, node):
+        """Kill cbq-engine; ns_server restarts it. Wait until the new process answers queries."""
+        shell = RemoteMachineShellConnection(node)
+        pid_cmd = 'pidof cbq-engine || pgrep -x cbq-engine'
+        old_pid = shell.execute_command(pid_cmd)[0]
+        _, err = shell.execute_command(f'kill -9 $({pid_cmd})')
+        self.assertFalse(err, f'Failed to kill cbq-engine on {node.ip}: {err}')
+        self.with_retry(lambda: shell.execute_command(pid_cmd)[0] not in ([], old_pid), eval=True, delay=3, tries=40)
+        shell.disconnect()
+        self.with_retry(lambda: self.run_cbq_query('SELECT 1', server=node)['status'], eval='success', delay=3, tries=40)
+        # Saved plans are reloaded from QUERY_METADATA after startup, not before the first query is
+        # served (build 217: system:prepareds was still empty right after SELECT 1 succeeded)
+        try:
+            self.with_retry(lambda: len(self._udf_prepareds(node)[1]), eval=1, delay=5, tries=24)
+        except Exception as ex:
+            self.fail(f'MB-74473: {self.UDF_PS_PREPARED} and its inline UDF entry not regenerated in '
+                      f'system:prepareds on {node.ip} within 120s of query restart: {ex}')
+
+    def test_plan_stability_udf_prepared_uses(self):
+        """MB-74473: 'uses' of the inline UDF entry is updated on EXECUTE; meta().plan does not panic."""
+        node = self.get_nodes_from_services_map(service_type="n1ql")
+        try:
+            self._setup_udf_plan_stability()
+            main, udfs = self._udf_prepareds(node)
+            self.assertEqual(udfs, [], f'Inline UDF entry should not exist before EXECUTE: {udfs}')
+            for run in range(1, 5):
+                self._execute_udf_prepared(node)
+                main, udfs = self._udf_prepareds(node)
+                self.assertEqual(len(udfs), 1, f'MB-74473: expected one inline UDF entry after EXECUTE #{run}: {udfs}')
+                self.assertEqual(main['uses'], run, f'{self.UDF_PS_PREPARED} uses after EXECUTE #{run}')
+                self.assertEqual(udfs[0]['uses'], run,
+                                 f'MB-74473: inline UDF entry uses not updated after EXECUTE #{run}: {udfs[0]}')
+            self.assertIs(udfs[0].get('inlineUDF'), True, f'MB-74473: inline UDF entry not flagged inlineUDF: {udfs[0]}')
+            self._assert_udf_meta_plan(node)
+        finally:
+            self._cleanup_udf_plan_stability()
+
+    def test_plan_stability_udf_prepared_restart(self):
+        """MB-74473: after a query restart both entries are regenerated from QUERY_METADATA with uses = 0."""
+        node = self.get_nodes_from_services_map(service_type="n1ql")
+        try:
+            self._setup_udf_plan_stability()
+            for _ in range(3):
+                self._execute_udf_prepared(node)
+            self._restart_query_service(node)
+            main, udfs = self._udf_prepareds(node)
+            self.assertEqual(len(udfs), 1, f'MB-74473: inline UDF entry not regenerated after query restart: {udfs}')
+            self.assertEqual(main['uses'], 0, f'{self.UDF_PS_PREPARED} uses after restart: {main}')
+            self.assertEqual(udfs[0]['uses'], 0, f'Inline UDF entry uses after restart: {udfs[0]}')
+            self._assert_udf_meta_plan(node)
+            self._execute_udf_prepared(node)
+            main, udfs = self._udf_prepareds(node)
+            self.assertEqual(main['uses'], 1, f'{self.UDF_PS_PREPARED} uses after first EXECUTE post-restart')
+            self.assertEqual(udfs[0]['uses'], 1, f'MB-74473: inline UDF uses not updated post-restart: {udfs[0]}')
+        finally:
+            self._cleanup_udf_plan_stability()
+
+    def test_plan_stability_udf_prepared_restart_multi_node(self):
+        """MB-74473: restarting one query node regenerates its UDF entry; the other node is unaffected."""
+        query_nodes = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)
+        self.assertGreaterEqual(len(query_nodes), 2, f'Needs at least 2 query nodes, got {query_nodes}')
+        node_a, node_b = query_nodes[0], query_nodes[1]
+        try:
+            self._setup_udf_plan_stability()
+            for node in (node_a, node_b):
+                for _ in range(2):
+                    self._execute_udf_prepared(node)
+                _, udfs = self._udf_prepareds(node)
+                self.assertEqual(len(udfs), 1, f'MB-74473: expected one inline UDF entry on {node.ip}: {udfs}')
+            main_a_before, udfs_a_before = self._udf_prepareds(node_a)
+
+            self._restart_query_service(node_b)
+
+            main_b, udfs_b = self._udf_prepareds(node_b)
+            self.assertEqual(len(udfs_b), 1, f'MB-74473: inline UDF entry not regenerated on {node_b.ip}: {udfs_b}')
+            self.assertEqual(main_b['uses'], 0, f'{self.UDF_PS_PREPARED} uses on restarted {node_b.ip}: {main_b}')
+            self.assertEqual(udfs_b[0]['uses'], 0, f'Inline UDF uses on restarted {node_b.ip}: {udfs_b[0]}')
+            self._assert_udf_meta_plan(node_b)
+            main_a, udfs_a = self._udf_prepareds(node_a)
+            self.assertEqual(main_a['uses'], main_a_before['uses'], f'{node_a.ip} entry changed by restart of {node_b.ip}')
+            self.assertEqual(udfs_a, udfs_a_before, f'{node_a.ip} inline UDF entry changed by restart of {node_b.ip}')
+            self._execute_udf_prepared(node_b)
+        finally:
+            self._cleanup_udf_plan_stability()
