@@ -56,7 +56,7 @@ class UpgradeFTS(NewUpgradeBaseTest):
         super(UpgradeFTS, self).setUp()
 
         self.initial_version = self.input.param('initial_version', '6.6.1-9213')
-        self.upgrade_to = self.input.param("upgrade_to")
+        self.upgrade_to = self.input.param("upgrade_to", None)
         if not self.upgrade_to and self.upgrade_versions:
             self.upgrade_to = self.upgrade_versions[-1]
             self.log.info(f"upgrade_to not set; using the last hop of "
@@ -362,6 +362,11 @@ class UpgradeFTS(NewUpgradeBaseTest):
                                                 no_check=False, cluster=self.cb_cluster)
         fts_callable.wait_for_indexing_complete(100000)
         pre_upgrade_hits, pre_upgrade_matches, _, pre_upgrade_status = pre_upgrade_idx.execute_query(query=fts_query)
+        # CBQE-9162: an empty baseline would make the mixed-window comparison
+        # below pass vacuously, so fail before spending time on the upgrade.
+        if not pre_upgrade_matches:
+            self.fail(f"Pre-upgrade baseline query {fts_query} returned no matches "
+                      f"(hits={pre_upgrade_hits}, status={pre_upgrade_status})")
 
         # Phase 1: Rebalance out first FTS node, upgrade, rebalance back in
         nodes_out = []
@@ -394,8 +399,18 @@ class UpgradeFTS(NewUpgradeBaseTest):
         log.info("="*20 + " Starting partial fts upgrade tests")
         partial_upgrade_hits, partial_upgrade_matches, _, partial_upgrade_status = pre_upgrade_idx.execute_query(query=fts_query)
 
+        # Logged here, not only in the final assertion, so a later failure in
+        # the post-upgrade checks cannot hide the mixed-window result.
+        log.info(f"Mixed-window comparison: pre-upgrade hits={pre_upgrade_hits}, "
+                 f"partial-upgrade hits={partial_upgrade_hits}, match="
+                 f"{sorted(pre_upgrade_matches) == sorted(partial_upgrade_matches)}")
         if sorted(pre_upgrade_matches) != sorted(partial_upgrade_matches):
-            errors = ["Pre-upgrade and partial-upgrade results of fts query do not match."]
+            missing = sorted(set(pre_upgrade_matches) - set(partial_upgrade_matches))
+            unexpected = sorted(set(partial_upgrade_matches) - set(pre_upgrade_matches))
+            errors = [f"Pre-upgrade and partial-upgrade results of fts query do not match: "
+                      f"hits {pre_upgrade_hits} -> {partial_upgrade_hits} "
+                      f"(status {partial_upgrade_status}), {len(missing)} missing "
+                      f"e.g. {missing[:5]}, {len(unexpected)} unexpected e.g. {unexpected[:5]}"]
             partial_upgrade_errors['test_partial_upgrade'] = errors
         errors = self._test_create_bucket_index()
         if len(errors) > 0:
@@ -469,7 +484,12 @@ class UpgradeFTS(NewUpgradeBaseTest):
         # Phase 4: Rebalance out KV node 0 (master), upgrade, rebalance back in
         nodes_out.clear()
         nodes_out.append(kv_nodes[0])
-        with FTSConcurrentWorkload(self, index=pre_upgrade_idx, driver=fts_callable,
+        # CBQE-9162: the KV workload loads through its driver's first node, and
+        # fts_callable's first node is the master this phase removes. Drive the
+        # phase 4 workloads from the nodes that stay in the cluster.
+        phase4_driver = FTSCallable([node for node in self.servers if node.ip != kv_nodes[0].ip],
+                                    es_validate=False, es_reset=False)
+        with FTSConcurrentWorkload(self, index=pre_upgrade_idx, driver=phase4_driver,
                                    label="phase 4 KV master rebalance-out") as workload:
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], nodes_out)
             rebalance.result()
@@ -484,13 +504,17 @@ class UpgradeFTS(NewUpgradeBaseTest):
         log.info("==== Upgrade Complete ====")
         self.sleep(120)
 
-        with FTSConcurrentWorkload(self, index=pre_upgrade_idx, driver=fts_callable,
+        with FTSConcurrentWorkload(self, index=pre_upgrade_idx, driver=phase4_driver,
                                    label="phase 4 KV master rebalance-in") as workload:
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                                  nodes_out, [],
                                                  services=['kv,index,n1ql'])
             rebalance.result()
         workload_errors.extend(workload.errors)
+        # CBQE-9162: the old master is back in the cluster. self.cb_cluster
+        # resolves nodes from this same list, so leaving it out drops its
+        # vbuckets from every collection doc count (and from tearDown).
+        self.servers.insert(0, kv_nodes[0])
 
         errors = self._test_create_single_collection_index()
         if len(errors) > 0:
@@ -501,9 +525,10 @@ class UpgradeFTS(NewUpgradeBaseTest):
         errors = self._test_create_bucket_index()
         if len(errors) > 0:
             post_upgrade_errors['_test_create_bucket_index'] = errors
-        errors = self._test_scope_limit_num_fts_indexes()
-        if len(errors) > 0:
-            post_upgrade_errors['_test_scope_limit_num_fts_indexes'] = errors
+        # CBQE-9162: _test_scope_limit_num_fts_indexes was dropped here. It lives on
+        # upgrade.newupgradebasetest, not the newupgradebasetest this class imports,
+        # so the call raised AttributeError; it also exercises serverless
+        # free-tier limits (enforceLimits), which do not apply on-prem.
         errors = self._test_backup_restore()
         if len(errors) > 0:
             post_upgrade_errors['_test_backup_restore'] = errors
@@ -589,6 +614,23 @@ class UpgradeFTS(NewUpgradeBaseTest):
                 index_collections.append(collection)
         return _type
 
+    def _wait_for_collection_index(self, fts_idx, timeout=1200, poll=10):
+        """FTSCallable.wait_for_indexing_complete compares the index with the
+        whole bucket, which never matches a collection-scoped index once
+        _default holds docs too, so wait on the index's own collections."""
+        indexed = expected = None
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            try:
+                indexed = fts_idx.get_indexed_doc_count()
+                expected = fts_idx.get_src_collections_doc_count()
+            except Exception as e:
+                log.info(f"index count for {fts_idx.name} not available yet: {e}")
+            if expected and indexed == expected:
+                return
+            self.sleep(poll, f"{fts_idx.name}: {indexed}/{expected} docs indexed")
+        log.warning(f"{fts_idx.name} still at {indexed}/{expected} docs after {timeout}s")
+
     def _test_create_single_collection_index(self):
         log.info("="*20 + " _test_create_single_collection_index")
 
@@ -612,7 +654,7 @@ class UpgradeFTS(NewUpgradeBaseTest):
                                                 _type=_type, analyzer="standard",
                                                 scope="scope1", collections=["collection1"], no_check=False,
                                                 cluster=self.cb_cluster)
-        fts_callable.wait_for_indexing_complete(100000)
+        self._wait_for_collection_index(fts_idx)
 
         docs_indexed = fts_idx.get_indexed_doc_count()
 
@@ -637,7 +679,11 @@ class UpgradeFTS(NewUpgradeBaseTest):
         self._create_collections(scope="scope1", collection=["collection2", "collection3", "collection4"])
         fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False, scope="scope1",
                                    collections=["collection2", "collection3", "collection4"], collection_index=True)
-        fts_callable.load_data(100000)
+        try:
+            fts_callable.load_data(100000)
+        except Exception as e:
+            errors.append(f"Could not load data into collections: {e}")
+            return errors
 
         _type = self.__define_index_parameters_collection_related(container_type="collection", scope="scope1",
                                                                   collection=["collection2", "collection3", "collection4"])
@@ -648,7 +694,7 @@ class UpgradeFTS(NewUpgradeBaseTest):
                          source_params=None, source_uuid=None, collection_index=True, _type=_type, analyzer="standard",
                                                 scope="scope1", collections=["collection2", "collection3", "collection4"],
                                                 no_check=False, cluster=self.cb_cluster)
-        fts_callable.wait_for_indexing_complete(100000)
+        self._wait_for_collection_index(fts_idx)
 
         docs_indexed = fts_idx.get_indexed_doc_count()
 
@@ -1116,7 +1162,7 @@ class UpgradeFTS(NewUpgradeBaseTest):
         fts_idx.index_definition['uuid'] = fts_idx.get_uuid()
         fts_idx.update()
 
-        fts_callable.wait_for_indexing_complete(100000)
+        self._wait_for_collection_index(fts_idx)
 
         _data_types = {
             "text":  {"field": "type", "vals": ["emp", "emp1"]},
@@ -1225,7 +1271,7 @@ class UpgradeFTS(NewUpgradeBaseTest):
         fts_idx.index_definition['uuid'] = fts_idx.get_uuid()
         fts_idx.update()
 
-        fts_callable.wait_for_indexing_complete(100000)
+        self._wait_for_collection_index(fts_idx)
 
         check_pushdown = False
 
@@ -1298,7 +1344,7 @@ class UpgradeFTS(NewUpgradeBaseTest):
         fts_idx.index_definition['uuid'] = fts_idx.get_uuid()
         fts_idx.update()
 
-        fts_callable.wait_for_indexing_complete(100000)
+        self._wait_for_collection_index(fts_idx)
 
         check_pushdown = False
 
@@ -1373,7 +1419,7 @@ class UpgradeFTS(NewUpgradeBaseTest):
         fts_idx.index_definition['uuid'] = fts_idx.get_uuid()
         fts_idx.update()
 
-        fts_callable.wait_for_indexing_complete(100000)
+        self._wait_for_collection_index(fts_idx)
 
         check_pushdown = False
         like_expressions = ["LIKE"]
@@ -1432,7 +1478,7 @@ class UpgradeFTS(NewUpgradeBaseTest):
         fts_idx.index_definition['uuid'] = fts_idx.get_uuid()
         fts_idx.update()
 
-        fts_callable.wait_for_indexing_complete(100000)
+        self._wait_for_collection_index(fts_idx)
 
         check_pushdown = False
         relations = ['<', '<=', '=', '>', '>=']
@@ -1506,7 +1552,7 @@ class UpgradeFTS(NewUpgradeBaseTest):
         fts_idx.index_definition['uuid'] = fts_idx.get_uuid()
         fts_idx.update()
 
-        fts_callable.wait_for_indexing_complete(100000)
+        self._wait_for_collection_index(fts_idx)
 
         check_pushdown = False
         _data_types = {
