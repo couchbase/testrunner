@@ -188,8 +188,8 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.quantization_algo_color_vector = self.input.param("quantization_algo_color_vector", "SQ8")
         self.quantization_algo_description_vector = self.input.param("quantization_algo_description_vector", "SQ8")
         self.quantization_sparse_vector = self.input.param("quantization_sparse_vector", "IVF1024")
-        #TODO this default value will be revisited post resolution of - MB-71192
-        self.sparsejl_dim = self.input.param("sparsejl_dim", 4096)
+        #Rerunning regression tests with default sparsejl_dim. Might cause recall issues
+        # self.sparsejl_dim = self.input.param("sparsejl_dim", 4096)
         self.gsi_util_obj = GSIUtils(self.run_cbq_query)
         self.encryption_helper = EncryptionAtRestHelper(log)
         self.gsi_encryption_helper = GSIEncryptionHelpers(log)
