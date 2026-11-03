@@ -930,6 +930,7 @@ class QueryTests(BaseTestCase):
                 asserts = test_dict[test_name].get('asserts', [])
                 cleanups = test_dict[test_name].get('cleanups', [])
                 server = test_dict[test_name].get('server', None)
+                query_params = test_dict[test_name].get('query_params', {})
 
                 # INDEX STAGE
 
@@ -968,7 +969,7 @@ class QueryTests(BaseTestCase):
 
                 self.log.info('Running Query Stage')
                 for query in queries:
-                    res = self.run_cbq_query(query, server=server)
+                    res = self.run_cbq_query(query, server=server, query_params=dict(query_params))
                     res_dict['q_res'].append(res)
 
                 # POST_QUERIES STAGE

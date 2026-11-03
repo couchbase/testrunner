@@ -1,5 +1,6 @@
 from .tuq import QueryTests
 import threading
+import time
 import random
 import numpy as np
 import ast
@@ -11,6 +12,7 @@ from couchbase.options import ClusterOptions
 from lib.vector.vector import SiftVector as sift, FAISSVector as faiss, CohereVector as cohere
 from lib.vector.vector import SparseVector as sparse
 from lib.vector.vector import LoadVector, QueryVector, UtilVector, IndexVector
+from lib.vector.vector import cfg as vector_cfg
 
 class VectorSearchTests(QueryTests):
     def setUp(self):
@@ -71,9 +73,10 @@ class VectorSearchTests(QueryTests):
         super(VectorSearchTests, self).suite_setUp()
         _vector_type = 'cohere' if 'RaBitQ' in self.description else self.vector_type
         threads = []
+        failed_keys = []
         self.log.info("Start loading vector data")
         for i in range(0, self.xb.shape[0], 1000): # load in batches of 1000 docs per thread
-            thread = threading.Thread(target=LoadVector().load_batch_documents,args=(self.database, self.xb[i:i+1000], i, self.use_xattr, self.use_base64, self.use_bigendian, _vector_type))
+            thread = threading.Thread(target=LoadVector().load_batch_documents,args=(self.database, self.xb[i:i+1000], i, self.use_xattr, self.use_base64, self.use_bigendian, _vector_type),kwargs={'failed_keys': failed_keys})
             threads.append(thread)
         # Start threads
         for i in range(len(threads)):
@@ -82,6 +85,7 @@ class VectorSearchTests(QueryTests):
         # Wait for threads to finish
         for i in range(len(threads)):
             threads[i].join()
+        self._verify_vector_load(failed_keys, self.xb.shape[0] * len(vector_cfg["sizes"]) * len(vector_cfg["brands"]))
         # if testing requires custom data (i.e pushdown, unnest, nested, etc)
         if self.input.param("update_data", False):
             self.log.info("Start updating vector data")
@@ -100,6 +104,21 @@ class VectorSearchTests(QueryTests):
             self.run_cbq_query('UPDATE default SET size = 10 limit 5000')
             self.run_cbq_query('UPDATE default SET brand = "asics" where brand != "puma" and brand != "reebok" limit 5000')
         self.log.info("Completed loading vector data")
+
+    def _verify_vector_load(self, failed_keys, expected_count, timeout=120):
+        """Fail the suite if the vector load was incomplete, instead of letting the tests
+        report misleading recall failures against partially loaded data."""
+        if failed_keys:
+            self.fail(f"{len(failed_keys)} vector docs failed to load, e.g. {failed_keys[:5]}")
+        item_count = 0
+        end_time = time.time() + timeout
+        while time.time() < end_time:
+            item_count = RestConnection(self.master).get_buckets_itemCount().get(self.bucket, 0)
+            if item_count >= expected_count:
+                self.log.info(f"Vector load verified: {item_count} docs in {self.bucket}")
+                return
+            self.sleep(5, f"waiting for item count {item_count} to reach {expected_count}")
+        self.fail(f"Vector load incomplete: {item_count} docs in {self.bucket}, expected {expected_count}")
 
     def tearDown(self):
         super(VectorSearchTests, self).tearDown()
@@ -285,7 +304,7 @@ class VectorSearchTests(QueryTests):
         # Create vector index based on conf file so we can test pushdown under multiple conditions
         try:
             # Index is on (null_field,price,brand,size,vec VECTOR)
-            IndexVector().create_index(self.database,index_order='tail',similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,custom_index_fields="null_field,price,brand,size,vec VECTOR", vector_type=self.vector_type)
+            IndexVector().create_index(self.database,index_order='tail',similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,custom_index_fields="null_field,price,brand,size,vec VECTOR",nprobes=self.nprobes, vector_type=self.vector_type)
             explain = self.run_cbq_query(explain_query)
             query_plan = explain['results'][0]['plan']
             children = query_plan['~children'][0]['~children'][0]
@@ -303,7 +322,7 @@ class VectorSearchTests(QueryTests):
         explain_query = f'EXPLAIN {ann_query}'
         try:
             # Index is on (vec VECTOR)
-            IndexVector().create_index(self.database,similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, use_bhive=self.use_bhive,custom_index_fields="vec VECTOR", vector_type=self.vector_type)
+            IndexVector().create_index(self.database,similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, use_bhive=self.use_bhive,custom_index_fields="vec VECTOR",nprobes=self.nprobes, vector_type=self.vector_type)
             explain = self.run_cbq_query(explain_query)
             query_plan = explain['results'][0]['plan']
             children = query_plan['~children'][0]['~children'][0]
@@ -329,7 +348,7 @@ class VectorSearchTests(QueryTests):
         explain_query = f'EXPLAIN {ann_query}'
         try:
             # Index is on (vec VECTOR)
-            IndexVector().create_index(self.database,similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, use_bhive=self.use_bhive,custom_index_fields="vec VECTOR", vector_type=self.vector_type)
+            IndexVector().create_index(self.database,similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, use_bhive=self.use_bhive,custom_index_fields="vec VECTOR",nprobes=self.nprobes, vector_type=self.vector_type)
             explain = self.run_cbq_query(explain_query)
             query_plan = explain['results'][0]['plan']
             children = query_plan['~children'][0]['~children'][0]
@@ -353,14 +372,15 @@ class VectorSearchTests(QueryTests):
         explain_query = f'EXPLAIN {ann_query}'
         try:
             # Index is on (vec VECTOR)
-            IndexVector().create_index(self.database,similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,custom_index_fields="vec VECTOR", vector_type=self.vector_type)
+            IndexVector().create_index(self.database,similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,custom_index_fields="vec VECTOR",nprobes=self.nprobes, vector_type=self.vector_type)
             explain = self.run_cbq_query(explain_query)
             query_plan = explain['results'][0]['plan']
             children = query_plan['~children'][0]['~children'][0]
             index_name = children['index']
             self.assertEqual(index_name, f'vector_index_{self.distance}_custom')
             self.assertTrue('index_vector' in children)
-            self.check_results_against_knn(expected_results, ann_query)
+            # Rows also carry CEIL(distance), which differs between exact and index-covered scores
+            self.check_results_against_knn(expected_results, ann_query, key='id')
         finally:
             IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive,custom_fields=True)
     '''A vector query with an array predicate'''
@@ -376,7 +396,7 @@ class VectorSearchTests(QueryTests):
         explain_query = f'EXPLAIN {ann_query}'
         try:
             # Index is on (vec VECTOR)
-            IndexVector().create_index(self.database,similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,custom_index_fields="vec VECTOR", vector_type=self.vector_type)
+            IndexVector().create_index(self.database,similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,custom_index_fields="vec VECTOR",nprobes=self.nprobes, vector_type=self.vector_type)
             explain = self.run_cbq_query(explain_query)
             query_plan = explain['results'][0]['plan']
             children = query_plan['~children'][0]['~children'][0]
@@ -399,7 +419,7 @@ class VectorSearchTests(QueryTests):
         explain_query = f'EXPLAIN {ann_query}'
         try:
             # Index is on (vec VECTOR)
-            IndexVector().create_index(self.database,similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,custom_index_fields="vec VECTOR", vector_type=self.vector_type)
+            IndexVector().create_index(self.database,similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,custom_index_fields="vec VECTOR",nprobes=self.nprobes, vector_type=self.vector_type)
             explain = self.run_cbq_query(explain_query)
             query_plan = explain['results'][0]['plan']
             children = query_plan['~children'][0]['~children'][0]
@@ -422,7 +442,7 @@ class VectorSearchTests(QueryTests):
         explain_query = f'EXPLAIN {ann_query}'
         try:
             # Index is on (vec VECTOR)
-            IndexVector().create_index(self.database,similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,custom_index_fields="vec VECTOR", vector_type=self.vector_type)
+            IndexVector().create_index(self.database,similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,custom_index_fields="vec VECTOR",nprobes=self.nprobes, vector_type=self.vector_type)
             explain = self.run_cbq_query(explain_query)
             query_plan = explain['results'][0]['plan']
             children = query_plan['~children'][0]['~children'][0]
@@ -446,7 +466,7 @@ class VectorSearchTests(QueryTests):
         explain_query = f'EXPLAIN {ann_query}'
         try:
             # Index is on (vec VECTOR)
-            IndexVector().create_index(self.database,similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,custom_index_fields="vec VECTOR", vector_type=self.vector_type)
+            IndexVector().create_index(self.database,similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,custom_index_fields="vec VECTOR",nprobes=self.nprobes, vector_type=self.vector_type)
             explain = self.run_cbq_query(explain_query)
             explain = self.run_cbq_query(explain_query)
             self.assertTrue(f'vector_index_{self.distance}_custom' in str(explain), f"We expect a vector index to be used please check {explain}")
@@ -467,7 +487,7 @@ class VectorSearchTests(QueryTests):
         explain_query = f'EXPLAIN {ann_query}'
         try:
             # Index is on (size,brand,vec VECTOR)
-            IndexVector().create_index(self.database,index_order="tail",similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive, vector_type=self.vector_type)
+            IndexVector().create_index(self.database,index_order="tail",similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,nprobes=self.nprobes, vector_type=self.vector_type)
             explain = self.run_cbq_query(explain_query)
             self.assertTrue(f'vector_index_{self.distance}' in str(explain), f"We expect a vector index to be used please check {explain}")
             self.check_results_against_knn(expected_results, ann_query)
@@ -486,7 +506,7 @@ class VectorSearchTests(QueryTests):
         explain_query = f'EXPLAIN {ann_query}'
         try:
             # Index is on (size,brand,vec VECTOR)
-            IndexVector().create_index(self.database,index_order="tail",similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive, vector_type=self.vector_type)
+            IndexVector().create_index(self.database,index_order="tail",similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,nprobes=self.nprobes, vector_type=self.vector_type)
             # need this index for correlated subquery to work — create before running KNN query
             self.run_cbq_query('CREATE INDEX idx_size ON default(size)')
             expected_results = self.run_cbq_query(knn_query)['results']
@@ -1665,10 +1685,16 @@ class VectorSearchTests(QueryTests):
                 #check that spans have the same high and low values
                 self.assertTrue(fields['high'] == fields['low'], f"We expect the high and low of each span to be the same, please check the spans in the plan {explain_plan}")
 
-    def check_results_against_knn(self, expected_results, ann_query):
+    def check_results_against_knn(self, expected_results, ann_query, key=None):
+        """Compare ANN results to the exact KNN results. Pass `key` to compare only that
+        field of each row, e.g. when rows also project a distance: the vector index
+        covers the distance with its approximate score, so it won't match the exact value."""
         threshold = self.recall_sparse_ann if self.vector_type == 'sparse' else self.recall_ann
-        ann_results = self.run_cbq_query(ann_query)
-        recall, accuracy = UtilVector().compare_result(expected_results, ann_results['results'])
+        ann_results = self.run_cbq_query(ann_query)['results']
+        if key:
+            expected_results = [row[key] for row in expected_results]
+            ann_results = [row[key] for row in ann_results]
+        recall, accuracy = UtilVector().compare_result(expected_results, ann_results)
         self.log.info(f'Recall rate: {round(recall, 2)}% with acccuracy: {round(accuracy,2)}%')
         if recall < threshold:
             self.fail(f"Recall rate of {recall} is less than expected {threshold}")
@@ -1918,3 +1944,19 @@ class VectorSearchTests(QueryTests):
                 self.sleep(retry_delay_sec)
         self.assertEqual(index_stats['default'][index_name]['num_docs_pending'], 0)
         self.assertEqual(indexed_docs, num_docs_indexed)
+
+    def test_infer_num_sample_values_zero(self):
+        """
+        MB-68228: INFER with num_sample_values=0 should skip all samples.
+        """
+        result = self.run_cbq_query('INFER default WITH {"num_sample_values": 0}')
+        schema_variants = result['results'][0]
+
+        # Verify no samples in any field across all variants
+        for variant in schema_variants:
+            props = variant.get('properties', {})
+            for field_name, field_info in props.items():
+                self.assertNotIn('samples', field_info,
+                                 f"With num_sample_values=0, field '{field_name}' should not have samples")
+
+        self.log.info("Verified: All fields have no samples with num_sample_values=0")

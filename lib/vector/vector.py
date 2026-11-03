@@ -10,10 +10,14 @@ try:
     from couchbase.options import QueryOptions
 except ImportError:
     from couchbase.cluster import QueryOptions
+from couchbase.options import MutateInOptions, UpsertMultiOptions
+from couchbase.exceptions import AmbiguousTimeoutException, UnAmbiguousTimeoutException, TemporaryFailException
 import couchbase.subdocument as SD
+from couchbase.subdocument import StoreSemantics
 import base64
 import struct
 import random
+import time
 from datetime import timedelta
 import faiss
 
@@ -379,12 +383,58 @@ class SiftVector(object):
         return gt
 
 class LoadVector(object):
+    # KV errors worth retrying while loading under heavy write load
+    TRANSIENT_ERRORS = (AmbiguousTimeoutException, UnAmbiguousTimeoutException, TemporaryFailException)
+    WRITE_RETRIES = 5
+    WRITE_TIMEOUT = timedelta(seconds=10)
+
+    def _upsert_with_retry(self, cb_coll, documents):
+        """Upsert documents, retrying the keys that hit transient errors.
+        Returns the keys that could not be written."""
+        pending = documents
+        failed = []
+        for attempt in range(self.WRITE_RETRIES):
+            result = cb_coll.upsert_multi(pending, UpsertMultiOptions(timeout=self.WRITE_TIMEOUT))
+            retry = {}
+            for key, ex in result.exceptions.items():
+                if isinstance(ex, self.TRANSIENT_ERRORS):
+                    retry[key] = pending[key]
+                else:
+                    print(f"upsert of {key} failed: {ex}")
+                    failed.append(key)
+            if not retry:
+                return failed
+            pending = retry
+            time.sleep(2 ** attempt)
+        print(f"upsert of {len(pending)} docs still failing after {self.WRITE_RETRIES} attempts")
+        return failed + list(pending)
+
+    def _upsert_xattr_doc_with_retry(self, cb_coll, key, doc, vector_field):
+        """Write the doc body and its vector xattr in a single upsert-semantics mutation,
+        so a retry after an ambiguous timeout is safe. Returns True on success."""
+        specs = [SD.upsert(vector_field, doc[vector_field], xattr=True)]
+        specs += [SD.upsert(field, value) for field, value in doc.items() if field != vector_field]
+        options = MutateInOptions(store_semantics=StoreSemantics.UPSERT, timeout=self.WRITE_TIMEOUT)
+        for attempt in range(self.WRITE_RETRIES):
+            try:
+                cb_coll.mutate_in(key, specs, options)
+                return True
+            except self.TRANSIENT_ERRORS as ex:
+                last_error = ex
+                time.sleep(2 ** attempt)
+            except Exception as ex:
+                print(f"xattr upsert of {key} failed: {ex}")
+                return False
+        print(f"xattr upsert of {key} still failing after {self.WRITE_RETRIES} attempts: {last_error}")
+        return False
+
     def encode_vector(self, vector, is_bigendian=False, vector_type='dense'):
         """
         Encodes the vector with endianess, supports both dense (list/ndarray)
         and sparse (tuple/list: (indices, values)) input.
         Returns base64 encoded string for dense or sparse.
-        For sparse, encode as: [int32 count][int32 indices...][float32 values...]
+        For sparse, encode as: [int32 indices...][float32 values...] (no count prefix;
+        the server derives the count from the buffer length)
         """
         if is_bigendian:
             endian = '>'
@@ -396,9 +446,9 @@ class LoadVector(object):
         elif vector_type == 'sparse':
             indices, values = vector
             count = len(indices)
-            # First pack count as int32, then indices as int32[count], then values as float32[count]
-            fmt = f"{endian}i{count}i{count}f"
-            buf = struct.pack(fmt, count, *indices, *values)
+            # Pack indices as int32[count], then values as float32[count]
+            fmt = f"{endian}{count}i{count}f"
+            buf = struct.pack(fmt, *indices, *values)
             return base64.b64encode(buf).decode()
         else:
             raise ValueError(f"Unknown vector_type: {vector_type}")
@@ -415,15 +465,19 @@ class LoadVector(object):
         bucket='default',
         scope='_default',
         collection='_default',
-        vector_field='vec'
+        vector_field='vec',
+        failed_keys=None
     ):
         """
         Loads batch docs into Couchbase, supporting both dense (default) and sparse.
         - If vector_type='dense', `docs` should be a sequence of ndarrays.
         - If vector_type='sparse', `docs` should be a sequence of 2-tuples/lists: (indices, values)
+        Returns the keys that could not be written; they are also appended to `failed_keys`
+        when given, so callers running this in threads can collect them.
         """
         cb = cluster.bucket(bucket)
         cb_coll = cb.scope(scope).collection(collection)
+        failed = []
         if vector_type == 'cohere':
             documents = {}
             for is1, size in enumerate(cfg["sizes"]):
@@ -438,12 +492,11 @@ class LoadVector(object):
                             "brandidx": ib,
                             vector_field: x.tolist()
                         }
-                    try:
-                        cb_coll.upsert_multi(documents)
-                    except Exception as e:
-                        print(e)
+                    failed += self._upsert_with_retry(cb_coll, documents)
                     documents = {}
-            return
+            if failed_keys is not None:
+                failed_keys.extend(failed)
+            return failed
         documents = {}
         for is1, size in enumerate(cfg["sizes"]):
             for ib, brand in enumerate(cfg["brands"]):
@@ -475,19 +528,17 @@ class LoadVector(object):
                         "brandidx": ib,
                         vector_field: vector
                     }
-                    # if is_xattr: remove vector_field from doc and store as xattr below
                     documents[key] = doc
-                try:
-                    cb_coll.upsert_multi(documents)
-                except Exception as e:
-                    print(e)
                 if is_xattr:
-                    for key in documents:
-                        cb_coll.mutate_in(
-                            key,
-                            [SD.upsert(vector_field, documents[key][vector_field], xattr=True),
-                             SD.remove(vector_field)]
-                        )
+                    # vector_field goes into an xattr instead of the doc body
+                    for key, doc in documents.items():
+                        if not self._upsert_xattr_doc_with_retry(cb_coll, key, doc, vector_field):
+                            failed.append(key)
+                else:
+                    failed += self._upsert_with_retry(cb_coll, documents)
+        if failed_keys is not None:
+            failed_keys.extend(failed)
+        return failed
 
     def multi_upsert_document_into_cb(self, cb_coll, documents):
         try:
@@ -704,7 +755,7 @@ class QueryVector(object):
         }
         result = cb_scope.query(
             vector_query,
-            QueryOptions(named_parameters=params), metrics=True, timeout=timedelta(seconds=300))
+            QueryOptions(named_parameters=params), metrics=True, timeout=timedelta(seconds=600))
         for row in result.rows():
             actual.append(row['id'])
         print(f"Execution time: {result.metadata().metrics().execution_time()}")
@@ -774,7 +825,7 @@ class QueryVector(object):
         }
         result = cb_scope.query(
             vector_query,
-            QueryOptions(named_parameters=params), metrics=True, timeout=timedelta(seconds=300))
+            QueryOptions(named_parameters=params), metrics=True, timeout=timedelta(seconds=600))
         for row in result.rows():
             vectors.append(row['id'])
             distances.append(row['distance'])

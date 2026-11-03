@@ -5219,6 +5219,451 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
         self.log.info("TEST PASSED: test_query_ffdc_in_cbcollect_not_encrypted")
         self.log.info("=" * 80)
 
+    # -------------------------------------------------------------------------
+    # MB-70063: cbcollect_info decryption / redaction of encrypted FFDC files
+    # -------------------------------------------------------------------------
+
+    # FFDC categories written by a manual (/admin/ffdc) trigger. Only the
+    # sensitive ones (query/ffdc/ffdc.go: sensitiveActions) are encrypted with
+    # the log DEK and lose the ".gz" suffix; the rest stay plaintext gzip.
+    FFDC_SENSITIVE_CATEGORIES = ("areq", "creq", "vita")
+    # Non-sensitive categories that must always be produced by a manual trigger.
+    # nets (netstat binary) and prof (async CPU profile) are verified when
+    # present but not required.
+    FFDC_REQUIRED_NON_SENSITIVE_CATEGORIES = ("heap", "mems", "grtn")
+    # Text cbcollect_info / cbcat emit in place of the file content when they
+    # cannot decrypt an encrypted file (see MB-70063 comments).
+    CBCOLLECT_DECRYPT_FAILURE_MARKERS = (
+        "Read file chunks failure",
+        "unsupported_compression_type",
+        "Unsupported compression",
+    )
+    CBCOLLECT_REDACTED_HASH_REGEX = "<ud>[0-9a-fA-F]{40}</ud>"
+    FFDC_FILE_CATEGORY_RE = re.compile(r"^query_ffdc_[A-Z]+_([a-z]+)_")
+
+    def _remote_int(self, shell, command):
+        """Run a shell pipeline that prints a single integer and return it (0 on parse failure)."""
+        out, _ = shell.execute_command(command)
+        try:
+            return int(out[0].strip()) if out else 0
+        except (ValueError, IndexError):
+            return 0
+
+    def _bundle_file_grep_count(self, shell, file_path, pattern, extended=False):
+        """
+        Count lines of a bundled file matching pattern. `zcat -f` reads both
+        plaintext and gzip members, so this works whether cbcollect stored the
+        FFDC file decompressed or as the original .gz.
+        """
+        safe = pattern.replace("'", "'\\''")
+        flag = "-aEc" if extended else "-aFc"
+        return self._remote_int(
+            shell, f"zcat -f {file_path} 2>/dev/null | grep {flag} -- '{safe}'"
+        )
+
+    def _snapshot_query_ffdc_inventory(self, query_nodes):
+        """Return {node_ip: {file_path: category}} for every query_ffdc_* file in the logs dir."""
+        inventory = {}
+        for node in query_nodes:
+            log_path = self.encryption_helper.get_log_path(node)
+            shell = RemoteMachineShellConnection(node, verbose=False)
+            try:
+                out, _ = shell.execute_command(
+                    f"find {log_path} -maxdepth 1 -type f -name 'query_ffdc_*' 2>/dev/null"
+                )
+            finally:
+                shell.disconnect()
+            node_files = {}
+            for line in out or []:
+                path = line.strip()
+                match = self.FFDC_FILE_CATEGORY_RE.match(os.path.basename(path))
+                if match:
+                    node_files[path] = match.group(1)
+            inventory[node.ip] = node_files
+        return inventory
+
+    def _prepare_encrypted_ffdc_for_cbcollect(self, prefix_label, marker):
+        """
+        Shared setup for the MB-70063 cbcollect tests:
+          - verify log EAR, load data + indexes, purge old FFDC files
+          - with background query load running, run a marker statement on every
+            query node (so it lands in completed requests) and trigger a manual FFDC
+          - wait for every FFDC category, then verify sensitive files are
+            encrypted without ".gz" and non-sensitive ones are plaintext ".gz"
+
+        Returns:
+            tuple: (query_nodes, inventory {node_ip: {file_path: category}})
+        """
+        self.log.info("[PREP] Verifying log encryption at rest prerequisites...")
+        self._verify_encryption_prerequisites("log")
+
+        self.log.info("[PREP] Setting up bucket, indexes, and baseline scans...")
+        select_queries, query_nodes = self._setup_bucket_indexes_scans(prefix_label=prefix_label)
+
+        # Purge old FFDC files so the inventory only holds this test's files
+        for node in query_nodes:
+            log_path = self.encryption_helper.get_log_path(node)
+            shell = RemoteMachineShellConnection(node, verbose=False)
+            try:
+                shell.execute_command(
+                    f"find {log_path} -maxdepth 1 -name 'query_ffdc_*' -delete 2>/dev/null"
+                )
+            finally:
+                shell.disconnect()
+            self.log.info(f"[PREP] Purged existing query_ffdc_* files on {node.ip} ({log_path})")
+
+        required = set(self.FFDC_SENSITIVE_CATEGORIES) | set(
+            self.FFDC_REQUIRED_NON_SENSITIVE_CATEGORIES
+        )
+        bg_thread, stop_event, _ = self._start_background_query_loop(select_queries, query_nodes)
+        try:
+            marker_statement = f'SELECT "{marker}" AS ffdc_marker'
+            for node in query_nodes:
+                for _ in range(3):
+                    result = self.run_cbq_query(query=marker_statement, server=node, verbose=False)
+                    self.assertEqual(
+                        result.get("status"), "success",
+                        f"[PREP] Marker query failed on {node.ip}: {result}"
+                    )
+            self.log.info(f"[PREP] Marker statement run on every query node: {marker_statement}")
+
+            self._dispatch_background_query_batch(select_queries, query_nodes)
+            for node in query_nodes:
+                status, response = self.rest.trigger_query_ffdc(node)
+                self.assertTrue(status, f"[PREP] Failed to trigger FFDC on {node.ip}: {response}")
+                self.log.info(f"[PREP] Manual FFDC triggered on {node.ip}")
+
+            # Wait until every node has all sensitive + required non-sensitive categories
+            deadline = time.time() + 180
+            missing = {}
+            while time.time() < deadline:
+                inventory = self._snapshot_query_ffdc_inventory(query_nodes)
+                missing = {
+                    ip: sorted(required - set(files.values()))
+                    for ip, files in inventory.items()
+                    if required - set(files.values())
+                }
+                if not missing:
+                    break
+                self.sleep(15, f"[PREP] Waiting for FFDC categories, still missing: {missing}")
+            self.assertFalse(missing, f"[PREP] FFDC categories not generated within 180s: {missing}")
+            self.sleep(30, "[PREP] Letting FFDC writers (incl. async CPU profile) finish")
+            inventory = self._snapshot_query_ffdc_inventory(query_nodes)
+        finally:
+            stop_event.set()
+            bg_thread.join(timeout=30)
+
+        # Verify on-disk encryption state of every FFDC file
+        failures = []
+        for node in query_nodes:
+            for path, category in sorted(inventory.get(node.ip, {}).items()):
+                is_encrypted, details = \
+                    self.encryption_helper.verify_file_encryption_magic_bytes(node, path)
+                sensitive = category in self.FFDC_SENSITIVE_CATEGORIES
+                self.log.info(
+                    f"[PREP] [{node.ip}] {os.path.basename(path)} category={category} "
+                    f"sensitive={sensitive} encrypted={is_encrypted}"
+                )
+                if sensitive and (not is_encrypted or path.endswith(".gz")):
+                    failures.append(
+                        f"  [{node.ip}] {path}: sensitive FFDC file must be encrypted "
+                        f"without .gz suffix (encrypted={is_encrypted}, details={details})"
+                    )
+                elif not sensitive and (is_encrypted or not path.endswith(".gz")):
+                    failures.append(
+                        f"  [{node.ip}] {path}: non-sensitive FFDC file must stay "
+                        f"unencrypted .gz (encrypted={is_encrypted}, details={details})"
+                    )
+        if failures:
+            self.fail("[PREP] FFDC on-disk encryption state is wrong:\n" + "\n".join(failures))
+        return query_nodes, inventory
+
+    def _cleanup_cbcollect_artifacts(self, node, tag):
+        base = f"/tmp/cbcollect_{tag}_{node.ip.replace('.', '_')}"
+        shell = RemoteMachineShellConnection(node, verbose=False)
+        try:
+            shell.execute_command(
+                f"rm -rf {base}.zip {base}-redacted.zip {base}_unredacted {base}_redacted "
+                f"2>/dev/null"
+            )
+        finally:
+            shell.disconnect()
+
+    def _run_cbcollect_and_extract(self, node, tag, redaction=False):
+        """
+        Run cbcollect_info on node (optionally with --log-redaction-level=partial)
+        and unzip each produced bundle.
+
+        Returns:
+            dict: {"unredacted": extract_dir[, "redacted": extract_dir]}
+        """
+        base = f"/tmp/cbcollect_{tag}_{node.ip.replace('.', '_')}"
+        self._cleanup_cbcollect_artifacts(node, tag)
+        options = "--log-redaction-level=partial" if redaction else ""
+        bundles = {"unredacted": (f"{base}.zip", f"{base}_unredacted")}
+        if redaction:
+            bundles["redacted"] = (f"{base}-redacted.zip", f"{base}_redacted")
+
+        shell = RemoteMachineShellConnection(node, verbose=False)
+        try:
+            self.log.info(f"Running cbcollect_info on {node.ip} -> {base}.zip {options}")
+            output, _ = shell.execute_cbcollect_info(f"{base}.zip", options)
+            self.log.info(
+                f"cbcollect_info on {node.ip} output tail: "
+                f"{' '.join(output[-5:] if output else [])}"
+            )
+            extracted = {}
+            for kind, (zip_path, extract_dir) in bundles.items():
+                check_out, _ = shell.execute_command(
+                    f"test -f {zip_path} && echo EXISTS || echo MISSING"
+                )
+                self.assertIn(
+                    "EXISTS", " ".join(check_out),
+                    f"{kind} cbcollect bundle not found at {zip_path} on {node.ip}"
+                )
+                shell.execute_command(
+                    f"mkdir -p {extract_dir} && unzip -o -q {zip_path} -d {extract_dir}"
+                )
+                extracted[kind] = extract_dir
+        finally:
+            shell.disconnect()
+        return extracted
+
+    def _verify_bundled_ffdc_files(self, node, extract_dir, node_inventory, marker, kind):
+        """
+        Check every FFDC file that was on disk before cbcollect is present in the
+        extracted bundle (matched by name, ignoring a ".gz" suffix) and valid:
+
+        All files: not encrypted, no decrypt-failure text. Sensitive files must be
+        non-empty; non-sensitive files must match their on-disk uncompressed size.
+        Sensitive files: decrypted content is real FFDC data (creq has requestId,
+        vita has uptime). creq marker statement: plaintext in the unredacted
+        bundle; in the redacted bundle the marker is absent from every sensitive
+        file and creq carries <ud>hash</ud> values.
+
+        Returns:
+            list: failure messages
+        """
+        failures = []
+        shell = RemoteMachineShellConnection(node, verbose=False)
+        try:
+            out, _ = shell.execute_command(
+                f"find {extract_dir} -type f -name 'query_ffdc_*' 2>/dev/null"
+            )
+            bundle_files = [line.strip() for line in out or [] if line.strip()]
+            self.log.info(
+                f"[{node.ip}][{kind}] {len(bundle_files)} FFDC file(s) in bundle: "
+                f"{sorted(os.path.basename(p) for p in bundle_files)}"
+            )
+            for disk_path, category in sorted(node_inventory.items()):
+                stem = os.path.basename(disk_path)
+                if stem.endswith(".gz"):
+                    stem = stem[:-len(".gz")]
+                matches = [p for p in bundle_files if os.path.basename(p).startswith(stem)]
+                if not matches:
+                    failures.append(
+                        f"  [{node.ip}][{kind}] {os.path.basename(disk_path)} "
+                        f"({category}) missing from cbcollect bundle"
+                    )
+                    continue
+
+                bundle_path = matches[0]
+                prefix = f"  [{node.ip}][{kind}] {os.path.basename(bundle_path)}"
+                file_failures = []
+                is_encrypted, details = \
+                    self.encryption_helper.verify_file_encryption_magic_bytes(node, bundle_path)
+                if is_encrypted:
+                    file_failures.append(f"{prefix}: still encrypted in cbcollect bundle ({details})")
+                else:
+                    # heap/prof are pprof (internally gzipped) inside a .gz; strip both layers
+                    size = self._remote_int(
+                        shell, f"zcat -f {bundle_path} 2>/dev/null | zcat -f | wc -c"
+                    )
+                    if category in self.FFDC_SENSITIVE_CATEGORIES:
+                        if size == 0:
+                            file_failures.append(f"{prefix}: empty in cbcollect bundle")
+                    else:
+                        # Non-sensitive files can legitimately be empty (e.g. nets when
+                        # netstat is absent on the node); they must match on-disk content.
+                        disk_size = self._remote_int(
+                            shell, f"zcat -f {disk_path} 2>/dev/null | zcat -f | wc -c"
+                        )
+                        if size != disk_size:
+                            file_failures.append(
+                                f"{prefix}: bundled size {size} != on-disk "
+                                f"uncompressed size {disk_size}"
+                            )
+                    for failure_text in self.CBCOLLECT_DECRYPT_FAILURE_MARKERS:
+                        if self._bundle_file_grep_count(shell, bundle_path, failure_text):
+                            file_failures.append(
+                                f"{prefix}: cbcollect failed to process the file "
+                                f"(contains '{failure_text}')"
+                            )
+                    if category in self.FFDC_SENSITIVE_CATEGORIES:
+                        marker_hits = self._bundle_file_grep_count(shell, bundle_path, marker)
+                        if category == "vita" and not self._bundle_file_grep_count(
+                                shell, bundle_path, '"uptime"'):
+                            file_failures.append(
+                                f"{prefix}: decrypted vitals content missing \"uptime\""
+                            )
+                        if category == "creq":
+                            if not self._bundle_file_grep_count(shell, bundle_path, '"requestId"'):
+                                file_failures.append(
+                                    f"{prefix}: decrypted completed-requests content "
+                                    f"missing \"requestId\""
+                                )
+                            if kind == "unredacted" and marker_hits == 0:
+                                file_failures.append(
+                                    f"{prefix}: marker statement '{marker}' not found in "
+                                    f"decrypted completed requests"
+                                )
+                            if kind == "redacted" and not self._bundle_file_grep_count(
+                                    shell, bundle_path, self.CBCOLLECT_REDACTED_HASH_REGEX,
+                                    extended=True):
+                                file_failures.append(
+                                    f"{prefix}: no redacted <ud>hash</ud> values in redacted bundle"
+                                )
+                        if kind == "redacted" and marker_hits:
+                            file_failures.append(
+                                f"{prefix}: marker statement '{marker}' present in redacted "
+                                f"bundle ({marker_hits} line(s)) - user data not redacted"
+                            )
+                    self.log.info(f"{prefix.strip()} category={category} size={size}")
+
+                if file_failures:
+                    dest = self._copy_failed_file_from_node(node, bundle_path)
+                    if dest:
+                        self.log.info(f"Copied failing bundled file to {dest}")
+                    failures.extend(file_failures)
+        finally:
+            shell.disconnect()
+        return failures
+
+    def test_query_ffdc_cbcollect_decrypts_encrypted_files(self):
+        """
+        MB-70063 (a): cbcollect_info without redaction decrypts encrypted FFDC files.
+
+        Steps:
+        1. Verify log EAR, set up data, purge old FFDC files
+        2. Under query load, run a marker statement on every query node and
+           trigger a manual FFDC
+        3. Verify on disk: areq/creq/vita encrypted (no .gz); heap/mems/grtn/
+           nets/prof unencrypted .gz
+        4. Run cbcollect_info (no redaction) on every query node
+        5. Verify every on-disk FFDC file is in the bundle and:
+           - is not encrypted, non-empty, and has no decrypt-failure text
+           - creq is real decrypted JSON and contains the marker statement
+           - vita is real decrypted JSON ("uptime")
+           - non-sensitive files are carried over intact
+        6. Clean up cbcollect artifacts
+        """
+        self.log.info("=" * 80)
+        self.log.info("STARTING TEST: test_query_ffdc_cbcollect_decrypts_encrypted_files")
+        self.log.info("=" * 80)
+        tag = "ffdc_decrypt"
+        marker = f"MB70063_DECRYPT_MARKER_{time.time_ns()}"
+
+        # ========== STEPS 1-3: Encrypted FFDC files on disk ==========
+        try:
+            query_nodes, inventory = self._prepare_encrypted_ffdc_for_cbcollect(
+                prefix_label="cbc_ffdc_dec", marker=marker
+            )
+            self.log.info("[STEPS 1-3] PASSED - FFDC files generated with expected on-disk state")
+        except Exception as e:
+            self.log.error(f"[STEPS 1-3] FAILED: {e}")
+            raise
+
+        try:
+            # ========== STEPS 4-5: cbcollect + bundle verification ==========
+            failures = []
+            for node in query_nodes:
+                bundles = self._run_cbcollect_and_extract(node, tag, redaction=False)
+                failures.extend(self._verify_bundled_ffdc_files(
+                    node, bundles["unredacted"], inventory[node.ip], marker, "unredacted"
+                ))
+            if failures:
+                msg = "[STEP 5] FFDC files in cbcollect bundle are not correctly decrypted:\n" \
+                      + "\n".join(failures)
+                self.log.error(msg)
+                self.fail(msg)
+            self.log.info("[STEPS 4-5] PASSED - all FFDC files decrypted and intact in cbcollect")
+        finally:
+            # ========== STEP 6: Cleanup ==========
+            for node in query_nodes:
+                try:
+                    self._cleanup_cbcollect_artifacts(node, tag)
+                except Exception as cleanup_err:
+                    self.log.warning(f"[STEP 6] cleanup failed on {node.ip}: {cleanup_err}")
+
+        self.log.info("=" * 80)
+        self.log.info("TEST PASSED: test_query_ffdc_cbcollect_decrypts_encrypted_files")
+        self.log.info("=" * 80)
+
+    def test_query_ffdc_cbcollect_redacts_decrypted_files(self):
+        """
+        MB-70063 (b): cbcollect_info with redaction decrypts encrypted FFDC files,
+        then redacts them.
+
+        Steps:
+        1. Verify log EAR, set up data, purge old FFDC files
+        2. Under query load, run a marker statement on every query node and
+           trigger a manual FFDC
+        3. Verify on disk: areq/creq/vita encrypted; non-sensitive unencrypted .gz
+        4. Run cbcollect_info --log-redaction-level=partial on every query node
+           (produces <name>.zip and <name>-redacted.zip)
+        5. Redacted bundle: every FFDC file present, not encrypted, no
+           decrypt-failure text; creq/vita are real decrypted JSON; the marker
+           statement is absent from all sensitive files and creq contains
+           <ud>hash</ud> values
+        6. Unredacted companion bundle: same checks, marker statement present
+        7. Clean up cbcollect artifacts
+        """
+        self.log.info("=" * 80)
+        self.log.info("STARTING TEST: test_query_ffdc_cbcollect_redacts_decrypted_files")
+        self.log.info("=" * 80)
+        tag = "ffdc_redact"
+        marker = f"MB70063_REDACT_MARKER_{time.time_ns()}"
+
+        # ========== STEPS 1-3: Encrypted FFDC files on disk ==========
+        try:
+            query_nodes, inventory = self._prepare_encrypted_ffdc_for_cbcollect(
+                prefix_label="cbc_ffdc_red", marker=marker
+            )
+            self.log.info("[STEPS 1-3] PASSED - FFDC files generated with expected on-disk state")
+        except Exception as e:
+            self.log.error(f"[STEPS 1-3] FAILED: {e}")
+            raise
+
+        try:
+            # ========== STEPS 4-6: cbcollect with redaction + bundle verification ==========
+            failures = []
+            for node in query_nodes:
+                bundles = self._run_cbcollect_and_extract(node, tag, redaction=True)
+                for kind in ("redacted", "unredacted"):
+                    failures.extend(self._verify_bundled_ffdc_files(
+                        node, bundles[kind], inventory[node.ip], marker, kind
+                    ))
+            if failures:
+                msg = "[STEPS 5-6] FFDC files in redacted cbcollect are not correctly " \
+                      "decrypted/redacted:\n" + "\n".join(failures)
+                self.log.error(msg)
+                self.fail(msg)
+            self.log.info(
+                "[STEPS 4-6] PASSED - FFDC files decrypted in both bundles and "
+                "user data redacted in the redacted bundle"
+            )
+        finally:
+            # ========== STEP 7: Cleanup ==========
+            for node in query_nodes:
+                try:
+                    self._cleanup_cbcollect_artifacts(node, tag)
+                except Exception as cleanup_err:
+                    self.log.warning(f"[STEP 7] cleanup failed on {node.ip}: {cleanup_err}")
+
+        self.log.info("=" * 80)
+        self.log.info("TEST PASSED: test_query_ffdc_cbcollect_redacts_decrypted_files")
+        self.log.info("=" * 80)
+
     def test_query_log_dek_lifetime(self):
         """
         Verify that when a DEK's lifetime expires, files previously encrypted with
