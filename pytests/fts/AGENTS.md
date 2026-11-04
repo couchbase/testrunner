@@ -204,7 +204,7 @@ Utility (not a TestCase):
   | `test_search_history_online_upgrade` | Per-node search history | `TOTORO;ONLINE;SEARCHHISTORY` |
   | `test_deep_pagination_online_upgrade` | Deep pagination over numeric/datetime/geo sorts | `TOTORO;ONLINE;DEEPPAGE` |
   | `test_hierarchical_online_upgrade` | Hierarchical (nested) search | `TOTORO;ONLINE;HIER` |
-  | `test_collections_scale_online_upgrade` | ~10k collections, varying scope shapes | `TOTORO;ONLINE;COLLECTIONS` |
+  | `test_collections_scale_online_upgrade` | ~1k collections (a 256MB bucket caps at 1200), varying scope shapes | `TOTORO;ONLINE;COLLECTIONS` |
   | `test_chained_upgrade` | Multi-hop chained upgrade (CBQE-8244) | `TOTORO;<ONLINE\|OFFLINE>;CHAINED` |
   | `test_query_correctness_online_upgrade` / `..._offline_upgrade` | Query-type matrix result sets unchanged (CBQE-9123, CBSE-23367) | `TOTORO;<ONLINE\|OFFLINE>;QUERYMATRIX` |
   | `test_ingestion_online_upgrade` / `..._offline_upgrade` | Docs written during/after the upgrade get indexed (CBQE-9123, CBSE-22203) | `TOTORO;<ONLINE\|OFFLINE>;INGEST` |
@@ -240,6 +240,24 @@ Utility (not a TestCase):
   `gpu_index=True`. They are injected by
   `FTSCallable._build_vector_index_body()`; the shared template
   `b/resources/fts/vector_index_def.json` carries none of them by default.
+- **BQ is measured on the cars BAAI dataset, not SIFT.** SIFT is all
+  non-negative, which BQ is not designed for: `bivf-sq8` on siftsmall recalled
+  ~4% while `bivf-flat` on the same data recalled ~94%, and the Search team asked
+  for a different dataset. When `bq_index_type` is set, the post-upgrade checks
+  restore `backup_zips/100k_cars_baai_1024.zip` exactly as the BQ functional suite
+  does (`restore_vector_backup` + `restored_vector_namespaces` in `fts_base.py`,
+  shared by both): no filters, auto-created buckets, then the first non-`_default`
+  scope and all its collections are taken from REST. The restore cannot run before
+  the upgrade: the zip was taken with a newer cbbackupmgr, and 7.6.x rejects it with
+  "has an unknown version". A plain 1024-dim index (`vec_bq_legacy_idx`, pinned to
+  segmentVersion 16) is built on the restored collections. Ground truth is FAISS
+  over the vectors read back with a KV range scan, since the upgrade topology has
+  no query node. The flat recall is measured first; then BQ is enabled in place on that
+  index and on a fresh `vec_bq_feature_idx`, and both are gated at
+  `bq_cars_recall_threshold` (default 70, matching the functional suite). The
+  SIFT legacy index still covers survival across the upgrade.
+  `bq_dataset=sift` restores the old behaviour. The restore needs
+  `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` on the slave, as the BQ suite does.
 - **Chained (multi-hop) upgrades** — `test_chained_upgrade` walks the
   `;`-separated chain in `upgrade_version` one hop at a time, carrying one index
   the whole way. `NewUpgradeBaseTest` already parsed that chain into

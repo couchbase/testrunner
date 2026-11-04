@@ -814,6 +814,9 @@ class RestConnection(object):
                                                 params=params, headers=headers)
 
         if ensure_manifest:
+            if not status:
+                raise Exception(f"PUT collection manifest on bucket '{bucket}' was "
+                                f"rejected: {content}")
             uid = json.loads(content)['uid']
             ensure_manifest_status, manifest_content, _ = self._http_request(
                 f"{self.baseUrl}pools/default/buckets/{bucket}/scopes/@ensureManifest/{uid}", 'POST',
@@ -4799,18 +4802,26 @@ class RestConnection(object):
             verb='POST')
         return status
 
-    def disable_querying_on_fts_index(self, name):
+    def disable_querying_on_fts_index(self, name, bucket=None, scope=None):
         """ method to disable querying on index"""
-        api = self.fts_baseUrl + "api/index/{0}/queryControl/disallow".format(name)
+        if self._fts_scoped_endpoint(bucket, scope):
+            api = self.fts_baseUrl + "api/bucket/{0}/scope/{1}/index/{2}/queryControl/disallow".format(
+                bucket, scope if scope is not None else "_default", name)
+        else:
+            api = self.fts_baseUrl + "api/index/{0}/queryControl/disallow".format(name)
         log.info('calling api : {0}'.format(api))
         status, content, header = self.urllib_request(
             api,
             verb='POST')
         return status
 
-    def enable_querying_on_fts_index(self, name):
+    def enable_querying_on_fts_index(self, name, bucket=None, scope=None):
         """ method to enable querying on index"""
-        api = self.fts_baseUrl + "api/index/{0}/queryControl/allow".format(name)
+        if self._fts_scoped_endpoint(bucket, scope):
+            api = self.fts_baseUrl + "api/bucket/{0}/scope/{1}/index/{2}/queryControl/allow".format(
+                bucket, scope if scope is not None else "_default", name)
+        else:
+            api = self.fts_baseUrl + "api/index/{0}/queryControl/allow".format(name)
         log.info('calling api : {0}'.format(api))
         status, content, header = self.urllib_request(
             api,

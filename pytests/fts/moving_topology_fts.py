@@ -2779,22 +2779,21 @@ class MovingTopFTS(FTSBaseTest):
         if len(err) > 0:
             self.fail(err)
 
+        post_change_errors = self.validate_post_topology_change(label="test_cleanup_after_failover_rebalance_addback")
+        self.assertEqual(post_change_errors, [],
+                         f"post-change validation failed: {post_change_errors}")
+
         self._cb_cluster.delete_bucket(bucket_name="default")
 
         # Ask a node that is still in the cluster - the connection captured above
         # may belong to the node that was just failed over and removed, and a
         # "connection refused" from it would be swallowed as a pass without ever
         # checking whether the index definition was cleaned up.
-        try:
-            _, indexdef = frest.get_fts_index_definition(index.name, index._source_name, index.scope)
-            self.fail("Index partitions still reside on the node - node not cleaned up properly")
-        except Exception as e:
-            self.log.info(f"Success - : {str(e)}")
-
-        # CBQE-8243
-        post_change_errors = self.validate_post_topology_change(label="test_cleanup_after_failover_rebalance_addback")
-        self.assertEqual(post_change_errors, [],
-                         f"post-change validation failed: {post_change_errors}")
+        found, _ = frest.get_fts_index_definition(index.name, index._source_name, index.scope)
+        if found:
+            self.fail("Index definition still present after its bucket was "
+                      "deleted - node not cleaned up properly")
+        self.log.info("Success - index definition removed along with its bucket")
 
     def partition_validation_sanity(self):
         partitions = [18, 3, 3]
@@ -2835,7 +2834,9 @@ class MovingTopFTS(FTSBaseTest):
                     nodeIds.append(nodeId)
         hostnames = []
         for nodeId in nodeIds:
-            hostnames.append(cfg['nodeDefsWanted']['nodeDefs'][nodeId]['hostPort'][:-5])
+            host = cfg['nodeDefsWanted']['nodeDefs'][nodeId]['hostPort'][:-5]
+            if host not in hostnames:
+                hostnames.append(host)
 
         # failover all nodes 1 by 1 and validate index parition count each time
         for i in range(len(hostnames)):

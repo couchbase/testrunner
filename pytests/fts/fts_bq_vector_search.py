@@ -16,7 +16,8 @@ from TestInput import TestInputSingleton
 from lib.membase.api.rest_client import RestConnection
 from lib.remote.remote_util import RemoteMachineShellConnection
 from lib.couchbase_helper.documentgenerator import SDKDataLoader
-from .fts_base import NodeHelper
+from .fts_base import (NodeHelper, FTSException, restore_vector_backup,
+                       restored_vector_namespaces, build_faiss_flat_index)
 from .fts_base import FTSConcurrentWorkload, FTSPostChangeValidator
 from .fts_backup_restore import FTSIndexBackupClient
 from .fts_vector_search import VectorSearch
@@ -55,26 +56,7 @@ class BQVectorSearch(VectorSearch):
     def tearDown(self):
         super(BQVectorSearch, self).tearDown()
 
-    def _get_s3_utils(self):
-        aws_key = os.environ.get("AWS_ACCESS_KEY_ID", None)
-        aws_secret = os.environ.get("AWS_SECRET_ACCESS_KEY", None)
-        if not aws_key or not aws_secret:
-            self.fail("AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY env vars are required "
-                      "for backup restore data loading")
-
-        from serverless.s3_utils import S3Utils
-        return S3Utils(aws_access_key_id=aws_key,
-                       aws_secret_access_key=aws_secret,
-                       s3_bucket=self._bq_s3_bucket,
-                       region=self.input.param("region", "us-east-1"))
-
     def _restore_couchbase_bucket(self):
-        s3_utils_obj = self._get_s3_utils()
-
-        filename = self.vector_backup_filename.split('/')[-1]
-        s3_utils_obj.download_file(object_name=self.vector_backup_filename,
-                                   filename=filename)
-
         master = self._cb_cluster.get_master_node()
 
         bq_kv_quota = self.input.param("bq_kv_quota", 3000)
@@ -102,65 +84,18 @@ class BQVectorSearch(VectorSearch):
             self.fail(f"Cannot set memory quotas needed for backup restore: {content}")
         time.sleep(5)
 
-        remote_client = RemoteMachineShellConnection(master)
-        dist_type = remote_client.extract_remote_info().distribution_type.lower()
-        remote_client.copy_file_local_to_remote(src_path=filename, des_path=filename)
-        repo = filename.split('.')[0]
-        remote_client.execute_command("rm -rf backup")
-
-        couchbase_root_dir = "/opt/couchbase/bin/cbbackupmgr"
-        if dist_type == 'windows':
-            couchbase_root_dir = '"/cygdrive/c/Program Files/Couchbase/Server/bin/cbbackupmgr"'
-
-        if dist_type != 'windows':
-            backup_config_cmd = f"{couchbase_root_dir} config --archive backup/ --repo {repo}"
-            out = remote_client.execute_command(backup_config_cmd, timeout=1800)
-            self.log.info(out)
-
-        info = remote_client.extract_remote_info()
-        if "debian" in info.distribution_version.lower():
-            remote_client.execute_command("apt-get install -y unzip")
-        elif "centos" in info.distribution_version.lower() or "rhel" in info.distribution_version.lower():
-            remote_client.execute_command("yum install -y unzip")
-        unzip_cmd = f"unzip -o {filename}"
-        remote_client.execute_command(command=unzip_cmd)
-
-        rest = RestConnection(master)
-        username = rest.username
-        password = rest.password
-
-        restore_cmd = (f"{couchbase_root_dir} restore --archive backup --repo {repo} "
-                       f"--cluster couchbase://127.0.0.1 --username {username} --password {password} "
-                       f"--auto-create-buckets ")
-        restore_out = remote_client.execute_command(restore_cmd, timeout=600)
-        self.log.info(restore_out)
-
-        restore_stdout = str(restore_out[0]) if restore_out else ""
-        bucket_succeeded = "| Succeeded |" in restore_stdout or "Restore completed successfully" in restore_stdout
-        has_error = "Error restoring cluster" in restore_stdout
-
-        if has_error and not bucket_succeeded:
-            self.fail(f"Backup restore failed: {restore_stdout}")
-        elif has_error and bucket_succeeded:
-            self.log.warning("Restore had non-critical errors (e.g. AWR metadata) "
-                             "but bucket data restored successfully")
+        try:
+            restore_vector_backup(master, self.vector_backup_filename, self._bq_s3_bucket,
+                                  region=self.input.param("region", "us-east-1"),
+                                  log=self.log)
+        except FTSException as err:
+            self.fail(str(err))
         self.log.info("Backup restore completed, waiting for bucket to be ready")
         time.sleep(10)
 
-        buckets = rest.get_buckets()
-        namespaces = []
-        for bucket in buckets:
-            scopes = rest.get_bucket_scopes(bucket=bucket)
-            for scope in scopes:
-                if scope == '_default':
-                    continue
-                collections = rest.get_scope_collections(bucket=bucket, scope=scope)
-                for collection in collections:
-                    namespaces.append({
-                        'bucket': bucket.name,
-                        'scope': scope,
-                        'collection': collection
-                    })
+        rest = RestConnection(master)
+
+        namespaces = restored_vector_namespaces(rest)
 
         self.log.info(f"Restored namespaces: {namespaces}")
 
@@ -218,22 +153,8 @@ class BQVectorSearch(VectorSearch):
         return vectors
 
     def _build_faiss_ground_truth(self, vectors, similarity="l2_norm"):
-        import faiss
-        import numpy as np
-
-        vectors_np = np.array(vectors, dtype='float32')
-        dim = vectors_np.shape[1]
-
-        if similarity in ("dot_product", "DOT"):
-            index = faiss.IndexFlatIP(dim)
-        elif similarity in ("cosine", "COSINE"):
-            faiss.normalize_L2(vectors_np)
-            index = faiss.IndexFlatIP(dim)
-        else:
-            index = faiss.IndexFlatL2(dim)
-
-        index.add(vectors_np)
-        self.log.info(f"Built FAISS ground truth index: {index.ntotal} vectors, dim={dim}")
+        index = build_faiss_flat_index(vectors, similarity=similarity)
+        self.log.info(f"Built FAISS ground truth index: {index.ntotal} vectors, dim={index.d}")
         self._faiss_ground_truth = index
         return index
 

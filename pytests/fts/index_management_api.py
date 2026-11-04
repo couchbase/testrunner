@@ -305,7 +305,9 @@ class IndexManagementAPI(FTSBaseTest):
         fts_index = self._cb_cluster.create_fts_index(name=self.sample_index_name, source_name="default",
                                                       collection_index=collection_index, _type=_type, scope=index_scope, collections=index_collections)
         self.wait_for_indexing_complete()
-        self.fts_rest.disable_querying_on_fts_index(fts_index.name)
+        self.assertTrue(self.fts_rest.disable_querying_on_fts_index(
+            fts_index.name, bucket=fts_index._source_name, scope=fts_index.scope),
+            "queryControl/disallow was rejected for %s" % fts_index.name)
         self.sleep(5)
         query = eval(self._input.param("query", str(self.sample_query)))
         if isinstance(query, str):
@@ -324,7 +326,8 @@ class IndexManagementAPI(FTSBaseTest):
 
         self.log.info("now allowing to run query on this index")
 
-        self.fts_rest.enable_querying_on_fts_index(fts_index.name)
+        self.fts_rest.enable_querying_on_fts_index(
+            fts_index.name, bucket=fts_index._source_name, scope=fts_index.scope)
         self.sleep(5)
         hits, matches, _, status= fts_index.execute_query(query,
                                                           zero_results_ok=False,
@@ -349,7 +352,8 @@ class IndexManagementAPI(FTSBaseTest):
             collection_index=collection_index, _type=_type,
             scope=index_scope, collections=index_collections)
         self.wait_for_indexing_complete()
-        self.fts_rest.disable_querying_on_fts_index(fts_index_1.name)
+        self.fts_rest.disable_querying_on_fts_index(
+            fts_index_1.name, bucket=fts_index_1._source_name, scope=fts_index_1.scope)
         self.sleep(5)
         self.generate_random_queries(fts_index_2, self.num_queries, self.query_types)
         self.run_query_and_compare(fts_index_2, n1ql_executor=self._cb_cluster, use_collections=collection_index)
@@ -360,7 +364,8 @@ class IndexManagementAPI(FTSBaseTest):
         fts_index = self._cb_cluster.create_fts_index(name=self.sample_index_name, source_name="default",
                                                       collection_index=collection_index, _type=_type, scope=index_scope, collections=index_collections)
         self.sleep(3)
-        self.fts_rest.disable_querying_on_fts_index(fts_index.name)
+        self.fts_rest.disable_querying_on_fts_index(
+            fts_index.name, bucket=fts_index._source_name, scope=fts_index.scope)
         self.wait_for_indexing_complete()
         self.validate_index_count(equal_bucket_doc_count=True)
 

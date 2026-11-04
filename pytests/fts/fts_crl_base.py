@@ -43,6 +43,23 @@ OUTCOME_OTHER = "other"
 
 REVOCATION_OUTCOMES = frozenset([OUTCOME_REJECTED_TLS, OUTCOME_REJECTED_AUTH])
 
+WINDOWS_DRIVE_PATH = re.compile(r"^([A-Za-z]):/(.*)$")
+
+
+def normalize_node_path(path):
+    return str(path or "").strip().strip('"').replace("\\", "/").rstrip("/")
+
+
+def is_absolute_node_path(path):
+    return path.startswith("/") or bool(WINDOWS_DRIVE_PATH.match(path))
+
+
+def shell_node_path(path):
+    match = WINDOWS_DRIVE_PATH.match(path)
+    if match:
+        return "/cygdrive/{0}/{1}".format(match.group(1).lower(), match.group(2))
+    return path
+
 # A revoked certificate is refused during the TLS handshake, and the peer's
 # alert text is what distinguishes that from the network simply being broken.
 # Without this, a connection reset from flaky infrastructure would be recorded
@@ -344,29 +361,28 @@ class FTSCRLBase(FTSBaseTest):
             self.log.warning("diag/eval datadir lookup failed on {0}: "
                              "{1}".format(server.ip, exc))
             return None
-        value = str(raw or "").strip().strip('"')
+        value = normalize_node_path(raw)
         if DIAG_EVAL_BLOCKED in value:
             self.log.warning(
                 "diag/eval is restricted to localhost on {0}; falling back to "
                 "the CRL settings directory for the datadir.".format(server.ip))
             return None
-        if not value.startswith("/"):
+        if not is_absolute_node_path(value):
             self.log.warning("diag/eval returned a non-absolute datadir on "
                              "{0}: {1!r}".format(server.ip, value))
             return None
-        return value.rstrip("/")
+        return value
 
     def _datadir_via_crl_settings(self):
         """Derive the datadir from the CRL directory ns_server reports."""
         suffix = "/{0}/crls".format(x509main.CHAINFILEPATH)
         try:
-            directory = str(self.get_crl_settings().get("directory") or "").strip()
+            directory = normalize_node_path(self.get_crl_settings().get("directory"))
         except Exception as exc:
             self.log.warning("Could not read CRL settings for the datadir: "
                              "{0}".format(exc))
             return None
-        directory = directory.rstrip("/")
-        if directory.startswith("/") and directory.endswith(suffix):
+        if is_absolute_node_path(directory) and directory.endswith(suffix):
             return directory[: -len(suffix)]
         self.log.warning(
             "CRL settings directory {0!r} does not match the expected "
@@ -393,16 +409,18 @@ class FTSCRLBase(FTSBaseTest):
         an unwritable destination is otherwise invisible until much later.
         """
         local_path = self._write_temp_pem(content_bytes, suffix="-upload.pem")
-        dest_path = "{0}/{1}".format(dest_dir.rstrip("/"), filename)
+        windows = bool(WINDOWS_DRIVE_PATH.match(dest_dir))
+        dest_dir = shell_node_path(dest_dir.rstrip("/"))
+        dest_path = "{0}/{1}".format(dest_dir, filename)
         shell = RemoteMachineShellConnection(server)
         try:
             if make_dir:
-                shell.execute_command("mkdir -p {0}".format(dest_dir))
+                shell.execute_command('mkdir -p "{0}"'.format(dest_dir))
             shell.copy_file_local_to_remote(local_path, dest_path)
-            if chown_dir:
-                shell.execute_command("chown -R couchbase {0}".format(chown_dir))
+            if chown_dir and not windows:
+                shell.execute_command('chown -R couchbase "{0}"'.format(chown_dir))
 
-            out, err = shell.execute_command("ls -l {0}".format(dest_dir))
+            out, err = shell.execute_command('ls -l "{0}"'.format(dest_dir))
             listing = "\n".join(out) if isinstance(out, list) else str(out or "")
             if filename not in listing:
                 self.fail(
@@ -422,8 +440,8 @@ class FTSCRLBase(FTSBaseTest):
         """Drop a CRL straight into the node's configured CRL directory."""
         servers = servers or self._input.servers
         settings = self.get_crl_settings()
-        crl_dir = str(settings.get("directory") or "").strip()
-        if not crl_dir.startswith("/"):
+        crl_dir = normalize_node_path(settings.get("directory"))
+        if not is_absolute_node_path(crl_dir):
             self.fail(
                 "CRL settings 'directory' is not an absolute path ({0!r}); "
                 "cannot place a CRL locally. Full settings: {1}".format(
@@ -1400,14 +1418,14 @@ class FTSCRLBase(FTSBaseTest):
 
     def _fts_log_path(self, node):
         """Resolve fts.log per node."""
-        log_dir = NodeHelper.get_log_dir(node).strip().strip('"')
-        if not log_dir.startswith("/"):
+        log_dir = normalize_node_path(NodeHelper.get_log_dir(node))
+        if not is_absolute_node_path(log_dir):
             self.fail(
                 "Could not resolve the log directory on {0} (got {1!r}). "
                 "/diag/eval is likely restricted to localhost — see the "
                 "warnings from _prepare_nodes_for_crl_tests().".format(
                     node.ip, log_dir))
-        return "{0}/fts.log".format(log_dir)
+        return shell_node_path("{0}/fts.log".format(log_dir))
 
     def fts_log_baselines(self):
         """Line counts per FTS node, so later reads only see new output."""
@@ -1416,7 +1434,7 @@ class FTSCRLBase(FTSBaseTest):
             shell = RemoteMachineShellConnection(node)
             try:
                 out, _ = shell.execute_command(
-                    "wc -l < {0}".format(self._fts_log_path(node)))
+                    'wc -l < "{0}"'.format(self._fts_log_path(node)))
                 text = (out[0] if isinstance(out, list) and out else (out or "")).strip()
                 baselines[node.ip] = int(text) if str(text).isdigit() else 0
             except Exception as exc:
@@ -1434,7 +1452,7 @@ class FTSCRLBase(FTSBaseTest):
             shell = RemoteMachineShellConnection(node)
             try:
                 out, _ = shell.execute_command(
-                    "tail -n +{0} {1}".format(
+                    'tail -n +{0} "{1}"'.format(
                         baselines.get(node.ip, 0) + 1, self._fts_log_path(node)))
                 chunks.append("\n".join(out) if isinstance(out, list) else (out or ""))
             except Exception as exc:

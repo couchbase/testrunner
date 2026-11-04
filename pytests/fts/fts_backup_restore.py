@@ -161,6 +161,11 @@ class BackupRestore(FTSBaseTest):
             # original bucket/scope - is what addresses it after the restore.
             name, bucket, scope = self._remapped_location(resolved_name, ix[1])
             remapped_def = self._fetch_index_def(name, bucket, scope)
+            if not remapped_def and not (scope and scope != "_default"):
+                short = resolved_name.split(".")[-1]
+                legacy_def = self._fetch_index_def(short, None, None)
+                if legacy_def.get('indexDef', {}).get('sourceName') == bucket:
+                    remapped_def = legacy_def
             if not remapped_def:
                 self.fail("Index %s was not found at its remapped location %s "
                           "after restore." % (resolved_name, ix[1]))

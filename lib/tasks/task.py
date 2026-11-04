@@ -7243,6 +7243,7 @@ class SDKLoadDocumentsTask(Task):
                 command = command + " -fu "
                 command = command + ",".join(arr_fields_to_update)
         self.log.info(command)
+        proc = None
         try:
             # Capture stderr too: the java client reports jvm and connection
             # failures there, and it was being thrown away, leaving the
@@ -7267,21 +7268,24 @@ class SDKLoadDocumentsTask(Task):
                             re.sub(r"-p '[^']*'", "-p '<redacted>'", command),
                             stdout or "<empty>", stderr or "<empty>"))
         except Exception as e:
-            proc.terminate()
+            if proc is not None:
+                proc.terminate()
             self.state = FINISHED
             self.set_exception(e)
+            return False
         proc.terminate()
-        self.state = FINISHED
-        self.set_result(True)
+        return True
 
     def execute(self, task_manager):
         if type(self.sdk_docloader.collection) is list:
             start_seq_num_shift = 0
             for c in self.sdk_docloader.collection:
-                self.execute_for_collection(c, start_seq_num_shift)
+                if not self.execute_for_collection(c, start_seq_num_shift):
+                    return
                 start_seq_num_shift = start_seq_num_shift + self.sdk_docloader.upd_del_shift
         else:
-            self.execute_for_collection(self.sdk_docloader.collection)
+            if not self.execute_for_collection(self.sdk_docloader.collection):
+                return
         self.check(task_manager)
         #TODO additional sleep to let ES finish with docs indexing, should be replaced with something more intelligent.
         time.sleep(30)

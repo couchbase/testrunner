@@ -371,7 +371,8 @@ class FTSCallable:
                     else:
                         break
         if not found:
-            self.log.critical(f"Couldn't wait for indexing since index {idx.name} was not found")
+            self.log.critical(f"Couldn't wait for indexing since index "
+                              f"{idx.name if idx is not None else '(any)'} was not found")
 
     def create_alias(self, target_indexes, name=None, alias_def=None, bucket=None, scope=None):
         """
@@ -773,7 +774,11 @@ class FTSCallable:
             else:
                 store.pop("vector_index_fast_merge", None)
         if segment_version is not None:
-            index_body["params"].setdefault("store", {})["segmentVersion"] = int(segment_version)
+            store = index_body["params"].setdefault("store", {})
+            if segment_version == "server_default":
+                store.pop("segmentVersion", None)
+            else:
+                store["segmentVersion"] = int(segment_version)
 
         if self.encode_base64_vector:
             if self.store_in_xattr:
@@ -1026,6 +1031,9 @@ class FTSCallable:
         common_elements = set(listA) & set(listB)
         not_common_elements = set(listA) ^ set(listB)
         self.log.info(f"Elements not common in both lists: {not_common_elements}")
+        if len(listA) == 0 or len(listB) == 0:
+            self.log.info(f"{nameB if len(listB) == 0 else nameA} is empty - scoring this query as a miss")
+            return 0, 0.0
         percentage_exist = (len(common_elements) / len(listB)) * 100
         self.log.info(f"Percentage of elements in {nameB} that exist in {nameA}: {percentage_exist:.2f}%")
         accuracy = 0

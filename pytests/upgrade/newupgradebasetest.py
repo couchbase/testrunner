@@ -2926,8 +2926,9 @@ class NewUpgradeBaseTest(BaseTestCase):
 
         alias_def = {"targets": {}}
         for index in target_indexes:
-            alias_def['targets'][index.name] = {}
-            alias_def['targets'][index.name]['indexUUID'] = index.get_uuid()
+            target = index.full_name
+            alias_def['targets'][target] = {}
+            alias_def['targets'][target]['indexUUID'] = index.get_uuid()
         alias = FTSIndex(cb_cluster, name=alias_name,
                          index_type='fulltext-alias', index_params=alias_def)
         rest = self.get_rest_handle_for_credentials(username, password)

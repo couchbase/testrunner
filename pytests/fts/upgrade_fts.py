@@ -11,7 +11,9 @@ from newupgradebasetest import NewUpgradeBaseTest
 from .fts_callable import FTSCallable
 from scripts.java_sdk_setup import JavaSdkSetup
 from .fts_base import (CouchbaseCluster, FTSIndex, FTSBaseTest, _ScanPlusHashMap, UDFHelper,
-                       FTSConcurrentWorkload, FTSPostChangeValidator, FTSQueryLoadMonitor, OPS)
+                       FTSConcurrentWorkload, FTSPostChangeValidator, FTSQueryLoadMonitor, OPS,
+                       restore_vector_backup, restored_vector_namespaces,
+                       build_faiss_flat_index)
 from lib.membase.helper.bucket_helper import BucketOperationHelper
 from lib.memcached.helper.data_helper import MemcachedClientHelper, VBucketAwareMemcached
 from couchbase_helper.documentgenerator import SDKDataLoader, JsonDocGenerator
@@ -29,6 +31,8 @@ class UpgradeFTS(NewUpgradeBaseTest):
 
     LEGACY_VECTOR_INDEX = "vec_legacy_idx"
     FEATURE_VECTOR_INDEX = "vec_feature_idx"
+    BQ_LEGACY_VECTOR_INDEX = "vec_bq_legacy_idx"
+    BQ_FEATURE_VECTOR_INDEX = "vec_bq_feature_idx"
 
     # Doc-id prefix for the vector corpus. MUST stay off the emp key space the
     # upgrade workload writes to -- see _push_all_vector_data.
@@ -85,6 +89,16 @@ class UpgradeFTS(NewUpgradeBaseTest):
         # Only automatic BQ bar when no threshold is stated: how many times random
         # a quantized index must beat before it counts as returning noise.
         self.bq_chance_multiple = float(self.input.param("bq_chance_multiple", 5))
+        self.bq_dataset = str(self.input.param("bq_dataset", "cars")).lower()
+        self.bq_backup_filename = self.input.param(
+            "vector_backup_filename", "backup_zips/100k_cars_baai_1024.zip")
+        self.bq_s3_bucket = self.input.param("bq_s3_bucket", "gsi-vector-car-backups")
+        self.bq_vector_field = self.input.param("bq_vector_field", "descriptionVector")
+        self.bq_dimension = int(self.input.param("bq_dimension", 1024))
+        self.bq_similarity = self.input.param("bq_similarity", "l2_norm")
+        self._bq_target = None
+        self.bq_num_queries = int(self.input.param("bq_num_queries", 50))
+        self.bq_cars_recall_threshold = float(self.input.param("bq_cars_recall_threshold", 70))
 
         self.ear_reencryption_timeout = self.input.param("ear_reencryption_timeout", 300)
         # keysInUse convergence is a far slower, best-effort signal than the DEK
@@ -2483,7 +2497,8 @@ class UpgradeFTS(NewUpgradeBaseTest):
         """
         return self._version_at_least(self.initial_version, 8, 0)
 
-    def _wait_vector_index_ready(self, index_name, label="", timeout=None, poll=15):
+    def _wait_vector_index_ready(self, index_name, label="", timeout=None, poll=15,
+                                 bucket="_default", scope="_default", min_count=None):
         """Block until an FTS index is really serving, before measuring recall.
 
         A fixed sleep is not enough. A kNN query fired seconds after a rebalance or
@@ -2505,14 +2520,15 @@ class UpgradeFTS(NewUpgradeBaseTest):
         while time.time() < deadline:
             try:
                 count = RestConnection(
-                    self.get_fts_query_node()).get_fts_index_doc_count(index_name)
+                    self.get_fts_query_node()).get_fts_index_doc_count(
+                    index_name, bucket=bucket, scope=scope)
             except Exception as err:
                 log.info(f"{label}waiting for '{index_name}' to answer /count: {err}")
                 count = None
             if count is not None:
                 log.info(f"{label}'{index_name}' indexed doc count: {count} "
                          f"(previous poll {previous})")
-                if count >= self.vector_k and count == previous:
+                if count >= max(self.vector_k, min_count or 0) and count == previous:
                     log.info(f"{label}'{index_name}' is steady at {count} docs - ready")
                     return True
                 previous = count
@@ -2534,7 +2550,7 @@ class UpgradeFTS(NewUpgradeBaseTest):
     VECTOR_END_INDEX = 10010001
 
     def _wait_vector_recall_stable(self, fts_callable, index_name, label="",
-                                   timeout=None, poll=30, delta=1.0):
+                                   timeout=None, poll=30, delta=1.0, measure=None):
         """Re-measure recall until it stops moving, for index types that train.
 
         _wait_vector_index_ready only proves the DOC COUNT is steady. A quantized
@@ -2552,7 +2568,10 @@ class UpgradeFTS(NewUpgradeBaseTest):
         deadline = time.time() + timeout
         trajectory, previous = [], None
         while time.time() < deadline:
-            _, stats = fts_callable.run_vector_queries_stats(index_name=index_name)
+            if measure is not None:
+                stats = measure()
+            else:
+                _, stats = fts_callable.run_vector_queries_stats(index_name=index_name)
             recall = stats.get('fts_recall', 0)
             trajectory.append(recall)
             if previous is not None and abs(recall - previous) <= delta:
@@ -2898,6 +2917,252 @@ class UpgradeFTS(NewUpgradeBaseTest):
                       "\n".join(f"  {k}: {v}" for k, v in errors.items()))
         log.info("test_vector_features_offline_upgrade PASSED")
 
+    def _bq_uses_cars(self, knobs):
+        return 'bq_index_type' in knobs and self.bq_dataset == "cars"
+
+    def _bq_cars_namespace(self):
+        return self._bq_target
+
+    def _bq_use_tls(self):
+        return bool(getattr(self, "use_https", False) or getattr(self, "enforce_tls", False))
+
+    def _bq_cars_index_body(self, index_name, knobs=None, store=None):
+        bucket, scope, collections = self._bq_cars_namespace()
+        knobs = knobs or {}
+        field = {"name": self.bq_vector_field, "type": "vector", "index": True,
+                 "dims": self.bq_dimension, "similarity": self.bq_similarity,
+                 "vector_index_optimized_for": knobs.get('bq_index_type', "recall")}
+        if knobs.get('gpu'):
+            field["gpu"] = True
+        store = dict(store) if store else {"indexType": "scorch"}
+        if knobs.get('fastmerge'):
+            store["vector_index_fast_merge"] = True
+        types = {f"{scope}.{collection}": {
+            "dynamic": False, "enabled": True,
+            "properties": {self.bq_vector_field: {
+                "enabled": True, "dynamic": False, "fields": [dict(field)]}}}
+            for collection in collections}
+        return {
+            "name": index_name,
+            "type": "fulltext-index",
+            "sourceType": "gocbcore",
+            "sourceName": bucket,
+            "sourceParams": {},
+            "planParams": {"maxPartitionsPerPIndex": 1024,
+                           "indexPartitions": int(self.input.param("num_partitions", 1)),
+                           "numReplicas": 0},
+            "params": {
+                "doc_config": {"docid_prefix_delim": "", "docid_regexp": "",
+                               "mode": "scope.collection.type_field", "type_field": "type"},
+                "mapping": {
+                    "default_analyzer": "standard",
+                    "default_datetime_parser": "dateTimeOptional",
+                    "default_field": "_all",
+                    "default_mapping": {"dynamic": True, "enabled": False},
+                    "default_type": "_default",
+                    "docvalues_dynamic": False,
+                    "index_dynamic": True,
+                    "store_dynamic": False,
+                    "type_field": "_type",
+                    "types": types},
+                "store": store}}
+
+    def _bq_cars_restore(self):
+        try:
+            restore_vector_backup(self.master, self.bq_backup_filename, self.bq_s3_bucket,
+                                  region=self.input.param("region", "us-east-1"), log=self.log,
+                                  use_https=self._bq_use_tls())
+        except Exception as err:
+            return [f"could not restore {self.bq_backup_filename}: {err}"]
+        self.sleep(10, "waiting for the restored bucket to be ready")
+        namespaces = restored_vector_namespaces(RestConnection(self.master))
+        log.info(f"Restored namespaces: {namespaces}")
+        if not namespaces:
+            return [f"no namespaces found after restoring {self.bq_backup_filename}"]
+        bucket, scope = namespaces[0]['bucket'], namespaces[0]['scope']
+        collections = [ns['collection'] for ns in namespaces
+                       if ns['bucket'] == bucket and ns['scope'] == scope]
+        self._bq_target = (bucket, scope, collections)
+
+        body = self._bq_cars_index_body(self.BQ_LEGACY_VECTOR_INDEX,
+                                        store={"indexType": "scorch", "segmentVersion": 16})
+        status, content = RestConnection(self.get_fts_query_node()).create_fts_index(
+            self.BQ_LEGACY_VECTOR_INDEX, body, bucket=bucket, scope=scope, mode=True)
+        if not status:
+            return [f"failed to create '{self.BQ_LEGACY_VECTOR_INDEX}' "
+                    f"on {bucket}.{scope}.{collections}: {content}"]
+        log.info(f"'{self.BQ_LEGACY_VECTOR_INDEX}' created on {bucket}.{scope}.{collections}")
+        return []
+
+    def _bq_cars_fetch_vectors(self, node):
+        from datetime import timedelta
+        from couchbase.auth import PasswordAuthenticator
+        from couchbase.cluster import Cluster
+        from couchbase.kv_range_scan import RangeScan
+        from couchbase.options import ClusterOptions, TLSVerifyMode
+        bucket, scope, collections = self._bq_cars_namespace()
+        rest = RestConnection(node)
+        auth = PasswordAuthenticator(rest.username, rest.password)
+        if self._bq_use_tls():
+            cluster = Cluster.connect(f"couchbases://{node.ip}?tls_verify=none",
+                                      ClusterOptions(auth, tls_verify=TLSVerifyMode.NONE))
+        else:
+            cluster = Cluster.connect(f"couchbase://{node.ip}", ClusterOptions(auth))
+        doc_ids, vectors = [], []
+        try:
+            cluster.wait_until_ready(timedelta(seconds=60))
+            for collection in collections:
+                coll = cluster.bucket(bucket).scope(scope).collection(collection)
+                for row in coll.scan(RangeScan()):
+                    body = row.content_as[dict]
+                    vec = body.get(self.bq_vector_field) if isinstance(body, dict) else None
+                    if isinstance(vec, list) and len(vec) == self.bq_dimension:
+                        doc_ids.append(row.id)
+                        vectors.append(vec)
+        finally:
+            cluster.close()
+        log.info(f"fetched {len(vectors)} '{self.bq_vector_field}' vectors from "
+                 f"{bucket}.{scope}.{collections}")
+        return doc_ids, vectors
+
+    def _bq_cars_recall(self, index_name, ground_truth, doc_ids, query_vectors):
+        import numpy as np
+        bucket, scope, _ = self._bq_cars_namespace()
+        rest = RestConnection(self.get_fts_query_node())
+        k = int(self.vector_k)
+        recalls, failures = [], 0
+        for qvec in query_vectors:
+            probe = np.array([qvec], dtype='float32')
+            if self.bq_similarity in ("cosine", "COSINE"):
+                probe = probe / max(np.linalg.norm(probe), 1e-12)
+            _, idx = ground_truth.search(probe, k)
+            truth = {doc_ids[i] for i in idx[0] if 0 <= i < len(doc_ids)}
+            query = {"query": {"match_none": {}},
+                     "knn": [{"field": self.bq_vector_field, "vector": qvec, "k": k}],
+                     "size": k, "explain": False, "ctl": {"timeout": 60000}}
+            try:
+                hits, matches, _, _ = rest.run_fts_query(index_name, query,
+                                                         bucket=bucket, scope=scope)
+            except Exception as err:
+                failures += 1
+                log.warning(f"kNN query on '{index_name}' failed: {err}")
+                continue
+            if hits == -1 or not isinstance(matches, list):
+                failures += 1
+                log.warning(f"kNN query on '{index_name}' returned an error: {matches}")
+                continue
+            got = {m.get('id') for m in matches[:k]}
+            recalls.append(100.0 * len(got & truth) / k)
+        recall = round(sum(recalls) / len(recalls), 2) if recalls else 0
+        stats = {'index_name': index_name, 'fts_recall': recall,
+                 'queries': len(recalls), 'query_failures': failures}
+        self.log.info(f"cars recall on '{index_name}': {stats}")
+        return stats
+
+    def _bq_cars_measure(self, index_name, label, ground_truth, doc_ids, query_vectors):
+        bucket, scope, _ = self._bq_cars_namespace()
+        self._wait_vector_index_ready(index_name, label=label, bucket=bucket, scope=scope,
+                                      min_count=len(doc_ids))
+        trajectory = self._wait_vector_recall_stable(
+            None, index_name, label=label,
+            measure=lambda: self._bq_cars_recall(index_name, ground_truth, doc_ids, query_vectors))
+        return self._bq_cars_recall(index_name, ground_truth, doc_ids, query_vectors), trajectory
+
+    def _bq_cars_post_upgrade_checks(self, knobs):
+        errors = {}
+        restore_errors = self._bq_cars_restore()
+        if restore_errors:
+            return {'bq_cars_restore': restore_errors}
+        bucket, scope, _ = self._bq_cars_namespace()
+        kv_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+        kv_node = kv_nodes[0] if kv_nodes else self.master
+        doc_ids, vectors = self._bq_cars_fetch_vectors(kv_node)
+        if len(vectors) < self.vector_k:
+            return {'bq_cars_restore': [
+                f"{self.bq_backup_filename} restored only {len(vectors)} docs carrying "
+                f"'{self.bq_vector_field}' into {bucket}.{scope}"]}
+
+        ground_truth = build_faiss_flat_index(vectors, similarity=self.bq_similarity)
+        rng = random.Random(len(vectors))
+        query_vectors = [vectors[i] for i in
+                         rng.sample(range(len(vectors)), min(self.bq_num_queries, len(vectors)))]
+
+        flat, _ = self._bq_cars_measure(self.BQ_LEGACY_VECTOR_INDEX, "[bq cars flat] ",
+                                        ground_truth, doc_ids, query_vectors)
+        if flat['query_failures'] or not flat['queries']:
+            errors['bq_cars_flat_query'] = [
+                f"'{self.BQ_LEGACY_VECTOR_INDEX}' could not answer kNN queries: {flat}"]
+
+        rest = RestConnection(self.get_fts_query_node())
+        status, current = rest.get_fts_index_definition(self.BQ_LEGACY_VECTOR_INDEX,
+                                                        bucket=bucket, scope=scope)
+        if not status:
+            errors['bq_cars_legacy_update'] = [
+                f"could not read '{self.BQ_LEGACY_VECTOR_INDEX}': {current}"]
+        else:
+            index_def = current['indexDef']
+            body = self._bq_cars_index_body(self.BQ_LEGACY_VECTOR_INDEX, knobs,
+                                            store=index_def.get('params', {}).get('store'))
+            body['uuid'] = index_def.get('uuid', "")
+            body['planParams'].update(index_def.get('planParams') or {})
+            status, content = rest.update_fts_index(self.BQ_LEGACY_VECTOR_INDEX, body,
+                                                    bucket=bucket, scope=scope, mode=True)
+            if not status:
+                errors['bq_cars_legacy_update'] = [
+                    f"could not enable {self._vector_feature_label(knobs)} on "
+                    f"'{self.BQ_LEGACY_VECTOR_INDEX}': {content}"]
+            else:
+                self.sleep(30, f"letting '{self.BQ_LEGACY_VECTOR_INDEX}' start rebuilding")
+                stats, trajectory = self._bq_cars_measure(
+                    self.BQ_LEGACY_VECTOR_INDEX, "[bq cars feature-enable] ",
+                    ground_truth, doc_ids, query_vectors)
+                for key, value in self._check_bq_recall(
+                        knobs, stats, flat, trajectory, self.BQ_LEGACY_VECTOR_INDEX,
+                        corpus=len(vectors), threshold=self.bq_cars_recall_threshold).items():
+                    errors[f"{key}[{self.BQ_LEGACY_VECTOR_INDEX}]"] = value
+
+        body = self._bq_cars_index_body(self.BQ_FEATURE_VECTOR_INDEX, knobs)
+        status, content = rest.create_fts_index(self.BQ_FEATURE_VECTOR_INDEX, body,
+                                                bucket=bucket, scope=scope, mode=True)
+        if not status:
+            errors['bq_cars_feature_create'] = [
+                f"could not create a {self._vector_feature_label(knobs)} index on "
+                f"{bucket}.{scope}: {content}"]
+            return errors
+        def_errors = self._validate_bq_cars_definition(self.BQ_FEATURE_VECTOR_INDEX, knobs)
+        if def_errors:
+            errors['bq_cars_feature_definition'] = def_errors
+        stats, trajectory = self._bq_cars_measure(
+            self.BQ_FEATURE_VECTOR_INDEX, "[bq cars feature] ",
+            ground_truth, doc_ids, query_vectors)
+        for key, value in self._check_bq_recall(
+                knobs, stats, flat, trajectory, self.BQ_FEATURE_VECTOR_INDEX,
+                corpus=len(vectors), threshold=self.bq_cars_recall_threshold).items():
+            errors[f"{key}[{self.BQ_FEATURE_VECTOR_INDEX}]"] = value
+        return errors
+
+    def _validate_bq_cars_definition(self, index_name, knobs):
+        bucket, scope, collections = self._bq_cars_namespace()
+        status, index_def = RestConnection(self.get_fts_query_node()).get_fts_index_definition(
+            index_name, bucket=bucket, scope=scope)
+        if not status:
+            return [f"could not read definition of '{index_name}': {index_def}"]
+        params = index_def['indexDef'].get('params', {})
+        errors = []
+        for collection in collections:
+            prop = (params.get('mapping', {}).get('types', {}).get(f"{scope}.{collection}", {})
+                    .get('properties', {}).get(self.bq_vector_field, {}))
+            field = (prop.get('fields') or [{}])[0]
+            if field.get('vector_index_optimized_for') != knobs.get('bq_index_type'):
+                errors.append(f"'{index_name}' {scope}.{collection}: vector_index_optimized_for="
+                              f"{field.get('vector_index_optimized_for')!r}, expected "
+                              f"{knobs.get('bq_index_type')!r}")
+            if knobs.get('gpu') and not field.get('gpu'):
+                errors.append(f"'{index_name}' {scope}.{collection}: gpu not set: {field}")
+        if knobs.get('fastmerge') and not params.get('store', {}).get('vector_index_fast_merge'):
+            errors.append(f"'{index_name}': vector_index_fast_merge not set: {params.get('store')}")
+        return errors
+
     def _vector_post_upgrade_checks(self, fts_callable, knobs, baseline):
         """Shared post-upgrade stage for the online and offline vector tests."""
         errors = {}
@@ -2905,6 +3170,10 @@ class UpgradeFTS(NewUpgradeBaseTest):
         survived = self._validate_legacy_index_survived(fts_callable, baseline, "post-upgrade")
         if survived:
             errors['post_legacy_index'] = survived
+
+        if self._bq_uses_cars(knobs):
+            errors.update(self._bq_cars_post_upgrade_checks(knobs))
+            return errors
 
         result, status = fts_callable.update_vector_index(
             False, False, self.LEGACY_VECTOR_INDEX, dimensions=self.vector_dimension, **knobs, node=self.get_fts_query_node())
@@ -2942,7 +3211,8 @@ class UpgradeFTS(NewUpgradeBaseTest):
         plans = self.construct_custom_plan_params(0, self.input.param("num_partitions", 1))
         result, status = fts_callable.create_vector_index(
             False, False, self.FEATURE_VECTOR_INDEX, plans,
-            dimensions=self.vector_dimension, **knobs, node=self.get_fts_query_node())
+            dimensions=self.vector_dimension, **knobs, node=self.get_fts_query_node(),
+            segment_version="server_default")
         if status != 200:
             errors['post_feature_index_create'] = [
                 f"could not create a {self._vector_feature_label(knobs)} index on the "
@@ -2999,7 +3269,8 @@ class UpgradeFTS(NewUpgradeBaseTest):
                           "still moving when sampled, so treat it as provisional."))
         return detail
 
-    def _check_bq_recall(self, knobs, stats, baseline, trajectory=None, index_name=""):
+    def _check_bq_recall(self, knobs, stats, baseline, trajectory=None, index_name="",
+                         corpus=None, threshold=None):
         """Gate a quantized index on a BQ-appropriate bar, never the flat one.
 
         expected_accuracy_and_recall is calibrated for the FLAT index (it recalls
@@ -3015,7 +3286,8 @@ class UpgradeFTS(NewUpgradeBaseTest):
         who knows the expected figure can set it.
         """
         recall = stats.get('fts_recall', 0)
-        corpus = max(1, self.VECTOR_END_INDEX - 10000001)
+        corpus = max(1, corpus if corpus else self.VECTOR_END_INDEX - 10000001)
+        threshold = self.bq_recall_threshold if threshold is None else threshold
         chance = 100.0 * min(self.vector_k, corpus) / corpus
         floor = chance * self.bq_chance_multiple
         context = (f"{self._vector_feature_label(knobs)} recall {recall}% "
@@ -3024,16 +3296,16 @@ class UpgradeFTS(NewUpgradeBaseTest):
         if trajectory:
             context += f", stable across re-measurement {trajectory}"
 
-        if self.bq_recall_threshold is not None:
-            if recall < float(self.bq_recall_threshold):
+        if threshold is not None:
+            if recall < float(threshold):
                 return {'post_feature_recall': [
                     f"{context} is below bq_recall_threshold="
-                    f"{self.bq_recall_threshold}"]}
+                    f"{threshold}"]}
             # self.log, not the module logger: `log` stops reaching the console
             # after the first test in a suite run, and these two lines exist
             # specifically to be read.
             self.log.info(f"BQ recall OK: {context} "
-                          f">= bq_recall_threshold={self.bq_recall_threshold}")
+                          f">= bq_recall_threshold={threshold}")
             return {}
 
         if recall < floor:
@@ -3890,7 +4162,16 @@ class UpgradeFTS(NewUpgradeBaseTest):
         fts_callable.wait_for_indexing_complete(self.num_items)
         return index
 
-    def _check_deep_pagination(self, index, sort_type, label):
+    @staticmethod
+    def _human_sort_value(value, sort_type):
+        if sort_type == "numeric":
+            text = repr(float(value))
+            return text[:-2] if text.endswith(".0") else text
+        if sort_type == "datetime":
+            return str(value)
+        return None
+
+    def _check_deep_pagination(self, index, sort_type, label, human_anchor=False):
         """search_after / search_before must line up with a full ordered scan."""
         errors = []
         partial_size = self.input.param("partial_size", 2)
@@ -3916,7 +4197,18 @@ class UpgradeFTS(NewUpgradeBaseTest):
                     f"(hits={all_hits}, matches={len(all_matches or [])})"]
         all_ids = [m['id'] for m in all_matches]
 
-        anchor = all_matches[start_index].get('decoded_sort', all_matches[start_index]['sort'])
+        anchor_match = all_matches[start_index]
+        if human_anchor:
+            field = {"numeric": "salary", "datetime": "join_date"}.get(sort_type)
+            value = (anchor_match.get('fields') or {}).get(field) if field else None
+            human = self._human_sort_value(value, sort_type) if value is not None else None
+            if human is None:
+                return [f"[{label}/{sort_type}] cannot build a human-readable anchor "
+                        f"(field={field}, value={value}); the probe needs a numeric or "
+                        f"datetime sort"]
+            anchor = [human, anchor_match['id']]
+        else:
+            anchor = anchor_match.get('decoded_sort', anchor_match['sort'])
         after_q = dict(base_query, size=partial_size, search_after=anchor)
         _, after_matches, _, _ = cluster.run_fts_query(index.name, after_q)
         for i, match in enumerate(after_matches or []):
@@ -3953,7 +4245,8 @@ class UpgradeFTS(NewUpgradeBaseTest):
         fts_callable.load_data(self.num_items)
         index = self._create_deep_pagination_index(fts_callable, self.DEEP_PAGINATION_INDEX)
 
-        pre = self._check_deep_pagination(index, sort_types[0], "Stage 0")
+        pre = self._check_deep_pagination(index, sort_types[0], "Stage 0",
+                                          human_anchor=True)
         if not pre:
             errors['s0_worked'] = (f"deep pagination over a {sort_types[0]} sort already worked "
                                    f"on the pre-upgrade build - either the cluster is not "
@@ -4087,16 +4380,34 @@ class UpgradeFTS(NewUpgradeBaseTest):
         for task in self.cb_cluster.async_load_all_buckets_from_generator(loader):
             task.result()
 
-        index = self.cb_cluster.create_hierarchical_fts_index(
-            name=self.HIERARCHICAL_INDEX, source_name="default")
-        self.sleep(self.vector_index_build_wait, "letting the hierarchical index build")
+        index = None
+        indexed_before = hits_before = 0
+        if self._version_at_least(self.initial_version, 8, 1):
+            index = self.cb_cluster.create_hierarchical_fts_index(
+                name=self.HIERARCHICAL_INDEX, source_name="default")
+            self.sleep(self.vector_index_build_wait, "letting the hierarchical index build")
 
-        indexed_before = index.get_indexed_doc_count()
-        hits_before, _, _, status = index.execute_query(query={"match_all": {}},
-                                                        zero_results_ok=True)
-        log.info(f"Pre-upgrade hierarchical index: {indexed_before} docs, {hits_before} hits")
-        if not indexed_before:
-            self.fail("pre-upgrade hierarchical index indexed 0 docs")
+            indexed_before = index.get_indexed_doc_count()
+            hits_before, _, _, status = index.execute_query(query={"match_all": {}},
+                                                            zero_results_ok=True)
+            log.info(f"Pre-upgrade hierarchical index: {indexed_before} docs, {hits_before} hits")
+            if not indexed_before:
+                self.fail("pre-upgrade hierarchical index indexed 0 docs")
+        else:
+            log.info("=" * 20 + f" Stage 0: hierarchical index must be rejected on "
+                                f"{self.initial_version}")
+            try:
+                self.cb_cluster.create_hierarchical_fts_index(
+                    name=self.HIERARCHICAL_INDEX, source_name="default")
+            except Exception as err:
+                log.info(f"Stage 0: rejected as expected on the pre-8.1 build: {err}")
+            else:
+                errors['s0_accepted'] = (f"a hierarchical (nested) index was accepted on "
+                                         f"pre-8.1 initial_version={self.initial_version}")
+                try:
+                    self.cb_cluster.delete_fts_index(self.HIERARCHICAL_INDEX)
+                except Exception as err:
+                    log.warning(f"could not clean up '{self.HIERARCHICAL_INDEX}': {err}")
 
         fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False,
                                    servers=self.servers)
@@ -4107,18 +4418,19 @@ class UpgradeFTS(NewUpgradeBaseTest):
                                       driver=fts_callable, index=index)
 
         log.info("=" * 20 + " Post-upgrade hierarchical checks")
-        indexed_after = index.get_indexed_doc_count()
-        if indexed_after < indexed_before:
-            errors['doc_count'] = (f"hierarchical index lost docs across the upgrade: "
-                                   f"{indexed_before} -> {indexed_after}")
+        if index is not None:
+            indexed_after = index.get_indexed_doc_count()
+            if indexed_after < indexed_before:
+                errors['doc_count'] = (f"hierarchical index lost docs across the upgrade: "
+                                       f"{indexed_before} -> {indexed_after}")
 
-        hits_after, _, _, status = index.execute_query(query={"match_all": {}},
-                                                       zero_results_ok=True)
-        if hits_after == -1 or status == 'fail':
-            errors['query'] = f"hierarchical index could not be queried after upgrade: {status}"
-        elif hits_after < hits_before:
-            errors['hits'] = (f"hierarchical query lost hits across the upgrade: "
-                              f"{hits_before} -> {hits_after}")
+            hits_after, _, _, status = index.execute_query(query={"match_all": {}},
+                                                           zero_results_ok=True)
+            if hits_after == -1 or status == 'fail':
+                errors['query'] = f"hierarchical index could not be queried after upgrade: {status}"
+            elif hits_after < hits_before:
+                errors['hits'] = (f"hierarchical query lost hits across the upgrade: "
+                                  f"{hits_before} -> {hits_after}")
 
         try:
             new_index = self.cb_cluster.create_hierarchical_fts_index(

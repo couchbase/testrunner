@@ -1398,113 +1398,13 @@ class VectorSearch(FTSBaseTest):
 
     def test_basic_vector_search_store_all(self):
 
-        indexes = []
+        all_stats = []
+        bad_indexes = []
 
         combinations = [['vector_data', 'vector', False, False], ['vector_encoded', 'vector_base64', True, True],
                         ['vector_data', 'vector', True, False], ['vector_data_base64', 'vector_base64', False, True],
                         ['vector_data', 'vector_base64', False, True], ['vector_encoded', 'vector', True, False],
                         ['vector_data', 'vector_base64', True, True], ['vector_data_base64', 'vector', False, False]]
-
-        containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client)
-
-
-
-        # docs not in xattr as vectors
-        self.store_in_xattr = False
-
-        self.encode_base64_vector = False
-        bucketvsdataset = self.load_vector_data(containers, dataset=self.vector_dataset, python_loader_toggle=True,
-                                                provideDefaultDocs=False)
-        idx = [("i1", "b1.s1.c1")]
-        vector_fields = self._build_vector_fields()
-        index = self._create_fts_index_parameterized(field_name="vector_data",
-                                                     field_type="vector",
-                                                     test_indexes=idx,
-                                                     vector_fields=vector_fields,
-                                                     create_vector_index=True,
-                                                     extra_fields=[{"sno": "number"}],
-                                                     xattr_flag=False,
-                                                     base64_flag=False,
-                                                     store_all_flag=True)
-
-        indexes.append(index[0])
-        index[0]['dataset'] = bucketvsdataset['bucket_name']
-        index_obj = next((item for item in index if item['name'] == "i1"), None)['index_obj']
-        index_obj.faiss_index = self.create_faiss_index_from_train_data(index[0]['dataset'])
-
-        self.store_in_xattr = True
-        self.encode_base64_vector = True
-        bucketvsdataset = self.load_vector_data(containers, dataset=self.vector_dataset, python_loader_toggle=False,
-                                                provideDefaultDocs=False)
-        idx = [("i2", "b1.s1.c1")]
-        vector_fields = self._build_vector_fields()
-        index = self._create_fts_index_parameterized(field_name="vector_encoded",
-                                                     field_type="vector_base64",
-                                                     test_indexes=idx,
-                                                     vector_fields=vector_fields,
-                                                     create_vector_index=True,
-                                                     extra_fields=[{"sno": "number"}],
-                                                     xattr_flag=True,
-                                                     base64_flag=True,
-                                                     store_all_flag=True)
-
-        indexes.append(index[0])
-        index[0]['dataset'] = bucketvsdataset['bucket_name']
-        index_obj = next((item for item in index if item['name'] == "i2"), None)['index_obj']
-        index_obj.faiss_index = self.create_faiss_index_from_train_data(index[0]['dataset'])
-
-        self.encode_base64_vector = False
-        bucketvsdataset = self.load_vector_data(containers, dataset=self.vector_dataset, python_loader_toggle=False,
-                                                provideDefaultDocs=False)
-
-        idx = [("i3", "b1.s1.c1")]
-        vector_fields = self._build_vector_fields()
-        index = self._create_fts_index_parameterized(field_name="vector_data",
-                                                     field_type="vector",
-                                                     test_indexes=idx,
-                                                     vector_fields=vector_fields,
-                                                     create_vector_index=True,
-                                                     extra_fields=[{"sno": "number"}],
-                                                     xattr_flag=True,
-                                                     base64_flag=False,
-                                                     store_all_flag=True
-                                                     )
-
-        indexes.append(index[0])
-        index[0]['dataset'] = bucketvsdataset['bucket_name']
-        index_obj = next((item for item in index if item['name'] == "i3"), None)['index_obj']
-        index_obj.faiss_index = self.create_faiss_index_from_train_data(index[0]['dataset'])
-
-        self.store_in_xattr = False
-        self.encode_base64_vector = True
-        bucketvsdataset = self.load_vector_data(containers, dataset=self.vector_dataset, python_loader_toggle=False,
-                                                provideDefaultDocs=False)
-
-        idx = [("i4", "b1.s1.c1")]
-        vector_fields = self._build_vector_fields()
-        index = self._create_fts_index_parameterized(field_name="vector_data_base64",
-                                                     field_type="vector_base64",
-                                                     test_indexes=idx,
-                                                     vector_fields=vector_fields,
-                                                     create_vector_index=True,
-                                                     extra_fields=[{"sno": "number"}],
-                                                     xattr_flag=False,
-                                                     base64_flag=True,
-                                                     store_all_flag=True
-                                                     )
-
-        indexes.append(index[0])
-        index[0]['dataset'] = bucketvsdataset['bucket_name']
-        index_obj = next((item for item in index if item['name'] == "i4"), None)['index_obj']
-        index_obj.faiss_index = self.create_faiss_index_from_train_data(index[0]['dataset'])
-
-        for i in range(4):
-            indexes.append(indexes[i])
-
-        time.sleep(200)
-
-        all_stats = []
-        bad_indexes = []
 
         query_schema = [{"query": {"match_none": {}}, "explain": True, "fields": ["*"],
                          "knn": [{"field": "vector_data", "k": self.k,
@@ -1533,67 +1433,170 @@ class VectorSearch(FTSBaseTest):
                                   "vector": ""}]}
                         ]
 
-        schema_counter = 0
-        for index in indexes:
+        containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client)
 
-            if self.read_from_replica:
-                self.read_from_replica_setup(index['index_obj'])
 
-            self.query = query_schema[schema_counter]
 
-            index_stats = {'index_name': '', 'fts_accuracy': 0, 'fts_recall': 0, 'faiss_accuracy': 0,
-                           'faiss_recall': 0}
-            index['dataset'] = bucketvsdataset['bucket_name']
-            queries = self.get_query_vectors(index['dataset'])
-            neighbours = self.get_groundtruth_file(index['dataset'])
-            fts_accuracy = []
-            fts_recall = []
-            faiss_accuracy = []
-            faiss_recall = []
-            perform_faiss_validation = True
+        # docs not in xattr as vectors
+        self.store_in_xattr = False
 
-            for count, q in enumerate(queries[:self.num_queries]):
-                self.vector_field_name = combinations[schema_counter][0]
-                self.vector_field_type = combinations[schema_counter][1]
-                self.store_in_xattr = combinations[schema_counter][2]
-                self.encode_base64_vector = combinations[schema_counter][3]
+        self.encode_base64_vector = False
+        bucketvsdataset = self.load_vector_data(containers, dataset=self.vector_dataset, python_loader_toggle=True,
+                                                provideDefaultDocs=False)
+        idx = [("i1", "b1.s1.c1")]
+        vector_fields = self._build_vector_fields()
+        index = self._create_fts_index_parameterized(field_name="vector_data",
+                                                     field_type="vector",
+                                                     test_indexes=idx,
+                                                     vector_fields=vector_fields,
+                                                     create_vector_index=True,
+                                                     extra_fields=[{"sno": "number"}],
+                                                     xattr_flag=False,
+                                                     base64_flag=False,
+                                                     store_all_flag=True)
 
-                _, _, _, recall_and_accuracy = self.run_vector_query(vector=q.tolist(), index=index['index_obj'],
-                                                                     neighbours=neighbours[count],
-                                                                     perform_faiss_validation=perform_faiss_validation,
-                                                                     base64Flag=self.encode_base64_vector,
-                                                                     store_all_flag=True,bucket_name=self.index_src,validation_data=self.validation_data,fts_nodes=self.fts_nodes,variable_node=self.fts_target_node)
-                fts_accuracy.append(recall_and_accuracy['fts_accuracy'])
-                fts_recall.append(recall_and_accuracy['fts_recall'])
-                if perform_faiss_validation:
-                    faiss_accuracy.append(recall_and_accuracy['faiss_accuracy'])
-                    faiss_recall.append(recall_and_accuracy['faiss_recall'])
+        index[0]['dataset'] = bucketvsdataset['bucket_name']
+        index_obj = next((item for item in index if item['name'] == "i1"), None)['index_obj']
+        index_obj.faiss_index = self.create_faiss_index_from_train_data(index[0]['dataset'])
+        self._measure_store_all_index(index[0], [0, 4], combinations, query_schema,
+                                      bucketvsdataset, all_stats, bad_indexes)
 
-            self.log.info(f"fts_accuracy: {fts_accuracy}")
-            self.log.info(f"fts_recall: {fts_recall}")
-            if perform_faiss_validation:
-                self.log.info(f"faiss_accuracy: {faiss_accuracy}")
-                self.log.info(f"faiss_recall: {faiss_recall}")
+        self.store_in_xattr = True
+        self.encode_base64_vector = True
+        bucketvsdataset = self.load_vector_data(containers, dataset=self.vector_dataset, python_loader_toggle=False,
+                                                provideDefaultDocs=False)
+        idx = [("i2", "b1.s1.c1")]
+        vector_fields = self._build_vector_fields()
+        index = self._create_fts_index_parameterized(field_name="vector_encoded",
+                                                     field_type="vector_base64",
+                                                     test_indexes=idx,
+                                                     vector_fields=vector_fields,
+                                                     create_vector_index=True,
+                                                     extra_fields=[{"sno": "number"}],
+                                                     xattr_flag=True,
+                                                     base64_flag=True,
+                                                     store_all_flag=True)
 
-            index_stats['index_name'] = index['index_obj'].name
-            index_stats['fts_accuracy'] = (sum(fts_accuracy) / len(fts_accuracy)) * 100
-            index_stats['fts_recall'] = (sum(fts_recall) / len(fts_recall))
+        index[0]['dataset'] = bucketvsdataset['bucket_name']
+        index_obj = next((item for item in index if item['name'] == "i2"), None)['index_obj']
+        index_obj.faiss_index = self.create_faiss_index_from_train_data(index[0]['dataset'])
+        self._measure_store_all_index(index[0], [1, 5], combinations, query_schema,
+                                      bucketvsdataset, all_stats, bad_indexes)
 
-            if perform_faiss_validation:
-                index_stats['faiss_accuracy'] = (sum(faiss_accuracy) / len(faiss_accuracy)) * 100
-                index_stats['faiss_recall'] = (sum(faiss_recall) / len(faiss_recall))
+        self.encode_base64_vector = False
+        bucketvsdataset = self.load_vector_data(containers, dataset=self.vector_dataset, python_loader_toggle=False,
+                                                provideDefaultDocs=False)
 
-            if index_stats['fts_accuracy'] < self.expected_accuracy_and_recall or index_stats[
-                'fts_recall'] < self.expected_accuracy_and_recall:
-                bad_indexes.append(index_stats)
-            all_stats.append(index_stats)
-            schema_counter += 1
+        idx = [("i3", "b1.s1.c1")]
+        vector_fields = self._build_vector_fields()
+        index = self._create_fts_index_parameterized(field_name="vector_data",
+                                                     field_type="vector",
+                                                     test_indexes=idx,
+                                                     vector_fields=vector_fields,
+                                                     create_vector_index=True,
+                                                     extra_fields=[{"sno": "number"}],
+                                                     xattr_flag=True,
+                                                     base64_flag=False,
+                                                     store_all_flag=True
+                                                     )
 
-            time.sleep(30)
+        index[0]['dataset'] = bucketvsdataset['bucket_name']
+        index_obj = next((item for item in index if item['name'] == "i3"), None)['index_obj']
+        index_obj.faiss_index = self.create_faiss_index_from_train_data(index[0]['dataset'])
+        self._measure_store_all_index(index[0], [2, 6], combinations, query_schema,
+                                      bucketvsdataset, all_stats, bad_indexes)
+
+        self.store_in_xattr = False
+        self.encode_base64_vector = True
+        bucketvsdataset = self.load_vector_data(containers, dataset=self.vector_dataset, python_loader_toggle=False,
+                                                provideDefaultDocs=False)
+
+        idx = [("i4", "b1.s1.c1")]
+        vector_fields = self._build_vector_fields()
+        index = self._create_fts_index_parameterized(field_name="vector_data_base64",
+                                                     field_type="vector_base64",
+                                                     test_indexes=idx,
+                                                     vector_fields=vector_fields,
+                                                     create_vector_index=True,
+                                                     extra_fields=[{"sno": "number"}],
+                                                     xattr_flag=False,
+                                                     base64_flag=True,
+                                                     store_all_flag=True
+                                                     )
+
+        index[0]['dataset'] = bucketvsdataset['bucket_name']
+        index_obj = next((item for item in index if item['name'] == "i4"), None)['index_obj']
+        index_obj.faiss_index = self.create_faiss_index_from_train_data(index[0]['dataset'])
+        self._measure_store_all_index(index[0], [3, 7], combinations, query_schema,
+                                      bucketvsdataset, all_stats, bad_indexes)
 
         self.log.info(f"Accuracy and recall for queries run on each index : {all_stats}")
         if len(bad_indexes) != 0:
             self.fail(f"Indexes have poor accuracy and recall: {bad_indexes}")
+
+    def _measure_store_all_index(self, index, schema_ids, combinations, query_schema,
+                                 bucketvsdataset, all_stats, bad_indexes):
+        saved = (self.vector_field_name, self.vector_field_type,
+                 self.store_in_xattr, self.encode_base64_vector)
+        time.sleep(200)
+        try:
+            for schema_counter in schema_ids:
+                if self.read_from_replica:
+                    self.read_from_replica_setup(index['index_obj'])
+
+                self.query = query_schema[schema_counter]
+
+                index_stats = {'index_name': '', 'fts_accuracy': 0, 'fts_recall': 0, 'faiss_accuracy': 0,
+                               'faiss_recall': 0}
+                index['dataset'] = bucketvsdataset['bucket_name']
+                queries = self.get_query_vectors(index['dataset'])
+                neighbours = self.get_groundtruth_file(index['dataset'])
+                fts_accuracy = []
+                fts_recall = []
+                faiss_accuracy = []
+                faiss_recall = []
+                perform_faiss_validation = True
+
+                for count, q in enumerate(queries[:self.num_queries]):
+                    self.vector_field_name = combinations[schema_counter][0]
+                    self.vector_field_type = combinations[schema_counter][1]
+                    self.store_in_xattr = combinations[schema_counter][2]
+                    self.encode_base64_vector = combinations[schema_counter][3]
+
+                    _, _, _, recall_and_accuracy = self.run_vector_query(vector=q.tolist(), index=index['index_obj'],
+                                                                         neighbours=neighbours[count],
+                                                                         perform_faiss_validation=perform_faiss_validation,
+                                                                         base64Flag=self.encode_base64_vector,
+                                                                         store_all_flag=True,bucket_name=self.index_src,validation_data=self.validation_data,fts_nodes=self.fts_nodes,variable_node=self.fts_target_node)
+                    fts_accuracy.append(recall_and_accuracy['fts_accuracy'])
+                    fts_recall.append(recall_and_accuracy['fts_recall'])
+                    if perform_faiss_validation:
+                        faiss_accuracy.append(recall_and_accuracy['faiss_accuracy'])
+                        faiss_recall.append(recall_and_accuracy['faiss_recall'])
+
+                self.log.info(f"fts_accuracy: {fts_accuracy}")
+                self.log.info(f"fts_recall: {fts_recall}")
+                if perform_faiss_validation:
+                    self.log.info(f"faiss_accuracy: {faiss_accuracy}")
+                    self.log.info(f"faiss_recall: {faiss_recall}")
+
+                index_stats['index_name'] = index['index_obj'].name
+                index_stats['fts_accuracy'] = (sum(fts_accuracy) / len(fts_accuracy)) * 100
+                index_stats['fts_recall'] = (sum(fts_recall) / len(fts_recall))
+
+                if perform_faiss_validation:
+                    index_stats['faiss_accuracy'] = (sum(faiss_accuracy) / len(faiss_accuracy)) * 100
+                    index_stats['faiss_recall'] = (sum(faiss_recall) / len(faiss_recall))
+
+                if index_stats['fts_accuracy'] < self.expected_accuracy_and_recall or index_stats[
+                    'fts_recall'] < self.expected_accuracy_and_recall:
+                    bad_indexes.append(index_stats)
+                all_stats.append(index_stats)
+
+                time.sleep(30)
+        finally:
+            (self.vector_field_name, self.vector_field_type,
+             self.store_in_xattr, self.encode_base64_vector) = saved
 
     def test_vector_search_wrong_parameters(self):
 
@@ -1941,7 +1944,7 @@ class VectorSearch(FTSBaseTest):
             for q in queries[:self.num_queries]:
 
                 n1ql_hits, hits, matches, _ = self.run_vector_query(vector=q.tolist(), index=index['index_obj'],
-
+                                                                    continue_on_failure=True,
                                                                     validate_result_count=False,
                                                                     bucket_name=self.index_src,
                                                                     validation_data=self.validation_data,
@@ -3062,7 +3065,7 @@ class VectorSearch(FTSBaseTest):
                 bad_indexes.append(index_stats)
             all_stats.append(index_stats)
 
-        self.query["knn"][0]["params"]["ivf_nprobe_pct"] = 50
+        self.query["knn"][0].setdefault("params", {})["ivf_nprobe_pct"] = 50
 
         for index in indexes:
             index_stats = {'index_name': '', 'fts_accuracy': 0, 'fts_recall': 0, 'faiss_accuracy': 0,

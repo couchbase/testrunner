@@ -107,7 +107,8 @@ class FastMergeVectorSearch(VectorSearch):
         self._validate_fm_in_store(index_obj)
 
         rest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
-        status, rest_def = rest.get_fts_index_definition("fm_defval")
+        status, rest_def = rest.get_fts_index_definition(
+            "fm_defval", bucket=index_obj._source_name, scope=index_obj.scope)
         self.assertTrue(status, "Failed to get index def via REST")
 
         rest_store = rest_def.get('indexDef', {}).get('params', {}).get('store', {})

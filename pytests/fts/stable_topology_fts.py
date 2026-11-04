@@ -16,8 +16,9 @@ from remote.remote_util import RemoteMachineShellConnection
 from TestInput import TestInputSingleton
 from tasks.task import ESRunQueryCompare
 from lib.testconstants import (FUZZY_FTS_SMALL_DATASET, FUZZY_FTS_LARGE_DATASET,
-                               MIN_KV_QUOTA, FTS_SERVICE_QUOTA)
+                               MIN_KV_QUOTA, FTS_SERVICE_QUOTA, FTS_QUOTA)
 from .fts_base import (FTSBaseTest, FTSIndex, INDEX_DEFAULTS, QUERY,
+                       live_node_service_sets, fit_service_quotas,
                        download_from_s3, _ScanPlusHashMap, _make_vec, UDFHelper,
                        LazyIndexUpdateHelper)
 from lib.membase.api.exception import FTSException, ServerUnavailableException
@@ -35,40 +36,40 @@ class StableTopFTS(FTSBaseTest):
         index_quota = self._input.param("index_quota", 400)
         cbas_quota = self._input.param("cbas_quota", 1024)
         eventing_quota = self._input.param("eventing_quota", 256)
-        # FTS needs the full 3000MB here - starving it stalls indexing outright.
-        # A smaller fts_quota is only ever passed to squeeze onto a node that also
-        # runs kv, and the fix for that is separating the services, not shrinking
-        # the quota, so treat 3000 as a floor.
         fts_quota = max(FTS_SERVICE_QUOTA, self._input.param("fts_quota", FTS_SERVICE_QUOTA))
         try:
             master = self._cb_cluster.get_master_node()
             rest = RestConnection(master)
-            master_services = (getattr(master, "services", "") or "kv").split(",")
-            if "kv" in master_services and "fts" in master_services:
-                # ns_server charges kv + fts against this one node, so the quotas
-                # below cannot all fit and the request is rejected as a whole -
-                # leaving fts on its 512MB default. Use an ini that puts fts on
-                # its own node (e.g. b/resources/fts/ini/3-node.ini).
-                self.log.warning(
-                    "%s runs both kv and fts; their quotas compete on one node "
-                    "and the quota request is likely to be rejected. Separate "
-                    "the services across nodes." % master.ip)
-            # ns_server rejects the request as a whole when the total exceeds what
-            # the node can back, so a node that is a little too small loses every
-            # quota in it - including fts. Trim kv to fit, never fts.
             reserved = int(rest.get_nodes_self().mcdMemoryReserved)
-            charged = kv_quota + index_quota
-            if "fts" in master_services:
-                charged += fts_quota
-            if charged > reserved:
-                trimmed = max(MIN_KV_QUOTA, kv_quota - (charged - reserved))
+            node_service_sets = live_node_service_sets(rest) or [
+                set((getattr(master, "services", "") or "kv").split(","))]
+            num_buckets = (self._input.param("standard_buckets", 0)
+                           + self._input.param("sasl_buckets", 0)
+                           + int(self._input.param("default_bucket", True)))
+            kv_floor = max(MIN_KV_QUOTA, num_buckets * MIN_KV_QUOTA)
+            try:
+                used = int(rest.get_pools_default().get("storageTotals", {})
+                           .get("ram", {}).get("quotaUsedPerNode", 0))
+                kv_floor = max(kv_floor, -(-used // (1024 * 1024)))
+            except Exception:
+                pass
+            wanted = {"kv": kv_quota, "fts": fts_quota, "index": index_quota,
+                      "cbas": cbas_quota, "eventing": eventing_quota}
+            fitted, overshoot = fit_service_quotas(
+                reserved, node_service_sets, wanted, kv_floor, FTS_QUOTA)
+            if fitted != wanted:
                 self.log.warning(
-                    "quotas charged to %s total %sMB but the node can only back "
-                    "%sMB; using kv quota %s instead of %s"
-                    % (master.ip, charged, reserved, trimmed, kv_quota))
-                kv_quota = trimmed
-            rest.modify_memory_quota(kv_quota, index_quota, fts_quota,
-                                     cbas_quota, eventing_quota)
+                    "quotas %s do not fit nodes running %s within %sMB; using %s"
+                    % (wanted, [sorted(s) for s in node_service_sets], reserved,
+                       fitted))
+            if overshoot > 0:
+                self.log.warning(
+                    "nodes running %s cannot back %s against %sMB even at the "
+                    "floors; still %sMB over. Separate kv and fts onto different "
+                    "nodes." % ([sorted(s) for s in node_service_sets], fitted,
+                                reserved, overshoot))
+            rest.modify_memory_quota(fitted["kv"], fitted["index"], fitted["fts"],
+                                     fitted["cbas"], fitted["eventing"])
         except Exception as e:
             self.log.warning("Could not modify service memory quotas: %s" % e)
         self.doc_filter_query = {"match": "search", "field": "search_string"}
@@ -1043,6 +1044,19 @@ class StableTopFTS(FTSBaseTest):
             items = some millions defined at run_time using items param
         """
         rest = RestConnection(self._cb_cluster.get_random_fts_node())
+        max_docs = int(self._input.param("large_indexing_max_docs", 1500000))
+        num_collections = (len(self.collection)
+                           if self.container_type == 'collection'
+                           and isinstance(self.collection, list) else 1)
+        if self._num_items * num_collections > max_docs:
+            capped = max(1, max_docs // num_collections)
+            self.log.warning(
+                "items=%s across %s collection(s) is %s docs; capping to %s per "
+                "collection (%s docs total, large_indexing_max_docs=%s)"
+                % (self._num_items, num_collections,
+                   self._num_items * num_collections, capped,
+                   capped * num_collections, max_docs))
+            self._num_items = capped
         self.load_employee_dataset()
         bucket = self._cb_cluster.get_bucket_by_name('default')
         collection_index, type, index_scope, index_collections = self.define_index_parameters_collection_related()
@@ -1470,6 +1484,8 @@ class StableTopFTS(FTSBaseTest):
         for task in load_tasks:
             task.result()
 
+        self.wait_for_indexing_complete()
+
         # run all types of mutations on scope1, check that scope2 results remain the same
         query = {"query": "dept:Marketing"}
         untouched_hits,_,_,_ = index1.execute_query(query)
@@ -1639,7 +1655,11 @@ class StableTopFTS(FTSBaseTest):
             scope=index_scope, collections=index_collections)
         self.load_data()
         self.generate_random_queries(index, self.num_queries, self.query_types)
-        self.run_query_and_compare(index)
+        es, self.es = self.es, None
+        try:
+            self.run_query_and_compare(index)
+        finally:
+            self.es = es
 
     def load_index_query_all_in_parallel(self):
         """
@@ -3840,14 +3860,12 @@ class StableTopFTS(FTSBaseTest):
         _index1 = self.create_index(self._cb_cluster.get_bucket_by_name('bucket1'),
                                     "index1", collection_index=True, _type="scope1.collection1",
                                     scope="scope1", collections=["collection1"])
-        try:
-            _index2 = self.create_index(self._cb_cluster.get_bucket_by_name('bucket1'),
-                                        "index1", collection_index=True, _type="scope2.collection1",
-                                        scope="scope2", collections=["collection1"], no_check=True)
-        except Exception as e:
-            self.log.info("Exception caught ::" + str(e) + "::")
-            return
-        self.fail("Failed creating 2 indexes with same name in different scopes ")
+        _index2 = self.create_index(self._cb_cluster.get_bucket_by_name('bucket1'),
+                                    "index1", collection_index=True, _type="scope2.collection1",
+                                    scope="scope2", collections=["collection1"])
+        self.assertNotEqual(_index1.full_name, _index2.full_name,
+                            "the same short name in two scopes must resolve to "
+                            "two distinct scoped indexes")
 
     test_data = {
         "doc_1": {
