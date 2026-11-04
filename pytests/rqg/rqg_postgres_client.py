@@ -16,6 +16,7 @@ import json
 import shutil
 import zipfile
 from os.path import basename
+from decimal import Decimal
 from psycopg2 import Timestamp
 
 
@@ -163,6 +164,8 @@ class RQGPostgresClient(PostgresClient):
         return data
 
     def _convert_to_mysql_json_compatible_val(self, value, type, round_level=0):
+        if isinstance(value, list): # array_agg: the column type is the array's, so convert each element by its own type
+            return [self._convert_array_element(element, round_level=round_level) for element in value]
         if "16" == str(type): # boolean
             return value
         if str(type) in ["1700", "701", "23", "20"]: # numeric
@@ -191,6 +194,13 @@ class RQGPostgresClient(PostgresClient):
             return str(value)
 
         return str(value)
+
+    def _convert_array_element(self, element, round_level=0):
+        if element is None or isinstance(element, (bool, str)):
+            return element
+        if isinstance(element, (int, float, Decimal)):
+            return self._convert_to_mysql_json_compatible_val(element, "1700", round_level=round_level)
+        return str(element)
 
 
     def _gen_index_combinations_for_tables(self, index_type="GSI", partitioned_indexes=False):

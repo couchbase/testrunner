@@ -373,7 +373,9 @@ class BaseRQGMySQLClient(MySQLClient):
                                       'MEAN': {"n1ql_name": "MEAN", "sql_name": "AVG"},
                                       'NULLS FIRST': {'n1ql_name': 'NULLS FIRST', 'sql_name': ''},
                                       'NULLS LAST': {'n1ql_name': 'NULLS LAST', 'sql_name': ''},
-                                      'POSITION': {'n1ql_name': 'POSITION1', 'sql_name': 'POSITION'}}
+                                      'POSITION': {'n1ql_name': 'POSITION1', 'sql_name': 'POSITION'},
+                                      # N1QL LOG is base 10; MySQL LOG is the natural log
+                                      'LOG': {'n1ql_name': 'LOG', 'sql_name': 'LOG10'}}
         for key in sql_n1ql_synonim_functions:
             if key.lower() in query_map['sql'].lower():
                 n1ql_name = key
@@ -399,9 +401,11 @@ class BaseRQGMySQLClient(MySQLClient):
                 query_map["sql"] = query_map["sql"].replace(date_part_substring, mysql_date_part_call)
             else:
                 break
+        # Search past each converted call, or a second POSITION in the query is never converted
+        position_search_start = 0
         while True:
-            if "POSITION" in query_map["sql"]:
-                position_substring_start = query_map["sql"].find("POSITION")
+            if "POSITION" in query_map["sql"][position_search_start:]:
+                position_substring_start = query_map["sql"].find("POSITION", position_search_start)
                 counter = 0
                 position_counter = position_substring_start
                 search_started = False
@@ -420,9 +424,11 @@ class BaseRQGMySQLClient(MySQLClient):
                 args_string = position_part_substring[position_part_substring.find("(")+1:-1]
                 args = args_string.split(",")
                 if len(args) < 2:
-                    break
+                    position_search_start = position_substring_end
+                    continue
                 mysql_position_call = "POSITION("+str(args[1])+" IN "+str(args[0])+")"
                 query_map["sql"] = query_map["sql"].replace(position_part_substring, mysql_position_call)
+                position_search_start = position_substring_start + len(mysql_position_call)
             else:
                 break
 

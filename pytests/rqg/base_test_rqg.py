@@ -37,6 +37,7 @@ class BaseRQGTests(BaseTestCase):
             self.skip_setup_cleanup = True
             self.crud_ops = self.input.param("crud_ops", False)
             self.use_fts = self.input.param("use_fts", False)
+            self.fts_max_terms = self.input.param("fts_max_terms", 10000)
             self.use_sdk = self.input.param("use_sdk", False)
             self.use_analytics = self.input.param("use_analytics", False)
             self.use_udf = self.input.param("use_udf", False)
@@ -158,13 +159,17 @@ class BaseRQGTests(BaseTestCase):
                     client = RQGMySQLClient(database=self.database, host=self.mysql_url, user_id=self.user_id, password=self.password)
                     self.kill_mysql_processes(client)
                     client.drop_database(self.database)
+                if getattr(self, 'created_postgres_database', False) and not self.skip_cleanup:
+                    self.client._close_connection()
+                    RQGPostgresClient.drop_database(host=self.postgres_url, user=self.user_id, password=self.password, database=self.database)
         except Exception as ex:
             self.log.info("==============  RQG Teardown Has Failed ==============")
             self.log.info(ex)
         self.log.info("==============  RQG Teardown Has Completed ==============")
 
     def kill_mysql_processes(self, client):
-        columns, rows = client._execute_query(query="select concat('KILL ',id,';') from information_schema.processlist where user='root' and time > 0;")
+        # Only this test's connections: RQG jobs on the same slave share one MySQL server
+        columns, rows = client._execute_query(query="select concat('KILL ',id,';') from information_schema.processlist where user='root' and db='{0}' and id != connection_id() and time > 0;".format(self.database))
         sql_result = client._gen_json_from_results(columns, rows)
         for result in sql_result:
             for key in list(result.keys()):
@@ -246,6 +251,13 @@ class BaseRQGTests(BaseTestCase):
                 update_query_template_list = []
                 delete_query_template_list = []
                 select_query_template_list = []
+            if self.use_fts:
+                # A string BETWEEN over ~1000 distinct values expands past FTS's default 1024-term limit
+                for fts_node in self.get_nodes_from_services_map(service_type="fts", get_all_nodes=True):
+                    try:
+                        RestConnection(fts_node).set_node_setting("bleveMaxTerms", self.fts_max_terms)
+                    except Exception as ex:
+                        self.log.warning(f"Cannot set bleveMaxTerms on {fts_node.ip}: {ex}")
             i = 1
             for table_name in table_list:
                 if self.use_fts:
@@ -547,7 +559,8 @@ class BaseRQGTests(BaseTestCase):
             else:
                 queries = n1ql_query.split(' UNION ')
             for q in queries:
-                query = re.sub(r"^\((.*?)\)$", r"\1", q.strip())
+                # Drop PREPARE first, or "PREPARE (SELECT ...) UNION ..." keeps its parens and ADVISE rejects it
+                query = re.sub(r"^\((.*?)\)$", r"\1", re.sub(r"^PREPARE\s+", "", q.strip()))
                 self.create_secondary_index(n1ql_query=query)
         if self.use_query_context:
             result = self.n1ql_helper.run_cbq_query(query=n1ql_query, server=server, query_params=query_params,
@@ -564,6 +577,13 @@ class BaseRQGTests(BaseTestCase):
                 n1ql_query = n1ql_query.replace("_default", self.advise_dict[bucket])
             n1ql_query = n1ql_query.replace("PREPARE", "")
         return n1ql_query
+
+    def _partition_index_statement(self, index_statement):
+        # PARTITION BY has to come before a partial index's WHERE clause
+        partition_clause = " PARTITION BY HASH(META().id)"
+        if " WHERE " in index_statement:
+            return index_statement.replace(" WHERE ", partition_clause + " WHERE ", 1)
+        return index_statement + partition_clause
 
     def translate_index_statement(self, n1ql_query=""):
         index_name = ""
@@ -602,7 +622,8 @@ class BaseRQGTests(BaseTestCase):
             if len(advise_result["results"][0]["advice"]["adviseinfo"]) == 0:
                 self.log.info("No advise for index")
                 return
-            if "index recommendation at this time" not in str(advise_result):
+            # "No index recommendation at this time" comes back as a string, whose spaces the cbq shell strips
+            if isinstance(advise_result["results"][0]["advice"]["adviseinfo"]["recommended_indexes"], dict):
                 if "indexes" in advise_result["results"][0]["advice"]["adviseinfo"][
                     "recommended_indexes"].keys():
                     for index_statement_array in advise_result["results"][0]["advice"]["adviseinfo"]["recommended_indexes"]["indexes"]:
@@ -617,12 +638,12 @@ class BaseRQGTests(BaseTestCase):
                                     self.log.info("Using partitioned index for this query: {0}".format(n1ql_query))
                                 if self.use_txns:
                                     if use_partitioned:
-                                        prepared_index_statement = prepared_index_statement + " PARTITION BY HASH(META().id)"
+                                        prepared_index_statement = self._partition_index_statement(prepared_index_statement)
                                     self.n1ql_helper.run_cbq_query(prepared_index_statement)
                                     self.n1ql_helper._wait_for_index_online(index_bucket,index_name)
                                 else:
                                     if use_partitioned:
-                                        prepared_index_statement = prepared_index_statement + " PARTITION BY HASH(META().id)"
+                                        prepared_index_statement = self._partition_index_statement(prepared_index_statement)
                                         self.log.info(prepared_index_statement)
                                     self.n1ql_helper.run_cbq_query(prepared_index_statement)
                                     self.n1ql_helper._wait_for_index_online(index_bucket,index_name)
@@ -643,12 +664,12 @@ class BaseRQGTests(BaseTestCase):
                                     self.log.info("Using partitioned index for this query: {0}".format(n1ql_query))
                                 if self.use_txns:
                                     if use_partitioned:
-                                        prepared_index_statement = prepared_index_statement + " PARTITION BY HASH(META().id)"
+                                        prepared_index_statement = self._partition_index_statement(prepared_index_statement)
                                     self.n1ql_helper.run_cbq_query(prepared_index_statement)
                                     self.n1ql_helper._wait_for_index_online(index_bucket,index_name)
                                 else:
                                     if use_partitioned:
-                                        prepared_index_statement = prepared_index_statement + " PARTITION BY HASH(META().id)"
+                                        prepared_index_statement = self._partition_index_statement(prepared_index_statement)
                                         self.log.info(prepared_index_statement)
                                     self.n1ql_helper.run_cbq_query(prepared_index_statement)
                                     self.n1ql_helper._wait_for_index_online(index_bucket,index_name)
@@ -874,7 +895,23 @@ class BaseRQGTests(BaseTestCase):
             sql_query = sql_query.replace("NUMERIC_VALUE2", str(offset))
             self.log.info(" SQL QUERY :: {0}".format(sql_query))
             self.log.info(" N1QL QUERY :: {0}".format(n1ql_query))
+        # FTS runs keep their ORDER BY as generated so the FTS pushdown being tested doesn't change
+        if not self.use_fts:
+            sql_query = self._add_order_by_tiebreaker(sql_query)
+            n1ql_query = self._add_order_by_tiebreaker(n1ql_query)
         return sql_query, n1ql_query
+
+    def _add_order_by_tiebreaker(self, query):
+        # Rows that tie on a non-unique ORDER BY come back in any order, so MySQL and N1QL can page
+        # different rows through LIMIT/OFFSET; ordering by the primary key last makes the page deterministic
+        upper_query = query.upper()
+        order_by = upper_query.rfind("ORDER BY")
+        limit = upper_query.find(" LIMIT ", order_by)
+        if order_by == -1 or limit == -1 or "PRIMARY_KEY_ID" in upper_query[order_by:limit]:
+            return query
+        if re.search(r"\bJOIN\b|\bUNION\b|\bDISTINCT\b|GROUP BY|\b(COUNT|SUM|AVG|MEAN|MIN|MAX|ARRAY_AGG)\s*\(", upper_query):
+            return query
+        return query[:limit] + ", primary_key_id" + query[limit:]
 
     def handle_n1ql_table_name(self, n1ql_query):
         if (n1ql_query.find("simple_table") > 0) and ((self.database+"_"+"simple_table") not in n1ql_query):
@@ -1494,7 +1531,8 @@ class BaseRQGTests(BaseTestCase):
         use_engine = random.randint(1, 100)
         if use_engine <= 20 and not self.use_analytics:
             self.use_sdk = True
-        elif use_engine <= 40 and not self.use_analytics:
+        # cbq -s cannot carry a txid, so every statement of a transaction would autocommit
+        elif use_engine <= 40 and not self.use_analytics and not self.use_txns:
             self.use_rest = False
             self.log.info("We are using the CBQ engine to run queries for this run")
         return N1QLHelper(version="sherlock", shell=self.shell, max_verify=self.max_verify,
@@ -1522,6 +1560,17 @@ class BaseRQGTests(BaseTestCase):
             self.client = RQGMySQLClient(database=self.database, host=self.mysql_url, user_id=self.user_id, password=self.password)
 
     def _initialize_postgres_client(self):
+        if self.reset_database:
+            # Give each job its own database, as the MySQL path does. Jobs sharing a slave otherwise
+            # drop and reload each other's simple_table mid-run, and a slave missing the shared
+            # database fails every setUp.
+            database = self.database + "_" + str(self.query_helper._random_int())
+            try:
+                RQGPostgresClient.create_database(host=self.postgres_url, user=self.user_id, password=self.password, database=database)
+                self.database = database
+                self.created_postgres_database = True
+            except Exception as ex:
+                self.log.warning(f"Cannot create Postgres database {database}, using shared database {self.database}: {ex}")
         self.client = RQGPostgresClient(host=self.postgres_url, user=self.user_id, password=self.password, database=self.database)
         self.client.reset_database_add_data(items=self.items)
 
@@ -1860,7 +1909,7 @@ class BaseRQGTests(BaseTestCase):
         new_bucket_list = []
         i = 1
         for bucket in bucket_list:
-            if bucket.find("copy_simple_table") > 0:
+            if "copy_simple_table" in bucket:
                 new_bucket_list.append(self.database+"_"+"copy_simple_table")
             else:
                 if i <= self.number_of_buckets:
