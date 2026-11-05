@@ -1,7 +1,12 @@
 from .tuq import QueryTests
+import json
 import threading
+import time
+import zlib
 from lib.membase.api.rest_client import RestHelper
 from membase.api.exception import CBQError
+from membase.api.rest_client import RestConnection
+from remote.remote_util import RemoteMachineShellConnection
 
 class QuerySeqScanTests(QueryTests):
     def setUp(self):
@@ -467,3 +472,110 @@ class QuerySeqScanTests(QueryTests):
 
         # check result is the same
         self.assertEqual(result_primary['results'], result_sequentialscan['results'])
+    
+    # MB-75091
+    def test_use_replica_after_replica_read_fallback(self):
+        """
+        With use_replica=on, a KV read that falls back to a replica marks the
+        active node down. Before the fix, a later sequential scan then sent
+        CREATE_RANGE_SCAN to the replica node and failed with 16062 / NOT_MY_VBUCKET
+        after ~63s (35 retries), even though the active node was healthy again.
+        Topology: node 0 kv:n1ql (only query node), node 1 kv, num_replicas=1.
+        """
+        kv_node = self.servers[1]
+        rest = RestConnection(self.master)
+        settings_api = rest.query_baseUrl + 'admin/settings'
+        original_feat_ctrl = rest.get_query_admin_settings(self.master)['n1ql-feat-ctrl']
+        # WHERE forces a sequential scan; a bare COUNT(*) is served by CountScan from bucket stats
+        count_query = f'SELECT COUNT(*) AS c FROM {self.bucket} WHERE name = "San Francisco"'
+        memcached_paused = False
+        try:
+            # 1. Enable sequential scan (bit 0x4000 set == disabled)
+            if original_feat_ctrl & 0x4000:
+                status, content, _ = rest._http_request(
+                    settings_api, 'POST', json.dumps({'n1ql-feat-ctrl': original_feat_ctrl & ~0x4000}))
+                self.assertTrue(status, f'Failed to enable sequential scan: {content}')
+
+            # 2. Baseline: plan uses #sequentialscan and use_replica scan works before any fallback
+            explain = self.run_cbq_query(f'EXPLAIN {count_query}')
+            self.assertIn('#sequentialscan', json.dumps(explain['results']),
+                          f'Query does not use a sequential scan: {explain["results"]}')
+            result = self.run_cbq_query(count_query, query_params={'use_replica': 'on'})
+            self.assertEqual(result['results'][0]['c'], self.doc_count)
+
+            # 3. Pick one key from each of 10 vbuckets active on the kv-only node. The bulk-get
+            # timeout is kvTimeout x keys-per-vbucket, so one key per vbucket keeps the fallback
+            # at ~2.5s; a longer pause lets ns_server push a new bucket config, which replaces the
+            # vbucket map and clears the down mark before the scan runs.
+            vb_server_map = rest.get_bucket_json(self.bucket)['vBucketServerMap']
+            kv_node_index = [s.split(':')[0] for s in vb_server_map['serverList']].index(kv_node.ip)
+            vb_map = vb_server_map['vBucketMap']
+            all_keys = self.run_cbq_query(f'SELECT RAW META().id FROM {self.bucket}')['results']
+            keys_by_vb = {}
+            for k in all_keys:
+                vb = ((zlib.crc32(k.encode()) >> 16) & 0x7fff) & (len(vb_map) - 1)
+                if vb_map[vb][0] == kv_node_index and vb not in keys_by_vb:
+                    keys_by_vb[vb] = k
+            node_keys = list(keys_by_vb.values())[:10]
+            self.assertEqual(len(node_keys), 10, f'Not enough vbuckets active on {kv_node.ip}')
+            use_keys_query = f'SELECT COUNT(*) AS c FROM {self.bucket} USE KEYS {json.dumps(node_keys)}'
+
+            # 4. Warm up query's KV connections to the kv-only node
+            for _ in range(3):
+                self.run_cbq_query(use_keys_query)
+
+            # 5. Pause memcached on the kv-only node and force a replica read fallback
+            # killall (psmisc) is missing on some images; pidof/pgrep are always present
+            shell = RemoteMachineShellConnection(kv_node)
+            memcached_pid_cmd = '$(pidof memcached || pgrep -x memcached)'
+            _, err = shell.execute_command(f'kill -STOP {memcached_pid_cmd}')
+            self.assertFalse(err, f'Failed to pause memcached on {kv_node.ip}: {err}')
+            memcached_paused = True
+            start = time.time()
+            result = self.run_cbq_query(use_keys_query, query_params={'use_replica': 'on'})
+            elapsed = time.time() - start
+            self.log.info(f'Replica read fallback took {elapsed:.1f}s')
+            self.assertEqual(result['results'][0]['c'], len(node_keys))
+            # The fallback only happens after a ~2.5s KV timeout on the paused node
+            self.assertGreater(elapsed, 2, 'Read did not wait on the paused node; memcached was not paused')
+            self.assertLess(elapsed, 6, 'Replica read fallback took too long; ns_server may refresh the bucket config')
+
+            # 6. Resume memcached; the active node is healthy again
+            shell.execute_command(f'kill -CONT {memcached_pid_cmd}')
+            memcached_paused = False
+            shell.disconnect()
+
+            # 7. Sequential scan with use_replica must hit the active node and succeed.
+            # Range scans sent to a replica get NOT_MY_VBUCKET and are retried; the scan can
+            # still recover once ns_server notices the node is back, so check query.log too.
+            query_shell = RemoteMachineShellConnection(self.master)
+            nmvb_count_cmd = ("grep -h 'NOT_MY_VBUCKET, opcode=CREATE_RANGE_SCAN' "
+                              "/opt/couchbase/var/lib/couchbase/logs/query.log* | wc -l")
+            nmvb_before = int(query_shell.execute_command(nmvb_count_cmd)[0][0])
+            scan_before = self.get_index_scan(self.bucket, '#sequentialscan')
+            start = time.time()
+            try:
+                result = self.run_cbq_query(count_query, query_params={'use_replica': 'on'})
+            except CBQError as ex:
+                self.fail(f'MB-75091: use_replica sequential scan failed after replica fallback '
+                          f'in {time.time() - start:.1f}s: {ex}')
+            elapsed = time.time() - start
+            self.log.info(f'use_replica sequential scan after fallback took {elapsed:.1f}s')
+            nmvb_new = int(query_shell.execute_command(nmvb_count_cmd)[0][0]) - nmvb_before
+            query_shell.disconnect()
+            self.assertEqual(nmvb_new, 0,
+                             f'MB-75091: {nmvb_new} CREATE_RANGE_SCAN NOT_MY_VBUCKET errors in query.log on '
+                             f'{self.master.ip}; range scans were routed to a replica node')
+            self.assertEqual(result['results'][0]['c'], self.doc_count)
+            self.assertLess(elapsed, 30, f'MB-75091: scan took {elapsed:.1f}s, range scans were retried')
+            self.assertEqual(self.get_index_scan(self.bucket, '#sequentialscan'), scan_before + 1)
+
+            # 8. Same scan without use_replica returns the same count
+            result = self.run_cbq_query(count_query)
+            self.assertEqual(result['results'][0]['c'], self.doc_count)
+        finally:
+            if memcached_paused:
+                shell.execute_command(f'kill -CONT {memcached_pid_cmd}')
+                shell.disconnect()
+            if original_feat_ctrl & 0x4000:
+                rest._http_request(settings_api, 'POST', json.dumps({'n1ql-feat-ctrl': original_feat_ctrl}))
