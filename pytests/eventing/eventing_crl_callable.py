@@ -32,6 +32,7 @@ Quick start:
 import datetime
 import json
 import os
+import shlex
 import ssl
 import tempfile
 import time
@@ -101,7 +102,7 @@ class EventingCRLCallable:
         ca_dir = "{0}{1}/CA".format(install_path, x509main.CHAINFILEPATH)
         shell = RemoteMachineShellConnection(server)
         try:
-            shell.execute_command("mkdir -p {0}".format(ca_dir))
+            shell.execute_command("mkdir -p {0}".format(shlex.quote(ca_dir)))
             local_path = self._write_temp_pem(pem_bytes)
             shell.copy_file_local_to_remote(local_path, "{0}/crl_test_ca.pem".format(ca_dir))
         finally:
@@ -128,7 +129,7 @@ class EventingCRLCallable:
         node_dir = "{0}{1}".format(install_path, x509main.CHAINFILEPATH)
         shell = RemoteMachineShellConnection(server)
         try:
-            shell.execute_command("mkdir -p {0}".format(node_dir))
+            shell.execute_command("mkdir -p {0}".format(shlex.quote(node_dir)))
             for filename, pem_bytes in [("chain.pem", self.crl_utils.cert_to_pem(cert)),
                                          ("pkey.key", self.crl_utils.key_to_pem(key))]:
                 local_path = self._write_temp_pem(pem_bytes)

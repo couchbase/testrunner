@@ -222,11 +222,14 @@ class EventingSanity(EventingBaseTest):
         self.undeploy_and_delete_function(body)
 
     def test_advance_bucket_op(self):
-        self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0", expiry=300)
+        expiry = self.input.param("doc_expiry", 900)
+        self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0", expiry=expiry)
         # set expiry pager interval
         ClusterOperationHelper.flushctl_set(self.master, "exp_pager_stime", 3, bucket=self.default_bucket_name)
         body = self.create_save_function_body(self.function_name, "handler_code/ABO/curl_timer_insert.js")
         self.deploy_function(body)
+        # OnUpdate timers insert every doc into collection1
         self.verify_doc_count_collections("default.scope0.collection1", self.docs_per_day * self.num_docs, timeout=3600)
-        self.verify_doc_count_collections("default.scope0.collection2", 0)
+        # once the source docs expire, OnDelete timers remove them from collection1 again
+        self.verify_doc_count_collections("default.scope0.collection1", 0, timeout=3600)
         self.undeploy_and_delete_function(body)

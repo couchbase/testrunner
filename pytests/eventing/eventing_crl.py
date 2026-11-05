@@ -45,6 +45,7 @@ calls used to check n2n.
 import datetime
 import json
 import os
+import shlex
 import tempfile
 import urllib.parse
 
@@ -125,7 +126,7 @@ class EventingCRL(CRLBase, EventingBaseTest):
         self.log.info("Pushing chain.pem + pkey.key to {0}:{1} over SSH".format(server.ip, node_dir))
         shell = RemoteMachineShellConnection(server)
         try:
-            shell.execute_command("mkdir -p {0}".format(node_dir))
+            shell.execute_command("mkdir -p {0}".format(shlex.quote(node_dir)))
             for filename, pem_bytes in [("chain.pem", self.crl_utils.cert_to_pem(cert)),
                                          ("pkey.key", self.crl_utils.key_to_pem(key))]:
                 local = self._write_temp_pem(pem_bytes)

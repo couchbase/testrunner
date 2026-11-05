@@ -8,7 +8,7 @@ from lib.sdk_client3 import SDKClient
 from pytests.eventing.eventing_base import EventingBaseTest
 from pytests.eventing.eventing_constants import HANDLER_CODE
 import couchbase.subdocument as SD
-from threading import Thread
+from threading import Event, Thread
 
 log = logging.getLogger()
 
@@ -240,18 +240,24 @@ class EventingDataset(EventingBaseTest):
                   batch_size=10)
         body = self.create_save_function_body(self.function_name, self.handler_code,
                                               data_chan_size=data_chan_size, worker_queue_cap=worker_queue_cap)
-        thread = Thread(target=self._change_eventing_quota, args=())
+        # change the eventing quota in the background while large docs are processed;
+        # always stopped when the test ends, so it never runs into tearDown
+        self._stop_quota_change = Event()
+        thread = Thread(target=self._change_eventing_quota, daemon=True)
         thread.start()
-        self.deploy_function(body)
-        # Wait for eventing to catch up with all the update mutations and verify results
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True,
-                                     timeout=3600)
-        self.load(gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=10, op_type='delete')
-        # Wait for eventing to catch up with all the delete mutations and verify results
-        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True, timeout=3600)
-        self.undeploy_and_delete_function(body)
-        thread.join()
+        try:
+            self.deploy_function(body)
+            # Wait for eventing to catch up with all the update mutations and verify results
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True,
+                                         timeout=3600)
+            self.load(gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=10, op_type='delete')
+            # Wait for eventing to catch up with all the delete mutations and verify results
+            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True, timeout=3600)
+            self.undeploy_and_delete_function(body)
+        finally:
+            self._stop_quota_change.set()
+            thread.join(timeout=60)
 
     def test_eventing_with_unicode_character_in_handler_code(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -268,8 +274,15 @@ class EventingDataset(EventingBaseTest):
 
     def _change_eventing_quota(self):
         for quota in range(256, 512, 4):
-            self.rest.set_service_memoryQuota(service='eventingMemoryQuota', memoryQuota=quota)
-            self.sleep(10)
+            if self._stop_quota_change.is_set():
+                return
+            try:
+                self.rest.set_service_memoryQuota(service='eventingMemoryQuota', memoryQuota=quota)
+            except Exception as e:
+                # a slow or busy node must not kill the sweep; the main thread's
+                # verification still catches a node that is really unresponsive
+                log.warning("Eventing quota change to {0} failed: {1}".format(quota, e))
+            self._stop_quota_change.wait(10)
 
     def test_eventing_does_not_use_xattrs(self):
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_WITH_TIMERS,
