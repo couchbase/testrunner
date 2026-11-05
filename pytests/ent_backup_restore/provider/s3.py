@@ -49,13 +49,15 @@ class S3(provider.Provider):
 
     def setup(self):
         """See super class"""
-        configuration = {}
+        kwargs = {}
 
-        if self.region:
-            configuration['LocationConstraint'] = self.region
+        # us-east-1 is the default region and S3 rejects it as an explicit LocationConstraint
+        # (InvalidLocationConstraint), so only send a constraint for the other regions.
+        if self.region and self.region != 'us-east-1':
+            kwargs['CreateBucketConfiguration'] = {'LocationConstraint': self.region}
 
         try:
-            self.resource.create_bucket(Bucket=self.bucket, CreateBucketConfiguration=configuration)
+            self.resource.create_bucket(Bucket=self.bucket, **kwargs)
         except botocore.exceptions.ClientError as error:
             error_code = error.response['Error']['Code']
             if error_code not in ('BucketAlreadyExists', 'BucketAlreadyOwnedByYou'):
