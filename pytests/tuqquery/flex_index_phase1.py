@@ -659,3 +659,40 @@ class FlexIndexTests(QueryTests):
             self.fail("Failed to run query with other issues: {0}".format(str(e)))
 
         self.cbcluster.delete_all_fts_indexes()
+
+    # MB-75072
+    def test_flex_fts_gsi_hint_offset_limit(self):
+        """
+        With USE INDEX (USING FTS, USING GSI) and a keyword-analyzed FTS index, a string
+        equality with ORDER BY/OFFSET/LIMIT is pushed to FTS with from/size, but before the
+        fix the plan also applied its own Offset, skipping the offset twice
+        (OFFSET 2 LIMIT 5 returned [5,6,7] instead of [3,4,5,6,7]).
+        """
+        doc_count = 20
+        expected = [3, 4, 5, 6, 7]
+        self.run_cbq_query(f'INSERT INTO `{self.bucket_name}` (KEY _k, VALUE _v) '
+                           f'SELECT "k" || TO_STRING(i) AS _k, {{"k": i, "c": "x"}} AS _v '
+                           f'FROM ARRAY_RANGE(1, {doc_count + 1}) AS i', server=self.query_node)
+        if not self.is_index_present(self.bucket_name, "#primary", server=self.query_node):
+            self.run_cbq_query(f'CREATE PRIMARY INDEX ON `{self.bucket_name}`', server=self.query_node)
+        # Keyword default analyzer + dynamic default mapping; waits until all docs are indexed,
+        # otherwise the planner silently falls back to GSI and the bug does not show
+        self.create_fts_index(name="mb75072_fts", source_name=self.bucket_name, doc_count=doc_count)
+        try:
+            query = (f'SELECT RAW k FROM `{self.bucket_name}` USE INDEX ({{0}}) '
+                     f'WHERE c = "x" ORDER BY k LIMIT 5 OFFSET 2')
+            explain = json.dumps(self.run_cbq_query("EXPLAIN " + query.format("USING FTS, USING GSI"),
+                                                    server=self.query_node)['results'])
+            self.assertIn('IndexFtsSearch', explain,
+                          f'FTS index was not chosen for USING FTS, USING GSI; bug cannot be exercised: {explain}')
+            failures = []
+            for hint in ["USING FTS, USING GSI", "USING FTS", "USING GSI"]:
+                actual = self.run_cbq_query(query.format(hint), server=self.query_node)['results']
+                self.log.info(f'USE INDEX ({hint}): {actual}')
+                if actual != expected:
+                    failures.append(f'USE INDEX ({hint}) returned {actual}, expected {expected}')
+            if failures:
+                self.fail(f'MB-75072: wrong ORDER BY/OFFSET/LIMIT results: {failures}. '
+                          f'Plan for USING FTS, USING GSI: {explain}')
+        finally:
+            self.cbcluster.delete_all_fts_indexes()
