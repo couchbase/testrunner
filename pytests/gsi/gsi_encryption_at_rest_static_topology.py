@@ -8398,8 +8398,9 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
         self.assertTrue(path, f"{label}No codebook file found on the index nodes")
         corrupted_log = "codebook appears to be corrupted"
         log_count = self._indexer_log_count(node, corrupted_log)
-        # The induced decrypt error is expected in indexer.log for the rest of the suite
-        type(self).allowed_encryption_log_patterns = ("Error observed while decryptCodebookByChunk",)
+        # The induced decrypt error is expected in indexer.log for the rest of this test.
+        # Set on self: setUp resets self.allowed_encryption_log_patterns, which hides a class value.
+        self.allowed_encryption_log_patterns = ("Error observed while decryptCodebookByChunk",)
         shell = RemoteMachineShellConnection(node)
         try:
             shell.execute_command(f"size=$(stat -c %s '{path}') && dd if=/dev/urandom of='{path}' bs=1 "

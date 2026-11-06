@@ -3195,7 +3195,8 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex, CRLBase):
 
         # ========== STEP 6: Restart indexer, verify read-back ==========
         self.log.info("[STEP 6] Restarting indexers to verify encrypted stats file read-back...")
-        self.gsi_encryption_helper.restart_index_nodes(index_nodes, timeout=900)
+        restart_errors = self._restart_indexer_on_all_nodes(label="[STEP 6] ")
+        self.assertFalse(restart_errors, f"[STEP 6] Indexer restart failed: {restart_errors}")
         self.wait_until_indexes_online(timeout=900)
         self.log.info("[STEP 6] PASSED - Indexers restarted, indexes online")
 
