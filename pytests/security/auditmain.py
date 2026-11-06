@@ -10,7 +10,8 @@ from membase.api.exception import ReadDocumentException
 from membase.api.exception import DesignDocCreationException
 from membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
-from testconstants import LINUX_DISTRIBUTION_NAME
+from testconstants import LINUX_DISTRIBUTION_NAME, LINUX_COUCHBASE_BIN_PATH, \
+    WIN_COUCHBASE_BIN_PATH
 from random import randint
 from datetime import datetime
 import time
@@ -53,7 +54,13 @@ class audit:
                                                     host.ssh_username != "root":
             self.nonroot = True
         shell.disconnect()
-        self.cli_location = "/opt/couchbase/bin/"
+        if self.info.distribution_type.lower() == 'windows':
+            self.cli_location = WIN_COUCHBASE_BIN_PATH
+        elif self.nonroot:
+            self.cli_location = "/home/%s/cb%s" % (host.ssh_username,
+                                                   LINUX_COUCHBASE_BIN_PATH)
+        else:
+            self.cli_location = LINUX_COUCHBASE_BIN_PATH
         self.pathDescriptor = self.getAuditConfigElement("descriptors_path") + "/"
         self.pathLogFile = self.getAuditLogPath()
         self.defaultFields = ['id', 'name', 'description']
@@ -210,15 +217,19 @@ class audit:
         data = []
         self.readFile(self.getAuditConfigPathInitial(), audit.AUDITCONFIGFILENAME)
         shell = RemoteMachineShellConnection(self.host)
-        command = "{0}cbcat {1}{2}".format(self.cli_location, self.getAuditConfigPathInitial(), audit.AUDITCONFIGFILENAME)
+        # Quote the config path: the Windows path contains a space
+        command = '{0}cbcat "{1}{2}"'.format(self.cli_location, self.getAuditConfigPathInitial(), audit.AUDITCONFIGFILENAME)
         output, error = shell.execute_command(command)
+        shell.disconnect()
         data = ""
         for part in output:
             data += part
         try:
             data = json.loads(data)
-        except:
-            print("Not able to convert the data from shell command to json")
+        except ValueError:
+            raise Exception("Not able to convert the data from shell command "
+                            "to json. Command: {0}, output: {1}, error: {2}"
+                            .format(command, output, error))
         # data = json.load(json_data)
         if (element == 'all'):
             return data
