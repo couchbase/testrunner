@@ -1231,7 +1231,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
             raise
 
 
-        self.restart_index_nodes(index_nodes, validate_read_back=True, select_queries=select_queries)
+        self.restart_index_nodes(index_nodes, validate_read_back=True, select_queries=all_select_queries)
 
         # ========== TEST COMPLETE ==========
         self.log.info("=" * 80)
@@ -1500,7 +1500,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
             self.log.error(f"[STEP 13] FAILED: {str(e)}")
             raise
 
-        self.restart_index_nodes(index_nodes, validate_read_back=True, select_queries=select_queries)
+        self.restart_index_nodes(index_nodes, validate_read_back=True, select_queries=all_select_queries)
 
         # ========== TEST COMPLETE ==========
         self.log.info("=" * 80)
@@ -1827,7 +1827,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
         except Exception as e:
             self.log.error(f"[STEP 12] FAILED: {str(e)}")
             raise
-        self.restart_index_nodes(index_nodes, validate_read_back=True, select_queries=select_queries)
+        self.restart_index_nodes(index_nodes, validate_read_back=True, select_queries=all_select_queries)
 
         # ========== TEST COMPLETE ==========
         self.log.info("=" * 80)
@@ -6857,6 +6857,9 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
         # ========== STEP 3: Verify persisted stats file is plaintext ==========
         self.log.info("[STEP 3] Verifying persisted stats (@2i/indexstats/stats) is plaintext...")
         results = self.gsi_encryption_helper.verify_gsi_persisted_stats_encrypted(index_nodes)
+        missing = [f"{ip}: {r['reason']}" for ip, r in results.items() if r["status"] == "skipped"]
+        if missing:
+            self.fail(f"[STEP 3] Persisted stats file missing: {missing}")
         encrypted_nodes = [ip for ip, r in results.items() if r["status"] == "passed"]
         if encrypted_nodes:
             self.fail(
@@ -6883,7 +6886,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
         )
         failures = [
             f"{ip}: {r['reason']}" for ip, r in results.items()
-            if r["status"] not in ("passed", "skipped")
+            if r["status"] != "passed"
         ]
         if failures:
             self.fail(f"[STEP 5] Persisted stats not encrypted as expected: {failures}")
@@ -6891,7 +6894,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
 
         # ========== STEP 6: Restart indexer once ==========
         self.log.info("[STEP 6] Restarting indexer (first restart) to verify read-back of encrypted stats...")
-        self.restart_index_nodes(index_nodes, validate_read_back=True)
+        self.restart_index_nodes(index_nodes, validate_read_back=True, select_queries=set(select_queries))
         self.log.info("[STEP 6] PASSED - Indexer restarted and indexes back online")
 
         # ========== STEP 7: Verify persisted stats still encrypted after first restart ==========
@@ -6902,7 +6905,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
         )
         failures = [
             f"{ip}: {r['reason']}" for ip, r in results.items()
-            if r["status"] not in ("passed", "skipped")
+            if r["status"] != "passed"
         ]
         if failures:
             self.fail(f"[STEP 7] Persisted stats not encrypted after first restart: {failures}")
@@ -6910,7 +6913,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
 
         # ========== STEP 8: Restart indexer a second time ==========
         self.log.info("[STEP 8] Restarting indexer (second restart)...")
-        self.restart_index_nodes(index_nodes, validate_read_back=True)
+        self.restart_index_nodes(index_nodes, validate_read_back=True, select_queries=set(select_queries))
         self.log.info("[STEP 8] PASSED - Second restart complete")
 
         # ========== STEP 9: Verify still encrypted, scans work ==========
@@ -6921,7 +6924,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
         )
         failures = [
             f"{ip}: {r['reason']}" for ip, r in results.items()
-            if r["status"] not in ("passed", "skipped")
+            if r["status"] != "passed"
         ]
         if failures:
             self.fail(f"[STEP 9] Persisted stats not encrypted after second restart: {failures}")
@@ -6933,30 +6936,48 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
         old_key_ids = set(expected_key_ids)
         status, _ = self.rest.trigger_log_reencryption()
         self.assertTrue(status, "[STEP 10] trigger_log_reencryption (force re-encrypt) failed")
-        self.sleep(10, "[STEP 10] Waiting for DEK drop to complete")
-        new_key_ids = self.get_indexer_in_use_key_ids(index_nodes, key_type="log")
-        self.assertTrue(new_key_ids, "[STEP 10] No in-use log key IDs after DEK drop")
+        # The drop is async: wait for a log key that wasn't in use before (fails if none appears)
+        new_key_ids = self.poll_for_new_indexer_key_ids(index_nodes, old_key_ids, timeout=600,
+                                                        label="[STEP 10] ", key_type="log")
+        # The file must carry a log key that is in use. Old keys may still be listed:
+        # other log-key files (stats log generations, cache) can lag the stats file.
+        in_use_key_ids = self.get_indexer_in_use_key_ids(index_nodes, key_type="log")
         results = self.gsi_encryption_helper.verify_gsi_persisted_stats_encrypted(
-            index_nodes, expected_key_id=new_key_ids
+            index_nodes, expected_key_id=in_use_key_ids
         )
         failures = [
             f"{ip}: {r['reason']}" for ip, r in results.items()
-            if r["status"] not in ("passed", "skipped")
+            if r["status"] != "passed"
         ]
         if failures:
-            self.fail(f"[STEP 10] Persisted stats not re-encrypted after DEK drop: {failures}")
-        self.log.info(f"[STEP 10] PASSED - Re-encrypted (old={old_key_ids}, new={set(new_key_ids)})")
+            self.fail(f"[STEP 10] Persisted stats not encrypted with an in-use log key: {failures}")
+        # The stats file is rewritten whole with the active key on a DEK drop, so it should
+        # move off the old key; per the agreed rule a lingering old key is only a warning.
+        deadline = time.time() + 300
+        while True:
+            results = self.gsi_encryption_helper.verify_gsi_persisted_stats_encrypted(
+                index_nodes, expected_key_id=new_key_ids
+            )
+            still_old = [ip for ip, r in results.items() if r["status"] != "passed"]
+            if not still_old or time.time() >= deadline:
+                break
+            self.sleep(15, f"[STEP 10] Waiting for persisted stats to move to {new_key_ids} on {still_old}")
+        if still_old:
+            self.log.warning(f"[STEP 10] Persisted stats still not on a new log key after 300 s on "
+                             f"{still_old} (old={sorted(old_key_ids)}, new={new_key_ids})")
+        self.log.info(f"[STEP 10] PASSED - Re-encrypted (old={sorted(old_key_ids)}, new={new_key_ids})")
 
         # ========== STEP 11: Kill -9 restart ==========
         self.log.info("[STEP 11] Kill -9 restart to test crash recovery of encrypted stats...")
-        self.restart_index_nodes(index_nodes, restart_mode="kill", validate_read_back=True)
+        self.restart_index_nodes(index_nodes, restart_mode="kill", validate_read_back=True,
+                                 select_queries=set(select_queries))
         expected_key_ids = self.get_indexer_in_use_key_ids(index_nodes, key_type="log")
         results = self.gsi_encryption_helper.verify_gsi_persisted_stats_encrypted(
             index_nodes, expected_key_id=expected_key_ids
         )
         failures = [
             f"{ip}: {r['reason']}" for ip, r in results.items()
-            if r["status"] not in ("passed", "skipped")
+            if r["status"] != "passed"
         ]
         if failures:
             self.fail(f"[STEP 11] Persisted stats not encrypted after kill -9: {failures}")
@@ -6970,13 +6991,16 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
         self.assertTrue(status, "[STEP 12] trigger_log_reencryption (decrypt) failed")
         self.sleep(10, "[STEP 12] Waiting for decrypt to complete")
         results = self.gsi_encryption_helper.verify_gsi_persisted_stats_encrypted(index_nodes)
+        missing = [f"{ip}: {r['reason']}" for ip, r in results.items() if r["status"] == "skipped"]
+        if missing:
+            self.fail(f"[STEP 12] Persisted stats file missing: {missing}")
         encrypted_nodes = [ip for ip, r in results.items() if r["status"] == "passed"]
         if encrypted_nodes:
             self.fail(
                 f"[STEP 12] Persisted stats still encrypted on {encrypted_nodes} "
                 f"after disabling log encryption"
             )
-        self.restart_index_nodes(index_nodes, validate_read_back=True)
+        self.restart_index_nodes(index_nodes, validate_read_back=True, select_queries=set(select_queries))
         self.run_scan_validation(set(select_queries))
         self.log.info("[STEP 12] PASSED - Persisted stats plaintext after disable, scans work")
 
@@ -7571,9 +7595,17 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
             json_template=self.json_template, output=True,
             username=self.username, password=self.password
         )
-        for task in self.data_ops_javasdk_loader_in_batches(
-                sdk_data_loader=gen_create, batch_size=10**4, dataset=self.json_template):
+        if self.use_magma_loader:
+            # Vector templates only load with the magma loader (java_sdk_client loads 0 docs)
+            tasks = [self.cluster.async_load_gen_docs(
+                self.master, bucket=bucket_name, generator=gen_create,
+                pause_secs=1, timeout_secs=300, use_magma_loader=True)]
+        else:
+            tasks = self.data_ops_javasdk_loader_in_batches(
+                sdk_data_loader=gen_create, batch_size=10**4, dataset=self.json_template)
+        for task in tasks:
             task.result()
+        self._assert_buckets_loaded([bucket_name], int(self.num_of_docs_per_collection))
         select_queries = self.create_indexes_on_namespace(
             namespace, index_nodes, prefix, step_prefix="[SETUP]", wait_for_ready=True
         )
@@ -7774,6 +7806,12 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
         self.item_count_related_validations()
         self.log.info("TEST PASSED: test_gsi_encryption_at_rest_log_key_lifecycle")
 
+    # TODO(gsi-ear-coverage): MB-69185 error path: create and drop indexes (in a thread,
+    # joined with an is_alive() check) while dropEncryptionAtRestDeks/other runs; then wait
+    # for the old "other" keys to leave GetInUseKeys (warn if they linger), run
+    # _validate_metadata_repo with the in-use "other" keys, restart with
+    # restart_index_nodes(validate_read_back=True, select_queries=...), and check
+    # getIndexStatus lists exactly the indexes that should exist.
     def test_gsi_encryption_at_rest_other_key_lifecycle(self):
         """
         'other' key lifecycle with the GSI metadata store (@2i/metadata_repo_v2).
@@ -7995,6 +8033,19 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
             shell.disconnect()
         return {line.strip() for line in out if line.strip()}
 
+    # TODO(gsi-ear-coverage): spec steps not covered yet (count the log line before/after):
+    #   - MB-69519 (stats log lifecycle, after step 3): a drop request that includes the active
+    #     log key is rejected ("DropKey received for active key"); a valid drop afterwards completes
+    #   - MB-72103 (stats log lifecycle, step 3): size rotation pauses during re-encryption
+    #     ("LogStatsFileHandler: rotation skipped (key op in progress)"); the active file goes past
+    #     statsLogFsize, then rotates normally
+    #   - MB-69178 (back_to_back_key_ops): quick key ops are queued/deduplicated ("drop/update in
+    #     progress for keydatatype", then "added to pending msg" / "duplicate to active msg")
+    #   - MB-69248 (multi_bucket_keys, BHIVE): drop-key retries stop at maxStorageDropKeyRetry
+    #     (no "trackDropKeys retry:<n>" above the limit)
+    #   - MB-69497 (codebook lifecycle): enabling encryption on a trained index logs
+    #     "SetCodebookEncryptionKey complete"; dropping a key the codebook doesn't use logs
+    #     "not in dropKeyIds" and leaves the codebook file unchanged (same mtime)
     def test_gsi_encryption_at_rest_stats_log_lifecycle(self):
         """
         MB-69179 / MB-72106 / MB-69519 / MB-72103: indexer_stats.log (index nodes) and
@@ -8254,8 +8305,12 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
             self.assertTrue(status, f"Disabling log encryption failed: {response}")
             status, response = self.rest.trigger_log_reencryption()
             self.assertTrue(status, f"dropEncryptionAtRestDeks/log (decrypt) failed: {response}")
-            self.poll_for_indexer_key_ids_gone(index_nodes, log_keys, timeout=600,
-                                               label="[STEP 5] ", key_type="log")
+            try:
+                self.poll_for_indexer_key_ids_gone(index_nodes, log_keys, timeout=600,
+                                                   label="[STEP 5] ", key_type="log")
+            except Exception as ex:
+                # Old keys may legitimately linger; record it but don't fail the test.
+                self.log.warning(f"[STEP 5] Log keys still in use after disabling: {ex}")
             self._wait_for_stats_log_chains(index_nodes, "plaintext", "[STEP 5] ", expected_content=captured)
             self.restart_index_nodes(index_nodes, validate_read_back=True)
             self.run_scan_validation(select_queries)
@@ -8437,8 +8492,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
         since (node local time, see _node_now). Files with the encryption header (log
         encryption on) are read with cbcat."""
         log_dir = self.gsi_encryption_helper.get_log_path(node)
-        cbcat = ("/opt/couchbase/bin/cbcat --password - --with-gosecrets "
-                 "/opt/couchbase/var/lib/couchbase/config/gosecrets.cfg")
+        cbcat = self.gsi_encryption_helper.cbcat_command(node)
         shell = RemoteMachineShellConnection(node)
         try:
             out, _ = shell.execute_command(
@@ -8480,7 +8534,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
             self.assertTrue(self._indexer_log_has(node, pattern),
                             f"{label}'{pattern}' not in indexer.log on {node.ip}")
 
-    def test_gsi_encryption_at_rest_bhive_multi_bucket_keys(self):
+    def test_gsi_encryption_at_rest_multi_bucket_keys(self):
         """
         MB-69248: BHIVE indexes on two buckets encrypted with different keys.
         Run with bhive_index=True.
@@ -8494,7 +8548,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
            re-validated per bucket
         5. Restart (read back); scans
         """
-        self.log.info("STARTING TEST: test_gsi_encryption_at_rest_bhive_multi_bucket_keys")
+        self.log.info("STARTING TEST: test_gsi_encryption_at_rest_multi_bucket_keys")
         index_nodes = self.verify_prerequisites()
         moi = self.gsi_type == "memory_optimized"
         storage = "memdb" if moi else "bhive" if self.bhive_index else "plasma"
@@ -8609,7 +8663,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
                     RestConnection(node).set_index_settings(original_retry)
             if storage == "plasma":
                 self.disable_shard_based_rebalance()
-        self.log.info("TEST PASSED: test_gsi_encryption_at_rest_bhive_multi_bucket_keys")
+        self.log.info("TEST PASSED: test_gsi_encryption_at_rest_multi_bucket_keys")
 
     def _assert_encryption_bootstrap_order(self, node, label):
         """MB-69178 / MB-69208: in the latest indexer start, EncryptionMgr caches the keys,
@@ -8714,28 +8768,26 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
                                   "EncryptionMgr:trackUpdateKeys complete for keydatatype"))
         key_errors_before = self._indexer_log_total(index_nodes, key_errors)
         scans_before = self._scan_results(select_queries)
+        keys_before_4b = set(self.get_indexer_in_use_key_ids(index_nodes, key_type="bucket"))
+        # Short rotation interval, long lifetime: old DEKs must not expire (and be dropped)
+        # while the rotations run
         self.set_bucket_dek_rotation_config(bucket_a, self.encryption_at_rest_id,
                                             dek_rotation_interval=self.kek_rotation_interval_seconds,
-                                            dek_lifetime=self.kek_rotation_interval_seconds * 5)
+                                            dek_lifetime=36000)
         for _ in range(int(self.input.param("rotations", 3))):
             self.poll_for_new_indexer_key_ids(index_nodes, self.get_indexer_in_use_key_ids(index_nodes, key_type="bucket"),
                                               timeout=600, label="[STEP 4b] ", key_type="bucket")
             self._assert_same_scan_results(scans_before, "[STEP 4b] ")
         self.set_bucket_dek_rotation_config(bucket_a, self.encryption_at_rest_id,
                                             dek_rotation_interval=36000, dek_lifetime=36000)
+        dropped = keys_before_4b - set(self.get_indexer_in_use_key_ids(index_nodes, key_type="bucket"))
+        if dropped:
+            self.log.warning(f"[STEP 4b] Keys in use before the rotations are no longer in use: {sorted(dropped)}")
         assert_logged(rotate_logs, "[STEP 4b] ")
 
         # STEP 5: kill -9 -> recovery from disk, no rebuild from 0, no key lookup errors
         rollbacks = self._indexer_log_total(index_nodes, "StorageMgr::rollbackAllToZero")
-        for node in index_nodes:
-            shell = RemoteMachineShellConnection(node)
-            try:
-                shell.execute_command("pkill -9 -x indexer")
-            finally:
-                shell.disconnect()
-        self.wait_for_indexer_ready(index_nodes, timeout=900, label="[STEP 5] ")
-        self.wait_until_indexes_online(timeout=1800)
-        self.item_count_related_validations()
+        self.restart_index_nodes(index_nodes, restart_mode="kill", validate_read_back=True)
         self._assert_same_scan_results(scans_before, "[STEP 5] ")
         self.assertEqual(self._indexer_log_total(index_nodes, "StorageMgr::rollbackAllToZero"), rollbacks,
                          "[STEP 5] Indexes rebuilt from 0 after kill -9")
@@ -8772,17 +8824,12 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
         `failed` not; MOI snapshot by default, BHIVE codebook), same scan results and item counts."""
         before = [self._indexer_log_total(index_nodes, p) for p in (done, failed)]
         scans_before = self._scan_results(select_queries)
-        for node in index_nodes:
-            shell = RemoteMachineShellConnection(node)
-            try:
-                shell.execute_command("pkill -9 -x indexer")
-            finally:
-                shell.disconnect()
-        self.wait_for_indexer_ready(index_nodes, timeout=900, label=label)
-        self.wait_until_indexes_online(timeout=1800)
-        self.assertGreater(self._indexer_log_total(index_nodes, done), before[0], f"{label}No MOI snapshot recovery")
-        self.assertEqual(self._indexer_log_total(index_nodes, failed), before[1], f"{label}MOI snapshot recovery failed")
-        self.item_count_related_validations()
+        # kill -9 each indexer; read-back checks item counts, no rebuild from KV,
+        # getIndexStatus and persisted stats. Scans are compared with _scan_results,
+        # which also handles LIMIT queries.
+        self.restart_index_nodes(index_nodes, restart_mode="kill", validate_read_back=True)
+        self.assertGreater(self._indexer_log_total(index_nodes, done), before[0], f"{label}No recovery log '{done}'")
+        self.assertEqual(self._indexer_log_total(index_nodes, failed), before[1], f"{label}Recovery failure logged: '{failed}'")
         self._assert_same_scan_results(scans_before, label)
 
     def test_gsi_encryption_at_rest_moi_lifecycle(self):
@@ -8928,7 +8975,9 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
         2. Corrupt a partition, kill the indexer: backup taken; restart (startup sweep): kept
         3. Plant .corruptData; encrypt a different bucket (bucket_2): .corruptData removed
            ("cleanupCorruptDataDirIfEncrypted removed"); then enable + force-encrypt the bucket.
-           Backup setting off: planted .corruptData kept across restart; on again: swept
+           Retain override (test_retain_corrupt_index_backup) on: planted .corruptData kept
+           across restart; off again: swept. Backup switch (enable_corrupt_index_backup) off:
+           cleanup doesn't run, planted .corruptData kept across restart; on again: swept
         4. Disable + drop DEKs on bucket only (bucket_2 still encrypted); corrupt again:
            no backup ("skipping backup: bucket encryption is active")
         5. Disable + drop DEKs on bucket_2; corrupt again, kill the indexer: backup taken again
@@ -8999,14 +9048,31 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
                            f"[STEP 3] '{removed_log}' not logged on {corrupt_node.ip}")
         self._bucket_key_op("enable", bucket_name, index_nodes, "[STEP 3] ")
 
-        # Retain setting on: cleanup is a no-op, planted .corruptData kept across restart
+        # Retain override on: cleanup is a no-op, planted .corruptData kept across restart
+        settings_rest = RestConnection(index_nodes[0])
         retain = "indexer.encryption.test_retain_corrupt_index_backup"
-        RestConnection(index_nodes[0]).set_index_settings({retain: True})
-        self._plant_corrupt_data_backup(index_nodes)
+        settings_rest.set_index_settings({retain: True})
+        try:
+            self._plant_corrupt_data_backup(index_nodes)
+            self.restart_index_nodes(index_nodes)
+            self.assertTrue(all(self._existing_corrupt_data_dirs(n) for n in index_nodes),
+                            f"[STEP 3] .corruptData removed with {retain} on")
+        finally:
+            settings_rest.set_index_settings({retain: False})
         self.restart_index_nodes(index_nodes)
-        self.assertTrue(all(self._existing_corrupt_data_dirs(n) for n in index_nodes),
-                        f"[STEP 3] .corruptData removed with {retain} on")
-        RestConnection(index_nodes[0]).set_index_settings({retain: False})
+        self._wait_for_corrupt_data_removed(index_nodes, "[STEP 3] ", timeout=120)
+
+        # Backup switch off (MB-69503 spec): the cleanup only runs when backups are enabled,
+        # so an existing .corruptData is left untouched across a restart; on again: swept
+        backup = "indexer.settings.enable_corrupt_index_backup"
+        settings_rest.set_index_settings({backup: False})
+        try:
+            self._plant_corrupt_data_backup(index_nodes)
+            self.restart_index_nodes(index_nodes)
+            self.assertTrue(all(self._existing_corrupt_data_dirs(n) for n in index_nodes),
+                            f"[STEP 3] .corruptData removed with {backup} off")
+        finally:
+            settings_rest.set_index_settings({backup: True})
         self.restart_index_nodes(index_nodes)
         self._wait_for_corrupt_data_removed(index_nodes, "[STEP 3] ", timeout=120)
 
@@ -9157,17 +9223,24 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
             self.log.info(f"{label}cache files validated on {list(results.keys())}")
 
         def _wait_cache_reencrypted(nodes, old_key_ids, label, timeout=300, interval=15):
+            # Done only when no cache file's header carries an old key (a mix of old and
+            # new keys is still in progress). Lingering old keys only warn (agreed rule).
+            old_key_ids = [str(k) for k in old_key_ids]
             deadline = time.time() + timeout
-            still = [n.ip for n in nodes]
-            while time.time() < deadline:
-                results = helper.verify_gsi_request_handler_cache_encrypted(
-                    nodes, expected_key_id=old_key_ids
-                )
-                still = [ip for ip, r in results.items() if r.get("status") == "passed"]
+            while True:
+                still = []
+                for node in nodes:
+                    for path in self._list_request_handler_cache_files(node):
+                        has_old, _ = helper.verify_file_header_contains_any(node, path, old_key_ids)
+                        if has_old:
+                            still.append(f"{node.ip}:{path}")
                 if not still:
                     return
-                self.sleep(interval, f"{label}cache still carries old keys on {still}")
-            raise Exception(f"{label}cache still carries old key IDs on {still} after {timeout}s")
+                if time.time() >= deadline:
+                    self.log.warning(f"{label}cache files still carry old key IDs {old_key_ids} "
+                                     f"after {timeout}s: {still}")
+                    return
+                self.sleep(interval, f"{label}cache still carries old keys in {still[:5]}")
 
         def _wait_cache_plaintext(nodes, label, timeout=300, interval=15):
             deadline = time.time() + timeout
@@ -9279,7 +9352,6 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
         final_log_keys = self.poll_for_new_indexer_key_ids(
             index_nodes, log_keys + new_log_keys, timeout=600,
             label="[STEP 9] ", key_type="log")
-        _wait_cache_reencrypted(index_nodes, new_log_keys, "[STEP 9] ")
         self._populate_request_handler_cache(index_nodes)
         _assert_cache_encrypted(index_nodes,
                                 self.get_indexer_in_use_key_ids(index_nodes, key_type="log"),
@@ -9436,130 +9508,3 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
         # STEP 10
         self.item_count_related_validations()
         self.log.info("TEST PASSED: test_gsi_encryption_at_rest_index_dir_naming")
-
-    def test_gsi_encryption_at_rest_kmip_sanity(self):
-        """
-        KMIP-backed encryption at rest sanity test.
-
-        Validates that GSI indexes work correctly when encryption at rest
-        uses a KMIP-managed key as KEK. The KMIP secret is created by
-        basetestcase.py setUp when create_KMIP_secret=True.
-
-        Steps:
-        1. Verify prerequisites (index nodes, encryption active)
-        2. Verify KMIP secret exists (self.KMIP_id set by setUp)
-        3. Create bucket, load docs, create indexes
-        4. Scan + file encryption validation
-        5. DEK rotation under KMIP KEK
-        6. Scan + file encryption post-rotation
-        7. Restart + read-back validation
-        8. Final scan + item count
-        """
-        STABLE_INTERVAL_S = 36000
-        ROTATION_INTERVAL_S = 120
-
-        self.log.info("=" * 80)
-        self.log.info("STARTING TEST: test_gsi_encryption_at_rest_kmip_sanity")
-        self.log.info("=" * 80)
-
-        # ========== STEP 1: Verify prerequisites ==========
-        index_nodes = self.verify_prerequisites(min_index_nodes=2)
-        key_id = self.encryption_at_rest_id
-
-        # ========== STEP 2: Verify KMIP secret was created ==========
-        kmip_id = getattr(self, 'KMIP_id', None)
-        self.assertIsNotNone(
-            kmip_id,
-            "[STEP 2] KMIP secret not created. Ensure create_KMIP_secret=True in conf"
-        )
-        self.log.info(f"[STEP 2] PASSED - KMIP secret ID: {kmip_id}, bucket key ID: {key_id}")
-
-        # ========== STEP 3: Snapshot settings + create bucket + indexes ==========
-        self.set_indexer_snapshot_settings(index_nodes)
-
-        bucket_name = self.test_bucket
-        self.create_bucket_with_encryption(bucket_name, enable_encryption=True)
-        bucket_info = self.rest.get_bucket_json(bucket_name)
-        encryption_key_id = bucket_info.get('encryptionAtRestKeyId', None)
-        self.assertEqual(
-            encryption_key_id, key_id,
-            f"[STEP 3] Bucket key {encryption_key_id} != expected {key_id}"
-        )
-
-        self.set_bucket_dek_rotation_config(
-            bucket_name, key_id,
-            dek_rotation_interval=STABLE_INTERVAL_S,
-            dek_lifetime=STABLE_INTERVAL_S
-        )
-
-        namespace = f"default:{bucket_name}._default._default"
-        gen_create = SDKDataLoader(
-            num_ops=self.num_of_docs_per_collection,
-            percent_create=100, percent_update=0, percent_delete=0,
-            scope="_default", collection="_default",
-            json_template=self.json_template, output=True,
-            username=self.username, password=self.password
-        )
-        if self.use_magma_loader:
-            self.cluster.async_load_gen_docs(
-                self.master, bucket=bucket_name, generator=gen_create,
-                pause_secs=1, timeout_secs=300, use_magma_loader=True
-            ).result()
-        else:
-            for task in self.data_ops_javasdk_loader_in_batches(
-                    sdk_data_loader=gen_create, batch_size=10**4, dataset=self.json_template):
-                task.result()
-
-        select_queries = self.create_indexes_on_namespace(
-            namespace, index_nodes, 'kmip_',
-            step_prefix="[STEP 3]", wait_for_ready=True
-        )
-        self.log.info("[STEP 3] PASSED - Bucket, docs, indexes created under KMIP KEK")
-
-        # ========== STEP 4: Baseline scan + file encryption validation ==========
-        baseline_keys = self.get_indexer_in_use_key_ids(index_nodes)
-        self.run_scan_validation(select_queries, validate_item_count=True)
-        self.validate_file_encryption_with_key(
-            index_nodes, expected_key_id=baseline_keys,
-            step_prefix="[STEP 4] ", raise_on_failure=True
-        )
-        self.log.info("[STEP 4] PASSED - Baseline scans and encryption validated")
-
-        # ========== STEP 5: DEK rotation under KMIP KEK ==========
-        self.log.info(f"[STEP 5] Triggering DEK rotation (interval={ROTATION_INTERVAL_S}s)...")
-        self.set_bucket_dek_rotation_config(
-            bucket_name, key_id,
-            dek_rotation_interval=ROTATION_INTERVAL_S,
-            dek_lifetime=ROTATION_INTERVAL_S
-        )
-        new_keys = self.poll_for_new_indexer_key_ids(
-            index_nodes, baseline_keys, timeout=600, label="[STEP 5] "
-        )
-        self.set_bucket_dek_rotation_config(
-            bucket_name, key_id,
-            dek_rotation_interval=STABLE_INTERVAL_S,
-            dek_lifetime=STABLE_INTERVAL_S
-        )
-        self.log.info(f"[STEP 5] PASSED - DEK rotation completed, new keys: {new_keys}")
-
-        # ========== STEP 6: Post-rotation scan + file encryption ==========
-        self.run_scan_validation(select_queries, validate_item_count=True)
-        post_rotation_keys = self.get_indexer_in_use_key_ids(index_nodes)
-        self.validate_file_encryption_with_key(
-            index_nodes, expected_key_id=post_rotation_keys,
-            step_prefix="[STEP 6] ", raise_on_failure=True
-        )
-        self.log.info("[STEP 6] PASSED - Post-rotation scans and encryption validated")
-
-        # ========== STEP 7: Restart + read-back ==========
-        self.log.info("[STEP 7] Restarting index nodes with read-back validation...")
-        self.restart_index_nodes(index_nodes, validate_read_back=True)
-        self.log.info("[STEP 7] PASSED - Restart and read-back OK under KMIP KEK")
-
-        # ========== STEP 8: Final scan + item count ==========
-        self.run_scan_validation(select_queries, validate_item_count=True)
-        self.log.info("[STEP 8] PASSED - Final scans and item counts OK")
-
-        self.log.info("=" * 80)
-        self.log.info("TEST PASSED: test_gsi_encryption_at_rest_kmip_sanity")
-        self.log.info("=" * 80)

@@ -1,6 +1,7 @@
 
 """GSI-focused encryption-at-rest helpers extracted from the shared EAR facade."""
 
+import fnmatch
 import json
 import random
 import re
@@ -2085,8 +2086,7 @@ class GSIEncryptionHelpers:
         files, gzip -dc for .gz (checks the whole file's CRC), plain read otherwise. A file
         that fails to decode gives a
         'READ_FAILED:<file>' line."""
-        cbcat = ("/opt/couchbase/bin/cbcat --password - --with-gosecrets "
-                 "/opt/couchbase/var/lib/couchbase/config/gosecrets.cfg")
+        cbcat = self.cbcat_command(node)
         shell = RemoteMachineShellConnection(node, verbose=False)
         try:
             out, _ = shell.execute_command(
@@ -2164,9 +2164,7 @@ class GSIEncryptionHelpers:
             if len(paths) > 1:
                 problems.append(f"generation {generation} exists as {paths}")
         if max_gap_secs is not None and not problems:
-            reader = ("/opt/couchbase/bin/cbcat --password - --with-gosecrets "
-                      "/opt/couchbase/var/lib/couchbase/config/gosecrets.cfg"
-                      if expect == "encrypted" else "zcat -f")
+            reader = self.cbcat_command(node) if expect == "encrypted" else "zcat -f"
             spans = []
             shell = RemoteMachineShellConnection(node, verbose=False)
             try:
@@ -3301,6 +3299,22 @@ class GSIEncryptionHelpers:
             return WIN_COUCHBASE_BIN_PATH
         return LINUX_NONROOT_CB_BIN_PATH if nonroot else LINUX_COUCHBASE_BIN_PATH
 
+    # TODO(gsi-ear-coverage): consolidate the duplicated EAR helpers:
+    #   - two cbcat forms: cbcat_command (with --with-gosecrets) vs _run_cbcat (plain); confirm
+    #     on a log-encrypted cluster which one decodes, and use one everywhere
+    #   - get_bin_path duplicates the bin-path logic in run_cb_tool
+    #   - static topology: _load_docs duplicates the loader in _setup_bucket_and_indexes
+    #   - single-use helpers to inline: _assert_corrupt_backup_skipped,
+    #     _corrupt_codebook_and_recover, _assert_encryption_bootstrap_order, verify_stats_log_chain
+    #   - F4: move _wait_for_log_files_plaintext / _wait_for_metadata_repo_plaintext onto
+    #     verify_files_plaintext (only used for codebooks today)
+    def cbcat_command(self, node):
+        """cbcat with the node's gosecrets.cfg, for decoding encrypted log-key files.
+        Paths come from the node's bin directory (root or non-root install)."""
+        bin_path = self.get_bin_path(node)
+        config_dir = bin_path[:-len("bin/")] + "var/lib/couchbase/config"
+        return f"{bin_path}cbcat --password - --with-gosecrets {config_dir}/gosecrets.cfg"
+
     def _run_cbcat(self, node, args):
         """Run cbcat on node. Runs from /tmp so a tool crash cannot leave
         erl_crash.dump in the logs directory."""
@@ -3692,8 +3706,6 @@ class GSIEncryptionAtRestBase:
         nodes) and projector.log* (KV nodes). Encrypted log files are read with cbcat,
         others with zcat -f. Logs each file's size and mtime so a rotation between the
         setUp baseline and tearDown is visible in the test log."""
-        cbcat = ("/opt/couchbase/bin/cbcat --password - --with-gosecrets "
-                 "/opt/couchbase/var/lib/couchbase/config/gosecrets.cfg")
         counts = {}
         targets = [("index", "indexer.log", self.ENCRYPTION_ERROR_PATTERNS_INDEXER),
                    ("kv", "projector.log", self.ENCRYPTION_ERROR_PATTERNS_PROJECTOR)]
@@ -3706,6 +3718,7 @@ class GSIEncryptionAtRestBase:
                     continue
                 log_dir = str(log_dir).strip('"')
                 greps = "; ".join(f"grep -cE '{pattern}' $T" for pattern in patterns)
+                cbcat = self.gsi_encryption_helper.cbcat_command(server)
                 shell = RemoteMachineShellConnection(server, verbose=False)
                 try:
                     listing, _ = shell.execute_command(
@@ -4627,6 +4640,8 @@ class GSIEncryptionAtRestBase:
         Run cbcollect_info on node and check each stats log in the bundle
         (ns_server.<name>) is decrypted: collected via cbbrowse_logs, no encryption
         header, and contains the first line of the oldest on-disk rotation.
+        Request-handler cache and persisted stats: if the bundle has them, they must
+        not carry the encryption header; if it doesn't, only warn.
         """
         helper = self.gsi_encryption_helper
         results = {}
@@ -4636,7 +4651,31 @@ class GSIEncryptionAtRestBase:
             shell.execute_command(f"rm -f {zip_path}")
             self.log.info(f"Running cbcollect_info on {node.ip} -> {zip_path}")
             shell.execute_cbcollect_info(zip_path)
+            listing, _ = shell.execute_command(f"unzip -Z1 {zip_path} 2>/dev/null")
             for category in categories:
+                if category not in self.STATS_LOG_FILE_NAMES:
+                    patterns = self.LOG_KEY_FILE_CATEGORIES[category][2]
+                    entries = [e.strip() for e in listing
+                               if any(fnmatch.fnmatch(e.strip(), f"*{pattern}") for pattern in patterns)]
+                    if not entries:
+                        self.log.warning(f"[cbcollect_{category}] {node.ip}: no {patterns} files in the "
+                                         f"cbcollect_info bundle; not collected")
+                        continue
+                    encrypted_entries = []
+                    for entry in entries:
+                        out, _ = shell.execute_command(
+                            f"unzip -p {zip_path} {shlex.quote(entry)} | head -c 64 | "
+                            f"grep -ac '{helper.ENCRYPTION_MAGIC_BYTES}'")
+                        if out and out[0].strip() != "0":
+                            encrypted_entries.append(entry)
+                    for entry in encrypted_entries:
+                        self.log.error(f"[cbcollect_{category}] {node.ip}: {entry} is still encrypted in the bundle")
+                    results[f"cbcollect_{category}"] = {
+                        "status": "failed" if encrypted_entries else "passed",
+                        "passed_count": len(entries) - len(encrypted_entries), "total_checked": len(entries),
+                        "failed_files": [(f"{zip_path}:{e}", "encrypted in bundle") for e in encrypted_entries],
+                        "reason": f"encrypted in bundle: {encrypted_entries}" if encrypted_entries else ""}
+                    continue
                 name = self.STATS_LOG_FILE_NAMES[category]
                 entry = f"{zip_path} '*/ns_server.{name}'"
                 failures = []
@@ -4701,26 +4740,16 @@ class GSIEncryptionAtRestBase:
         for node in nodes:
             allowed = None
             if node.ip in service_ips["index"]:
-                try:
-                    allowed = self.get_indexer_in_use_key_ids([node], strict=True, key_type="log")
-                except Exception as exc:
-                    self.log.warning(
-                        f"Could not resolve in-use log key IDs for {node.ip} "
-                        f"(e.g. mid-restart): {exc!r} — checking without a key-ID filter")
+                # Waits for the node to answer; a lookup that still fails fails the check
+                allowed = self.get_indexer_in_use_key_ids([node], key_type="log")
             node_categories = [c for c in categories
                                if node.ip in service_ips[self.LOG_KEY_FILE_CATEGORIES[c][0]]]
             for category in node_categories:
                 results.setdefault(category, {})[node.ip] = self._check_log_key_files(
                     node, category, allowed_key_ids=allowed)
-            stats_categories = [c for c in node_categories if c in self.STATS_LOG_FILE_NAMES]
-            if stats_categories:
-                for category, result in self._check_cbcollect_bundle(node, stats_categories).items():
+            if node_categories:
+                for category, result in self._check_cbcollect_bundle(node, node_categories).items():
                     results.setdefault(category, {})[node.ip] = result
-            non_collected = [c for c in node_categories if c not in self.STATS_LOG_FILE_NAMES]
-            for category in non_collected:
-                self.log.warning(
-                    f"[cbcollect] {node.ip}: {category} files are not collected by "
-                    f"cbcollect_info — skipping bundle check")
 
         self._log_encryption_summary(results)
         passed_lines, skipped_lines, failed_lines = self._build_encryption_summary_lines(results)
@@ -4793,13 +4822,8 @@ class GSIEncryptionAtRestBase:
             if category in data_categories:
                 return self._node_data_key_ids(node)
             if node.ip in index_ips and expect_encrypted:
-                try:
-                    return self.get_indexer_in_use_key_ids([node], strict=True, key_type="log")
-                except Exception as exc:
-                    self.log.warning(
-                        f"Could not resolve in-use log key IDs for {node.ip} "
-                        f"(e.g. mid-restart): {exc!r} — checking without a key-ID filter")
-                    return None
+                # Waits for the node to answer; a lookup that still fails fails the check
+                return self.get_indexer_in_use_key_ids([node], key_type="log")
             return None
 
         index_ips = {n.ip for n in self.get_nodes_from_services_map(

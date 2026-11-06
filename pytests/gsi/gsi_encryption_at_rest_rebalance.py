@@ -26,6 +26,7 @@ import time
 from couchbase_helper.documentgenerator import SDKDataLoader
 from couchbase_helper.query_definitions import QueryDefinition, RANGE_SCAN_TEMPLATE
 from membase.api.rest_client import RestConnection, RestHelper
+from lib.remote.remote_util import RemoteMachineShellConnection
 from .gsi_encryption_helpers import GSIEncryptionAtRestBase, _GSI_TYPE_TO_ENGINE
 from .base_gsi import BaseSecondaryIndexingTests
 
@@ -892,9 +893,9 @@ class GSIEncryptionAtRestRebalance(GSIEncryptionAtRestBase, BaseSecondaryIndexin
                     ("request_cache", post_rebal_index_nodes),
                     ("persisted_stats", post_rebal_index_nodes),
                     ("projector_stats_log", kv_nodes)):
-                expect_files = category in ("stats_log", "projector_stats_log")
-                results = self.verify_category_on_nodes(
-                    category, category_nodes, expect_files=expect_files)
+                # Every index node has the cache (populated above) and the persisted stats
+                # file (written at indexer start), so a missing file fails in all categories
+                results = self.verify_category_on_nodes(category, category_nodes)
                 failed = {ip: r for ip, r in results.items()
                           if isinstance(r, dict) and r.get("status") == "failed"}
                 if failed:
@@ -4988,6 +4989,17 @@ class GSIEncryptionAtRestRebalance(GSIEncryptionAtRestBase, BaseSecondaryIndexin
                       f"Dest: {dest_node.ip}")
 
         # STEP 5: swap rebalance
+        # The destination logs "importShardKeys recovering shard keys" when it imports the
+        # shards' DEKs (indexing shard_rebalancer.go); count it before and after
+        import_keys_log = "ShardRebalancer::importShardKeys recovering shard keys"
+        dest_indexer_log = f"{self.gsi_encryption_helper.get_log_path(dest_node)}/indexer.log*"
+        shell = RemoteMachineShellConnection(dest_node)
+        try:
+            out, _ = shell.execute_command(f'zgrep -c "{import_keys_log}" {dest_indexer_log} 2>/dev/null '
+                                           f'| awk -F: "{{s+=\\$NF}} END {{print s+0}}"')
+        finally:
+            shell.disconnect()
+        import_keys_before = int(out[0].strip()) if out and out[0].strip().isdigit() else 0
         self.log.info(f"[STEP 5] Swap rebalance: removing {source_node.ip}, adding {dest_node.ip}")
         rebalance = self.cluster.async_rebalance(
             self.servers[:self.nodes_init],
@@ -5003,7 +5015,17 @@ class GSIEncryptionAtRestRebalance(GSIEncryptionAtRestBase, BaseSecondaryIndexin
         # STEP 6
         self.sleep(30, "[STEP 6] Waiting for indexes to settle after rebalance")
         self.wait_until_indexes_online(timeout=1200)
-        self.log.info("[STEP 6] PASSED - indexes online on new topology")
+        shell = RemoteMachineShellConnection(dest_node)
+        try:
+            out, _ = shell.execute_command(f'zgrep -c "{import_keys_log}" {dest_indexer_log} 2>/dev/null '
+                                           f'| awk -F: "{{s+=\\$NF}} END {{print s+0}}"')
+        finally:
+            shell.disconnect()
+        import_keys_after = int(out[0].strip()) if out and out[0].strip().isdigit() else 0
+        self.assertGreater(import_keys_after, import_keys_before,
+                           f"[STEP 6] '{import_keys_log}' not logged on dest {dest_node.ip}: shard keys "
+                           f"were not imported ({import_keys_before} -> {import_keys_after})")
+        self.log.info("[STEP 6] PASSED - indexes online on new topology, shard keys imported on dest")
 
         # STEP 7: compare dest bucket key IDs vs source (DEKs are shipped via importShardKeys)
         dest_bucket_key_ids = set(self.get_indexer_in_use_key_ids(
@@ -5042,6 +5064,12 @@ class GSIEncryptionAtRestRebalance(GSIEncryptionAtRestBase, BaseSecondaryIndexin
         self.run_scan_validation(all_select_queries)
         self.log.info("TEST PASSED: test_gsi_encryption_shards_after_fbr")
 
+    # TODO(gsi-ear-coverage): MB-70278 cases not covered yet:
+    #   - partly used shard: a shard that still hosts indexes that didn't move must not be
+    #     deleted and those indexes must keep scanning (needs a setup that guarantees a
+    #     shared shard; step 9 already only fails on shards no index uses)
+    #   - after the rebalance, drop the bucket DEKs and wait for the old keys to leave
+    #     GetInUseKeys on the surviving nodes (warn if they linger, per the agreed rule)
     def test_gsi_ear_shard_cleanup_after_dcp_rebalance(self):
         """
         MB-70278: Verify that empty shard directories are cleaned up on the source
@@ -5116,9 +5144,8 @@ class GSIEncryptionAtRestRebalance(GSIEncryptionAtRestBase, BaseSecondaryIndexin
         self.log.info(f"[STEP 5] Capturing shard dirs on source node {node_to_eject.ip}...")
 
         node_rest = RestConnection(node_to_eject)
-        storage_dir = node_rest.get_indexer_internal_stats().get(
-            "indexer.storage_dir", "/data/@2i"
-        )
+        storage_dir = node_rest.get_indexer_internal_stats().get("indexer.storage_dir")
+        self.assertTrue(storage_dir, f"[STEP 5] indexer.storage_dir not reported by {node_to_eject.ip}")
         shard_path = f"{storage_dir}/shards"
 
         shell_src = RemoteMachineShellConnection(node_to_eject)
@@ -5170,9 +5197,6 @@ class GSIEncryptionAtRestRebalance(GSIEncryptionAtRestBase, BaseSecondaryIndexin
             rebalance.result(timeout=1800)
         except Exception as e:
             self.fail(f"[STEP 7] Rebalance failed: {e}")
-        # Give the cleanup phase time to run (runCleanupEmptyShards can take up to 25 min)
-        self.log.info("[STEP 7] Rebalance complete. Waiting up to 25 min for shard cleanup...")
-        self.sleep(90, "[STEP 7] Initial settle after rebalance finish")
         # Redirect self.master/self.rest to a surviving KV+N1QL node.
         # surviving_nodes are index nodes — some may lack kv/n1ql.
         # Query node_services via a surviving node (not the ejected master).
@@ -5198,41 +5222,49 @@ class GSIEncryptionAtRestRebalance(GSIEncryptionAtRestBase, BaseSecondaryIndexin
         self.log.info(f"[STEP 7] Redirected self.master to {self.master.ip}")
         self.log.info("[STEP 7] PASSED - Rebalance out complete")
 
-        # ========== STEP 8: Assert cleanup log counts increased on surviving nodes ==========
-        self.log.info("[STEP 8] Checking indexer.log on surviving nodes for new cleanup log lines...")
-        started_increased = False
-        done_increased = False
+        # ========== STEP 8: Wait for cleanup start/done log lines on surviving nodes ==========
+        # runCleanupEmptyShards waits up to ~25 min for the cleanup to finish, so poll.
+        self.log.info("[STEP 8] Waiting up to 26 min for cleanup log lines on surviving nodes...")
+        log_dirs = {}
         for node in surviving_nodes:
-            shell = RemoteMachineShellConnection(node)
             _, log_dir = RestConnection(node).diag_eval(
                 "filename:absname(element(2, application:get_env(ns_server,error_logger_mf_dir)))."
             )
-            log_dir = str(log_dir)
-            indexer_log = f"{log_dir}/indexer.log*"
-
-            started_count, _ = shell.execute_command(
-                f'zgrep "{CLEANUP_LOG_START}" {indexer_log} 2>/dev/null | wc -l'
-            )
-            done_count, _ = shell.execute_command(
-                f'zgrep "{CLEANUP_LOG_DONE}" {indexer_log} 2>/dev/null | wc -l'
-            )
-            destroy_count, _ = shell.execute_command(
-                f'zgrep "{DESTROY_LOG}" {indexer_log} 2>/dev/null | wc -l'
-            )
-            shell.disconnect()
-
-            s = int(started_count[0].strip()) if started_count else 0
-            d = int(done_count[0].strip()) if done_count else 0
-            ds = int(destroy_count[0].strip()) if destroy_count else 0
-            base = baseline_counts.get(node.ip, {"started": 0, "done": 0, "destroy": 0})
-            self.log.info(
-                f"[STEP 8] {node.ip}: started={base['started']}->{s}, "
-                f"done={base['done']}->{d}, destroy={base['destroy']}->{ds}"
-            )
-            if s > base["started"]:
-                started_increased = True
-            if d > base["done"]:
-                done_increased = True
+            log_dirs[node.ip] = str(log_dir)
+        deadline = time.time() + 26 * 60
+        while True:
+            started_increased = False
+            done_increased = False
+            for node in surviving_nodes:
+                indexer_log = f"{log_dirs[node.ip]}/indexer.log*"
+                shell = RemoteMachineShellConnection(node)
+                try:
+                    started_count, _ = shell.execute_command(
+                        f'zgrep "{CLEANUP_LOG_START}" {indexer_log} 2>/dev/null | wc -l'
+                    )
+                    done_count, _ = shell.execute_command(
+                        f'zgrep "{CLEANUP_LOG_DONE}" {indexer_log} 2>/dev/null | wc -l'
+                    )
+                    destroy_count, _ = shell.execute_command(
+                        f'zgrep "{DESTROY_LOG}" {indexer_log} 2>/dev/null | wc -l'
+                    )
+                finally:
+                    shell.disconnect()
+                s = int(started_count[0].strip()) if started_count else 0
+                d = int(done_count[0].strip()) if done_count else 0
+                ds = int(destroy_count[0].strip()) if destroy_count else 0
+                base = baseline_counts.get(node.ip, {"started": 0, "done": 0, "destroy": 0})
+                self.log.info(
+                    f"[STEP 8] {node.ip}: started={base['started']}->{s}, "
+                    f"done={base['done']}->{d}, destroy={base['destroy']}->{ds}"
+                )
+                if s > base["started"]:
+                    started_increased = True
+                if d > base["done"]:
+                    done_increased = True
+            if (started_increased and done_increased) or time.time() >= deadline:
+                break
+            self.sleep(60, "[STEP 8] Waiting for empty shard cleanup to finish")
 
         self.assertTrue(
             started_increased,
@@ -5240,57 +5272,51 @@ class GSIEncryptionAtRestRebalance(GSIEncryptionAtRestBase, BaseSecondaryIndexin
         )
         self.assertTrue(
             done_increased,
-            "[STEP 8] Cleanup done log count did not increase on any surviving node; "
-            "cleanup may have timed out after 25 min"
+            "[STEP 8] Cleanup done log count did not increase on any surviving node within 26 min"
         )
         self.log.info("[STEP 8] PASSED - Cleanup log counts increased after DCP rebalance")
 
-        # ========== STEP 9: Assert empty shard dirs cleaned up on surviving nodes ==========
-        self.log.info("[STEP 9] Checking shard dirs on surviving nodes...")
+        # ========== STEP 9: No orphaned shard dirs on surviving nodes ==========
+        # A shard dir is <indexer.storage_dir>/shards/shard<N>, N = a shard ID from the index
+        # metadata (shardIds). It holds plasma files (config.json, data, meta), not *.index
+        # dirs, so "in use" comes from the metadata: a shard<N> whose N no index uses is an
+        # empty shard that runCleanupEmptyShards should have destroyed.
+        self.log.info("[STEP 9] Checking for orphaned shard dirs on surviving nodes...")
         leftover_empty = []
         for node in surviving_nodes:
             node_rest = RestConnection(node)
-            node_storage_dir = node_rest.get_indexer_internal_stats().get(
-                "indexer.storage_dir", "/data/@2i"
-            )
-            node_shard_path = f"{node_storage_dir}/shards"
+            node_storage_dir = node_rest.get_indexer_internal_stats().get("indexer.storage_dir")
+            self.assertTrue(node_storage_dir, f"[STEP 9] indexer.storage_dir not reported by {node.ip}")
+            metadata = node_rest.get_index_aggregate_metadata()
+            self.assertTrue(metadata, f"[STEP 9] getIndexMetadata returned nothing on {node.ip}")
+            in_use = set()
+            pending = [metadata]
+            while pending:
+                item = pending.pop()
+                if isinstance(item, dict):
+                    for key, value in item.items():
+                        if key == "shardIds" and isinstance(value, list):
+                            in_use.update(str(shard_id) for shard_id in value)
+                        else:
+                            pending.append(value)
+                elif isinstance(item, list):
+                    pending.extend(item)
             shell = RemoteMachineShellConnection(node)
             try:
-                out, _ = shell.execute_command(
-                    f"ls {node_shard_path} 2>/dev/null || echo '__empty__'"
-                )
-                post_shards = [
-                    s.strip() for s in out if s.strip() and s.strip() != "__empty__"
-                ]
-                if post_shards:
-                    self.log.info(f"[STEP 9] {node.ip}: shard dirs remaining: {post_shards}")
-                    for shard_dir in post_shards:
-                        shard_full = f"{node_shard_path}/{shard_dir}"
-                        idx_out, _ = shell.execute_command(
-                            f"ls {shard_full}/*.index 2>/dev/null | wc -l"
-                        )
-                        idx_count = int(idx_out[0].strip()) if idx_out else 0
-                        if idx_count == 0:
-                            leftover_empty.append(f"{node.ip}:{shard_dir}")
-                            self.log.warning(
-                                f"[STEP 9] {node.ip}: empty shard dir {shard_dir} "
-                                f"was NOT cleaned up"
-                            )
-                        else:
-                            self.log.info(
-                                f"[STEP 9] {node.ip}: shard dir {shard_dir} still has "
-                                f"{idx_count} index dir(s) — expected (shared shard)"
-                            )
-                else:
-                    self.log.info(f"[STEP 9] {node.ip}: no shard dirs remaining")
+                out, _ = shell.execute_command(f"ls {node_storage_dir}/shards 2>/dev/null")
             finally:
                 shell.disconnect()
+            shard_dirs = [line.strip() for line in out if line.strip().startswith("shard")]
+            orphaned = [d for d in shard_dirs if d[len("shard"):] not in in_use]
+            self.log.info(f"[STEP 9] {node.ip}: {len(shard_dirs)} shard dirs, "
+                          f"{len(in_use)} shard IDs in use cluster-wide, orphaned: {orphaned}")
+            leftover_empty.extend(f"{node.ip}:{d}" for d in orphaned)
         if leftover_empty:
             self.fail(
                 f"[STEP 9] Empty shard directories not cleaned up on surviving nodes: "
                 f"{leftover_empty}"
             )
-        self.log.info("[STEP 9] PASSED - No empty shard dirs on surviving nodes")
+        self.log.info("[STEP 9] PASSED - No orphaned shard dirs on surviving nodes")
 
         # ========== STEP 10: Verify encryption intact on surviving nodes ==========
         self.log.info("[STEP 10] Verifying encryption intact on surviving index nodes...")

@@ -59,8 +59,6 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex, CRLBase):
     def setUp(self):
         # Explicit call (not super) so CRLBase.setUp() does not run via MRO —
         # same pattern as QueryCRLTests. CRLBase fields are initialised below.
-        if not TestInputSingleton.input.param("upgrade_to", None):
-            self.skipTest("upgrade_to must be passed via -p (e.g. -p upgrade_to=8.1.0-XXXX)")
         UpgradeSecondaryIndex.setUp(self)
         self.encryption_helper = N1QLEncryptionHelpers(self.log)
         self.log.info("==============  GSIQueryEncryptionAtRestUpgrade setUp ==============")
@@ -3057,6 +3055,23 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex, CRLBase):
             self.sleep(10)
         self._run_upgrade_test(mode='online')
 
+    def _wait_persisted_stats_encrypted(self, index_nodes, label, timeout=300, interval=15):
+        """Poll until @2i/indexstats/stats on every index node is encrypted with an in-use
+        log key. Returns the remaining failures (empty when done)."""
+        deadline = time.time() + timeout
+        while True:
+            expected_key_ids = self._get_indexer_log_in_use_key_ids(index_nodes)
+            if not expected_key_ids:
+                failures = ["no in-use log key IDs reported"]
+            else:
+                results = self.gsi_encryption_helper.verify_gsi_persisted_stats_encrypted(
+                    index_nodes, expected_key_id=expected_key_ids
+                )
+                failures = [f"{ip}: {r['reason']}" for ip, r in results.items() if r["status"] != "passed"]
+            if not failures or time.time() >= deadline:
+                return failures
+            self.sleep(interval, f"{label}Waiting for persisted stats to be encrypted: {failures}")
+
     def test_stats_log_upgrade_plaintext_to_encrypted(self):
         """
         MB-69769: Verify that the persisted stats file (@2i/indexstats/stats)
@@ -3066,7 +3081,7 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex, CRLBase):
         Steps:
           1. Start on initial_version (8.0 or older).  Create a bucket, load
              docs, build indexes so the indexer writes a plaintext stats file.
-          2. Assert persisted stats file is plaintext on all index nodes.
+          2. Assert the persisted stats file exists on all index nodes.
           3. Upgrade all nodes to upgrade_to (8.1+) via offline upgrade.
           4. Enable log encryption and trigger a DEK drop to force an
              immediate encrypted write of the persisted stats file.
@@ -3074,6 +3089,8 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex, CRLBase):
           6. Restart each indexer once; verify read-back.
           7. Assert still encrypted; verify scans succeed.
         """
+        if not TestInputSingleton.input.param("upgrade_to", None):
+            self.skipTest("upgrade_to must be passed via -p (e.g. -p upgrade_to=8.1.0-XXXX)")
 
         self.log.info("=" * 80)
         self.log.info("STARTING TEST: test_stats_log_upgrade_plaintext_to_encrypted")
@@ -3115,17 +3132,14 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex, CRLBase):
         self.sleep(30, "[STEP 1] Waiting for stats flush to disk")
         self.log.info("[STEP 1] PASSED")
 
-        # ========== STEP 2: Assert persisted stats file is plaintext pre-upgrade ==========
-        self.log.info("[STEP 2] Asserting persisted stats (@2i/indexstats/stats) is plaintext...")
+        # ========== STEP 2: Persisted stats file exists pre-upgrade ==========
+        # Pre-8.1 builds can't encrypt it, so only check that it exists to be upgraded.
+        self.log.info("[STEP 2] Checking persisted stats (@2i/indexstats/stats) exists pre-upgrade...")
         results = self.gsi_encryption_helper.verify_gsi_persisted_stats_encrypted(index_nodes)
-        encrypted_nodes = [ip for ip, r in results.items() if r["status"] == "passed"]
-        if encrypted_nodes:
-            self.log.warning(
-                f"[STEP 2] Persisted stats already encrypted on {encrypted_nodes} "
-                f"before upgrade — initial_version={self.initial_version} may support log EAR"
-            )
-        else:
-            self.log.info("[STEP 2] PASSED - Persisted stats file is plaintext pre-upgrade")
+        missing = [f"{ip}: {r['reason']}" for ip, r in results.items() if r["status"] == "skipped"]
+        if missing:
+            self.fail(f"[STEP 2] Persisted stats file missing: {missing}")
+        self.log.info("[STEP 2] PASSED - Persisted stats file present on all index nodes")
 
         # ========== STEP 3: Upgrade all nodes (offline) ==========
         self.log.info(f"[STEP 3] Upgrading all nodes to {self.upgrade_to} (offline)...")
@@ -3175,20 +3189,11 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex, CRLBase):
         self.assertTrue(status, "[STEP 4] configure_log_encryption_at_rest failed")
         status, _ = self.rest.trigger_log_reencryption()
         self.assertTrue(status, "[STEP 4] trigger_log_reencryption (DEK drop) failed")
-        self.sleep(10, "[STEP 4] Waiting for DEK drop to persist stats file")
         self.log.info(f"[STEP 4] PASSED - Log encryption enabled, DEK drop triggered")
 
         # ========== STEP 5: Assert persisted stats file is now encrypted ==========
         self.log.info("[STEP 5] Verifying persisted stats is encrypted post-upgrade...")
-        expected_key_ids = self._get_indexer_log_in_use_key_ids(index_nodes)
-        self.assertTrue(expected_key_ids, "[STEP 5] No in-use log key IDs reported")
-        results = self.gsi_encryption_helper.verify_gsi_persisted_stats_encrypted(
-            index_nodes, expected_key_id=expected_key_ids
-        )
-        failures = [
-            f"{ip}: {r['reason']}" for ip, r in results.items()
-            if r["status"] not in ("passed", "skipped")
-        ]
+        failures = self._wait_persisted_stats_encrypted(index_nodes, "[STEP 5] ")
         if failures:
             self.fail(f"[STEP 5] Persisted stats not encrypted as expected: {failures}")
         self.log.info("[STEP 5] PASSED - Persisted stats encrypted on all index nodes")
@@ -3202,21 +3207,15 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex, CRLBase):
 
         # ========== STEP 7: Verify still encrypted + scans work ==========
         self.log.info("[STEP 7] Verifying persisted stats still encrypted + running scans...")
-        expected_key_ids = self._get_indexer_log_in_use_key_ids(index_nodes)
-        results = self.gsi_encryption_helper.verify_gsi_persisted_stats_encrypted(
-            index_nodes, expected_key_id=expected_key_ids
-        )
-        failures = [
-            f"{ip}: {r['reason']}" for ip, r in results.items()
-            if r["status"] not in ("passed", "skipped")
-        ]
+        failures = self._wait_persisted_stats_encrypted(index_nodes, "[STEP 7] ")
         if failures:
             self.fail(f"[STEP 7] Persisted stats not encrypted after restart: {failures}")
-        for q in list(select_queries)[:5]:
+        for q in select_queries:
             try:
                 self.run_cbq_query(query=q, server=query_node, verbose=False)
             except Exception as e:
                 self.fail(f"[STEP 7] Scan failed after upgrade+restart: {q!r}: {e}")
+        self.item_count_related_validations()
         self.log.info("[STEP 7] PASSED - Stats file encrypted, scans succeeded")
 
         self.log.info("=" * 80)
