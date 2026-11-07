@@ -153,14 +153,26 @@ class AutoRetryFailedRebalance(RebalanceBaseTest):
     def test_negative_auto_retry_of_failed_rebalance_where_rebalance_will_not_be_cancelled(self):
         during_rebalance_failure = self.input.param("during_rebalance_failure", "stop_server")
         post_failure_operation = self.input.param("post_failure_operation", "create_delete_buckets")
+        # rebalance_out completes within sleep_time, so default to progress based failure for it
+        induce_failure_at_progress = self.input.param(
+            "induce_failure_at_progress", 20 if self.rebalance_operation == "rebalance_out" else None)
         zone_name = "Group_{0}_{1}".format(random.randint(1, 1000000000), self._testMethodName)
         zone_name = zone_name[0:60]
         default_zone = "Group 1"
         moved_node = []
         moved_node.append(self.servers[1].ip)
         try:
+            if induce_failure_at_progress:
+                # Limit concurrent vbucket moves so the rebalance stays running long enough to fail it
+                self.rest.set_rebalance_settings({"rebalanceMovesPerNode": 1})
             operation = self._rebalance_operation(self.rebalance_operation)
-            self.sleep(self.sleep_time)
+            if induce_failure_at_progress:
+                # Fast rebalances (e.g. rebalance_out) can finish within sleep_time,
+                # so induce the failure based on progress instead of a fixed sleep
+                self.sleep(3, "Wait for rebalance to start")
+                RestHelper(self.rest).rebalance_reached(induce_failure_at_progress)
+            else:
+                self.sleep(self.sleep_time)
             # induce the failure during the rebalance
             self._induce_error(during_rebalance_failure)
             operation.result()
@@ -201,6 +213,8 @@ class AutoRetryFailedRebalance(RebalanceBaseTest):
         else:
             self.fail("Rebalance did not fail as expected. Hence could not validate auto-retry feature..")
         finally:
+            if induce_failure_at_progress:
+                self.rest.set_rebalance_settings({"rebalanceMovesPerNode": 4})
             if post_failure_operation == "change_server_group":
                 status = self.rest.shuffle_nodes_in_zones(moved_node, zone_name, default_zone)
                 self.log.info("Shuffle the node back to default group . Status : {0}".format(status))

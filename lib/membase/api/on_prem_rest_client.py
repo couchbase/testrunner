@@ -7714,6 +7714,18 @@ class RestConnection(object):
             raise Exception(content)
         return content
 
+    # Change rebalance settings like rebalanceMovesPerNode
+    def set_rebalance_settings(self, body):
+        url = "settings/rebalance"
+        api = self.baseUrl + url
+        params = urllib.parse.urlencode(body)
+        headers = self._create_headers()
+        status, content, header = self._http_request(api, 'POST', headers=headers, params=params)
+
+        if not status:
+            raise Exception(content)
+        return content
+
     def get_retry_rebalance_settings(self):
         authorization = self.get_authorization(self.username, self.password)
         url = "settings/retryRebalance"
