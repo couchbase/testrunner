@@ -1250,14 +1250,19 @@ class BackupServiceTest(BackupServiceBase):
             # Check the repository does not exist on the filesystem
             # In cbbackupmgr 8.1.0 the friendly "Backup Repository `X` not found" is
             # replaced by a raw filesystem error surfaced while opening the archive.
-            missing_repo_error = "Error getting archive information: failed to open archive: " \
-                                 "failed to mount archive: failed to list repo contents: " \
-                                 "open {0}/{1}: no such file or directory" \
-                                 .format(self.backupset.directory, repository.repo)
+            # From 8.5.0 `info --json` reports it as {"error": "..."} without the
+            # "Error getting archive information: " prefix, and for cloud archives the
+            # error is about the missing backup-meta.json in the staging directory.
+            expected_errors = [
+                f"Backup Repository `{repository.repo}` not found",
+                f"failed to list repo contents: open {self.backupset.directory}/{repository.repo}: no such file or directory",
+                f"{repository.repo}/backup-meta.json' not found",
+            ]
             self.log.info(f"backup_info() output for deleted repository '{repository.repo}': {output}")
+            self.log.info(f"Expecting one of these errors: {expected_errors}")
+            full_output = "\n".join(output)
             self.assertTrue(
-                f"Backup Repository `{repository.repo}` not found" in output[0] or
-                missing_repo_error in output[0],
+                any(expected_error in full_output for expected_error in expected_errors),
                 f"Neither expected error matched. Actual backup_info() output: {output}")
         else:
             # Check the repositry exists on the filesystem
