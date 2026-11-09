@@ -353,25 +353,35 @@ class BackupServiceTest(BackupServiceBase):
 
         Create a plan with no Tasks and expect the operation to fail.
         Create a plan with 1 Task and expect the operation to succeed.
-        Create a plan with 14 Tasks and expect the operation to succeed.
-        Create a plans with > 14 Tasks and expect the operation to fail.
+        Create a plan with 24 Tasks and expect the operation to succeed.
+        Create a plans with > 24 Tasks and expect the operation to fail.
         """
         generic_backup_schedule = TaskTemplateSchedule(job_type="BACKUP", frequency=1, period="HOURS", time="22:00", start_now=False)
+        # Maximum number of tasks allowed in a plan (MB-60124)
+        max_tasks = 24
 
         def get_task(i):
             return TaskTemplate(name=f"my_task{i}", task_type="BACKUP", schedule=generic_backup_schedule, merge_options=None, full_backup=None)
 
-        # Add 0, 1 and 14 Tasks in a Plan and expect it to succeed.
-        for no_of_tasks in [1, 14]:
+        def create_plan_with_tasks(no_of_tasks):
+            status = self.create_plan("my_plan", http_info=True, body=Plan(name="my_plan", tasks=[get_task(i) for i in range(0, no_of_tasks)]))[1]
+            self.log.info(f"Creating a plan with {no_of_tasks} tasks returned status {status}")
+            return status
+
+        # Add 1 and max_tasks Tasks in a Plan and expect it to succeed.
+        for no_of_tasks in [1, max_tasks]:
             # Add plan with an valid Task (Should succeed)
-            self.assertEqual(self.create_plan("my_plan", http_info=True, body=Plan(name="my_plan", tasks=[get_task(i) for i in range(0, no_of_tasks)]))[1], 200)
+            self.assertEqual(create_plan_with_tasks(no_of_tasks), 200)
 
             self.delete_plan("my_plan")
 
-        # Add 15, 20 and 100 Tasks in a Plan and expect it to fail.
-        for no_of_tasks in [0, 15, 20, 100]:
+        # Add 0 or more than max_tasks Tasks in a Plan and expect it to fail.
+        for no_of_tasks in [0, max_tasks + 1, max_tasks + 6, 100]:
             # Add plan with an invalid Task (Should fail)
-            self.assertEqual(self.create_plan("my_plan", http_info=True, body=Plan(name="my_plan", tasks=[get_task(i) for i in range(0, no_of_tasks)]))[1], 400)
+            status = create_plan_with_tasks(no_of_tasks)
+            if status == 200:
+                self.delete_plan("my_plan")
+            self.assertEqual(status, 400, f"A plan with {no_of_tasks} tasks should be rejected (max is {max_tasks})")
 
     def test_attach_plan_to_repository(self):
         """ Tie a plan to n repositories and test the plan was attached successfully.
