@@ -1831,29 +1831,36 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 if backup_name in self.backups:
                     backup_count += 1
                     self.log.info("{0} matched in list command output".format(backup_name))
+        # Each bucket is stored in a directory named after the bucket UUID, e.g.
+        # <archive>/<repo>/<backup>/0e3395ad4c950e944ecd43256e2cd5b4/bucket-config.json
+        bucket_uuid = RestConnection(self.master).get_bucket_json(self.buckets[0].name)['uuid']
         backup_bucket_config_path = self.backupset.directory + "/backup" + \
                                     "/" + self.backups[self.backupset.number_of_backups - 1] + \
-                                    "/" + self.buckets[0].uuid + "-*" \
-                                                                 "/bucket-config.json"
+                                    "/" + bucket_uuid + "*" + "/bucket-config.json"
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         self.log.info("Remove } in bucket-config.json to make it invalid json ")
-        remote_client.execute_command("sed -i 's/}//' %s " % backup_bucket_config_path)
+        output, error = remote_client.execute_command("sed -i 's/}//' %s " % backup_bucket_config_path)
+        remote_client.log_command_output(output, error)
+        if error:
+            self.fail("Failed to corrupt {0}: {1}".format(backup_bucket_config_path, error))
+        output, error = remote_client.execute_command("tail -c 300 %s" % backup_bucket_config_path)
+        remote_client.log_command_output(output, error)
         self.log.info("Start to merge backup")
         self.backupset.start = randrange(1, self.backupset.number_of_backups)
         self.backupset.end = randrange(self.backupset.start + 1,
                                        self.backupset.number_of_backups + 1)
-        result, output, _ = self.backup_merge()
-        if result:
-            self.log.info("Here is the output from command %s " % output[0])
-            # cbbackupmgr 8.1.0 rewords this to include the failing file's path (which
-            # contains a dynamic backup timestamp/bucket UUID) and the underlying
-            # JSON-decode reason instead of the generic "is corrupt" phrasing.
-            new_error_present = (self._check_output("failed to read bucket settings at", output) and
-                                 self._check_output("bucket-config.json", output) and
-                                 self._check_output("unexpected EOF", output))
-            if not (self._check_output(error_msg, output) or new_error_present):
-                self.fail("read bucket config should fail since bucket-config.json is invalid")
+        result, output, message = self.backup_merge()
+        self.log.info("Merge result: {0}, message: {1}, output: {2}".format(result, message, output))
         remote_client.disconnect()
+        if result:
+            self.fail("Merge should fail since bucket-config.json is invalid")
+        # cbbackupmgr 8.1.0 rewords this to include the failing file's path (which
+        # contains a dynamic backup timestamp/bucket UUID) and the underlying
+        # JSON-decode reason instead of the generic "is corrupt" phrasing.
+        new_error_present = (self._check_output("failed to read bucket settings at", output) and
+                             self._check_output("bucket-config.json", output))
+        if not (self._check_output(error_msg, output) or new_error_present):
+            self.fail("read bucket config should fail since bucket-config.json is invalid")
 
     def test_restore_with_non_exist_bucket(self):
         """
