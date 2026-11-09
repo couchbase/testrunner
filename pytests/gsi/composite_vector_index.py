@@ -7478,7 +7478,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             f"}}"
         )
         if self.isSparse:
-            create_query = f'CREATE VECTOR INDEX {index_name} ON {collection_namespace} (`sparse` SPARSE VECTOR) USING GSI WITH {{"similarity": "DOT", "description": "IVF", "sparsejl_dim": {self.sparsejl_dim}, "train_list": 50000}}'
+            sparsejl_clause = f'"sparsejl_dim": {self.sparsejl_dim}, ' if self.sparsejl_dim else ''
+            create_query = f'CREATE VECTOR INDEX {index_name} ON {collection_namespace} (`sparse` SPARSE VECTOR) USING GSI WITH {{"similarity": "DOT", "description": "IVF", {sparsejl_clause}"train_list": 50000}}'
 
         self.log.info(f"Creating BHIVE vector index: {create_query}")
         with ThreadPoolExecutor() as executor:

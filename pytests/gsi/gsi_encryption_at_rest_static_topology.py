@@ -9022,7 +9022,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
         # STEP 1
         self.enable_corrupt_index_backup()
         select_queries = self._create_bucket_with_indexes(bucket_name, index_nodes, 'cbk_')
-        hosts = {host.split(":")[0] for idx in self.rest.get_indexer_metadata()['status']
+        hosts = {host.split(":")[0] for idx in RestConnection(index_nodes[0]).get_indexer_metadata()['status']
                  if idx.get('bucket') == bucket_name for host in idx.get('hosts', [])}
         self.assertTrue(hosts, f"[STEP 1] No index hosts found for {bucket_name}")
         corrupt_node = random.choice([n for n in index_nodes if n.ip in hosts])
