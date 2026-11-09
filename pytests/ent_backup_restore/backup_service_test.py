@@ -3046,12 +3046,25 @@ class BackupServiceTest(BackupServiceBase):
         # Connect the links after the restore completes
         connect()
 
-        self.sleep(10)
-        # Check the dataverse and links are restored
-        value = json.loads(rest_connection.execute_statement_on_cbas("SELECT VALUE COUNT(*) FROM dataset1", None, username=username, password=password))
-        self.assertEqual(value['results'], [30])
-        value = json.loads(rest_connection.execute_statement_on_cbas("SELECT VALUE COUNT(*) FROM dataset2", None, username=username, password=password))
-        self.assertEqual(value['results'], [969])
+        # The generator cycles through ages 0-999, so each age repeats num_items // 1000 times
+        full_cycles, remainder = divmod(self.num_items, 1000)
+        expected_counts = {"dataset1": full_cycles * 30 + min(remainder, 30),
+                           "dataset2": full_cycles * 969 + max(0, remainder - 31)}
+        self.log.info(f"Expected analytics counts for {self.num_items} docs: {expected_counts}")
+
+        def get_count(dataset):
+            value = json.loads(rest_connection.execute_statement_on_cbas(f"SELECT VALUE COUNT(*) FROM {dataset}", None, username=username, password=password))
+            self.log.info(f"Analytics count for {dataset}: {value.get('results')} (status: {value.get('status')}, errors: {value.get('errors')})")
+            return value.get('results')
+
+        # Check the dataverse and links are restored, waiting for analytics to finish ingesting the restored docs
+        for dataset, expected in expected_counts.items():
+            end_time = time.time() + 300
+            actual = get_count(dataset)
+            while actual != [expected] and time.time() < end_time:
+                self.sleep(10, f"Waiting for {dataset} to ingest {expected} docs")
+                actual = get_count(dataset)
+            self.assertEqual(actual, [expected], f"Unexpected document count in {dataset}")
         drop()
 
     def test_restoring_collections(self):
