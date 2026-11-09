@@ -852,6 +852,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             self.bk_printout.append('Backed up bucket "{0}" succeeded'.format(bucket.name))
             if error or not self._check_output(self.bk_printout, output):
                 self.log.error("Failed to backup bucket {0}".format(bucket.name))
+                if not self.debug_logs:
+                    remote_client.log_command_output(output, error)
                 return output, error
 
         pattern = r"^\d{4}-\d{2}-\d{2}"

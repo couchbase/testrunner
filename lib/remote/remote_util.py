@@ -3486,7 +3486,7 @@ class RemoteMachineShellConnection(KeepRefs):
                     .format(self.ip, output, error, track_words))
         elif debug and output:
             for line in output:
-                log.debug(line)
+                log.info(line)
         return success
 
     def execute_commands_inside(self, main_command,query, queries,bucket1,password,bucket2,source,subcommands=[], min_output_size=0,

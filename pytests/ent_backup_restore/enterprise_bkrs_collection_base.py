@@ -956,6 +956,8 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
         for bucket in self.buckets:
             if error or not self._check_output(self.bk_printout, output):
                 self.log.error("Failed to backup bucket {0}".format(bucket.name))
+                if not self.debug_logs:
+                    remote_client.log_command_output(output, error)
                 return output, error
 
         command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory, self.backupset.name)
