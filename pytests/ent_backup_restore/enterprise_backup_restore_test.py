@@ -4254,11 +4254,11 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                         output, error = remote_client.execute_command(f"{command} {sub_command} {argument}")
                         remote_client.log_command_output(output, error)
                         self.assertNotEqual(len(output), 0)
-                        error_mesg_obj = "s3 arguments provided without the archive 's3://' schema prefix"
+                        error_mesg_obj = "cloud arguments provided without the cloud scheme prefix"
                         if "bucket" in sub_command:
                             error_mesg_obj = "Unknown flag: --bucket"
                         self.assertIn(error_mesg_obj, output[0],
-                                        "Expected an error about providing S3 specific arguments without the s3:// schema prefix")
+                                      "Expected an error about providing cloud arguments without the cloud schema prefix")
 
             # Check all the common objstore flags that require arguments without providing arguments. This is testing
             # cbflag.
