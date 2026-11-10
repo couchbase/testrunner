@@ -2865,18 +2865,40 @@ class BackupServiceTest(BackupServiceBase):
 
         self.time.set_timezone('Pacific/Apia')
 
-        # Failover the leader
-        failover_server.failover(graceful=False)
-        self.sleep(60)
-        failover_server.rebalance()
+        # The leader is rebalanced out below, so record its services to add it back afterwards
+        old_leader = curr_leader
+        old_leader_services = next((services for node, services in RestConnection(old_leader).get_nodes_services().items()
+                                    if node.split(':')[0] == old_leader.ip), None)
+        self.log.info(f"Failing over leader {old_leader.ip} with services {old_leader_services}")
 
-        curr_leader = self.get_leader(cluster=[server for server in self.input.clusters[0] if server != curr_leader])
-        self.configuration.host = f"http://{curr_leader.ip}:{8091}/_p/backup/api/v1"
+        try:
+            # Failover the leader
+            failover_server.failover(graceful=False)
+            self.sleep(60)
+            failover_server.rebalance()
 
-        # Should schedule tasks at 10
-        schedule_test.run(1)
+            curr_leader = self.get_leader(cluster=[server for server in self.input.clusters[0] if server != old_leader])
+            self.log.info(f"New leader after failing over {old_leader.ip}: {curr_leader.ip}")
+            self.configuration.host = f"http://{curr_leader.ip}:{8091}/_p/backup/api/v1"
 
-        time, _, _ = self.get_repository('active', schedule_test.plan_repo[0][1]).next_scheduled
+            # Should schedule tasks at 10
+            schedule_test.run(1)
+
+            time, _, _ = self.get_repository('active', schedule_test.plan_repo[0][1]).next_scheduled
+        finally:
+            # Add the old leader back so tearDown and later tests, which use it as the master, can reach the backup service
+            remaining_node = next(server for server in self.input.clusters[0] if server.ip != old_leader.ip)
+            active_ips = [node.ip for node in RestConnection(remaining_node).get_nodes()]
+            all_ips = [node.ip for node in RestConnection(remaining_node).get_nodes(get_all_nodes=True)]
+            self.log.info(f"Nodes before adding back {old_leader.ip}: active {active_ips}, all {all_ips}")
+            if old_leader.ip in all_ips and old_leader.ip not in active_ips:
+                # Still failed over in the cluster, rebalance it out before adding it back
+                failover_server.rebalance()
+            if old_leader.ip not in active_ips:
+                RestConnection(remaining_node).add_node(old_leader.rest_username, old_leader.rest_password,
+                                                        old_leader.ip, services=old_leader_services)
+                self.cluster.rebalance(self.input.clusters[0], [], [])
+                self.log.info(f"Added {old_leader.ip} back with services {old_leader_services}")
 
         # TODO: when the backup service responds to timezone changes.
         # self.assertEqual(time.hour, None)
