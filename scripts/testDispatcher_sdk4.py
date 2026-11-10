@@ -1222,6 +1222,7 @@ def main():
                 # the same collapse 8.1+ already does, applied at every version.
                 if options.serverType == AWS_ONDEMAND:
                     aws_slave_map = {
+                        "P0":                 "P0",                  # CentOS 7 AMI, pre-8.1 runs
                         "bhive_slave":        "bhive_slave",
                         "rqg_testing":        "deb12_rqg_slave",
                         "deb12_rqg_slave":    "deb12_rqg_slave",
