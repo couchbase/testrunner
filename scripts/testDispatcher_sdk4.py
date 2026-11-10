@@ -1210,12 +1210,32 @@ def main():
                         curr_job['target_jenkins'] = 'http://172.23.120.81'
                         slave_to_use = "P3XDCR"
 
-                # AWS_ONDEMAND: route to a dedicated AWS-only label "<label>_aws"
-                # so AWS jobs never land on the shared on-prem slaves that carry
-                # the original label (and vice-versa). Each _aws label maps to its
-                # own golden AMI, which keeps per-component tracking clean as the
-                # migration expands.
+                # AWS_ONDEMAND: normalise the label BEFORE appending "_aws".
+                # The version gates above decide which ON-PREM slave pool to use and must
+                # not leak into AWS: below 8.1 they leave the raw QE-Test-Suites value
+                # (P0, rqg_testing, magma_slave, bkrs3, or null) untouched, so the suffix
+                # produced labels like "P0_aws"/"None_aws" that no template serves and the
+                # jobs queued forever ("There are no nodes with the label 'P0_aws'").
+                # On a 7.6 run that was ~1100 of ~1900 weekly jobs.
+                # The AWS fleet is a fixed set of deb12 golden AMIs with four labels,
+                # independent of the server version under test, so map onto those here --
+                # the same collapse 8.1+ already does, applied at every version.
                 if options.serverType == AWS_ONDEMAND:
+                    aws_slave_map = {
+                        "bhive_slave":        "bhive_slave",
+                        "rqg_testing":        "deb12_rqg_slave",
+                        "deb12_rqg_slave":    "deb12_rqg_slave",
+                        "jython_slave":       "jython_slave",        # analytics AMI
+                        "aws_analytics":      "jython_slave",        # analytics, DB-named
+                        "deb12_jython_slave": "deb12_jython_slave",
+                        "magma_slave":        "deb12_jython_slave",  # as 8.1+ collapses it
+                    }
+                    # Default is framework-aware on purpose: a TAF job needs Jython at
+                    # /opt/jython, which the P0 AMI does not have.
+                    aws_default = ("deb12_jython_slave"
+                                   if curr_job['framework'] == "TAF"
+                                   else "deb12_P0_slave")
+                    slave_to_use = aws_slave_map.get(slave_to_use, aws_default)
                     slave_to_use = slave_to_use + "_aws"
                     # Run the AWS on-demand executor on the qa master (Jenkins 2.516.1),
                     # where the AWS-only slaves live and the EC2 automation will run --
