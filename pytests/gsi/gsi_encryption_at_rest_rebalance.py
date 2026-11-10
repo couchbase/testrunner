@@ -78,6 +78,8 @@ class GSIEncryptionAtRestRebalance(GSIEncryptionAtRestBase, BaseSecondaryIndexin
         self.test_failures = []
         # Patterns a test induces on purpose; set per test, never on the class.
         self.allowed_encryption_log_patterns = ()
+        # Before the log-error baseline: the indexer restart's log noise lands in it
+        self.set_stats_persistence_interval()
         self.gsi_log_error_baseline = None
         if not getattr(self, "capella_run", False) and not self.input.param("skip_encryption_log_check", False):
             self.gsi_log_error_baseline = self.get_gsi_log_error_counts(label="[setUp] ")

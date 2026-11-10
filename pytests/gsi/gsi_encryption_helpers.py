@@ -344,7 +344,7 @@ class GSIEncryptionHelpers:
             storage_dir = f"{index_path}/@2i"
             
             shell = RemoteMachineShellConnection(node, verbose=False)
-            cmd = f"test -d {storage_dir} && echo 'exists' || echo 'not_found'"
+            cmd = f"test -d {self._shell_quote(storage_dir)} && echo 'exists' || echo 'not_found'"
             output, _ = shell.execute_command(cmd)
             shell.disconnect()
             
@@ -358,7 +358,7 @@ class GSIEncryptionHelpers:
             
             # 1. Check *.index directories (contain codebooks and data files)
             shell = RemoteMachineShellConnection(node, verbose=False)
-            cmd = f"find {storage_dir} -maxdepth 1 -type d -name '*.index' 2>/dev/null | head -5"
+            cmd = f"find {self._shell_quote(storage_dir)} -maxdepth 1 -type d -name '*.index' 2>/dev/null | head -5"
             index_dirs, _ = shell.execute_command(cmd)
             shell.disconnect()
             
@@ -373,7 +373,7 @@ class GSIEncryptionHelpers:
             # 2. Check BHIVE shards directory
             bhive_shards_dir = f"{storage_dir}/@bhive/bhive-shards"
             shell = RemoteMachineShellConnection(node, verbose=False)
-            cmd = f"test -d {bhive_shards_dir} && echo 'exists' || echo 'not_found'"
+            cmd = f"test -d {self._shell_quote(bhive_shards_dir)} && echo 'exists' || echo 'not_found'"
             output, _ = shell.execute_command(cmd)
             shell.disconnect()
             
@@ -386,7 +386,7 @@ class GSIEncryptionHelpers:
             for subdir in storage_subdirs:
                 sub_dir_path = f"{storage_dir}/{subdir}"
                 shell = RemoteMachineShellConnection(node, verbose=False)
-                cmd = f"test -d {sub_dir_path} && echo 'exists' || echo 'not_found'"
+                cmd = f"test -d {self._shell_quote(sub_dir_path)} && echo 'exists' || echo 'not_found'"
                 output, _ = shell.execute_command(cmd)
                 shell.disconnect()
                 
@@ -527,7 +527,7 @@ class GSIEncryptionHelpers:
 
             shell = RemoteMachineShellConnection(node, verbose=False)
             snap_files_out, _ = shell.execute_command(
-                f"find {storage_dir} -path '*snapshot*' 2>/dev/null"
+                f"find {self._shell_quote(storage_dir)} -path '*snapshot*' 2>/dev/null"
             )
             shell.disconnect()
             snap_files = [l.strip() for l in snap_files_out if l.strip()]
@@ -538,7 +538,7 @@ class GSIEncryptionHelpers:
 
             shell = RemoteMachineShellConnection(node, verbose=False)
             exists_out, _ = shell.execute_command(
-                f"test -d {storage_dir} && echo 'exists' || echo 'not_found'"
+                f"test -d {self._shell_quote(storage_dir)} && echo 'exists' || echo 'not_found'"
             )
             shell.disconnect()
             if not exists_out or 'exists' not in exists_out[0]:
@@ -549,7 +549,7 @@ class GSIEncryptionHelpers:
 
             shell = RemoteMachineShellConnection(node, verbose=False)
             output, _ = shell.execute_command(
-                f"find {storage_dir} -type d -path '*/*.index/snapshot.*' "
+                f"find {self._shell_quote(storage_dir)} -type d -path '*/*.index/snapshot.*' "
                 f"2>/dev/null | head -20"
             )
             shell.disconnect()
@@ -604,7 +604,7 @@ class GSIEncryptionHelpers:
             for snapshot_dir in snapshot_dirs:
                 shell = RemoteMachineShellConnection(node, verbose=False)
                 file_out, _ = shell.execute_command(
-                    f"find {snapshot_dir} -type f {plaintext_excl} 2>/dev/null"
+                    f"find {self._shell_quote(snapshot_dir)} -type f {plaintext_excl} 2>/dev/null"
                 )
                 shell.disconnect()
 
@@ -1118,7 +1118,7 @@ class GSIEncryptionHelpers:
             # that legitimately don't carry the Plasma key. Excluding them here
             # removes the double-scan false positive without losing coverage.
             cmd = (
-                f"find {storage_dir} -type f "
+                f"find {self._shell_quote(storage_dir)} -type f "
                 f"! -name 'header.data' "
                 f"! -path '*/@bhive/*' "
                 f"\\( "
@@ -1294,7 +1294,7 @@ class GSIEncryptionHelpers:
 
             shell = RemoteMachineShellConnection(node, verbose=False)
             dir_check, _ = shell.execute_command(
-                f"test -d {shards_dir} && echo exists || echo not_found"
+                f"test -d {self._shell_quote(shards_dir)} && echo exists || echo not_found"
             )
             shell.disconnect()
             dir_exists = dir_check and "exists" in dir_check[0]
@@ -1314,7 +1314,7 @@ class GSIEncryptionHelpers:
                 # TODO: header.data excluded — see verify_gsi_data_files_key_id
                 #   for the full rationale.  Reinstate once confirmed with the
                 #   indexer team that shard header.data is re-written on encrypt.
-                f"find {shards_dir} -type f "
+                f"find {self._shell_quote(shards_dir)} -type f "
                 f"-name 'log.*.data' "
                 f"2>/dev/null"
             )
@@ -1470,7 +1470,7 @@ class GSIEncryptionHelpers:
             #   indexer team that BHive pindex lss header.data is re-written
             #   on encrypt.
             cmd = (
-                f"find {storage_dir}/@bhive -type f -name '*.data' "
+                f"find {self._shell_quote(storage_dir)}/@bhive -type f -name '*.data' "
                 f"! -name 'header.data' "
                 f"-path '*/mainIndex/lss.*/*' "
                 f"! -path '*/lss.*/recovery/chkp.*' "
@@ -1641,7 +1641,7 @@ class GSIEncryptionHelpers:
 
             shell = RemoteMachineShellConnection(node, verbose=False)
             cmd = (
-                f"find {storage_dir}/@bhive/bhive-shards -type f "
+                f"find {self._shell_quote(storage_dir)}/@bhive/bhive-shards -type f "
                 f"-name 'sstable.*.data' "
                 f"2>/dev/null"
             )
@@ -1763,7 +1763,7 @@ class GSIEncryptionHelpers:
 
             shell = RemoteMachineShellConnection(node, verbose=False)
             output, _ = shell.execute_command(
-                f"find {storage_dir} -type f -name '*.error' 2>/dev/null"
+                f"find {self._shell_quote(storage_dir)} -type f -name '*.error' 2>/dev/null"
             )
             shell.disconnect()
 
@@ -1834,10 +1834,10 @@ class GSIEncryptionHelpers:
 
         shell = RemoteMachineShellConnection(node, verbose=False)
         exists_out, _ = shell.execute_command(
-            f"test -f {stats_log} && echo 'exists' || echo 'not_found'"
+            f"test -f {self._shell_quote(stats_log)} && echo 'exists' || echo 'not_found'"
         )
         enc_exists_out, _ = shell.execute_command(
-            f"test -f {stats_log}.enc && echo 'exists' || echo 'not_found'"
+            f"test -f {self._shell_quote(stats_log)}.enc && echo 'exists' || echo 'not_found'"
         )
         shell.disconnect()
 
@@ -1923,7 +1923,7 @@ class GSIEncryptionHelpers:
             stats_file = f"{RestConnection(node).get_index_path()}/@2i/indexstats/stats"
             shell = RemoteMachineShellConnection(node, verbose=False)
             try:
-                out, _ = shell.execute_command(f"test -s {stats_file} && echo exists || echo not_found")
+                out, _ = shell.execute_command(f"test -s {self._shell_quote(stats_file)} && echo exists || echo not_found")
             finally:
                 shell.disconnect()
             if not out or "exists" not in out[0]:
@@ -1965,7 +1965,7 @@ class GSIEncryptionHelpers:
 
             shell = RemoteMachineShellConnection(node, verbose=False)
             exists_out, _ = shell.execute_command(
-                f"test -d {cache_dir} && echo 'exists' || echo 'not_found'"
+                f"test -d {self._shell_quote(cache_dir)} && echo 'exists' || echo 'not_found'"
             )
             if not exists_out or 'exists' not in exists_out[0]:
                 shell.disconnect()
@@ -1974,10 +1974,10 @@ class GSIEncryptionHelpers:
                 continue
 
             stats_out, _ = shell.execute_command(
-                f"find {cache_dir}/stats -type f 2>/dev/null"
+                f"find {self._shell_quote(cache_dir)}/stats -type f 2>/dev/null"
             )
             meta_out, _ = shell.execute_command(
-                f"find {cache_dir}/meta -type f 2>/dev/null"
+                f"find {self._shell_quote(cache_dir)}/meta -type f 2>/dev/null"
             )
             shell.disconnect()
 
@@ -2282,7 +2282,7 @@ class GSIEncryptionHelpers:
         try:
             if category == "snapshot":
                 out, _ = shell.execute_command(
-                    f"find {storage_dir} -type d -path '*/*.index/snapshot.*' "
+                    f"find {self._shell_quote(storage_dir)} -type d -path '*/*.index/snapshot.*' "
                     f"2>/dev/null"
                 )
                 snapshot_dirs = [d.strip() for d in out if d.strip()]
@@ -2293,7 +2293,7 @@ class GSIEncryptionHelpers:
                 files = []
                 for snapshot_dir in snapshot_dirs:
                     file_out, _ = shell.execute_command(
-                        f"find {snapshot_dir} -type f 2>/dev/null"
+                        f"find {self._shell_quote(snapshot_dir)} -type f 2>/dev/null"
                     )
                     for line in file_out:
                         fp = line.strip()
@@ -2307,7 +2307,7 @@ class GSIEncryptionHelpers:
 
             if category == "data":
                 out, _ = shell.execute_command(
-                    f"find {storage_dir} -type f \\( "
+                    f"find {self._shell_quote(storage_dir)} -type f \\( "
                     f"-path '*/*.index/docIndex/*.data' -o "
                     f"-path '*/*.index/mainIndex/*.data' -o "
                     f"-path '*/*.index/keyindex/*.data' "
@@ -2320,7 +2320,7 @@ class GSIEncryptionHelpers:
 
             if category == "error":
                 out, _ = shell.execute_command(
-                    f"find {storage_dir} -type f -name '*.error' 2>/dev/null"
+                    f"find {self._shell_quote(storage_dir)} -type f -name '*.error' 2>/dev/null"
                 )
                 files = [f.strip() for f in out if f.strip()]
                 if encrypted_bucket_names and bucket_key_map:
@@ -2329,7 +2329,7 @@ class GSIEncryptionHelpers:
 
             if category == "codebook":
                 out, _ = shell.execute_command(
-                    f"find {storage_dir} -type f -path '*/*.index/codebook/*' "
+                    f"find {self._shell_quote(storage_dir)} -type f -path '*/*.index/codebook/*' "
                     f"2>/dev/null"
                 )
                 files = [f.strip() for f in out if f.strip()]
@@ -2340,10 +2340,10 @@ class GSIEncryptionHelpers:
             if category == "request_handler_cache":
                 cache_dir = f"{storage_dir}/cache"
                 stats_out, _ = shell.execute_command(
-                    f"find {cache_dir}/stats -type f 2>/dev/null"
+                    f"find {self._shell_quote(cache_dir)}/stats -type f 2>/dev/null"
                 )
                 meta_out, _ = shell.execute_command(
-                    f"find {cache_dir}/meta -type f 2>/dev/null"
+                    f"find {self._shell_quote(cache_dir)}/meta -type f 2>/dev/null"
                 )
                 return [f.strip() for f in (stats_out + meta_out) if f.strip()]
 
@@ -2553,7 +2553,7 @@ class GSIEncryptionHelpers:
 
             shell = RemoteMachineShellConnection(node, verbose=False)
             output, _ = shell.execute_command(
-                f"find {storage_dir} -type f -path '*/*.index/codebook/*' "
+                f"find {self._shell_quote(storage_dir)} -type f -path '*/*.index/codebook/*' "
                 f"2>/dev/null"
             )
             shell.disconnect()
@@ -2671,7 +2671,7 @@ class GSIEncryptionHelpers:
                 # Find WAL files (with size, so empty/mid-rotation segments
                 # can be skipped below instead of misclassified as PLAINTEXT).
                 wal_cmd = (
-                    f"find {metadata_dir}/wal -maxdepth 1 -type f "
+                    f"find {self._shell_quote(metadata_dir)}/wal -maxdepth 1 -type f "
                     f"-printf '%s %p\\n' 2>/dev/null"
                 )
                 wal_out, _ = shell.execute_command(wal_cmd)
@@ -2679,7 +2679,7 @@ class GSIEncryptionHelpers:
 
                 # Find SSTable files (with size)
                 sst_cmd = (
-                    f"find {metadata_dir} -type f -name 'sstable.*.data' "
+                    f"find {self._shell_quote(metadata_dir)} -type f -name 'sstable.*.data' "
                     f"-printf '%s %p\\n' 2>/dev/null"
                 )
                 sst_out, _ = shell.execute_command(sst_cmd)
@@ -3210,9 +3210,9 @@ class GSIEncryptionHelpers:
             log_dir = self.get_log_path(node)
 
             shell = RemoteMachineShellConnection(node, verbose=False)
-            idx_out, _ = shell.execute_command(f"find {storage_dir} 2>/dev/null")
+            idx_out, _ = shell.execute_command(f"find {self._shell_quote(storage_dir)} 2>/dev/null")
             log_out, _ = shell.execute_command(
-                f"find {log_dir} -maxdepth 2 2>/dev/null"
+                f"find {self._shell_quote(log_dir)} -maxdepth 2 2>/dev/null"
             )
             shell.disconnect()
 
@@ -3422,6 +3422,35 @@ class GSIEncryptionAtRestBase:
     UUID_PATTERN = re.compile(
         r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
     )
+
+    def set_stats_persistence_interval(self):
+        """Persist indexer stats every stats_persistence_interval seconds (indexer default 900)
+        so restart_index_nodes(validate_read_back=True) waits ~1 min instead of up to 15 min
+        per node for @2i/indexstats/stats. The setting is cluster-wide (metakv), but a running
+        indexer only reads it after its current persistence sleep (up to 900s), so the
+        indexers are killed once when the setting changes and bootstrap with the new value.
+        Already set (cluster reused from an earlier test): no restart."""
+        self.stats_persistence_interval = int(self.input.param("stats_persistence_interval", 60))
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        if getattr(self, "capella_run", False) or not index_nodes:
+            self.stats_persistence_interval = 900
+            return
+        rest = RestConnection(index_nodes[0])
+        current = rest.get_indexer_internal_stats().get("indexer.statsPersistenceInterval")
+        if current is not None and int(current) == self.stats_persistence_interval:
+            self.log.info(f"indexer.statsPersistenceInterval already {current}; no indexer restart")
+            return
+        rest.set_index_settings_internal({"indexer.statsPersistenceInterval": self.stats_persistence_interval})
+        self.log.info(f"indexer.statsPersistenceInterval {current} -> {self.stats_persistence_interval}; "
+                      f"killing the indexers so they bootstrap with it")
+        for node in index_nodes:
+            shell = RemoteMachineShellConnection(node, verbose=False)
+            try:
+                shell.execute_command("pkill -9 -x indexer")
+            finally:
+                shell.disconnect()
+        self.sleep(10, "Waiting for ns_server to restart the indexers")
+        self.wait_for_indexer_ready(index_nodes, label="[setUp] ")
 
     def validate_bucket_encryption(self, bucket_name):
         bucket_info = self.rest.get_bucket_json(bucket_name)
@@ -3722,9 +3751,9 @@ class GSIEncryptionAtRestBase:
                 shell = RemoteMachineShellConnection(server, verbose=False)
                 try:
                     listing, _ = shell.execute_command(
-                        f"ls -l --time-style=full-iso {log_dir}/{log_name}* 2>/dev/null")
+                        f"ls -l --time-style=full-iso {GSIEncryptionHelpers._shell_quote(log_dir)}/{log_name}* 2>/dev/null")
                     out, _ = shell.execute_command(
-                        f"T=$(mktemp); for f in {log_dir}/{log_name}*; do "
+                        f"T=$(mktemp); for f in {GSIEncryptionHelpers._shell_quote(log_dir)}/{log_name}*; do "
                         f"if head -c 64 \"$f\" | grep -qa 'Couchbase Encrypted'; then {cbcat} \"$f\" </dev/null; "
                         f"else zcat -f \"$f\"; fi; done > $T 2>/dev/null; {greps}; rm -f $T")
                 finally:
@@ -4063,22 +4092,30 @@ class GSIEncryptionAtRestBase:
                 moi_interval = int(RestConnection(index_nodes[0]).get_index_settings().get(
                     "indexer.settings.persisted_snapshot.moi.interval", 600000)) // 1000
                 self.sleep(moi_interval + 15, "[RESTART] Waiting for an MOI disk snapshot")
+            # Each node persists on its own timer: record every node's clock first, then wait
+            # for all of them against one deadline (indexer.statsPersistenceInterval + margin)
+            stats_files, node_start = {}, {}
             for node in index_nodes:
-                stats_file = f"{RestConnection(node).get_index_path()}/@2i/indexstats/stats"
+                stats_files[node.ip] = f"{RestConnection(node).get_index_path()}/@2i/indexstats/stats"
                 shell = RemoteMachineShellConnection(node, verbose=False)
                 try:
                     out, _ = shell.execute_command("date +%s")
-                    node_now = int(out[0].strip())
-                    deadline = time.time() + 960  # indexer.statsPersistenceInterval default 900s
+                    node_start[node.ip] = int(out[0].strip())
+                finally:
+                    shell.disconnect()
+            deadline = time.time() + getattr(self, "stats_persistence_interval", 900) + 60
+            for node in index_nodes:
+                shell = RemoteMachineShellConnection(node, verbose=False)
+                try:
                     while True:
-                        out, _ = shell.execute_command(f"stat -c %Y {stats_file} 2>/dev/null || echo 0")
-                        if int(out[0].strip()) > node_now or time.time() > deadline:
+                        out, _ = shell.execute_command(f"stat -c %Y {GSIEncryptionHelpers._shell_quote(stats_files[node.ip])} 2>/dev/null || echo 0")
+                        if int(out[0].strip()) > node_start[node.ip] or time.time() > deadline:
                             break
                         self.sleep(15, f"[RESTART] Waiting for stats to be persisted on {node.ip}")
                 finally:
                     shell.disconnect()
-                if int(out[0].strip()) <= node_now:
-                    self.log.warning(f"[RESTART] {stats_file} on {node.ip} not rewritten after the scans; "
+                if int(out[0].strip()) <= node_start[node.ip]:
+                    self.log.warning(f"[RESTART] {stats_files[node.ip]} on {node.ip} not rewritten after the scans; "
                                      f"persisted stats may differ after the restart")
             state_before = self._capture_read_back_state(index_nodes)
 
@@ -4435,8 +4472,7 @@ class GSIEncryptionAtRestBase:
         self.log.info(f"{step_prefix}File encryption validation completed successfully")
         return True
 
-    def validate_files_not_encrypted(self, index_nodes, bucket_name, timeout=300, poll_interval=15, step_prefix="",
-                                     old_key_ids=None):
+    def validate_files_not_encrypted(self, index_nodes, bucket_name, timeout=300, poll_interval=15, step_prefix=""):
         """
         Poll index nodes until all index files for bucket_name are confirmed NOT encrypted.
 
@@ -4452,10 +4488,10 @@ class GSIEncryptionAtRestBase:
             timeout: Max seconds to wait (default 300 / 5 min).
             poll_interval: Seconds between polls (default 15).
             step_prefix: Log prefix string.
-            old_key_ids: key IDs the bucket was encrypted with; Plasma/BHIVE data files carry
-                no header, so a file whose body still contains one of them is still encrypted.
+
+        Plasma/BHIVE log files are not grepped for old key IDs: blocks before the LSS head are
+        dead but stay on disk until hole-punched in 64MB chunks, so small indexes keep them.
         """
-        old_key_ids = [str(k) for k in (old_key_ids or []) if k]
         self.log.info(
             f"{step_prefix}Polling until all index files for bucket '{bucket_name}' "
             f"are decrypted (timeout={timeout}s)..."
@@ -4482,7 +4518,7 @@ class GSIEncryptionAtRestBase:
                 shell = RemoteMachineShellConnection(node, verbose=False)
                 try:
                     out, _ = shell.execute_command(
-                        f"find {storage_dir} -type f 2>/dev/null | grep -i '{bucket_uuid}'"
+                        f"find {GSIEncryptionHelpers._shell_quote(storage_dir)} -type f 2>/dev/null | grep -i '{bucket_uuid}'"
                     )
                 finally:
                     shell.disconnect()
@@ -4495,19 +4531,6 @@ class GSIEncryptionAtRestBase:
                         f"treating as decrypted"
                     )
                     continue
-                if old_key_ids:
-                    keys = " ".join(f"-e {shlex.quote(k)}" for k in old_key_ids)
-                    shell = RemoteMachineShellConnection(node, verbose=False)
-                    try:
-                        out, _ = shell.execute_command(
-                            f"find {storage_dir} -type f 2>/dev/null | grep -i '{bucket_uuid}' | "
-                            f"LC_ALL=C xargs -r grep -aFl {keys} 2>/dev/null"
-                        )
-                    finally:
-                        shell.disconnect()
-                    for fpath in (l.strip() for l in out if l.strip()):
-                        still_encrypted.append((node.ip, fpath))
-                        self.log.info(f"{step_prefix}{node.ip}: file still carries an old key ID: {fpath}")
 
                 for fpath in files:
                     is_enc, details = self.gsi_encryption_helper.verify_file_encryption_magic_bytes(
@@ -4560,7 +4583,7 @@ class GSIEncryptionAtRestBase:
         shell = RemoteMachineShellConnection(node)
         try:
             out, _ = shell.execute_command(
-                f"find {cache_dir}/meta {cache_dir}/stats -type f 2>/dev/null | head -20")
+                f"find {GSIEncryptionHelpers._shell_quote(cache_dir)}/meta {GSIEncryptionHelpers._shell_quote(cache_dir)}/stats -type f 2>/dev/null | head -20")
         finally:
             shell.disconnect()
         return [line.strip() for line in out if line.strip()]
@@ -4587,7 +4610,7 @@ class GSIEncryptionAtRestBase:
             base_dir = self.gsi_encryption_helper.get_log_path(node)
         else:
             base_dir = f"{RestConnection(node).get_index_path()}/@2i"
-        paths = " ".join(f"{base_dir}/{pattern}" for pattern in globs)
+        paths = " ".join(f"{GSIEncryptionHelpers._shell_quote(base_dir)}/{pattern}" for pattern in globs)
         shell = RemoteMachineShellConnection(node, verbose=False)
         try:
             out, _ = shell.execute_command(f"ls -1d {paths} 2>/dev/null | grep -v '\\.tmp$'")

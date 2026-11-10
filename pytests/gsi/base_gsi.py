@@ -421,7 +421,15 @@ class BaseSecondaryIndexingTests(QueryTests):
         # per-bucket/index data key. A genuinely-plaintext metadata store while
         # "other" encryption is enabled still fails, so real regressions are kept.
         other_enabled, live_other_key_ids = self._other_encryption_state(index_nodes)
-        if other_enabled:
+        # Set by a test while the metadata store is mixed by design ("other" just enabled,
+        # pre-existing sstables still plaintext until the "other" DEK drop)
+        mixed_reason = getattr(self, "metadata_repo_mixed_reason", None)
+        if other_enabled and mixed_reason:
+            self.log.info(f"[metadata_repo] Skipping validation: {mixed_reason}")
+            _safe_run("metadata_repo",
+                      lambda nodes: {n.ip: {"status": "skipped", "reason": mixed_reason} for n in nodes},
+                      index_nodes)
+        elif other_enabled:
             metadata_expected_key = metadata_key_id or live_other_key_ids or expected_key_id
             _safe_run("metadata_repo",
                       helper.verify_gsi_metadata_repo_encrypted,

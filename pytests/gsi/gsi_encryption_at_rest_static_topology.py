@@ -77,6 +77,8 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
         self.index_online_timeout = self.input.param("index_online_timeout", 1200)
         # Patterns a test induces on purpose; set per test, never on the class.
         self.allowed_encryption_log_patterns = ()
+        # Before the log-error baseline: the indexer restart's log noise lands in it
+        self.set_stats_persistence_interval()
         self.gsi_log_error_baseline = None
         if not getattr(self, "capella_run", False) and not self.input.param("skip_encryption_log_check", False):
             self.gsi_log_error_baseline = self.get_gsi_log_error_counts(label="[setUp] ")
@@ -5900,6 +5902,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
         # raises when it finds none.
         baseline_key_ids = self.get_indexer_in_use_key_ids(index_nodes) if start_encrypted else []
         log_baseline_key_ids = []
+        projector_baseline_key_ids = set()
         other_baseline_key_ids = []
         baseline_metadata = None
         if self.key_op == "other_reencrypt":
@@ -5912,15 +5915,30 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
             self.sleep(60, "Waiting for stats log and persisted stats to be written")
             log_baseline_key_ids = self.poll_for_new_indexer_key_ids(
                 index_nodes, [], timeout=300, label="[STEP 4] ", key_type="log")
+            # Log keys are per node: the KV nodes' projector_stats.log key is not in the indexers' list
+            for node in self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True):
+                projector_baseline_key_ids |= self._stats_log_key_ids(node, "projector_stats.log")
+            self.assertTrue(projector_baseline_key_ids, "[STEP 4] No encrypted projector_stats.log on the KV nodes")
 
         # ========== STEP 5: Baseline scans + file encryption validation ==========
         try:
             self.log.info("[STEP 5] Running baseline scans and file encryption validation...")
             self.run_scan_validation(select_queries, validate_item_count=True)
+            if self.key_op == "other_reencrypt":
+                # Metadata written before "other" encryption was enabled stays plaintext until the
+                # "other" DEK drop in STEP 6: the indexer reports "" and the active key in use
+                other_raw = self._other_in_use_ids_raw(index_nodes)
+                self.assertIn("", other_raw, f"[STEP 5] Expected plaintext ('') in 'other' in-use keys: {other_raw}")
+                self.assertTrue(other_raw - {""}, f"[STEP 5] No active 'other' key in use: {other_raw}")
+                self.metadata_repo_mixed_reason = ("metadata store mixed by design before the 'other' DEK drop "
+                                                   "(plaintext '' still in use)")
             if start_encrypted:
-                if not self.validate_file_encryption_with_key(
-                        index_nodes, expected_key_id=baseline_key_ids, step_prefix="[STEP 5] "):
-                    raise Exception("Baseline file encryption validation failed")
+                try:
+                    if not self.validate_file_encryption_with_key(
+                            index_nodes, expected_key_id=baseline_key_ids, step_prefix="[STEP 5] "):
+                        raise Exception("Baseline file encryption validation failed")
+                finally:
+                    self.metadata_repo_mixed_reason = None
             else:
                 self.validate_files_not_encrypted(
                     index_nodes, bucket_name, timeout=60, step_prefix="[STEP 5] "
@@ -6170,6 +6188,10 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
                 except Exception as ex:
                     # Old keys may legitimately linger; record it but don't fail the test.
                     self.log.warning(f"[STEP 11] Old 'other' keys still in use: {ex}")
+                # The "other" DEK drop also drops "": no plaintext metadata left
+                self._wait_until_no_problems(
+                    lambda: [ids for ids in [self._other_in_use_ids_raw(index_nodes)] if "" in ids],
+                    "[STEP 11] Plaintext ('') gone from 'other' in-use keys: ")
                 self._validate_metadata_repo(
                     index_nodes, self.get_indexer_in_use_key_ids(index_nodes, key_type="other"), "[STEP 11] ")
                 self.item_count_related_validations()
@@ -6183,10 +6205,19 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
                     self.log.warning(f"[STEP 11] Old log keys still in use: {ex}")
                 self._populate_request_handler_cache(index_nodes)
                 self.sleep(60, "[STEP 11] Waiting for log files to be written after the restart")
+                # Index-node files against the indexers' log keys; projector_stats.log (KV nodes,
+                # their own log key) is checked below
                 self.validate_log_encryption_files_encrypted(
-                    index_nodes, require_files=("indexer_stats_log", "projector_stats_log",
-                                                "request_handler_cache", "persisted_stats"),
-                    expected_key_id=self.get_indexer_in_use_key_ids(index_nodes, key_type="log"))
+                    index_nodes, require_files=("indexer_stats_log", "request_handler_cache", "persisted_stats"),
+                    expected_key_id=self.get_indexer_in_use_key_ids(index_nodes, key_type="log"), kv_nodes=[])
+                # TODO: the projector has no REST endpoint for its in-use keys (it reports them to
+                # ns_server only via the cbauth callback); once it exposes one like the indexer's
+                # /encryption/GetInUseKeys, check projector_stats.log against those keys instead of
+                # only "encrypted and not on a pre-re-encryption key".
+                kv_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+                self._wait_until_no_problems(
+                    lambda: self._projector_stats_log_problems(kv_nodes, projector_baseline_key_ids),
+                    "[STEP 11] projector_stats.log re-encrypted: ")
                 self.item_count_related_validations()
                 self.log.info("[STEP 11] PASSED - log files re-encrypted and readable after restart")
             elif self.key_op == "reencrypt":
@@ -7721,9 +7752,6 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
 
         # STEP 1: bucket, indexes, scans; getIndexStatus populates the request-handler cache
         self.set_indexer_snapshot_settings(index_nodes)
-        for node in index_nodes:
-            # persist stats every 60s so step 4 can compare them across a restart
-            RestConnection(node).set_index_settings_internal({"indexer.statsPersistenceInterval": 60})
         bucket_name, select_queries = self._setup_bucket_and_indexes('logkey_', index_nodes)
         self.run_scan_validation(select_queries, validate_item_count=True)
         self._populate_request_handler_cache(index_nodes)
@@ -8023,15 +8051,29 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
     def _stats_log_key_ids(self, node, log_name):
         """MB-69519: header key ID of each encrypted <log_name> generation (ID length at
         byte 27, ID from byte 28)."""
-        log_dir = self.gsi_encryption_helper.get_log_path(node)
+        log_dir = self.gsi_encryption_helper._shell_quote(self.gsi_encryption_helper.get_log_path(node))
         shell = RemoteMachineShellConnection(node)
         try:
             out, _ = shell.execute_command(
-                f"for f in {log_dir}/{log_name} {log_dir}/{log_name}.*; do case $f in *.gz|*.tmp) continue;; esac; "
-                f"[ -f $f ] && dd if=$f bs=1 skip=28 count=$(od -An -tu1 -j27 -N1 $f | tr -d ' ') 2>/dev/null; echo; done")
+                f"for f in {log_dir}/{log_name} {log_dir}/{log_name}.*; do case \"$f\" in *.gz|*.tmp) continue;; esac; "
+                f"[ -f \"$f\" ] && dd if=\"$f\" bs=1 skip=28 count=$(od -An -tu1 -j27 -N1 \"$f\" | tr -d ' ') 2>/dev/null; echo; done")
         finally:
             shell.disconnect()
         return {line.strip() for line in out if line.strip()}
+
+    def _projector_stats_log_problems(self, kv_nodes, old_key_ids):
+        """Log DEK drop: projector_stats.log on every KV node is encrypted and no generation
+        still carries one of old_key_ids (the projector re-encrypts all of them)."""
+        problems = []
+        results = self.gsi_encryption_helper.verify_gsi_projector_stats_log_encrypted(kv_nodes)
+        for node in kv_nodes:
+            if results.get(node.ip, {}).get("status") != "passed":
+                problems.append(f"{node.ip}: not encrypted: {results.get(node.ip)}")
+                continue
+            stale = self._stats_log_key_ids(node, "projector_stats.log") & set(old_key_ids)
+            if stale:
+                problems.append(f"{node.ip}: still on old key(s) {sorted(stale)}")
+        return problems
 
     # TODO(gsi-ear-coverage): spec steps not covered yet (count the log line before/after):
     #   - MB-69519 (stats log lifecycle, after step 3): a drop request that includes the active
@@ -8403,14 +8445,12 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
                                  (4, "disable", "plaintext")):
             label = f"[STEP {step}] "
             log_count = self._indexer_log_total(index_nodes, codebook_logs[op])
-            pre_op_keys = self._bucket_in_use_key_ids(index_nodes, [bucket_name])[bucket_name]
             self._bucket_key_op(op, bucket_name, index_nodes, label, before_drop=lambda: [self.run_cbq_query(
                 query=f"DROP INDEX `{d.index_name}` ON `{bucket_name}`",
                 server=self.get_nodes_from_services_map(service_type="n1ql")) for d in drop_defs])
             self._wait_for_codebooks(index_nodes, expect, label)
             if op == "disable":  # MB-69248: BHIVE index data plaintext too; "" back in use
-                self.validate_files_not_encrypted(index_nodes, bucket_name, timeout=600, step_prefix=label,
-                                                  old_key_ids=pre_op_keys)
+                self.validate_files_not_encrypted(index_nodes, bucket_name, timeout=600, step_prefix=label)
                 self.assertEqual(self._bucket_in_use_ids_raw(index_nodes, bucket_name), {""}, f"{label}In-use keys")
             if op == "drop":  # MB-69248: rotate; the old DEK is dropped when its lifetime expires
                 old_keys, scans_before = (self.get_indexer_in_use_key_ids(index_nodes, key_type="bucket"),
@@ -8798,11 +8838,12 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
         self.run_scan_validation(select_queries)
 
         # STEP 6 (MB-70886): disable -> plaintext, "" in use; re-enable -> encrypted again
-        pre_disable_keys = self._bucket_in_use_key_ids(index_nodes, [bucket_b])[bucket_b]
         self._bucket_key_op("disable", bucket_b, index_nodes, "[STEP 6] ")
-        self.validate_files_not_encrypted(index_nodes, bucket_b, timeout=600, step_prefix="[STEP 6] ",
-                                          old_key_ids=pre_disable_keys)
+        self.validate_files_not_encrypted(index_nodes, bucket_b, timeout=600, step_prefix="[STEP 6] ")
         self.assertEqual(self._bucket_in_use_ids_raw(index_nodes, bucket_b), {""}, "[STEP 6] In-use keys")
+        # kill -9 -> live (decrypted) data recovers from disk and scans without the old keys
+        self.restart_index_nodes(index_nodes, restart_mode="kill", validate_read_back=True)
+        self.run_scan_validation(select_queries)
         self._bucket_key_op("enable", bucket_b, index_nodes, "[STEP 6] ")
         self.validate_file_encryption_with_key(index_nodes, encrypted_bucket_names=[bucket_b],
                                                step_prefix="[STEP 6] ", raise_on_failure=True)
@@ -8815,6 +8856,18 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
         for node in index_nodes:
             status, response = RestConnection(node).get_indexer_in_use_encryption_keys()
             ids.update(response.get(tag, []) if status and isinstance(response, dict) else [])
+        return ids
+
+    def _other_in_use_ids_raw(self, index_nodes):
+        """GetInUseKeys IDs of the "other" (metadata store) entries, including "" (plaintext
+        metadata still on disk), which get_indexer_in_use_key_ids filters out."""
+        ids = set()
+        for node in index_nodes:
+            status, response = RestConnection(node).get_indexer_in_use_encryption_keys()
+            if status and isinstance(response, dict):
+                for entry, key_ids in response.items():
+                    if self._is_key_type_entry(entry, "other"):
+                        ids.update("" if str(k) == "<unencrypted>" else str(k) for k in key_ids or [])
         return ids
 
     def _kill9_indexers_recover_from_snapshot(self, index_nodes, select_queries, label,
