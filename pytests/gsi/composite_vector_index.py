@@ -4148,8 +4148,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.install_tools()
         self.enable_shard_based_rebalance()
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
+        self.assertTrue(self.namespaces, "No namespaces after restoring the backup; cannot create indexes")
         select_queries = set()
         namespace_index_map = {}
+        build_queries = []
         for namespace in self.namespaces:
             definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
                                                                       prefix='test',
@@ -4166,7 +4168,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                      defer_build=True, bhive_index=self.bhive_index)
             select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=definitions,
                                                                        namespace=namespace, limit=self.scan_limit))
-            build_query = self.gsi_util_obj.get_build_indexes_query(definition_list=definitions, namespace=namespace)
+            build_queries.append(self.gsi_util_obj.get_build_indexes_query(definition_list=definitions,
+                                                                           namespace=namespace))
             namespace_index_map[namespace] = definitions
 
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
@@ -4179,7 +4182,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         self.sleep(30)
 
-        self.run_cbq_query(query=build_query, server=self.n1ql_node)
+        for build_query in build_queries:
+            self.run_cbq_query(query=build_query, server=self.n1ql_node)
         self.wait_until_indexes_online()
 
         if self.memory_fill:
