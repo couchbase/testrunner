@@ -118,13 +118,15 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         self.collection_rest.create_buckets_scopes_collections(
             self.num_buckets, self.num_scopes, self.num_collections,
             self.bucket_size, self.test_bucket, self.scope_prefix,
-            self.collection_prefix)
+            self.collection_prefix, storage_backend=self.bucket_storage)
 
     def _recreate_bucket_structure(self, bucket=""):
         if self.default_bucket:
-            self.rest.create_bucket(self.buckets[0].name, ramQuotaMB=self.bucket_size)
+            self.rest.create_bucket(self.buckets[0].name, ramQuotaMB=self.bucket_size,
+                                    storageBackend=self.bucket_storage)
         elif bucket:
-            self.rest.create_bucket(bucket, ramQuotaMB=self.bucket_size)
+            self.rest.create_bucket(bucket, ramQuotaMB=self.bucket_size,
+                                    storageBackend=self.bucket_storage)
             self.collection_rest.create_scope_collection_count(
                 self.num_scopes, self.num_collections, self.scope_prefix,
                 self.collection_prefix, bucket)
@@ -522,7 +524,8 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         remap_bucket = "remap_bucket" if self.bucket_remap\
                        else original_bucket
         if remap_bucket != original_bucket:
-            self.rest.create_bucket(remap_bucket, ramQuotaMB=self.bucket_size)
+            self.rest.create_bucket(remap_bucket, ramQuotaMB=self.bucket_size,
+                                    storageBackend=self.bucket_storage)
             backup_client.set_restore_bucket(remap_bucket)
         remap_scope = "remap_scope"
         self.rest.create_scope(remap_bucket, remap_scope)
@@ -570,7 +573,8 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         remap_bucket = "remap_bucket" if self.bucket_remap\
                        else original_bucket
         if remap_bucket != original_bucket:
-            self.rest.create_bucket(remap_bucket, ramQuotaMB=self.bucket_size)
+            self.rest.create_bucket(remap_bucket, ramQuotaMB=self.bucket_size,
+                                    storageBackend=self.bucket_storage)
             backup_client.set_restore_bucket(remap_bucket)
         remap_scope = "remap_scope"
         remap_namespaces = []
@@ -625,7 +629,8 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         remap_bucket = "remap_bucket" if self.bucket_remap\
                        else original_bucket
         if remap_bucket != original_bucket:
-            self.rest.create_bucket(remap_bucket, ramQuotaMB=self.bucket_size)
+            self.rest.create_bucket(remap_bucket, ramQuotaMB=self.bucket_size,
+                                    storageBackend=self.bucket_storage)
             backup_client.set_restore_bucket(remap_bucket)
         self.rest.create_scope(remap_bucket, scopes[1])
         self.rest.create_collection(remap_bucket, scopes[1], collections[1])
@@ -710,7 +715,8 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         remap_bucket = "remap_bucket" if self.bucket_remap\
                        else bucket
         if remap_bucket != bucket:
-            self.rest.create_bucket(remap_bucket, ramQuotaMB=self.bucket_size)
+            self.rest.create_bucket(remap_bucket, ramQuotaMB=self.bucket_size,
+                                    storageBackend=self.bucket_storage)
             backup_client.set_restore_bucket(remap_bucket)
         if self.bucket_remap:
             self.rest.delete_bucket(backup_client.backup_bucket)
@@ -759,7 +765,8 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         remap_bucket = "remap_bucket" if self.bucket_remap\
                        else bucket
         if remap_bucket != bucket:
-            self.rest.create_bucket(remap_bucket, ramQuotaMB=self.bucket_size)
+            self.rest.create_bucket(remap_bucket, ramQuotaMB=self.bucket_size,
+                                    storageBackend=self.bucket_storage)
             backup_client.set_restore_bucket(remap_bucket)
         if self.bucket_remap:
             self.rest.delete_bucket(backup_client.backup_bucket)
