@@ -6243,7 +6243,9 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backup_merge()
 
         # Delete a bucket
-        self.backup_remove(self.backups.pop(-2), verify_cluster_stats=False)
+        # The last backup is an incremental that depends on the removed one, so cbbackupmgr's
+        # safe-remove check (MB-60337) would refuse this remove unless it is disabled.
+        self.backup_remove(self.backups.pop(-2), verify_cluster_stats=False, disable_safe_remove_check=True)
 
     def test_magma_couchstore_compatibility(self):
         """ Test that couchstore and magma are compatible
