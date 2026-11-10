@@ -603,9 +603,32 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
 
     def backup_reset_clusters(self, servers):
         BucketOperationHelper.delete_all_buckets_or_assert(servers, self)
-        ClusterOperationHelper.cleanup_cluster(servers, master=servers[0])
+        ClusterOperationHelper.cleanup_cluster(servers, master=self._get_active_node(servers))
         ClusterOperationHelper.wait_for_ns_servers_or_assert(servers,
                                                              self, debug=False)
+
+    def _get_active_node(self, servers):
+        """ Returns the first server that is an active member of the cluster.
+
+        A failed over node is still listed in the cluster until it is rebalanced
+        out, so servers[0] may be a failed over node. Keeping it while ejecting
+        every other node fails with "No active nodes left".
+        """
+        active_ips = None
+        for server in servers:
+            try:
+                active_ips = [node.ip for node in RestConnection(server).get_nodes()]
+                break
+            except Exception as e:
+                self.log.warning("Could not get the active nodes from {0}: {1}".format(server.ip, e))
+        self.log.info("Active nodes in cluster: {0}".format(active_ips))
+        for server in servers:
+            if active_ips and server.ip in active_ips:
+                self.log.info("Using {0} as the master to reset the cluster".format(server.ip))
+                return server
+        self.log.warning("No active node found in {0}, using {1} as the master to reset the cluster"
+                         .format([server.ip for server in servers], servers[0].ip))
+        return servers[0]
 
     def store_vbucket_seqno(self):
         try:
