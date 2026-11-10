@@ -6466,12 +6466,12 @@ class BaseSecondaryIndexingTests(QueryTests):
         for definition in index_definitions:
             if "primary" in definition.index_name:
                 continue
-            if getattr(definition, 'sparsejl_dim', None) is not None:
+            if self.isSparse:
                 metadata_dict[definition.index_name] = {
                     "description": definition.description,
                     "train_list": definition.train_list,
                     "nprobes": definition.scan_nprobes,
-                    "sparsejl_dim": definition.sparsejl_dim
+                    "sparsejl_dim": getattr(definition, 'sparsejl_dim', None)
                 }
             else:
                 metadata_dict[definition.index_name] = {
