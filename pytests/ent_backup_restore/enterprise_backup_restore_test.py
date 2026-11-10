@@ -4668,7 +4668,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         remote_client.disconnect()
-        self.assertTrue("Error merging data: invalid range start cannot be before end" in output[-1], "Expected error message not thrown")
+        self.assertTrue("Error merging data: invalid range, end cannot be before start" in output[-1], "Expected error message not thrown")
 
     def test_backup_remove_negative_args(self):
         """
