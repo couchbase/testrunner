@@ -5454,6 +5454,18 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.expiry = 3
 
         self.restServer = self.get_nodes_from_services_map(service_type="eventing")
+        eventing_node_added = None
+        if self.restServer is None:
+            # The cluster nodes may already be provisioned without eventing, so add a free node with eventing
+            active_ips = [node.ip for node in RestConnection(self.master).get_nodes()]
+            eventing_node_added = next((server for server in self.input.clusters[0]
+                                        if server.ip not in active_ips and server.ip != self.backupset.backup_host.ip), None)
+            if eventing_node_added is None:
+                self.fail("No eventing node in cluster {0} and no free node to add one".format(active_ips))
+            self.log.info("No eventing node in cluster {0}, adding {1} with eventing service"
+                          .format(active_ips, eventing_node_added.ip))
+            self.cluster.rebalance(self.cluster_to_backup, [eventing_node_added], [], services=["eventing"])
+            self.restServer = self.get_nodes_from_services_map(service_type="eventing")
         self.rest = RestConnection(self.restServer)
 
 
@@ -5500,6 +5512,9 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 rest = RestConnection(node)
                 self.bkrs_undeploy_and_delete_function(body, rest, node)
             self.rest = RestConnection(self.master)
+            if eventing_node_added is not None:
+                self.log.info("Removing eventing node {0} added by the test".format(eventing_node_added.ip))
+                self.cluster.rebalance(self.cluster_to_backup, [], [eventing_node_added])
 
     def test_bkrs_logs_when_no_mutations_received(self):
         """
