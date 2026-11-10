@@ -2404,17 +2404,28 @@ class BackupServiceTest(BackupServiceBase):
             time, stat = stat['data'][0]['values'][-1]
             return int(stat)
 
-        timeout, prometheus = time.time() + 200, Prometheus(self.backupset.cluster_host)
+        def get_data_size():
+            """ Fetch the latest backup_data_size of this repository
+            """
+            stat = prometheus.stats_range('backup_data_size')
+            self.log.info(f"backup_data_size stat: {stat}")
+            return max((int(series['values'][-1][1]) for series in stat['data']
+                        if series['metric'].get('repository') == repo_name and series['values']), default=0)
+
+        # backup_data_size is only collected by the leader every 5 minutes (CB_BACKUP_SERVICE_STAT_COLLECTION_FREQUENCY),
+        # so it reports the size of the empty repository until the first collection after the backup.
+        timeout, prometheus = time.time() + 400, Prometheus(self.backupset.cluster_host)
 
         # Check the stats have a sensible value
         while time.time() < timeout:
-            if all(len(prometheus.stats_range(stat)['data']) > 0 for stat in ['backup_dispatched', 'backup_data_size', 'backup_task_run']):
+            if all(len(prometheus.stats_range(stat)['data']) > 0 for stat in ['backup_dispatched', 'backup_data_size', 'backup_task_run']) \
+                    and get_data_size() > 0:
                 self.assertGreaterEqual(get_stats_latest_value(prometheus.stats_range('backup_dispatched')), 1)
-                self.assertGreaterEqual(get_stats_latest_value(prometheus.stats_range('backup_data_size')), 1000000)
+                self.assertGreaterEqual(get_data_size(), 1000000)
                 self.assertGreaterEqual(get_stats_latest_value(prometheus.stats_range('backup_task_run')), 1)
                 return
 
-            self.sleep(1, "Waiting for prometheus stats to become available")
+            self.sleep(10, "Waiting for prometheus stats to become available")
 
         self.fail("Timed out while trying to wait for prometheus stats to become available")
 
