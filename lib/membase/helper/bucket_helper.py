@@ -123,6 +123,80 @@ class BucketOperationHelper:
         return bucket_created
 
     @staticmethod
+    def get_api_manifest_json_from_bucket(serverInfo, bucket_name):
+        """
+        Fetch manifest (scopes and collections) for a bucket using REST API.
+
+        Returns:
+            dict: Manifest in the form
+            {
+                "scopes": [
+                    {"name": ..., "collections": [{"name": ...}]}
+                ]
+            }
+        """
+        rest = RestConnection(serverInfo)
+        data = rest.get_bucket_manifest(bucket_name)
+
+        manifest = {
+            "scopes": [
+                {
+                    "name": s["name"],
+                    "collections": [
+                        {"name": c["name"]} for c in s.get("collections", [])
+                    ]
+                }
+                for s in data.get("scopes", [])
+            ]
+        }
+
+        return manifest
+
+    @staticmethod
+    def merge_collection_manifests(original_manifest, new_manifest):
+        """
+        Merge two manifests safely.
+
+        Args:
+            original_manifest: existing manifest (from cluster)
+            new_manifest: newly generated manifest
+
+        Returns:
+            dict: merged manifest
+        """
+
+        merged = {"scopes": []}
+
+        scope_map = {}
+
+        for scope in original_manifest.get("scopes", []):
+            scope_map[scope["name"]] = {
+                "name": scope["name"],
+                "collections": {c["name"] for c in scope.get("collections", [])}
+            }
+
+        for scope in new_manifest.get("scopes", []):
+
+            scope_name = scope["name"]
+
+            if scope_name not in scope_map:
+                scope_map[scope_name] = {
+                    "name": scope_name,
+                    "collections": set()
+                }
+
+            for col in scope.get("collections", []):
+                scope_map[scope_name]["collections"].add(col["name"])
+
+        for scope_name, scope_data in scope_map.items():
+            merged["scopes"].append({
+                "name": scope_name,
+                "collections": [{"name": c} for c in sorted(scope_data["collections"])]
+            })
+
+        return merged
+
+    @staticmethod
     def delete_all_buckets_or_assert(servers, test_case, timeout=200):
         log = logger.Logger.get_logger()
         for serverInfo in servers:
