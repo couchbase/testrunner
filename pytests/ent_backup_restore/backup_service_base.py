@@ -402,6 +402,11 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         if len(nodes) < len(self.input.clusters[0]):
             # Nodes which are currently not added
             servers_to_add = [server for server in self.input.clusters[0][1:] if (server.ip, server.port) not in nodes_ips_and_ports]
+            # Nodes rebalanced out by the previous test come back with a self-signed certificate, which the cluster
+            # rejects with "Unknown CA". preamble() loads the custom certificates only after this rebalance, so load them here.
+            if self.input.param('custom_certificate', False):
+                self.log.info("Loading custom certificates before adding {0}".format([server.ip for server in servers_to_add]))
+                CryptoTester(self.input.clusters[0]).upload()
             # Provision node in cluster[0] into a cluster
             Cluster().rebalance(self.input.clusters[0], servers_to_add, [], services=[server.services for server in self.servers])
 
