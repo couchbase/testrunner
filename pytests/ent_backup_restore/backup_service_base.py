@@ -2269,21 +2269,32 @@ class CryptoTester:
     def upload(self):
         """ Activates the root certificate and the per-node key pairs.
         """
-        # Place the per-node private key and certificate in /opt/couchbase/...
+        # Place the per-node private key and certificate and the root certificate in /opt/couchbase/...
         for ((per_node_private_key, per_node_certificate), server) in zip(self.per_node_pair, self.clusters):
             connection = RemoteMachineShellConnection(server)
-            connection.execute_command(f"mkdir -p /opt/couchbase/var/lib/couchbase/inbox/")
+            connection.execute_command(f"mkdir -p /opt/couchbase/var/lib/couchbase/inbox/CA/")
             connection.execute_command(f"echo '{per_node_private_key}' > /opt/couchbase/var/lib/couchbase/inbox/pkey.key")
             connection.execute_command(f"echo '{per_node_certificate}' > /opt/couchbase/var/lib/couchbase/inbox/chain.pem")
+            connection.execute_command(f"echo '{self.root_certificate}' > /opt/couchbase/var/lib/couchbase/inbox/CA/ca.pem")
             connection.execute_command(f"chmod -R a+x /opt/couchbase/var/lib/couchbase/inbox/")
             connection.execute_command(f"chown -R couchbase:couchbase /opt/couchbase/var/lib/couchbase/inbox/")
             connection.disconnect()
 
-        # Upload the root certificate
-        for cluster in self.clusters:
-            rest_connection = RestConnection(cluster)
-            rest_connection.upload_cluster_ca(self.root_certificate)
-            rest_connection.reload_certificate()
+        # Trust the root certificate and activate the per-node certificate. The node restarts its TLS listener
+        # when certificates change, so retry calls that fail while it is down.
+        log = logger.Logger.get_logger()
+        for server in self.clusters:
+            rest_connection = RestConnection(server)
+            for name, call in [("loadTrustedCAs", rest_connection.load_trusted_CAs),
+                               ("reloadCertificate", rest_connection.reload_certificate)]:
+                for attempt in range(1, 6):
+                    status, content = call()
+                    log.info(f"{name} on {server.ip} attempt {attempt}: status {status}, content {content}")
+                    if status:
+                        break
+                    time.sleep(5)
+                else:
+                    raise Exception(f"{name} failed on {server.ip}: {content}")
 
 class Crypto:
 
