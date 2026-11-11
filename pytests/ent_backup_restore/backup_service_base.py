@@ -1778,13 +1778,27 @@ class SambaClient(Client):
         if os_type == "linux" and os_dist == "centos7":
            self.remote_shell.execute_command(f"yum -y install samba-client cifs-utils")
         if os_type == "linux" and "debian" in os_dist:
-           self.remote_shell.execute_command(f"apt update -y && apt install -y samba-client cifs-utils")
+           # Non-interactive so debconf prompts (e.g. krb5-config) cannot hang the install, and wait for the dpkg lock
+           self.remote_shell.execute_command(f"DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 update -y && "
+                                             f"DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 install -y samba-client cifs-utils")
 
     def mount(self, directory_to_share, directory_to_mount):
         self.remote_shell.execute_command(f"umount -f -l {directory_to_mount}")
         self.remote_shell.execute_command(f"rm -rf {directory_to_mount}")
         self.remote_shell.execute_command(f"mkdir -p {directory_to_mount}")
         self.remote_shell.execute_command(f"mount -t cifs -o username=Couchbase,password=password,uid=$(id -u couchbase),gid=$(id -g couchbase),nobrl //{self.server.ip}/Anonymous {directory_to_mount}")
+        self.log_diagnostics(directory_to_mount)
+
+    def log_diagnostics(self, directory_to_mount):
+        """ Logs how the share is mounted and whether the couchbase user can write to it """
+        write_test = f"{directory_to_mount}/.write_test_{self.client.ip}"
+        for command in [f"mount | grep {directory_to_mount}",
+                        "id couchbase",
+                        f"ls -la {directory_to_mount}",
+                        f"su -s /bin/sh couchbase -c 'mkdir -p {write_test} && touch {write_test}/file && rm -rf {write_test}' "
+                        f"&& echo 'couchbase write test passed on {self.client.ip}'"]:
+            output, error = self.remote_shell.execute_command(command)
+            self.remote_shell.log_command_output(output, error)
 
     def clean(self, directory_to_mount):
         self.remote_shell.execute_command(f"umount -f -l {directory_to_mount}")
@@ -1801,7 +1815,8 @@ class SambaServer(Server):
         if os_type == "linux" and os_dist == "centos7":
             self.remote_shell.execute_command("yum -y install samba")
         if os_type == "linux" and "debian" in os_dist:
-            self.remote_shell.execute_command("apt update -y && apt -y install samba")
+            self.remote_shell.execute_command("DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 update -y && "
+                                              "DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 install -y samba")
     def share(self, directory_to_share, privileges={}):
         """ Shares `directory_to_share`
 
@@ -1840,6 +1855,16 @@ class SambaServer(Server):
         # A SELinux specific interaction:
         # If you want to allow samba to share any file/directory read/write, you must turn on the samba_export_all_rw boolean.
         self.remote_shell.execute_command(f"setsebool -P samba_export_all_rw on")
+
+        # Log the samba server state to help diagnose permission errors on the share
+        for command in ["smbd --version",
+                        "systemctl is-active smbd.service smb.service",
+                        "testparm -s 2>/dev/null",
+                        "id couchbase",
+                        "pdbedit -L",
+                        f"ls -la {directory_to_share}"]:
+            output, error = self.remote_shell.execute_command(command)
+            self.remote_shell.log_command_output(output, error)
 
     def clean(self):
         self.remote_shell.execute_command(f"echo -n > {SambaServer.samba_config_directory} && systemctl stop smb.service")
