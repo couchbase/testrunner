@@ -9,6 +9,7 @@ from newupgradebasetest import NewUpgradeBaseTest
 from security.auditmain import audit
 import subprocess
 import socket
+import uuid
 import fileinput
 import sys
 from subprocess import Popen, PIPE
@@ -466,7 +467,19 @@ class rbacTest(ldaptest, AutoFailoverBaseTest):
         /settings/rbac/users/local/<userid>
         """
         rest = RestConnection(self.master)
-        user_id = "test_user"
+        # This test covers local users only. setUp enables LDAP and saslauthd
+        # authentication, and a failed local login then falls through to the
+        # shared LDAP server, where other suites leave users behind (e.g.
+        # cn=test_user/password from py-grp-memcached.conf). Disable both so
+        # the old password can only be checked against the local user; the
+        # next test's setUp enables them again
+        status, content, _ = rest.disable_ldap()
+        self.assertTrue(status, "Failed to disable LDAP authentication: {0}".format(content))
+        status, content, _ = rest.disableSaslauthdAuth()
+        self.assertTrue(status, "Failed to disable saslauthd authentication: {0}".format(content))
+        # Per-run name as well, in case external authentication is ever re-enabled
+        local_user_id = "patch_user_{0}".format(uuid.uuid4().hex[:8])
+        user_id = local_user_id
         role = "admin"
         password = "password"
         payload = "name={0}&roles={1}&password={2}".format(user_id, role, password)
@@ -485,12 +498,18 @@ class rbacTest(ldaptest, AutoFailoverBaseTest):
 
         # Verify old password doesn't work, api will return nothing
         try:
-            rest.check_user_permission(user_id, password, "cluster!admin")
+            content = rest.check_user_permission(user_id, password, "cluster!admin")
         except Exception as ex:
             self.assertTrue("b''" == str(ex), msg="Unexpected exception {0}".format(ex))
             self.log.info("Failed as excepted with the old password")
         else:
-            self.fail("Unauthorized access granted with the old password")
+            # A 200 here means an external (LDAP) user of the same name
+            # authenticated; it must not carry the local user's admin role
+            if content.get("cluster!admin"):
+                self.fail("Unauthorized access granted with the old password: {0}"
+                          .format(content))
+            self.fail("Old password authenticated as an external user, check the "
+                      "LDAP server for a {0} entry: {1}".format(user_id, content))
 
         # Verify password update fails for non-existent user
         try:
@@ -574,7 +593,7 @@ class rbacTest(ldaptest, AutoFailoverBaseTest):
                     "Mismatch in the roles of {0}.".format(user))
         self.log.info("All user roles after password update is intact")
 
-        user_id = "test_user"
+        user_id = local_user_id
         rest.update_password(user_id, password)  # Reset password
         
         # no password provided

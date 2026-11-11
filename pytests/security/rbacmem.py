@@ -4,6 +4,8 @@ from security.testmemcached import TestMemcachedClient
 from security.testmemcached import TestSDK
 from security.rbacmain import rbacmain
 from security.rbac_base import RbacBase
+from security.ldap_user import LdapUser
+from security.ldap_group import LdapGroup
 import time
 
 
@@ -201,6 +203,24 @@ class RbacTestMemcached(BaseTestCase):
             final_role = self._return_roles(self.user_role)
             ldapGroupBase().create_int_group(self.group_name,self.ldap_users[0],final_role,final_role,self.master)
 
+    def tearDown(self):
+        # LDAP users and groups live on the shared LDAP server, which outlives
+        # the cluster. Remove them, or other suites with LDAP auth enabled can
+        # authenticate as them (rbacTest saw cn=test_user/password that way)
+        auth_type = getattr(self, 'auth_type', None)
+        ldap_users = getattr(self, 'ldap_users', [])
+        try:
+            if auth_type == 'ldap':
+                for user in ldap_users:
+                    LdapUser(user[0]).delete_user()
+            elif auth_type == 'LDAPGrp' and ldap_users:
+                # setUp creates an LDAP user for every item of ldap_users[0]
+                for user in ldap_users[0]:
+                    LdapUser(user).delete_user()
+                LdapGroup(group_name=getattr(self, 'group_name', 'testgrp')).delete_group()
+        except Exception as e:
+            self.log.warning("Failed to clean up LDAP users/groups: {0}".format(e))
+        super(RbacTestMemcached, self).tearDown()
 
     def _return_roles(self, user_role):
         final_roles = ''
