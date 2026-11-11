@@ -177,10 +177,14 @@ class SecondaryIndexingClusterOpsTests(BaseSecondaryIndexingTests):
         self.sleep(60, "wait for expiry pager to run on all nodes...")
         c_stats = CollectionsStats(self.master)
         rest = RestConnection(self.master)
+        kv_nodes = self.get_kv_nodes()
         for bucket in self.buckets:
-            items = rest.get_active_key_count(bucket) \
-                    - c_stats.get_collection_item_count(
-                        bucket.name, "_system", "_query")
+            # _system._query docs are not subject to bucket maxTTL; they are
+            # spread across vbuckets, so sum them over every KV node
+            system_query_items = c_stats.get_collection_item_count_cumulative(
+                bucket.name, "_system", "_query", node=kv_nodes)
+            self.log.info("Docs in _system._query: {0}".format(system_query_items))
+            items = rest.get_active_key_count(bucket) - system_query_items
             self.log.info("Docs in source bucket is {0} after maxttl has elapsed".format(items))
             if items != 0:
                 self.fail("Docs in source bucket is not 0 after maxttl has elapsed")
