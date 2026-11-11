@@ -5476,11 +5476,14 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE, worker_count=3)
         bk_events_created = False
         rs_events_created = False
+        # The eventing REST API is only served by eventing nodes, which may not be the cluster hosts
+        self.log.info("Using eventing node {0} of backup cluster {1}".format(self.restServer.ip,
+                                                                            self.backupset.cluster_host.ip))
         try:
-            self.deploy_function(body)
+            self.deploy_function(body, server=self.restServer)
             bk_events_created = True
             self.backup_cluster()
-            rest_bk = RestConnection(self.backupset.cluster_host)
+            rest_bk = RestConnection(self.restServer)
             bk_fxn = rest_bk.get_all_functions()
 
             backup_index = 0
@@ -5500,17 +5503,27 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             if self.backup_before_eventing:
                 self.assertTrue('metadata' in [bucket.name for bucket in rest_rs.get_buckets()])
 
-            self.bkrs_resume_function(body, rest_rs)
+            rs_eventing_node = self.get_nodes_from_services_map(service_type="eventing",
+                                                                master=self.backupset.restore_cluster_host)
+            self.log.info("Using eventing node {0} of restore cluster {1}".format(rs_eventing_node.ip,
+                                                                                 self.backupset.restore_cluster_host.ip))
+            self.bkrs_resume_function(body, RestConnection(rs_eventing_node))
             rs_events_created = True
-            self._verify_restore_events_definition(bk_fxn)
+            self._verify_restore_events_definition(bk_fxn, server=rs_eventing_node)
         except Exception as e:
             self.fail(e)
         finally:
-            master_nodes = [self.backupset.cluster_host,
-                            self.backupset.restore_cluster_host]
-            for node in master_nodes:
-                rest = RestConnection(node)
-                self.bkrs_undeploy_and_delete_function(body, rest, node)
+            rs_eventing_node = self.get_nodes_from_services_map(service_type="eventing",
+                                                                master=self.backupset.restore_cluster_host)
+            # Backup and restore can be the same cluster, so undeploy only once per eventing node
+            undeployed_ips = []
+            for node, eventing_node in [(self.backupset.cluster_host, self.restServer),
+                                        (self.backupset.restore_cluster_host, rs_eventing_node)]:
+                if eventing_node is None or eventing_node.ip in undeployed_ips:
+                    continue
+                self.log.info("Undeploying and deleting {0} on eventing node {1}".format(body['appname'], eventing_node.ip))
+                self.bkrs_undeploy_and_delete_function(body, RestConnection(eventing_node), node)
+                undeployed_ips.append(eventing_node.ip)
             self.rest = RestConnection(self.master)
             if eventing_node_added is not None:
                 self.log.info("Removing eventing node {0} added by the test".format(eventing_node_added.ip))

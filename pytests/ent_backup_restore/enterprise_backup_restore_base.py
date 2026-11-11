@@ -3126,13 +3126,14 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         return body
 
     def deploy_function(self, body, deployment_fail=False, wait_for_bootstrap=True,pause_resume=False,pause_resume_number=1,
-                        deployment_status=True,processing_status=True):
+                        deployment_status=True,processing_status=True, server=None):
+        """ server: The eventing node to deploy on, defaults to the backup cluster host """
         body['settings']['deployment_status'] = deployment_status
         body['settings']['processing_status'] = processing_status
         if self.print_eventing_handler_code_in_logs:
             self.log.info("Deploying the following handler code : {0} with \nbindings: {1} and \nsettings: {2}".format(body['appname'], body['depcfg'] , body['settings']))
             self.log.info("\n{0}".format(body['appcode']))
-        rest = RestConnection(self.backupset.cluster_host)
+        rest = RestConnection(server if server else self.backupset.cluster_host)
         content1 = rest.create_function(body['appname'], body)
         self.log.info("deploy Application : {0}".format(content1))
         if deployment_fail:
@@ -3248,7 +3249,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             shutil.rmtree(bk_file_events_dir)
         shell.disconnect()
 
-    def _verify_restore_events_definition(self, bk_fxn):
+    def _verify_restore_events_definition(self, bk_fxn, server=None):
+        """ server: The eventing node of the restore cluster, defaults to the restore cluster host """
         # ---- Encryption at Rest (EaR) — Impl §5.3.5 (pending §5.4 Q4) ----
         if getattr(self, "ear_enabled", False):
             self.log.info("EaR enabled: events.json may be encrypted (Impl §5.4 Q4 — unconfirmed); "
@@ -3258,7 +3260,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         events_file_name = "events.json"
         bk_file_events_dir = "/tmp/backup_events{0}/".format(self.master.ip)
         bk_file_events_path = bk_file_events_dir + events_file_name
-        rest = RestConnection(self.backupset.restore_cluster_host)
+        rest = RestConnection(server if server else self.backupset.restore_cluster_host)
         rs_fxn = rest.get_all_functions()
         rs_fxn_dict = json.loads(rs_fxn)[0]
         bk_fxn_dict = json.loads(bk_fxn)[0]
