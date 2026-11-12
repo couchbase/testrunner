@@ -1564,7 +1564,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             no_progress_bar=self.no_progress_bar,
             cli_command_location=self.cli_command_location,
             cb_version=self.cb_version,
-            num_shards=num_shards)
+            num_shards=num_shards,
+            enforce_tls=self.enforce_tls, x509=self.input.param("x509", False))
         conn_bk = RemoteMachineShellConnection(self.backupset.cluster_host)
         conn_bk.pause_memcached(timesleep=8, delay=10)
         conn_bk.unpause_memcached()
@@ -1612,7 +1613,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             no_progress_bar=self.no_progress_bar,
             cli_command_location=self.cli_command_location,
             cb_version=self.cb_version,
-            num_shards=num_shards)
+            num_shards=num_shards,
+            enforce_tls=self.enforce_tls, x509=self.input.param("x509", False))
         conn = RemoteMachineShellConnection(self.backupset.cluster_host)
         conn.kill_erlang(delay=10)
         conn.start_couchbase()
@@ -1628,7 +1630,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 no_progress_bar=self.no_progress_bar,
                 cli_command_location=self.cli_command_location,
                 cb_version=self.cb_version,
-                num_shards=num_shards)
+                num_shards=num_shards,
+                enforce_tls=self.enforce_tls, x509=self.input.param("x509", False))
             output = backup_result.result(timeout=300)
         self.assertTrue(self._check_output("Backup completed successfully", output),
                         "Backup failed with erlang crash and restart within 180 seconds")
@@ -1667,7 +1670,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             no_progress_bar=self.no_progress_bar,
             cli_command_location=self.cli_command_location,
             cb_version=self.cb_version,
-            num_shards=num_shards)
+            num_shards=num_shards,
+            enforce_tls=self.enforce_tls, x509=self.input.param("x509", False))
         conn = RemoteMachineShellConnection(self.backupset.cluster_host)
         conn.stop_couchbase()
         conn.start_couchbase()
@@ -1685,7 +1689,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 no_progress_bar=self.no_progress_bar,
                 cli_command_location=self.cli_command_location,
                 cb_version=self.cb_version,
-                num_shards=num_shards)
+                num_shards=num_shards,
+                enforce_tls=self.enforce_tls, x509=self.input.param("x509", False))
             output = backup_result.result(timeout=300)
         self.assertTrue(self._check_output("Backup completed successfully", output),
                        "Backup failed with couchbase stop and start within 180 seconds")
@@ -1727,7 +1732,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     no_progress_bar=self.no_progress_bar,
                     cli_command_location=self.cli_command_location,
                     cb_version=self.cb_version,
-                    num_shards=num_shards)
+                    num_shards=num_shards,
+                    enforce_tls=self.enforce_tls, x509=self.input.param("x509", False))
                 self.wait_for_DCP_stream_start(backup_result)
                 conn.kill_erlang(self.os_name)
                 try:

@@ -3093,7 +3093,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                                           resume=self.backupset.resume, purge=self.backupset.purge,
                                                           no_progress_bar=self.no_progress_bar,
                                                           cli_command_location=self.cli_command_location,
-                                                          cb_version=self.cb_version)
+                                                          cb_version=self.cb_version,
+                                                          enforce_tls=self.enforce_tls, x509=self.input.param("x509", False))
         self.sleep(10)
         conn = RemoteMachineShellConnection(self.backupset.cluster_host)
         conn.kill_erlang()
@@ -3119,7 +3120,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                                           resume=self.backupset.resume, purge=self.backupset.purge,
                                                           no_progress_bar=self.no_progress_bar,
                                                           cli_command_location=self.cli_command_location,
-                                                          cb_version=self.cb_version)
+                                                          cb_version=self.cb_version,
+                                                          enforce_tls=self.enforce_tls, x509=self.input.param("x509", False))
         self.sleep(10)
         conn = RemoteMachineShellConnection(self.backupset.cluster_host)
         conn.stop_couchbase()
@@ -3145,7 +3147,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                                           resume=self.backupset.resume, purge=self.backupset.purge,
                                                           no_progress_bar=self.no_progress_bar,
                                                           cli_command_location=self.cli_command_location,
-                                                          cb_version=self.cb_version)
+                                                          cb_version=self.cb_version,
+                                                          enforce_tls=self.enforce_tls, x509=self.input.param("x509", False))
         self.sleep(10)
         conn = RemoteMachineShellConnection(self.backupset.cluster_host)
         conn.pause_memcached()
@@ -3172,7 +3175,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                                               resume=self.backupset.resume, purge=self.backupset.purge,
                                                               no_progress_bar=self.no_progress_bar,
                                                               cli_command_location=self.cli_command_location,
-                                                              cb_version=self.cb_version)
+                                                              cb_version=self.cb_version,
+                                                              enforce_tls=self.enforce_tls, x509=self.input.param("x509", False))
             if self.os_name != "windows":
                 self.sleep(10)
             conn = RemoteMachineShellConnection(self.backupset.cluster_host)
@@ -3211,7 +3215,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                                               resume=self.backupset.resume, purge=self.backupset.purge,
                                                               no_progress_bar=self.no_progress_bar,
                                                               cli_command_location=self.cli_command_location,
-                                                              cb_version=self.cb_version)
+                                                              cb_version=self.cb_version,
+                                                              enforce_tls=self.enforce_tls, x509=self.input.param("x509", False))
             self.sleep(10)
             conn = RemoteMachineShellConnection(self.backupset.cluster_host)
             conn.stop_couchbase()
@@ -3246,7 +3251,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                                               resume=self.backupset.resume, purge=self.backupset.purge,
                                                               no_progress_bar=self.no_progress_bar,
                                                               cli_command_location=self.cli_command_location,
-                                                              cb_version=self.cb_version)
+                                                              cb_version=self.cb_version,
+                                                              enforce_tls=self.enforce_tls, x509=self.input.param("x509", False))
 
             self.sleep(10)
             output = backup_result.result(timeout=200)
@@ -3629,7 +3635,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                                           resume=self.backupset.resume, purge=self.backupset.purge,
                                                           no_progress_bar=self.no_progress_bar,
                                                           cli_command_location=self.cli_command_location,
-                                                          cb_version=self.cb_version)
+                                                          cb_version=self.cb_version,
+                                                          enforce_tls=self.enforce_tls, x509=self.input.param("x509", False))
         self.wait_for_DCP_stream_start(backup_result)
         conn = RemoteMachineShellConnection(self.backupset.cluster_host)
         conn.kill_erlang()
@@ -5554,7 +5561,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                                           resume=self.backupset.resume, purge=self.backupset.purge,
                                                           no_progress_bar=self.no_progress_bar,
                                                           cli_command_location=self.cli_command_location,
-                                                          cb_version=self.cb_version)
+                                                          cb_version=self.cb_version,
+                                                          enforce_tls=self.enforce_tls, x509=self.input.param("x509", False))
 
         # We need to wait until the data transfer starts before we pause memcached.
         # Read the backup file output until we find evidence of a DCP connection,
@@ -5939,7 +5947,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                                           resume=self.backupset.resume, purge=self.backupset.purge,
                                                           no_progress_bar=self.no_progress_bar,
                                                           cli_command_location=self.cli_command_location,
-                                                          cb_version=self.cb_version)
+                                                          cb_version=self.cb_version,
+                                                          enforce_tls=self.enforce_tls, x509=self.input.param("x509", False))
 
         for i in range(10):
             _, err = self.backup_info(True)

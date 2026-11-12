@@ -5718,7 +5718,7 @@ class CancelBucketCompactionTask(Task):
 class EnterpriseBackupTask(Task):
 
     def __init__(self, backupset, objstore_provider, resume=False, purge=False, no_progress_bar=False,
-                 cli_command_location='', cb_version=None, num_shards=''):
+                 cli_command_location='', cb_version=None, num_shards='', enforce_tls=False, x509=False):
         Task.__init__(self, "enterprise_backup_task")
         self.backupset = backupset
         self.objstore_provider = objstore_provider
@@ -5729,6 +5729,8 @@ class EnterpriseBackupTask(Task):
         self.cb_version = cb_version
         self.cluster_flag = "--cluster"
         self.num_shards = num_shards
+        self.enforce_tls = enforce_tls
+        self.x509 = x509
         if self.cb_version is None:
             raise Exception("Need to pass Couchbase version to run correctly bk/rt ")
         self.output = []
@@ -5742,12 +5744,19 @@ class EnterpriseBackupTask(Task):
 
     def execute(self, task_manager):
         try:
+            # Connect the same way as EnterpriseBackupRestoreBase.backup_cluster: with enforce_tls only the TLS
+            # port is open, so plain http fails to bootstrap before any DCP stream is opened
+            scheme = "https" if self.enforce_tls else "http"
+            auth = (f" --username {self.backupset.cluster_host.rest_username}"
+                    f" --password {self.backupset.cluster_host.rest_password}")
+            if self.x509 and getattr(self.backupset, "client_certs", None):
+                auth = (f" --client-cert {self.backupset.client_certs[2][0]}"
+                        f" --client-key {self.backupset.client_certs[2][1]}")
             args = (
                 f"backup --archive {self.objstore_provider.schema_prefix() + self.backupset.objstore_bucket + '/' if self.objstore_provider else ''}{self.backupset.directory}"
                 f" --repo {self.backupset.name}"
-                f" {self.cluster_flag} http://{self.backupset.cluster_host.ip}:{self.backupset.cluster_host.port}"
-                f" --username {self.backupset.cluster_host.rest_username}"
-                f" --password {self.backupset.cluster_host.rest_password}"
+                f" {self.cluster_flag} {scheme}://{self.backupset.cluster_host.ip}:{self.backupset.cluster_host.port}"
+                f"{auth}"
                 f" {self.num_shards}"
                 f"{' --obj-staging-dir ' + self.backupset.objstore_staging_directory if self.objstore_provider else ''}"
                 f"{' --obj-endpoint ' + self.backupset.objstore_endpoint if self.objstore_provider and self.backupset.objstore_endpoint else ''}"
@@ -5756,6 +5765,8 @@ class EnterpriseBackupTask(Task):
                 f"{' --obj-secret-access-key ' + self.backupset.objstore_secret_access_key if self.objstore_provider and self.backupset.objstore_secret_access_key else ''}"
                 f"{' --s3-force-path-style' if self.objstore_provider and self.objstore_provider.schema_prefix() == 's3://' else ''}"
             )
+            if getattr(self.backupset, "no_ssl_verify", False):
+                args += " --no-ssl-verify"
             if self.resume:
                 args += " --resume"
             if self.purge:
