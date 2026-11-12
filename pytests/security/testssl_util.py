@@ -17,7 +17,7 @@ class ServerInfo:
 
 
 class TestSSL:
-    TestSSL_URL = "https://github.com/drwetter/testssl.sh.git"
+    TestSSL_URL = "https://github.com/testssl/testssl.sh.git"
     TEST_SSL_FILE_PATH = "/tmp/testssl.sh"
     TEST_SSL_FILENAME = "/tmp/testssl.sh/testssl.sh"
     SLAVE_HOST = ServerInfo('127.0.0.1', 22, 'root', 'couchbase')
@@ -34,7 +34,8 @@ class TestSSL:
                                               "git clone {1}"
                                               .format(self.path, TestSSL.TestSSL_URL))
         shell.log_command_output(output, error)
-        output, error = shell.execute_command("yum install bind-utils -y")
+        output, error = shell.execute_command("command -v dig || yum install bind-utils -y "
+                                              "|| apt-get install dnsutils -y")
         shell.log_command_output(output, error)
         shell.disconnect()
 
