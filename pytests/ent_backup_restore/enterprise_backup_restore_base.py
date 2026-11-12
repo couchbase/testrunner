@@ -3179,7 +3179,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             body['settings'].pop('dcp_stream_boundary')
         self.log.info("Settings after deleting dcp_stream_boundary : {0}"
                       .format(body['settings']))
-        content1 = rest.set_settings_for_function(body['appname'], body['settings'])
+        # Only send the status fields: a restored function can already be deployed, and eventing rejects changes to
+        # most settings of a deployed function. It may also have adjusted values on store (e.g. checkpoint_interval
+        # 10000 is stored as 15000), so resending the original settings counts as a change.
+        resume_settings = {'deployment_status': True, 'processing_status': True}
+        content1 = rest.set_settings_for_function(body['appname'], resume_settings)
         self.log.info("Resume Application : {0}".format(body['appname']))
         if wait_for_resume:
             self.bkrs_wait_for_handler_state(body['appname'], "deployed", rest)
