@@ -328,10 +328,12 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
                                     if col in scopes_collections[scope_id]:
                                         found_collections.append(col)
                         if self.backupset.load_to_collection:
-                            if str(self.backupset.load_scope_id[2:]) in list(bk_scopes[scope_id]["collections"].keys()):
+                            # load_scope_id is a hex collection id (e.g. 0x18) but info keys collections by decimal id (24)
+                            load_collection_id = str(int(self.backupset.load_scope_id, 16))
+                            if load_collection_id in list(bk_scopes[scope_id]["collections"].keys()):
                                 self.log.info("check items in collection")
-                                print("\nitems number: ", bk_scopes[scope_id]["collections"][str(self.backupset.load_scope_id[2:])]["mutations"])
-                                if bk_scopes[scope_id]["collections"][str(self.backupset.load_scope_id[2:])]["mutations"] != self.num_items:
+                                print("\nitems number: ", bk_scopes[scope_id]["collections"][load_collection_id]["mutations"])
+                                if bk_scopes[scope_id]["collections"][load_collection_id]["mutations"] != self.num_items:
                                     raise Exception("collection items not in backup")
                 if len(found_collections) != len(collections):
                     raise Exception("collection may not in backup repo.  Found cols: {0} != check cols: {1}"\

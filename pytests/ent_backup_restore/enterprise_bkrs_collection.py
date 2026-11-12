@@ -412,19 +412,29 @@ class EnterpriseBackupRestoreCollectionTest(EnterpriseBackupRestoreCollectionBas
         scopes = self.get_bucket_scope_cluster_host()
         scopes = [i for i in scopes if i]
         scopes_id = []
+        collections_id = []
         for scope in scopes:
-            if scope == "_default":
+            if scope in ("_default", "_system"):
                 continue
-            scopes_id.append(self.get_scopes_id_cluster_host(scope))
+            scope_id = self.get_scopes_id_cluster_host(scope)
+            scopes_id.append(scope_id)
+            if scope_id:
+                collections_id.append(self.get_collections_id_cluster_host(scope, "mycollection_{0}_0".format(scope)))
         """ remove null and empty element """
         scopes_id = [i for i in scopes_id if i]
+        collections_id = [i for i in collections_id if i]
         print("\nscope ids: ", scopes_id)
+        print("\ncollection ids: ", collections_id)
         if not scopes_id:
             self.fail("Could not get scope id from scopes: {0}".format(scopes))
         self.backup_create()
         col_cmd = ""
         if self.backupset.load_to_collection:
-            self.backupset.load_scope_id = choice(scopes_id)
+            # cbworkloadgen -c takes a collection id. Scope ids can't be used here: they overlap with the ids of the
+            # _system scope's collections (e.g. 0x9 is _system._query), so the docs would be loaded there instead.
+            if not collections_id:
+                self.fail("Could not get collection ids for scopes: {0}".format(scopes))
+            self.backupset.load_scope_id = choice(collections_id)
             col_cmd = " -c {0} ".format(self.backupset.load_scope_id)
         self.load_all_buckets(self.backupset.cluster_host, ratio=0.1,
                                              command_options=col_cmd)
