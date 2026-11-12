@@ -3,6 +3,7 @@ from membase.api.exception import CBQError
 from remote.remote_util import RemoteMachineShellConnection
 from deepdiff import DeepDiff
 import json
+import re
 
 
 class QuerySubqueryTests(QueryTests):
@@ -74,6 +75,66 @@ class QuerySubqueryTests(QueryTests):
         diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
         if diffs:
             self.assertTrue(False, diffs)
+
+    def test_let_subquery_predicate_not_pushed_to_index_filter(self):
+        """
+        A WHERE predicate on a LET variable defined by a subquery must not be pushed
+        into the IndexScan3 filter: the filter runs before the LET is bound, so the
+        variable is MISSING and every index entry is dropped (0 rows instead of 5).
+        """
+        keyspace = f"`{self.buckets[0].name}`._default.c1"
+        self.run_cbq_query(f"CREATE COLLECTION {keyspace} IF NOT EXISTS")
+        try:
+            for _ in range(30):
+                res = self.run_cbq_query(f'SELECT RAW 1 FROM system:keyspaces '
+                                         f'WHERE `bucket` = "{self.buckets[0].name}" AND name = "c1"')
+                if res['results']:
+                    break
+                self.sleep(2, "waiting for collection c1")
+            self.run_cbq_query(f"CREATE INDEX ix1 ON {keyspace}(a, b, c, d, ts)")
+            self.run_cbq_query(f"CREATE INDEX ix2 ON {keyspace}(a, b, c, d, tid, ts)")
+            self._wait_for_index_online('c1', 'ix1')
+            self._wait_for_index_online('c1', 'ix2')
+            self.run_cbq_query(f'INSERT INTO {keyspace} (KEY k, VALUE v) '
+                               f'SELECT "k" || TO_STR(i) AS k, '
+                               f'{{"a":"a1","b":"b1","c":"c1","d":i%3,"ts":1000+i,"tid":"t"||TO_STR(i)}} AS v '
+                               f'FROM ARRAY_RANGE(0,100) AS i')
+            res = self.run_cbq_query(f'SELECT RAW COUNT(*) FROM {keyspace} WHERE a = "a1"',
+                                     query_params={'scan_consistency': 'request_plus'})
+            self.assertEqual(res['results'], [100], f"expected 100 docs, got {res['results']}")
+            self.run_cbq_query(f"UPDATE STATISTICS FOR {keyspace} INDEX ALL")
+
+            let_cts = (f'LET cts = (SELECT RAW x.ts FROM {keyspace} AS x '
+                       f'WHERE x.a = "a1" AND x.b = "b1" AND x.c = "c1" AND x.tid = "t50" LIMIT 1)[0] ')
+            q1 = (f'SELECT t.tid, t.ts, t.e FROM {keyspace} AS t {let_cts}'
+                  f'WHERE t.a = "a1" AND t.b = "b1" AND t.c = "c1" AND cts IS NOT NULL '
+                  f'AND (t.ts < cts OR (t.ts = cts AND t.tid <= "t50")) LIMIT 5')
+            q2 = (f'SELECT t.tid, t.ts FROM {keyspace} AS t {let_cts}'
+                  f'WHERE t.a = "a1" AND t.b = "b1" AND t.c = "c1" AND t.d = 0 AND t.ts < cts LIMIT 5')
+            # LIMIT 5 without ORDER BY: any 5 matching rows are valid, so check count and predicate.
+            # cts = 1050; Q1 also admits ts = 1050 (tid t50), Q2 needs ts < 1050.
+            for name, query, max_ts in [("Q1", q1, 1050), ("Q2", q2, 1049)]:
+                for use_cbo in [True, False]:
+                    rows = self.run_cbq_query(query, query_params={'use_cbo': use_cbo})['results']
+                    self.assertEqual(len(rows), 5, f"{name} use_cbo={use_cbo} returned {len(rows)} rows, "
+                                                   f"expected 5: {rows}")
+                    self.assertFalse([r for r in rows if r['ts'] > max_ts],
+                                     f"{name} use_cbo={use_cbo} returned rows with ts > {max_ts}: {rows}")
+                    plan = json.dumps(self.run_cbq_query(f"EXPLAIN {query}",
+                                                         query_params={'use_cbo': use_cbo})['results'])
+                    filters = re.findall(r'"filter": "((?:[^"\\]|\\.)*)"', plan)
+                    self.assertFalse([f for f in filters if '`cts`' in f],
+                                     f"{name} use_cbo={use_cbo} pushed LET variable cts into "
+                                     f"index scan filter: {filters}")
+
+            # control: same predicate with a named parameter instead of the LET variable
+            rows = self.run_cbq_query(f'SELECT t.tid, t.ts FROM {keyspace} AS t WHERE t.a = "a1" AND t.b = "b1" '
+                                      f'AND t.c = "c1" AND t.d = 0 AND t.ts < $cts LIMIT 5',
+                                      query_params={'$cts': 1050})['results']
+            self.assertTrue(len(rows) == 5 and all(r['ts'] < 1050 for r in rows),
+                            f"named-parameter control returned wrong rows: {rows}")
+        finally:
+            self.run_cbq_query(f"DROP COLLECTION {keyspace} IF EXISTS")
 
     ''' When a cte is killed, the subquery it runs should also be killed'''
     def test_cte_subquery_cancel(self):
