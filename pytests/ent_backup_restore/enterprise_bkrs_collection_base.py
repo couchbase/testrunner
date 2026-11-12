@@ -80,7 +80,8 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
         if self.enforce_tls:
             self.master.port = '18091'
             self.master.protocol = "https://"
-            for server in self.servers:
+            # input.clusters holds separate server objects from self.servers (the restore cluster host is one of them)
+            for server in self.servers + [s for cluster in self.input.clusters.values() for s in cluster]:
                 server.port = '18091'
 
         cmd = 'curl -k -g {4}{0}:{3}/diag/eval -u {1}:{2} '.format(self.master.ip,
@@ -389,7 +390,7 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
         if self.enforce_tls:
             self.master.port = '8091'
             self.master.protocol = "http://"
-            for server in self.servers:
+            for server in self.servers + [s for cluster in self.input.clusters.values() for s in cluster]:
                 server.port = '8091'
         if not self.input.param("skip_cleanup", False):
             remote_client = RemoteMachineShellConnection(self.input.clusters[1][0])
