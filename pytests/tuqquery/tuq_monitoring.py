@@ -3,6 +3,7 @@ import logging
 import threading
 import time
 
+from lib.Cb_constants.CBServer import CbServer
 from remote.remote_util import RemoteMachineShellConnection
 
 from .tuq import QueryTests
@@ -979,5 +980,96 @@ class QueryMonitoringTests(QueryTests):
         # No queries should appear
         result = self.run_cbq_query('select * from system:completed_requests')
         self.assertEqual(result['metrics']['resultCount'], 0)
-
         self.rest.set_completed_requests_collection_duration(self.master, 1000)
+
+    def test_completed_requests_large_parameters(self):
+        """MB-75217: system:completed_requests must not pin the request body of a large parameter.
+
+        Before the fix each logged entry held the request's own namedArgs/positionalArgs and
+        statement (zero-copy slices of the POST body), so the query heap grew by ~1 body per
+        request (10 x 9.6 MB -> +109 MB on 8.5.0-1441). After the fix (8.5.0-1459) parameters are
+        stored as a detached JSON copy capped at 64 KiB and replaced by a WARNING above it.
+        """
+        num_requests = self.input.param("num_requests", 10)
+        num_docs = self.input.param("num_docs", 1000)
+        statement = "SELECT RAW 1"
+        warning_text = "exceed maximum permitted (64.0 KiB) size"
+        large_data = {"_default": [{"docId": "k%05d" % i, "doc": {"id": i, "pad": "x" * 10000}}
+                                   for i in range(num_docs)]}
+        large_body = json.dumps({"statement": statement, "$data": large_data})
+        body_size = len(large_body)
+        try:
+            self.rest.set_completed_requests_collection_duration(self.master, 0)
+            self.run_cbq_query('DELETE FROM system:completed_requests')
+
+            heap_before = self._query_heap_after_gc()
+            for i in range(num_requests):
+                result = self._post_query_body(large_body)
+                self.assertEqual(result['status'], 'success', f"MB-75217: request {i} failed: {result}")
+                self.assertEqual(result['results'], [1], f"MB-75217: request {i} wrong results: {result}")
+            heap_after = self._query_heap_after_gc()
+            heap_growth = heap_after - heap_before
+            self.log.info(f"MB-75217: body {body_size} bytes x {num_requests}; heap {heap_before} -> "
+                          f"{heap_after} (+{heap_growth / 1048576:.1f} MB)")
+            # Fixed builds grow ~0.1 MB; the bug pins ~1 body per request, so allow less than one body.
+            self.assertLess(heap_growth, body_size,
+                            f"MB-75217: completed_requests pins request bodies, heap grew "
+                            f"{heap_growth / 1048576:.1f} MB for {num_requests} x {body_size} byte requests")
+
+            result = self.run_cbq_query(f"SELECT COUNT(*) AS entries, MAX(ENCODED_SIZE(namedArgs)) AS max_size, "
+                                        f"ARRAY_AGG(DISTINCT namedArgs) AS args FROM system:completed_requests "
+                                        f"WHERE statement = '{statement}'")
+            row = result['results'][0]
+            self.assertEqual(row['entries'], num_requests,
+                             f"MB-75217: expected {num_requests} completed_requests entries, got {row}")
+            self.assertLess(row['max_size'], 65536,
+                            f"MB-75217: namedArgs not capped at 64 KiB, size {row['max_size']}")
+            self.assertEqual(len(row['args']), 1, f"MB-75217: unexpected namedArgs {row['args']}")
+            self.assertIn(warning_text, row['args'][0].get('WARNING', ''),
+                          f"MB-75217: oversized namedArgs not replaced by WARNING: {row['args'][0]}")
+
+            # Positional args over the cap get the same WARNING.
+            self.run_cbq_query('DELETE FROM system:completed_requests')
+            result = self._post_query_body(json.dumps({"statement": "SELECT RAW 2", "args": [large_data]}))
+            self.assertEqual(result['status'], 'success', f"MB-75217: positional request failed: {result}")
+            result = self.run_cbq_query("SELECT RAW positionalArgs FROM system:completed_requests "
+                                        "WHERE statement = 'SELECT RAW 2'")
+            self.assertEqual(len(result['results']), 1, f"MB-75217: positional entry missing: {result}")
+            self.assertIn(warning_text, json.dumps(result['results'][0]),
+                          f"MB-75217: oversized positionalArgs not replaced by WARNING: {result['results'][0]}")
+
+            # Small parameters are still logged in full with the same shape.
+            small_args = {"a": 1, "b": ["x", "y"]}
+            result = self._post_query_body(json.dumps({"statement": "SELECT RAW 3", "$p": small_args, "args": [7]}))
+            self.assertEqual(result['status'], 'success', f"MB-75217: small-args request failed: {result}")
+            result = self.run_cbq_query("SELECT namedArgs, positionalArgs FROM system:completed_requests "
+                                        "WHERE statement = 'SELECT RAW 3'")
+            self.assertEqual(result['results'], [{"namedArgs": {"$p": small_args}, "positionalArgs": [7]}],
+                             f"MB-75217: small parameters not logged as-is: {result['results']}")
+        finally:
+            self.rest.set_completed_requests_collection_duration(self.master, 1000)
+            self.run_cbq_query('DELETE FROM system:completed_requests')
+
+    # POSTs a raw JSON request body to the master's query service; query_tool puts parameters in the
+    # URL, which cannot carry a multi-MB parameter.
+    def _post_query_body(self, body):
+        protocol, port = "http", CbServer.n1ql_port
+        if CbServer.use_https:
+            protocol, port = "https", CbServer.ssl_port_map.get(str(port), str(port))
+        headers = self.rest._create_capi_headers()
+        status, content, _ = self.rest._http_request(f"{protocol}://{self.master.ip}:{port}/query/service",
+                                                     'POST', params=body, headers=headers, timeout=300)
+        return json.loads(content)
+
+    # Forces a GC on the master's query service and returns memory.usage (live heap bytes) from admin/vitals.
+    def _query_heap_after_gc(self):
+        protocol, port = "http", CbServer.n1ql_port
+        if CbServer.use_https:
+            protocol, port = "https", CbServer.ssl_port_map.get(str(port), str(port))
+        for _ in range(3):
+            self.rest._http_request(f"{protocol}://{self.master.ip}:{port}/debug/pprof/heap?gc=1", 'GET')
+            time.sleep(1)
+        status, vitals = self.rest.get_query_vitals(self.master)
+        self.assertTrue(status, f"admin/vitals failed on {self.master.ip}: {vitals}")
+        return json.loads(vitals)['memory.usage']
+
