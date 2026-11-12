@@ -2677,6 +2677,17 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.sleep(3)
             rest = RestConnection(self.master)
             actual_keys = rest.get_active_key_count("default")
+            # curr_items comes from periodically sampled bucket stats, which can trail a completed restore by
+            # several seconds, so wait up to 300 seconds for it to reach the 10000 docs in the ENT_BKRS archive
+            if self._check_output(success_msg, output):
+                waited, timeout = 0, 300
+                while int(actual_keys) != 10000:
+                    if waited >= timeout:
+                        self.fail("curr_items in default bucket is %s, expected 10000 after waiting %s seconds"
+                                  % (actual_keys, timeout))
+                    self.sleep(60, "curr_items in default bucket is %s, waiting for it to reach 10000" % actual_keys)
+                    waited += 60
+                    actual_keys = rest.get_active_key_count("default")
             print(("\nActual keys in default bucket: %s \n" % actual_keys))
             if self.cluster_new_role in users_can_restore_all:
                 if not self._check_output(success_msg, output):
