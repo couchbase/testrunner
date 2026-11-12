@@ -1277,8 +1277,11 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
             - Invalid user with valid password
         """
         cluster_host = self.master
+        # Like take_one_off_restore, use https for the TLS port: plain http to it fails before authentication, so no
+        # authentication failure would be audited
+        protocol = "https://" if cluster_host.port == "18091" else ""
         for credentials in [("gibberish", cluster_host.rest_password), (cluster_host.rest_username, "gibberish")]:
-            body = Body1(target=f"{cluster_host.ip}:{cluster_host.port}", user=credentials[0], password=credentials[1])
+            body = Body1(target=f"{protocol}{cluster_host.ip}:{cluster_host.port}", user=credentials[0], password=credentials[1])
             task_name = self.repository_api.cluster_self_repository_state_id_restore_post("active", repo_name, body=body).task_name
             self.assertFalse(self.wait_for_task(repo_name, task_name))
 
