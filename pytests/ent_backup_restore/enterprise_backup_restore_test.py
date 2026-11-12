@@ -2693,7 +2693,9 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                         self.fail("User: %s failed to restore data with roles: %s. " \
                                   "Here is the output %s " % \
                                   (self.cluster_new_user, roles, output))
-                    if int(actual_keys) != self.num_items:
+                    # The restored data comes from the pre-built ENT_BKRS archive, which holds 10000 docs in
+                    # the default bucket regardless of the items param
+                    if int(actual_keys) != 10000:
                         self.fail("User: %s failed to restore data with roles: %s. " \
                                   "Here is the actual docs in bucket %s " % \
                                   (self.cluster_new_user, roles, actual_keys))
