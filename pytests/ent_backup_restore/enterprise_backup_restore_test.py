@@ -5083,7 +5083,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 reps = rest_src.get_replications()
             self.backup_create()
             self.backup_cluster_validate()
-            self.backup_restore_validate(compare_uuid=False, seqno_compare_function="<=")
+            # The load is still running, so the restored cluster also has docs written after the backup
+            self.backup_restore_validate(compare_uuid=False, seqno_compare_function="<=", allow_extra_keys=True)
             for task in tasks:
                 task.result()
         finally:

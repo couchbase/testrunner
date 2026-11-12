@@ -98,7 +98,7 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
 
     def validate_restore(self, backup_number, backup_vbucket_seqno, restored_vbucket_seqno, compare_uuid=False,
                          compare="==", get_replica=False, mode="memory", backups_on_disk=None,
-                         ignore_fields=None):
+                         ignore_fields=None, allow_extra_keys=False):
         """
         Validates ep-engine stats and restored data
         :param backup_number: backup end number
@@ -110,6 +110,8 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
         :param mode: where to get the items from - can be "disk" or "memory"
         :param ignore_fields: list of top-level document fields to exclude from
                               the backup-vs-restore value comparison
+        :param allow_extra_keys: accept keys in the restored cluster that are not in the backup, for tests that keep
+                                 loading data while backing up and restoring; missing or unequal keys still fail
         :return: status and message
         """
         self.log.info("backup start: " + str(self.backupset.start))
@@ -178,6 +180,12 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
                                for k, v in data.items()}
             is_equal, not_equal, extra, not_present = \
                                         self.compare_dictionary(compare_backedup_kv, compare_data)
+            if allow_extra_keys and extra and not not_equal and not not_present:
+                self.log.info("Restored bucket {0} has {1} keys written after the backup, which are expected while "
+                              "data is still being loaded (e.g. {2}). All {3} backed up keys were restored with "
+                              "their backed up values".format(bucket.name, len(extra), list(extra)[:5],
+                                                              len(compare_backedup_kv)))
+                is_equal, extra = True, {}
             # Debug: Log detailed info for mismatched keys
             if not_equal:
                 for mismatched_key in not_equal.keys():
