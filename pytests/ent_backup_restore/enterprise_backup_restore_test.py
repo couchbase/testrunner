@@ -5009,6 +5009,13 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backup_create()
 
         rest_src_fts = RestConnection(self.servers[1])
+        # FTSCallable refits the cluster memory quotas for FTS (e.g. kv 256, fts 2256) and never
+        # puts them back, so the next test's node init fails with "KV RAM needs to be more than 256 MB"
+        rest_master = RestConnection(self.master)
+        quotas = rest_master.cluster_status()
+        self.addCleanup(rest_master.modify_memory_quota, kv_quota=quotas["memoryQuota"],
+                        index_quota=quotas["indexMemoryQuota"], fts_quota=quotas["ftsMemoryQuota"],
+                        cbas_quota=quotas["cbasMemoryQuota"], eventing_quota=quotas["eventingMemoryQuota"])
         try:
             from pytests.fts.fts_callable import FTSCallable
             fts_obj = FTSCallable(nodes=self.servers, es_validate=False)
