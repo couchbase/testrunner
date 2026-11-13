@@ -1073,3 +1073,49 @@ class QueryMonitoringTests(QueryTests):
         self.assertTrue(status, f"admin/vitals failed on {self.master.ip}: {vitals}")
         return json.loads(vitals)['memory.usage']
 
+    def test_dml_does_not_retain_documents_after_request(self):
+        """INSERT/UPSERT/UPDATE/DELETE must not keep the last batch of keys and documents reachable
+        from the query service's pooled pair slices once the request has finished.
+
+        Without the fix (8.5.0-1458) the query heap after GC stayed +4/+8/+46/+123 MB above baseline
+        after each statement of 10 x 4 MB docs; with the fix (8.5.0-1459) it stays within 0.3 MB.
+        Documents are built on the server with REPEAT so no large request body is involved.
+        """
+        num_docs = self.input.param("num_docs", 10)
+        doc_size = self.input.param("doc_size", 4000000)
+        query_bucket = self.query_buckets[0]
+        keys = json.dumps(["dml_heap_%d" % i for i in range(num_docs)])
+        statements = [
+            ("INSERT", f"INSERT INTO {query_bucket} (KEY k, VALUE v) SELECT 'dml_heap_' || TOSTR(i) AS k, "
+                       f"{{'pad': REPEAT('x', {doc_size})}} AS v FROM ARRAY_RANGE(0, {num_docs}) AS i"),
+            ("UPSERT", f"UPSERT INTO {query_bucket} (KEY k, VALUE v) SELECT 'dml_heap_' || TOSTR(i) AS k, "
+                       f"{{'pad': REPEAT('u', {doc_size})}} AS v FROM ARRAY_RANGE(0, {num_docs}) AS i"),
+            ("UPDATE", f"UPDATE {query_bucket} USE KEYS {keys} SET pad = REPEAT('y', {doc_size})"),
+            # The field predicate makes DELETE fetch the documents, so their values go into the pairs.
+            ("DELETE", f"DELETE FROM {query_bucket} USE KEYS {keys} WHERE pad IS NOT NULL"),
+        ]
+        try:
+            for _ in range(3):
+                self.run_cbq_query('SELECT RAW 1')
+            heap_before = self._query_heap_after_gc()
+            heap_growth = {}
+            for op, statement in statements:
+                result = self.run_cbq_query(statement)
+                self.assertEqual(result['metrics']['mutationCount'], num_docs,
+                                 f"{op} of {num_docs} large documents did not mutate all of them: {result['metrics']}")
+                # The heap right after the DML is noisy; measure once unrelated requests have run.
+                for _ in range(20):
+                    self.run_cbq_query('SELECT RAW 1')
+                heap_after = self._query_heap_after_gc()
+                heap_growth[op] = heap_after - heap_before
+                self.log.info(f"after {op}: heap {heap_before} -> {heap_after} "
+                              f"(+{heap_growth[op] / 1048576:.1f} MB)")
+            result = self.run_cbq_query(f"SELECT RAW COUNT(*) FROM {query_bucket} USE KEYS {keys}")
+            self.assertEqual(result['results'], [0], f"DELETE left documents behind: {result['results']}")
+            # Growth is cumulative over the baseline, so every step is checked against the same bound.
+            growth_mb = ", ".join(f"{op} +{growth / 1048576:.1f} MB" for op, growth in heap_growth.items())
+            retained = [op for op, growth in heap_growth.items() if growth >= doc_size]
+            self.assertFalse(retained, f"query heap still holds documents after {', '.join(retained)} finished "
+                                       f"({num_docs} x {doc_size} byte docs; growth over baseline: {growth_mb})")
+        finally:
+            self.run_cbq_query(f"DELETE FROM {query_bucket} USE KEYS {keys}")
