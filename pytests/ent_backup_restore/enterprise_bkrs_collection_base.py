@@ -1,4 +1,5 @@
 import copy
+import uuid
 import os, shutil, ast, re, subprocess
 import json
 import random
@@ -322,9 +323,27 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
             self.input.param("backup-conpressed", False)
         self.backups = []
 
+        # Common configuration which are shared accross cloud providers
+        self.backupset.objstore_access_key_id = self.input.param('access_key_id', '')
+        self.backupset.objstore_bucket = self.input.cbbackupmgr_param('bucket', str(uuid.uuid1()))
+        self.backupset.objstore_cacert = self.input.cbbackupmgr_param('cacert', '')
+        self.backupset.objstore_endpoint = self.input.cbbackupmgr_param('endpoint', '')
+        self.backupset.objstore_no_ssl_verify = self.input.cbbackupmgr_param('no_ssl_verify', False)
+        self.backupset.objstore_region = self.input.cbbackupmgr_param('region', '')
+        self.backupset.objstore_secret_access_key = self.input.param('secret_access_key', '')
+        self.backupset.objstore_staging_directory = self.change_root_of_path(info, self.input.cbbackupmgr_param('staging_directory'))
+
+        # S3 specific configuration
+        self.backupset.s3_force_path_style = self.input.cbbackupmgr_param('s3_force_path_style', False)
+
         self.objstore_provider = None
         provider = self.input.param("objstore_provider", None)
         if provider == "s3":
+            if not self.backupset.objstore_access_key_id and "BACKUP_RESTORE_AWS_ACCESS_KEY_ID" in os.environ:
+                self.backupset.objstore_access_key_id = os.environ["BACKUP_RESTORE_AWS_ACCESS_KEY_ID"]
+
+            if not self.backupset.objstore_secret_access_key and "BACKUP_RESTORE_AWS_SECRET_ACCESS_KEY" in os.environ:
+                self.backupset.objstore_secret_access_key = os.environ["BACKUP_RESTORE_AWS_SECRET_ACCESS_KEY"]
 
             self.objstore_provider = S3(self.backupset.objstore_access_key_id, self.backupset.objstore_bucket,
                                         self.backupset.objstore_cacert, self.backupset.objstore_endpoint,
@@ -426,6 +445,17 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
             if os.path.exists(validation_files_location):
                 self.log.info("delete dir %s" % validation_files_location)
                 shutil.rmtree(validation_files_location)
+            # testrunner runs the teardown before running setup which means the 'objstore_provider' will be undefined
+            # we can continue in this case knowing that we haven't yet loaded any data into the cloud.
+            try:
+                if self.objstore_provider:
+                    self.objstore_provider.teardown(info, remote_client)
+                    try:
+                        self.objstore_provider.remove_bucket()
+                    except Exception as e:
+                        self.log.warning(f"Error in deleting bucket: {str(e)}")
+            except AttributeError:
+                pass
             remote_client.disconnect()
 
     @property
@@ -785,8 +815,18 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
         shell.log_command_output(output, error)
         shell.disconnect()
 
+    def _archive(self):
+        """ The archive to pass to cbbackupmgr, in the object store's bucket when one is in use """
+        if self.objstore_provider:
+            return self.objstore_provider.schema_prefix() + self.backupset.objstore_bucket + '/' + self.backupset.directory
+        return self.backupset.directory
+
+    def _common_objstore_arguments(self):
+        return self.backupset.common_objstore_arguments(self.objstore_provider)
+
     def backup_create(self, del_old_backup=True):
-        args = "config --archive {0} --repo {1}".format(self.backupset.directory, self.backupset.name)
+        args = "config --archive {0} --repo {1}{2}".format(self._archive(), self.backupset.name,
+                                                           self._common_objstore_arguments())
         if self.backupset.exclude_buckets:
             args += " --exclude-data \"{0}\"".format(self.backupset.exclude_buckets)
         if self.backupset.include_buckets:
@@ -819,6 +859,9 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
         if del_old_backup:
             self.log.info("Remove any old dir before create new one")
+            # Since we are just wiping out the archive here, we can just run the object store teardown
+            if self.objstore_provider:
+                self.objstore_provider.teardown(remote_client.extract_remote_info().type.lower(), remote_client)
             remote_client.execute_command("rm -rf {0}".format(self.backupset.directory))
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
@@ -826,7 +869,8 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
         return output, error
 
     def backup_info(self):
-        args = "info -a {0} -r {1}".format(self.backupset.directory, self.backupset.name)
+        args = "info -a {0} -r {1}{2}".format(self._archive(), self.backupset.name,
+                                              self._common_objstore_arguments())
         if self.backupset.info_to_json:
             args += " --json"
         if self.backupset.info_all:
@@ -904,13 +948,14 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
             self.cluster_flag = "--cluster"
 
         args = "backup --archive {0} --repo {1} {6} http{7}://{2}:{8}{3} " \
-               "{4} {5}".format(self.backupset.directory, self.backupset.name,
+               "{4} {5}".format(self._archive(), self.backupset.name,
                                 self.backupset.cluster_host.cluster_ip,
                                 self.backupset.cluster_host.port,
                                 user_input,
                                 password_input,
                                 self.cluster_flag, url_format,
                                 secure_port)
+        args += self._common_objstore_arguments()
         if self.backupset.no_ssl_verify:
             args += " --no-ssl-verify"
         if self.backupset.secure_conn:
@@ -961,7 +1006,11 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
                     remote_client.log_command_output(output, error)
                 return output, error
 
-        command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory, self.backupset.name)
+        pattern = r"^\d{4}-\d{2}-\d{2}"
+        command = (
+            f"ls -tr {self.backupset.objstore_staging_directory + '/' if self.objstore_provider else ''}"
+            f"{self.backupset.directory}/{self.backupset.name}/ | grep -P '{pattern}' | tail -1"
+        )
         o, e = remote_client.execute_command(command)
         if o:
             self.backups.append(o[0])
@@ -1047,7 +1096,7 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
 
         args = "restore --archive {0} --repo {1} {2} http{9}://{3}:{10}{4} " \
                "{5} {6} --start {7} --end {8}" \
-            .format(self.backupset.directory,
+            .format(self._archive(),
                     self.backupset.name,
                     self.cluster_flag,
                     self.backupset.restore_cluster_host.cluster_ip,
@@ -1055,6 +1104,7 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
                     user_input,
                     password_input,
                     backup_start, backup_end, url_format, secure_port)
+        args += self._common_objstore_arguments()
         if version >= "6.5" and self.backupset.auto_select_threads:
             args += " --auto-select-threads"
         if version >= "6.5" and self.backupset.log_to_stdout:
@@ -1428,7 +1478,7 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
         remote_client.disconnect()
 
     def backup_list(self):
-        args = "info --all -j --archive {0}".format(self.backupset.directory)
+        args = "info --all -j --archive {0}{1}".format(self._archive(), self._common_objstore_arguments())
         if self.backupset.backup_list_name:
             args += " --repo {0}".format(self.backupset.backup_list_name)
         if self.backupset.backup_incr_backup:
@@ -1447,8 +1497,9 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
             return True, output, "Backup list obtained"
 
     def backup_compact(self):
-        args = "compact --archive {0} --repo {1} --backup {2}".format(self.backupset.directory, self.backupset.name,
-                                                                      self.backups[self.backupset.backup_to_compact])
+        args = "compact --archive {0} --repo {1} --backup {2}{3}".format(self._archive(), self.backupset.name,
+                                                                         self.backups[self.backupset.backup_to_compact],
+                                                                         self._common_objstore_arguments())
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
         output, error = remote_client.execute_command(command)
@@ -1460,7 +1511,8 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
         remote_client.disconnect()
 
     def backup_remove(self, backup_range=None):
-        args = "remove --archive {0} --repo {1}".format(self.backupset.directory, self.backupset.name)
+        args = "remove --archive {0} --repo {1}{2}".format(self._archive(), self.backupset.name,
+                                                           self._common_objstore_arguments())
         if backup_range is not None:
             args += " --backups {0}".format(backup_range)
 
@@ -1531,13 +1583,14 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
             except IndexError:
                 backup_end = "{0}{1}".format(self.backups[-1], self.backupset.end)
             args = "merge --archive {0} --repo {1} --start {2} --end {3}" \
-                .format(self.backupset.directory,
+                .format(self._archive(),
                         self.backupset.name,
                         backup_start, backup_end)
         else:
-            args = "merge --archive {0} --repo {1} --date-range {2}".format(self.backupset.directory,
+            args = "merge --archive {0} --repo {1} --date-range {2}".format(self._archive(),
                                                                             self.backupset.name,
                                                                             self.backupset.date_range)
+        args += self._common_objstore_arguments()
 
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
@@ -2811,3 +2864,21 @@ class Backupset:
 
         # S3 specific configuration
         self.s3_force_path_style = False
+
+    def common_objstore_arguments(self, objstore_provider):
+        """ Returns a string consisting of the common objstore command line params and args.
+
+        Args:
+            objstore_provider (Provider): If None returns an empty string.
+
+        """
+        return (
+            f"{' --obj-access-key-id ' + self.objstore_access_key_id if objstore_provider and self.objstore_access_key_id else ''}"
+            f"{' --obj-cacert ' + self.objstore_cacert if objstore_provider and self.objstore_cacert else ''}"
+            f"{' --obj-endpoint ' + self.objstore_endpoint if objstore_provider and self.objstore_endpoint else ''}"
+            f"{' --obj-no-ssl-verify' if objstore_provider and self.objstore_no_ssl_verify else ''}"
+            f"{' --obj-region ' + self.objstore_region if objstore_provider and self.objstore_region else ''}"
+            f"{' --obj-secret-access-key ' + self.objstore_secret_access_key if objstore_provider and self.objstore_secret_access_key else ''}"
+            f"{' --obj-staging-dir ' + self.objstore_staging_directory if objstore_provider else ''}"
+            f"{' --s3-force-path-style' if objstore_provider and objstore_provider.schema_prefix() == 's3://' else ''}"
+        )
