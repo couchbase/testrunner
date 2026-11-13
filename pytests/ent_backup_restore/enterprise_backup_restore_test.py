@@ -4309,9 +4309,13 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 self.assertIn(error_mesg, output[0],
                                 "Expected an error about providing cloud arguments without a value")
 
-            # Test omitting the staging directory argument
+            # Test omitting the staging directory argument. Azure needs the storage account name before it checks the
+            # staging directory (otherwise "failed to determine account name"), so pass it for az://
+            account = ""
+            if self.objstore_provider.schema_prefix() == 'az://':
+                account = f" --obj-access-key-id {self.backupset.objstore_access_key_id}"
             output, error = remote_client.execute_command(
-                f"{command} {sub_command.replace('archive', self.objstore_provider.schema_prefix() + 'archive')}"
+                f"{command} {sub_command.replace('archive', self.objstore_provider.schema_prefix() + 'archive')}{account}"
             )
             remote_client.log_command_output(output, error)
             self.assertNotEqual(len(output), 0)
