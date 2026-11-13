@@ -1839,6 +1839,185 @@ class GSIEncryptionAtRestRebalance(GSIEncryptionAtRestBase, BaseSecondaryIndexin
         self.log.info("TEST PASSED: test_gsi_log_encryption_files_encrypted")
         self.log.info("=" * 80)
 
+    def _run_vector_aware_scans(self, select_queries, label):
+        """Run every query, filling the embVector placeholder of vector queries."""
+        query_node = self.get_nodes_from_services_map(service_type="n1ql")
+        for query in select_queries:
+            if "embVector" in query:
+                query = query.replace("embVector", str(self.bhive_sample_vector))
+            self.run_cbq_query(query=query, scan_consistency='request_plus', server=query_node)
+        self.log.info(f"{label}{len(select_queries)} scans passed")
+
+    def _remote_command(self, node, command):
+        shell = RemoteMachineShellConnection(node, verbose=False)
+        try:
+            out, _ = shell.execute_command(command)
+        finally:
+            shell.disconnect()
+        return [line.strip() for line in out if line.strip()]
+
+    def test_gsi_ear_added_node_startup_writes_and_stale_codebook_files(self):
+        """
+        An index node joins with log encryption on, and a crash during a codebook key
+        operation leaves files next to the codebook. Run with enable_log_encryption_at_rest=True,
+        bhive_index=True, a spare node, and stats_persistence_interval=900 (the indexer
+        default): a persisted stats file written in plaintext at startup stays plaintext
+        until the next persist, so the check in step 3 sees it.
+
+        Steps:
+        1. Encrypted bucket with vector (codebook) and scalar indexes; scans
+        2. Rebalance in a new index node (no index redistribution, so the rebalance is
+           short): its indexer starts with log encryption on and no persisted stats file
+        3. Within the first stats persistence interval of that indexer: the persisted stats
+           file, indexer_stats.log and the request-handler cache on it are encrypted with
+           its in-use log key; scans
+        4. Leave a plaintext <codebook>.decrypt and a <codebook>.tmp next to a codebook, as a
+           crash during a codebook key operation does; kill -9 that indexer: both are
+           removed at codebook recovery; scans
+        5. Leave a <codebook>.tmp larger than the codebook and drop the bucket DEKs: the
+           codebook is re-encrypted with a key in use and the stale tail of the .tmp is not
+           carried into it; kill -9: the codebook recovers from disk with no corruption; scans
+        """
+        self.log.info("STARTING TEST: test_gsi_ear_added_node_startup_writes_and_stale_codebook_files")
+        index_nodes = self.verify_prerequisites(min_index_nodes=2)
+        if not getattr(self, "enable_log_encryption_at_rest", False):
+            self.skipTest("Log encryption at rest not enabled. Set enable_log_encryption_at_rest=True")
+        if not self.bhive_index:
+            self.skipTest("Needs vector indexes for codebooks. Set bhive_index=True")
+        self.assertGreaterEqual(self.stats_persistence_interval, 600,
+                                "Set stats_persistence_interval=900: with a short interval a plaintext "
+                                "persisted stats file is rewritten before step 3 checks it")
+        spare_nodes = self.servers[self.nodes_init:]
+        self.assertTrue(spare_nodes, "Needs a spare node in the ini to rebalance in")
+        new_node = spare_nodes[0]
+
+        # STEP 1: encrypted bucket, vector + scalar indexes, scans
+        self.set_indexer_snapshot_settings(index_nodes, step_prefix="[STEP 1]")
+        bucket_names, _ = self._create_encrypted_test_buckets(num_buckets=1)
+        bucket_name = bucket_names[0]
+        query_node = self.get_nodes_from_services_map(service_type="n1ql")
+        select_queries = set()
+        for namespace in self.namespaces:
+            prefix = 'addnode_' + ''.join(random.choices(string.ascii_letters + string.digits, k=5))
+            definitions = self._get_query_definitions(prefix=prefix, num_indexes_per_type=1)
+            select_queries.update(self._get_select_queries(*definitions, namespace))
+            self.gsi_util_obj.create_gsi_indexes(
+                create_queries=self._get_create_queries(*definitions, namespace, defer_build=False),
+                database=namespace, query_node=query_node)
+        self.wait_until_indexes_online()
+        self._run_vector_aware_scans(select_queries, "[STEP 1] ")
+
+        # STEP 2: rebalance in a new index node
+        self.disable_redistribute_indexes()
+        self.log.info(f"[STEP 2] Rebalancing in {new_node.ip} with the index service")
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [new_node], [],
+                                                 services=["index"])
+        self.assertTrue(rebalance.result(), "[STEP 2] Rebalance-in failed")
+        self.wait_for_indexer_ready([new_node], label="[STEP 2] ")
+        # Rotated stats logs were written by the node's standalone indexer before it joined
+        # the encrypted cluster; only the indexer started by the join is in scope here
+        self._remote_command(new_node, f"rm -f {self.gsi_encryption_helper.get_log_path(new_node)}"
+                                       f"/indexer_stats.log.*")
+
+        # STEP 3: the files the new indexer wrote at startup are encrypted with its log key.
+        # Check once the persisted stats file exists and do not wait for a rewrite: that
+        # is what hides a plaintext first write.
+        stats_file = f"{RestConnection(new_node).get_index_path()}/@2i/indexstats/stats"
+        stats_log = f"{self.gsi_encryption_helper.get_log_path(new_node)}/indexer_stats.log"
+        deadline = time.time() + 300
+        while self._remote_command(new_node, f"test -s {stats_file} && test -s {stats_log} && echo ok") != ["ok"]:
+            if time.time() > deadline:
+                self.fail(f"[STEP 3] {stats_file} / {stats_log} not written on {new_node.ip} within 300s")
+            self.sleep(10, f"[STEP 3] Waiting for {stats_file} and {stats_log} on {new_node.ip}")
+        indexer_age = int(self._remote_command(new_node, "ps -o etimes= -C indexer | head -1")[0])
+        self.assertLess(indexer_age, self.stats_persistence_interval,
+                        f"[STEP 3] Indexer on {new_node.ip} up {indexer_age}s: the persisted stats file may "
+                        f"already have been rewritten, so a plaintext first write would go unseen")
+        self.log.info(f"[STEP 3] Checking {new_node.ip}, indexer up {indexer_age}s "
+                      f"(statsPersistenceInterval {self.stats_persistence_interval}s)")
+        self._populate_request_handler_cache([new_node])
+        for category in ("persisted_stats", "stats_log", "request_cache"):
+            results = self.verify_category_on_nodes(category, [new_node])
+            failed = {ip: r for ip, r in results.items() if r.get("status") != "passed"}
+            self.assertFalse(failed, f"[STEP 3] {category} not encrypted with the log key in use "
+                                     f"on the added node: {failed}")
+        self._run_vector_aware_scans(select_queries, "[STEP 3] ")
+
+        # STEP 4: stale .decrypt / .tmp next to a codebook are removed at recovery
+        node, codebook = None, None
+        for index_node in index_nodes:
+            found = self._remote_command(
+                index_node, f"find {RestConnection(index_node).get_index_path()}/@2i -type f "
+                            f"-path '*.index/codebook/*' ! -name '*.tmp' ! -name '*.decrypt' 2>/dev/null | head -1")
+            if found:
+                node, codebook = index_node, found[0]
+                break
+        self.assertIsNotNone(codebook, f"[STEP 4] No codebook file on {[n.ip for n in index_nodes]}")
+        stale_files = (f"{codebook}.decrypt", f"{codebook}.tmp")
+        self.log.info(f"[STEP 4] Leaving {stale_files} on {node.ip}")
+        self._remote_command(node, f"echo 'plaintext codebook left by a crash' > {stale_files[0]}; "
+                                   f"head -c 4096 /dev/urandom > {stale_files[1]}; "
+                                   f"chown --reference={codebook} {' '.join(stale_files)}")
+        # indexer.log is encrypted with the log key, so plain grep finds nothing in it
+        indexer_log = f"{self.gsi_encryption_helper.get_log_path(node)}/indexer.log"
+        removed_pattern = ["removeStaleCodebookFiles: Removed stale file"]
+        removed_before = len(self.gsi_encryption_helper.grep_with_cbcat(node, indexer_log, removed_pattern,
+                                                                        max_hits=100000))
+        self._remote_command(node, "pkill -9 -x indexer")
+        self.sleep(10, "[STEP 4] Waiting for ns_server to restart the indexer")
+        self.wait_for_indexer_ready([node], label="[STEP 4] ")
+        self.wait_until_indexes_online()
+        left = self._remote_command(node, f"ls {' '.join(stale_files)} 2>/dev/null")
+        self.assertFalse(left, f"[STEP 4] Stale codebook files not removed at recovery on {node.ip}: {left}")
+        removed = len(self.gsi_encryption_helper.grep_with_cbcat(node, indexer_log, removed_pattern,
+                                                                 max_hits=100000)) - removed_before
+        self.assertGreaterEqual(removed, 2, f"[STEP 4] Expected 2 'Removed stale file' lines on {node.ip}, "
+                                            f"found {removed}")
+        self._run_vector_aware_scans(select_queries, "[STEP 4] ")
+
+        # STEP 5: a stale .tmp longer than the codebook does not leave its tail in the
+        # re-encrypted codebook
+        codebook_size = int(self._remote_command(node, f"stat -c %s {codebook}")[0])
+        tmp_size = 2 * codebook_size + 1024 * 1024
+        self._remote_command(node, f"head -c {tmp_size} /dev/urandom > {stale_files[1]}; "
+                                   f"chown --reference={codebook} {stale_files[1]}")
+        old_keys = self.get_indexer_in_use_key_ids(index_nodes, key_type="bucket")
+        status, response = self.rest.trigger_data_reencryption(bucket_name)
+        self.assertTrue(status, f"[STEP 5] dropEncryptionAtRestDeks failed: {response}")
+        new_keys = self.poll_for_new_indexer_key_ids(index_nodes, old_keys, timeout=600, label="[STEP 5] ",
+                                                     key_type="bucket")
+        # Wait for this codebook only: on an idle BHIVE bucket the old keys go only after
+        # forced recovery points, one per forceCommitInterval (MB-73573), so 15+ min by default
+        cfg = RestConnection(node).get_indexer_internal_stats()
+        deadline = time.time() + 600 + (int(cfg.get("indexer.recovery.max_disksnaps", 4)) + 2) * int(
+            cfg.get("indexer.timekeeper.forceCommitInterval", 300000)) // 1000
+        while not self.gsi_encryption_helper.verify_file_header_contains_any(node, codebook, new_keys)[0]:
+            if time.time() > deadline:
+                self.fail(f"[STEP 5] Codebook {codebook} on {node.ip} not re-encrypted with any of {new_keys}")
+            self.sleep(30, f"[STEP 5] Waiting for {codebook} to be re-encrypted with a new bucket key")
+        self.gsi_encryption_helper.assert_no_temp_files(node, f"{RestConnection(node).get_index_path()}/@2i",
+                                                        suffixes=(".tmp", ".decrypt"), timeout=120)
+        new_size = int(self._remote_command(node, f"stat -c %s {codebook}")[0])
+        self.log.info(f"[STEP 5] Codebook {codebook}: {codebook_size} bytes before, {new_size} after "
+                      f"the DEK drop (stale .tmp was {tmp_size})")
+        self.assertLess(new_size, tmp_size, f"[STEP 5] Re-encrypted codebook {codebook} on {node.ip} is "
+                                            f"{new_size} bytes: it kept the tail of the {tmp_size}-byte stale .tmp")
+        results = self.verify_category_on_nodes("codebook", [node])
+        failed = {ip: r for ip, r in results.items() if r.get("status") != "passed"}
+        self.assertFalse(failed, f"[STEP 5] Codebooks not encrypted with a bucket key in use: {failed}")
+        corrupted_pattern = ["Codebook corrupted and unrecoverable", "Error observed while decryptCodebookByChunk"]
+        corrupted_before = len(self.gsi_encryption_helper.grep_with_cbcat(node, indexer_log, corrupted_pattern,
+                                                                          max_hits=100000))
+        self._remote_command(node, "pkill -9 -x indexer")
+        self.sleep(10, "[STEP 5] Waiting for ns_server to restart the indexer")
+        self.wait_for_indexer_ready([node], label="[STEP 5] ")
+        self.wait_until_indexes_online()
+        corrupted = len(self.gsi_encryption_helper.grep_with_cbcat(node, indexer_log, corrupted_pattern,
+                                                                   max_hits=100000)) - corrupted_before
+        self.assertEqual(corrupted, 0, f"[STEP 5] Codebook on {node.ip} failed to recover after the restart")
+        self._run_vector_aware_scans(select_queries, "[STEP 5] ")
+        self.log.info("TEST PASSED: test_gsi_ear_added_node_startup_writes_and_stale_codebook_files")
+
     def test_gsi_encryption_at_rest_rebalance(self):
         """
         Encryption at rest rebalance test with dense, sparse, and scalar indexes.

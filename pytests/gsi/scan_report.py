@@ -171,7 +171,7 @@ class Scan_Report(FileBasedRebalance):
         return definitions, queries, select_queries
 
     def _ensure_deferred_indexes_built(self, definitions, namespace, query_node,
-                                       max_attempts=6, wait=30):
+                                       max_idle_attempts=6, wait=30, timeout=1800):
         """Re-issue BUILD INDEX for any index still sitting in 'Created'.
 
         Indexes are created concurrently on one keyspace, so the server rejects
@@ -184,26 +184,51 @@ class Scan_Report(FileBasedRebalance):
         the full wait_until_indexes_online() timeout.
 
         Retry the build for just the indexes that are actually still pending.
+
+        While any of our indexes is still 'Building', a 'Created' index is
+        queued behind it for the indexer's background retry (BUILD INDEX then
+        returns success but is a no-op), so keep waiting instead of counting
+        it as a failed attempt. Only fail when indexes stay 'Created' with
+        nothing building for max_idle_attempts polls, or after timeout.
         """
         index_names = {d.index_name for d in definitions}
         rest = RestConnection(self.master)
         pending = set()
-        for attempt in range(1, max_attempts + 1):
+        idle_attempts = 0
+        end_time = time.time() + timeout
+        while time.time() < end_time:
             pending = set()
+            building = set()
             for bucket_indexes in rest.get_index_status().values():
                 for name, state in bucket_indexes.items():
                     # Replicas are reported as "<name> (replica N)"; BUILD INDEX
                     # takes the base name and covers every replica.
                     base_name = name.split(" (replica")[0]
-                    if base_name in index_names and state.get("status") == "Created":
+                    if base_name not in index_names:
+                        continue
+                    if state.get("status") == "Created":
                         pending.add(base_name)
+                    elif state.get("status") == "Building":
+                        building.add(base_name)
             if not pending:
-                if attempt > 1:
+                if idle_attempts or building:
                     self.log.info("All deferred indexes are building or built")
                 return
+            if building:
+                idle_attempts = 0
+                self.log.info(
+                    f"{len(pending)} index(es) queued in 'Created' behind "
+                    f"{len(building)} building index(es), waiting: {sorted(pending)}"
+                )
+                self.sleep(wait, "Waiting for in-flight index builds to finish")
+                continue
+            idle_attempts += 1
+            if idle_attempts > max_idle_attempts:
+                break
             self.log.warning(
-                f"Attempt {attempt}/{max_attempts}: {len(pending)} index(es) still "
-                f"in 'Created' state, re-issuing BUILD INDEX: {sorted(pending)}"
+                f"Attempt {idle_attempts}/{max_idle_attempts}: {len(pending)} index(es) "
+                f"still in 'Created' with nothing building, re-issuing BUILD INDEX: "
+                f"{sorted(pending)}"
             )
             build_query = (f"BUILD INDEX ON {namespace}"
                            f"({', '.join('`' + name + '`' for name in sorted(pending))})")
@@ -214,8 +239,8 @@ class Scan_Report(FileBasedRebalance):
                 # flight; the next attempt picks up whatever is left.
                 self.log.warning(f"BUILD INDEX retry failed (will re-check): {err}")
             self.sleep(wait, "Waiting for deferred index builds to start")
-        self.fail(f"Indexes stuck in 'Created' state after {max_attempts} build "
-                  f"attempts: {sorted(pending)}")
+        self.fail(f"Indexes stuck in 'Created' state ({idle_attempts} idle build "
+                  f"attempts, {timeout}s timeout): {sorted(pending)}")
 
     def _create_vector_indexes(self, namespace, prefix, query_node, num_replica=1, index_names=None):
         """Create composite vector indexes"""
