@@ -550,15 +550,16 @@ class EnterpriseBackupRestoreUpgradeCollectionsTest(EnterpriseBackupRestoreBase,
 
     def test_backup_during_swap_rebalance_upgrade(self):
         """
-        Online swap-rebalance upgrade of a one node cluster (servers[0] old,
-        servers[2] new) with the backup host (servers[1]) outside the cluster.
+        Online swap-rebalance upgrade of a one node cluster (servers[0] old, the
+        other of servers[1]/servers[2] new) with the backup host (cluster2 in the
+        ini) outside the cluster.
 
         1. Install initial_version on servers[0] and the backup host and
-           upgrade_version on servers[2]; load data and take a baseline backup
+           upgrade_version on the new node; load data and take a baseline backup
            with the old cbbackupmgr
         2. Upgrade the backup host, start an incremental backup with the new
            cbbackupmgr and, while it runs, swap-rebalance servers[0] out and
-           servers[2] in
+           the new node in
         3. The backup must succeed and overlap the rebalance
         4. Restore the whole repo with the new cbbackupmgr into the recreated
            bucket on the upgraded node and compare the item count
@@ -568,9 +569,13 @@ class EnterpriseBackupRestoreUpgradeCollectionsTest(EnterpriseBackupRestoreBase,
             self.fail("Need param 'upgrade_version'")
         if len(self.servers) < 3:
             self.fail("Needs three servers: old node, backup host, new node")
-        old_node, backup_host, new_node = self.servers[0], self.servers[1], self.servers[2]
-        if self.backupset.backup_host.ip != backup_host.ip:
-            self.fail("Backup host must be servers[1] (cluster2 in the ini)")
+        # The backup host is whichever server cluster2 in the ini names, the new node is the remaining server
+        old_node, backup_host = self.servers[0], self.backupset.backup_host
+        if backup_host.ip == old_node.ip:
+            self.fail("Backup host {0} must not be servers[0], the old node".format(backup_host.ip))
+        new_node = [server for server in self.servers[1:3] if server.ip != backup_host.ip][0]
+        self.log.info("Old node {0}, backup host {1}, new node {2}".format(old_node.ip, backup_host.ip,
+                                                                           new_node.ip))
         initial_version = self.initial_version
 
         self._install([old_node, backup_host])
