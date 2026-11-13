@@ -43,6 +43,11 @@ AWS = "AWS"
 # spun up on-demand in AWS (dedicated <label>_aws node / EC2 plugin) and the build
 # is pulled from S3 (latestbuilds unreachable from AWS).
 AWS_ONDEMAND = "AWS_ONDEMAND"
+# Long-lived NFS server inside the VPC for TAF's PITR suites. TAF pins
+# PITR_NFS_SERVER to the on-prem 172.23.104.203 (TAF/lib/testconstants.py), which no
+# AWS slave can reach, and nfs_utils.validate_nfs_server() SSHes in and runs
+# dpkg/systemctl/exportfs -- so a managed filesystem (EFS) can never substitute.
+AWS_PITR_NFS_SERVER = "172.31.22.231"
 AZURE = "AZURE"
 GCP = "GCP"
 KUBERNETES = "KUBERNETES"
@@ -1086,6 +1091,10 @@ def main():
                     # the 8.1 "force to qe jenkins" target_jenkins set just above; AWS
                     # on-demand is a self-contained pipeline on qa.
                     testsToLaunch[i]['target_jenkins'] = 'http://qa.sc.couchbase.com'
+                    if testsToLaunch[i]['framework'] == "TAF":
+                        _pitr = "pitr_nfs_server=" + AWS_PITR_NFS_SERVER
+                        parameters = (_pitr if parameters in (None, "", "None")
+                                      else parameters + "," + _pitr)
 
                 if (options.launch_job == 'test_suite_executor_cloud'
                         and testsToLaunch[i]['component'] == 'smoke_capella'

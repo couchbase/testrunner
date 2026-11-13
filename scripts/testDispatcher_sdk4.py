@@ -47,6 +47,11 @@ AWS = "AWS"
 # on-prem slave, and the build is pulled from S3 (latestbuilds is unreachable
 # from AWS). See aws-poc-estimation/FTS_AWS_OnDemand_Design.md.
 AWS_ONDEMAND = "AWS_ONDEMAND"
+# Long-lived NFS server inside the VPC for TAF's PITR suites. TAF pins
+# PITR_NFS_SERVER to the on-prem 172.23.104.203 (TAF/lib/testconstants.py), which no
+# AWS slave can reach, and nfs_utils.validate_nfs_server() SSHes in and runs
+# dpkg/systemctl/exportfs -- so a managed filesystem (EFS) can never substitute.
+AWS_PITR_NFS_SERVER = "172.31.22.231"
 AZURE = "AZURE"
 GCP = "GCP"
 KUBERNETES = "KUBERNETES"
@@ -1334,6 +1339,11 @@ def main():
                         parameters = runTimeTestRunnerParameters
                     else:
                         parameters = curr_job['parameters'] + ',' + runTimeTestRunnerParameters
+                if (options.serverType == AWS_ONDEMAND
+                        and curr_job['framework'] == "TAF"):
+                    _pitr = "pitr_nfs_server=" + AWS_PITR_NFS_SERVER
+                    parameters = (_pitr if parameters in (None, "", "None")
+                                  else parameters + "," + _pitr)
 
                 url = launchString.format(options.version,
                                           curr_job['confFile'],
