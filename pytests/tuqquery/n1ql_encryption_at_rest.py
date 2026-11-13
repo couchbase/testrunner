@@ -1400,7 +1400,10 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
                 else phase_counts.get('indexScan', 0)
             )
             self.assertGreater(gsi_scans, 0,
-                               f"No GSI index scans recorded in phaseCounts: {phase_counts}")
+                               f"No GSI index scans recorded in phaseCounts: {phase_counts} "
+                               f"(node={inner.get('node')}, requestTime={inner.get('requestTime')}, "
+                               f"requestId={inner.get('requestId')}, "
+                               f"statement={inner.get('statement')})")
 
         self.log.info(
             f"system:completed_requests validated: {len(all_matched)} matching "
@@ -1499,6 +1502,13 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
 
         self.log.info("Waiting for indexes to come online")
         self.wait_until_indexes_online(timeout=300, defer_build=self.defer_build)
+
+        # Drop entries left by earlier tests: the SELECT statements are identical
+        # across tests, so stale entries would otherwise match in
+        # _validate_completed_requests.
+        result = self.run_cbq_query("DELETE FROM system:completed_requests")
+        self.assertEqual(result.get('status'), 'success',
+                         f"Failed to clear system:completed_requests: {result}")
 
         self._run_select_scans(select_queries, query_nodes=query_nodes)
 
