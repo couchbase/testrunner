@@ -1487,10 +1487,13 @@ class OnPremBaseTestCase(unittest.TestCase):
     def disable_compaction(self, server=None, bucket="default"):
 
         server = server or self.servers[0]
-        new_config = {"viewFragmntThresholdPercentage": None,
-                      "dbFragmentThresholdPercentage": None,
-                      "dbFragmentThreshold": None,
-                      "viewFragmntThreshold": None}
+        # None makes set_auto_compaction() omit the field, and ns_server then
+        # falls back to the global threshold (30% by default), leaving
+        # autocompaction on. "undefined" makes ns_server store no threshold.
+        new_config = {"viewFragmntThresholdPercentage": "undefined",
+                      "dbFragmentThresholdPercentage": "undefined",
+                      "dbFragmentThreshold": "undefined",
+                      "viewFragmntThreshold": "undefined"}
         self.cluster.modify_fragmentation_config(server, new_config, bucket)
 
     def async_create_views(self, server, design_doc_name, views, bucket="default", with_query=True,

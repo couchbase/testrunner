@@ -491,7 +491,7 @@ class AutoCompactionTests(BaseTestCase):
             monitor_fragm = self.cluster.async_monitor_db_fragmentation(self.master, self.autocompaction_value, bucket.name)
             while monitor_fragm.state != "FINISHED":
                 if end_time < time.time():
-                    self.fail("Fragmentation level is not reached in %s sec" % self.wait_timeout * 30)
+                    self.fail("Fragmentation level is not reached in %s sec" % (self.wait_timeout * 30))
                 try:
                     self._load_all_buckets(self.servers[0], self.gen_update, "update", 0)
                 except Exception as ex:
@@ -509,7 +509,7 @@ class AutoCompactionTests(BaseTestCase):
         end_time = time.time() + self.wait_timeout * 30
         while monitor_fragm.state != "FINISHED":
             if end_time < time.time():
-                self.fail("Fragmentation level is not reached in %s sec" % self.wait_timeout * 30)
+                self.fail("Fragmentation level is not reached in %s sec" % (self.wait_timeout * 30))
             try:
                 self._load_all_buckets(self.master, self.gen_update, "update", 0)
             except Exception as ex:
