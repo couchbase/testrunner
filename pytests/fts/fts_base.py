@@ -48,6 +48,7 @@ from lib.SystemEventLogLib.fts_service_events import SearchServiceEvents
 from scripts.collect_server_info import cbcollectRunner
 from couchbase_helper.documentgenerator import *
 from tasks.taskmanager import TaskManager
+from tasks.future import TimeoutError as TaskTimeoutError
 from collection.collections_rest_client import CollectionsRest
 from couchbase_helper.documentgenerator import JsonDocGenerator
 from lib.membase.api.exception import FTSException
@@ -102,6 +103,32 @@ def raise_if(cond, ex):
     """
     if cond:
         raise ex
+
+
+def live_node_service_sets(rest):
+    try:
+        return [set(node.services or ["kv"]) for node in rest.get_nodes()]
+    except Exception:
+        return []
+
+
+def fit_service_quotas(reserved, node_service_sets, quotas, kv_floor, fts_floor):
+    q = dict(quotas)
+    sets = [s for s in node_service_sets if s] or [{"kv", "index", "fts"}]
+
+    def charge(svcs, skip=None):
+        return sum(v for svc, v in q.items() if svc in svcs and svc != skip)
+
+    for svcs in sets:
+        if "fts" in svcs and "kv" not in svcs:
+            q["fts"] = max(fts_floor, min(q["fts"], reserved - charge(svcs, "fts")))
+    for svcs in sets:
+        if "kv" in svcs:
+            q["kv"] = max(kv_floor, min(q["kv"], reserved - charge(svcs, "kv")))
+    for svcs in sets:
+        if "kv" in svcs and "fts" in svcs:
+            q["fts"] = max(fts_floor, min(q["fts"], reserved - charge(svcs, "fts")))
+    return q, max(charge(svcs) for svcs in sets) - reserved
 
 
 def download_from_s3(source, dest):
@@ -1577,6 +1604,37 @@ class FTSIndex:
     def get_src_collections_doc_count(self, extra_collections = None):
         return self.__cluster.get_doc_count_in_collections(self.source_bucket, self.scope, self.collections, extra_collections = extra_collections)
 
+    def resolve_source_collections(self):
+        """(scope, collections) this index really reads from, read off the live
+        definition. Some tests build a collection index without passing
+        scope/collections, and counting _default._default for those is wrong.
+        Returns None for a genuinely bucket-level index."""
+        if self.collections:
+            return self.scope, self.collections
+        if hasattr(self, "_resolved_src_collections"):
+            return self._resolved_src_collections
+        resolved = None
+        try:
+            _, defn = self.get_index_defn()
+            params = defn["indexDef"]["params"]
+            mode = str(params.get("doc_config", {}).get("mode", ""))
+            if mode.startswith("scope.collection"):
+                scope, collections = None, []
+                for key in params.get("mapping", {}).get("types", {}):
+                    parts = key.split(".")
+                    if len(parts) < 2:
+                        continue
+                    scope = scope or parts[0]
+                    if parts[1] not in collections:
+                        collections.append(parts[1])
+                if scope and collections:
+                    resolved = (scope, collections)
+        except Exception as e:
+            self.__log.info(f"Could not resolve source collections for "
+                            f"'{self.name}': {e}")
+        self._resolved_src_collections = resolved
+        return resolved
+
     def get_uuid(self):
         rest = RestConnection(self.__cluster.get_random_fts_node())
         return rest.get_fts_index_uuid(self.name, self._source_name, self.scope)
@@ -2291,88 +2349,71 @@ class CouchbaseCluster:
         requested_fts_quota = TestInputSingleton.input.param("fts_quota", FTS_SERVICE_QUOTA)
         # Any node co-hosting kv and fts constrains the quota, not just the
         # master - topologies like ['kv','kv','kv,fts','kv,fts','fts'] put the
-        # squeeze on the middle nodes while the master looks clean. This runs from
-        # __init__, before init_cluster has assigned services from the cluster
-        # spec, so the ini services on self.__nodes do not describe the topology
-        # the test asked for yet - read the spec itself as well.
-        mixed_nodes = []
-        for node in self.__nodes:
-            node_services = (getattr(node, "services", "") or "kv").split(",")
-            if "kv" in node_services and "fts" in node_services:
-                mixed_nodes.append(node.ip)
+        # squeeze on the middle nodes while the master looks clean.
+        #
+        # This runs from __init__, which is handed a single-element node list
+        # ([first_node]), so neither self.__nodes nor its length describes the
+        # topology: every cluster looks like one co-located node from here.
+        # Read the topology the test actually asked for instead - the cluster
+        # spec when there is one, since that is what init_cluster will assign,
+        # and the ini services across every input server otherwise.
+        all_servers = TestInputSingleton.input.servers or self.__nodes
         spec = TestInputSingleton.input.param("cluster", "") or ""
         if isinstance(spec, (list, tuple)):
             spec = ",".join(spec)
         for letter, service in {'D': 'kv', 'F': 'fts', 'I': 'index', 'Q': 'n1ql'}.items():
             spec = spec.replace(letter, service)
-        for entry in re.split('[-,:]', spec):
-            entry_services = entry.replace('+', ',').split(',')
-            if "kv" in entry_services and "fts" in entry_services:
-                mixed_nodes.append("(from cluster spec: %s)" % entry)
-                break
-        fts_shares_a_kv_node = bool(mixed_nodes) or len(self.__nodes) == 1
+        node_service_sets = []
+        if spec.strip():
+            for entry in re.split('[-,:]', spec):
+                node_service_sets.append(set(entry.replace('+', ',').split(',')))
+        else:
+            for node in all_servers:
+                node_service_sets.append(
+                    set((getattr(node, "services", "") or "kv").split(",")))
         index_quota = TestInputSingleton.input.param("index_quota", 600)
         kv_quota = TestInputSingleton.input.param("kv_quota", 3000)
         try:
             rest = RestConnection(self.__master_node)
-            # ns_server rejects the request as a whole when the total charged to a
-            # node exceeds what it can back, which would silently leave fts on its
-            # 512MB init default. On a 4GB pool node kv 3000 + index 600 already
-            # exceeds the 3104MB ceiling, so trim kv to fit - never fts.
             reserved = int(rest.get_nodes_self().mcdMemoryReserved)
 
             # Treat FTS_SERVICE_QUOTA as a floor, because anything less starves
-            # indexing. The exception is a node that has to carry kv and fts
-            # together and cannot afford both: forcing the floor there pushes the
-            # request past the ceiling, ns_server rejects it whole and fts is left
-            # on its 512MB default - worse than the smaller value the job asked
-            # for. Pool nodes are homogeneous, so the master's ceiling stands in
-            # for the mixed node's.
             fts_quota = max(FTS_SERVICE_QUOTA, requested_fts_quota)
-            if fts_shares_a_kv_node and kv_quota + index_quota + fts_quota > reserved:
-                fts_quota = requested_fts_quota
-                self.__log.warning(
-                    "fts shares a node with kv (%s) that cannot back kv %s + index "
-                    "%s + fts %s against %sMB, so fts_quota stays at %s. Separate "
-                    "the services onto different nodes to give FTS its full quota."
-                    % (mixed_nodes or [self.__master_node.ip], kv_quota,
-                       index_quota, FTS_SERVICE_QUOTA, reserved,
-                       requested_fts_quota))
-            elif fts_quota != requested_fts_quota:
+            if fts_quota != requested_fts_quota:
                 self.__log.warning(
                     "fts_quota=%s is too small for FTS to index with; using %s"
                     % (requested_fts_quota, fts_quota))
             if(is_n1ql):
                 fts_quota = 2400
 
-            # Size the request against the most constrained node in the topology,
-            # not the master. A kv+fts node is charged kv + fts, and getting this
-            # wrong is worse than leaving the quotas alone: trimming kv just
-            # enough for the master makes ns_server accept the request, which
-            # raises the cluster-wide fts quota, and then that node cannot join at
-            # all ("Prepare join failed ... does not have sufficient memory").
-            master_services = (getattr(self.__master_node, "services", "") or "kv").split(",")
-            charged = kv_quota + index_quota
-            if fts_shares_a_kv_node or "fts" in master_services:
-                charged += fts_quota
-            if charged > reserved:
-                trimmed = max(MIN_KV_QUOTA, kv_quota - (charged - reserved))
+            if spec.strip() and node_service_sets and node_service_sets[0] != {"kv"}:
+                node_service_sets = [{"kv"}] + node_service_sets
+            node_service_sets = [svcs | {"index"} for svcs in node_service_sets]
+            node_service_sets += live_node_service_sets(rest)
+
+            # kv cannot go below what this test's buckets will ask for, or bucket
+            # creation fails outright with "RAM quota specified is too large".
+            num_buckets = (TestInputSingleton.input.param("standard_buckets", 0)
+                           + TestInputSingleton.input.param("sasl_buckets", 0)
+                           + int(TestInputSingleton.input.param("default_bucket", True)))
+            kv_floor = max(MIN_KV_QUOTA, num_buckets * MIN_KV_QUOTA)
+
+            wanted = {"kv": kv_quota, "fts": fts_quota, "index": index_quota}
+            fitted, overshoot = fit_service_quotas(
+                reserved, node_service_sets, wanted, kv_floor, FTS_QUOTA)
+            if fitted != wanted:
                 self.__log.warning(
-                    "quotas charged to a kv+fts node total %sMB but a node can "
-                    "only back %sMB; using kv quota %s instead of %s"
-                    % (charged, reserved, trimmed, kv_quota))
-                kv_quota = trimmed
-                # If kv alone could not absorb the overshoot, the fts quota has to
-                # come down too - an unsatisfiable combination blocks the join.
-                still_over = kv_quota + index_quota + \
-                    (fts_quota if (fts_shares_a_kv_node or "fts" in master_services) else 0)
-                if still_over > reserved:
-                    fts_quota = max(FTS_QUOTA, fts_quota - (still_over - reserved))
-                    self.__log.warning(
-                        "kv quota alone could not absorb the overshoot; reducing "
-                        "fts quota to %s so every node can back the request. "
-                        "Separate kv and fts onto different nodes."
-                        % fts_quota)
+                    "quotas %s do not fit nodes running %s within %sMB; using %s "
+                    "(kv floor %s for %s bucket(s))"
+                    % (wanted, [sorted(s) for s in node_service_sets], reserved,
+                       fitted, kv_floor, num_buckets))
+            if overshoot > 0:
+                self.__log.warning(
+                    "topology %s cannot back %s against %sMB even at the floors; "
+                    "still %sMB over." % (spec or "(from ini)", fitted, reserved,
+                                          overshoot))
+            kv_quota, fts_quota, index_quota = (
+                fitted["kv"], fitted["fts"], fitted["index"])
             rest.modify_memory_quota(kv_quota=kv_quota, fts_quota=fts_quota,
                                      index_quota=index_quota)
         except Exception as ex:
@@ -5886,8 +5927,10 @@ class FTSBaseTest(unittest.TestCase):
                         # count. The bucket may legitimately contain docs in other
                         # collections (e.g. magma DGM load path uses Java SDK
                         # all_collections=true), which would inflate the bucket total.
+                        src_scope, src_collections = (
+                            index.resolve_source_collections() or ("_default", ["_default"]))
                         container_doc_count = self._cb_cluster.get_doc_count_in_collections(
-                            index.source_bucket, "_default", ["_default"])
+                            index.source_bucket, src_scope, src_collections)
 
                     if not compare_es:
                         self.log.info(f"Docs in bucket = {container_doc_count}, "
@@ -6706,7 +6749,18 @@ class FTSBaseTest(unittest.TestCase):
             if index.collections:
                 container_doc_count = index.get_src_collections_doc_count()
             else:
-                container_doc_count = index.get_src_bucket_doc_count()
+                # No scope/collections on the index object. It may still be
+                # collection-scoped (some tests omit the kwargs), so read the
+                # real source off the definition first. A genuinely bucket-level
+                # index without custom mapping only indexes _default._default, so
+                # compare against that collection rather than the bucket-wide
+                # active key count: the bucket may hold docs in other collections
+                # (e.g. the magma DGM load path uses Java SDK
+                # all_collections=true), inflating the bucket total.
+                src_scope, src_collections = (
+                    index.resolve_source_collections() or ("_default", ["_default"]))
+                container_doc_count = self._cb_cluster.get_doc_count_in_collections(
+                    index.source_bucket, src_scope, src_collections)
 
             self.log.info("Docs in index {0}={1}, bucket docs={2}".
                           format(index.name, docs_indexed, container_doc_count))
@@ -7312,8 +7366,20 @@ class FTSBaseTest(unittest.TestCase):
                 print(stat.get_collection_stats(bkt))
             return
         load_tasks = self.async_load_data(generator=generator, data_loader_output=data_loader_output)
+        # Bounded wait: a load task that never runs or never finishes used to
+        # block result() forever (seen holding a job ~3h at 750/1000 docs with
+        # no connection open to any node), until Jenkins aborted the whole job.
+        # Fail this test instead so the rest of the suite still runs.
+        load_timeout = int(TestInputSingleton.input.param("data_load_timeout", 3600))
+        deadline = time.time() + load_timeout
         for task in load_tasks:
-            task.result()
+            remaining = max(1, deadline - time.time())
+            try:
+                task.result(timeout=remaining)
+            except TaskTimeoutError:
+                pending = [t.name for t in load_tasks if not t.done()]
+                self.fail("Data load did not finish within %ss (data_load_timeout); "
+                          "still pending: %s" % (load_timeout, pending))
         self.log.info("Loading phase complete!")
 
     def _run_hierarchical_validation(self):

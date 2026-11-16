@@ -11,12 +11,23 @@ import tarfile
 from pathlib import Path
 from urllib.request import urlretrieve
 
+# Imported one at a time: a single missing module used to leave all three
+# undefined, so an executor without the 'wget' pip package failed every sift
+# download with "name 'wget' is not defined" even though urllib can fetch it.
 try:
     import h5py
+except ImportError:
+    h5py = None
+    print("Install h5py module if running FTS vector tests on HDF5 datasets")
+try:
     import numpy as np
+except ImportError:
+    np = None
+    print("Install numpy module if running FTS vector tests")
+try:
     import wget
 except ImportError:
-    print("Install h5py, numpy and wget modules if running FTS vector tests")
+    wget = None
 
 ########################################################################################
 # Global Variables
@@ -143,16 +154,29 @@ class VectorDataset:
                     # Changing permissions to allow wget to write files
                     self.change_permissions(self.local_base_dir)
                     print(f"Downloading {sift_tar_file_url} to {self.local_base_dir}")
-                    wget.download(sift_tar_file_url, out=self.local_base_dir)
+                    if wget is not None:
+                        wget.download(sift_tar_file_url, out=self.local_base_dir)
+                    else:
+                        # The wget pip package is optional; urllib handles ftp:// too.
+                        urlretrieve(sift_tar_file_url, local_tar_file_path)
                     # Changing permissions to all files after downloading.
                     self.change_permissions(self.local_base_dir)
                 except Exception as e:
                     print(
-                        f"Unable to get file from  {sift_tar_file_url} to local dir {self.local_base_dir}"
+                        f"Unable to get file from  {sift_tar_file_url} to local dir {self.local_base_dir} "
                         f"exception {e}"
                     )
+                    # Drop a partial download so the next run retries it instead
+                    # of trying to untar a truncated file.
+                    if os.path.exists(local_tar_file_path):
+                        os.remove(local_tar_file_path)
             else:
                 print(f"Skipping download as tar file as it exists at the path {local_tar_file_path} already")
+            if not os.path.exists(local_tar_file_path):
+                raise FileNotFoundError(
+                    f"Dataset {self.dataset_name} could not be downloaded from "
+                    f"{sift_tar_file_url} to {local_tar_file_path}; see the "
+                    f"download error printed above")
             with tarfile.open(local_tar_file_path, "r:gz") as tar:
                 print(f"Untar downloaded tar.gz to {self.local_base_dir}")
                 tar.extractall(self.local_base_dir)

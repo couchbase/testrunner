@@ -438,14 +438,20 @@ class VectorSearch(FTSBaseTest):
 
         if self.prefilter_docs:
             if self.conjuction_query_with_prefilter:
-                fts_vector_query["knn"][0]["filter"] = {}
-                fts_vector_query["knn"][0]["filter"]["conjuncts"] = []
-                first_query = self.prefilter_query.copy()
-                first_query["max"] = int(first_query["max"] / 2)
-
-                self.prefilter_query["min"] = int(self.prefilter_query["max"]/2 + 1)
-                fts_vector_query["knn"][0]["filter"]["conjuncts"].append(first_query)
-                fts_vector_query["knn"][0]["filter"]["conjuncts"].append(self.prefilter_query)
+                # Widen each conjunct outwards so the AND is exactly the
+                # [min, max) band the groundtruth covers. ANDing two halves of
+                # the band instead caps recall near 50% whatever the index does.
+                # Each conjunct alone still reaches outside the band, so an AND
+                # that is not applied trips the prefilter check in the test body.
+                lo = int(self.prefilter_query["min"])
+                hi = int(self.prefilter_query["max"])
+                span = max(1, (hi - lo) // 4)
+                lower_conjunct = dict(self.prefilter_query)
+                lower_conjunct["min"] = lo - span
+                upper_conjunct = dict(self.prefilter_query)
+                upper_conjunct["max"] = hi + span
+                fts_vector_query["knn"][0]["filter"] = {
+                    "conjuncts": [lower_conjunct, upper_conjunct]}
                 self.log.info(f"conjunction query with prefilter is : {fts_vector_query}")
             else:
                 fts_vector_query["knn"][0]["filter"] = self.prefilter_query
@@ -477,7 +483,11 @@ class VectorSearch(FTSBaseTest):
 
         self.log.info("Modifying quotas for each services in the cluster")
         try:
-            RestConnection(self._cb_cluster.get_master_node()).modify_memory_quota(512, 400, 2000, 1024, 256)
+            kv_quota = TestInputSingleton.input.param("kv_quota", 512)
+            index_quota = TestInputSingleton.input.param("index_quota", 400)
+            fts_quota = TestInputSingleton.input.param("fts_quota", 2000)
+            RestConnection(self._cb_cluster.get_master_node()).modify_memory_quota(
+                kv_quota, index_quota, fts_quota, 1024, 256)
         except Exception as e:
             print(e)
 
@@ -1048,7 +1058,10 @@ class VectorSearch(FTSBaseTest):
                                                                     explain=self.query['explain'], return_raw_hits=True,
                                                                     fields=self.query['fields'],bucket_name=bucket_name,validation_data=validation_data,
                                                                     fts_nodes=fts_nodes,variable_node=variable_node)
-            if type(status) == str or status['failed'] != 0:
+            # status is a str on some error paths, and a dict that may not
+            # carry 'failed' at all -- e.g. an invalid-value query. Treat
+            # anything that is not a clean dict as a retryable failure.
+            if not isinstance(status, dict) or status.get('failed', 0) != 0:
                 print(f"debug : status : {status}\n")
                 time.sleep(5)
                 num_retries -= 1
@@ -3001,7 +3014,7 @@ class VectorSearch(FTSBaseTest):
         self.log.info(f"Assigned Prefilter Query : {self.prefilter_query}\n")
 
         index_ = self.construct_docfilter_index([("term_filter",term_filter)],"b1","s1",collection_list[0],"i0",is_vector=True)
-        doc_index = self._cb_cluster.create_fts_index(name="i0",source_name="b1",scope="s1",payload=index_)
+        doc_index = self._cb_cluster.create_fts_index(name="i0",source_name="b1",scope="s1",collections=[collection_list[0]],payload=index_)
         doc_index.index_definition['uuid'] = doc_index.get_uuid()
 
         idx = [("i1", f"b1.s1.{collection_list[0]}")]
@@ -3058,7 +3071,7 @@ class VectorSearch(FTSBaseTest):
         time.sleep(10)
 
         index_ = self.construct_docfilter_index([("bool_filter",bool_filter)],"b1","s1",collection_list[0],"i0",is_vector=True)
-        doc_index = self._cb_cluster.create_fts_index(name="i0",source_name="b1",scope="s1",payload=index_)
+        doc_index = self._cb_cluster.create_fts_index(name="i0",source_name="b1",scope="s1",collections=[collection_list[0]],payload=index_)
         doc_index.index_definition['uuid'] = doc_index.get_uuid()
 
         idx = [("i1", f"b1.s1.{collection_list[0]}")]
@@ -3113,7 +3126,7 @@ class VectorSearch(FTSBaseTest):
         time.sleep(10)
 
         index_ = self.construct_docfilter_index([("numeric_filter",numeric_filter)],"b1","s1",collection_list[0],"i0",is_vector=True)
-        doc_index = self._cb_cluster.create_fts_index(name="i0",source_name="b1",scope="s1",payload=index_)
+        doc_index = self._cb_cluster.create_fts_index(name="i0",source_name="b1",scope="s1",collections=[collection_list[0]],payload=index_)
         doc_index.index_definition['uuid'] = doc_index.get_uuid()
 
         idx = [("i1", f"b1.s1.{collection_list[0]}")]
@@ -3172,7 +3185,7 @@ class VectorSearch(FTSBaseTest):
         time.sleep(10)
 
         index_ = self.construct_docfilter_index([("date_filter",date_filter)],"b1","s1",collection_list[0],"i0",is_vector=True)
-        doc_index = self._cb_cluster.create_fts_index(name="i0",source_name="b1",scope="s1",payload=index_)
+        doc_index = self._cb_cluster.create_fts_index(name="i0",source_name="b1",scope="s1",collections=[collection_list[0]],payload=index_)
         doc_index.index_definition['uuid'] = doc_index.get_uuid()
 
         idx = [("i1", f"b1.s1.{collection_list[0]}")]

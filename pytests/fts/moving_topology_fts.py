@@ -1320,7 +1320,8 @@ class MovingTopFTS(FTSBaseTest):
         index = self.create_index_generate_queries()
         graceful = self._input.param("graceful", False)
         if graceful:
-            node = self._cb_cluster.get_kv_nodes()[1]
+            master = self._cb_cluster.get_master_node()
+            node = next(n for n in self._cb_cluster.get_kv_nodes() if n.ip != master.ip)
         else:
             node = self._cb_cluster.get_fts_nodes()[0]
         self._cb_cluster.async_failover(graceful=graceful, node=node).result()
@@ -2457,8 +2458,23 @@ class MovingTopFTS(FTSBaseTest):
         """
         self.load_data()
 
-        non_master_nodes = list(set(self._cb_cluster.get_nodes())-
-                           {self._master})
+        # get_nodes() order is meaningful here; set() arithmetic randomised it,
+        # so which nodes got ejected below varied from run to run.
+        non_master_nodes = [node for node in self._cb_cluster.get_nodes()
+                            if node != self._master]
+
+        # The docstring assumes every node runs kv+fts. On a split layout
+        # (D,D,F,F) an arbitrary eject set can remove every kv node (server
+        # rejects it with noKVNodesLeft) or every fts node (index creation
+        # below then fails). Only eject sets that leave both behind.
+        fts_set = set(self._cb_cluster.get_fts_nodes())
+        kv_set = set(self._cb_cluster.get_kv_nodes())
+        all_nodes = [self._master] + non_master_nodes
+
+        def keeps_services(candidates):
+            survivors = [n for n in all_nodes if n not in candidates]
+            return (any(n in fts_set for n in survivors)
+                    and any(n in kv_set for n in survivors))
 
         from lib.membase.api.rest_client import RestConnection, RestHelper
         rest = RestConnection(self._master)
@@ -2466,7 +2482,10 @@ class MovingTopFTS(FTSBaseTest):
         ejected_nodes = []
 
         # first eject a master + non-master node
-        eject_nodes = [self._master] + [non_master_nodes[0]]
+        companion = next((n for n in non_master_nodes
+                          if keeps_services([self._master, n])),
+                         non_master_nodes[0])
+        eject_nodes = [self._master, companion]
 
         for eject in eject_nodes:
             for node in nodes:
@@ -2481,7 +2500,16 @@ class MovingTopFTS(FTSBaseTest):
         stopped = rest.stop_rebalance()
         self.assertTrue(stopped, msg="unable to stop rebalance")
 
-        eject_nodes = non_master_nodes[:2]
+        eject_nodes = []
+        for node in non_master_nodes:
+            if len(eject_nodes) == 2:
+                break
+            if keeps_services(eject_nodes + [node]):
+                eject_nodes.append(node)
+        if len(eject_nodes) < 2:
+            self.log.warning(
+                "only %s node(s) can be ejected without stripping kv or fts "
+                "from the cluster; ejecting those" % len(eject_nodes))
         ejected_nodes = []
 
         for eject in eject_nodes:

@@ -280,7 +280,14 @@ class UpgradeTests(NewUpgradeBaseTest):
 
 
     def test_upgrade(self):
-        self.fts_obj = FTSCallable(nodes=self.servers, es_validate=True)
+        # Honour compare_es rather than demanding ES unconditionally. No
+        # upgrade conf sets it, so hardcoding True made every upgrade test
+        # depend on the ES node being up: FTSCallable's constructor deletes a
+        # stale ES index, and an unreachable ES raised out of it before the
+        # upgrade ran at all.
+        self.fts_obj = FTSCallable(
+            nodes=self.servers,
+            es_validate=self.input.param("compare_es", False))
         self.event_threads = []
         self.after_event_threads = []
         try:
@@ -400,7 +407,7 @@ class UpgradeTests(NewUpgradeBaseTest):
     def stop_all_events(self, thread_list):
         for t in thread_list:
             try:
-                if t.isAlive():
+                if t.is_alive():
                     t.stop()
             except Exception as ex:
                 self.log.info(ex)
@@ -450,15 +457,27 @@ class UpgradeTests(NewUpgradeBaseTest):
     def finish_events(self, thread_list):
         for t in thread_list:
             t.join()
+        # The upgrade itself runs in one of these threads, so without this a
+        # hung rebalance (or a failed vbucket check) is swallowed and the test
+        # reports ok while the cluster is left half-swapped.
+        errors = getattr(self, "_upgrade_errors", None)
+        if errors:
+            self._upgrade_errors = []
+            raise errors[0]
 
     def upgrade_event(self):
         self.log.info("upgrade_event")
         self.start_upgrade_server = True
         thread_list = []
+        self._upgrade_errors = []
         if self.upgrade_type == "online":
-            t = threading.Thread(target=self.online_upgrade, args=())
+            t = threading.Thread(target=self._run_capturing,
+                                 args=(self.online_upgrade,
+                                       self._upgrade_errors))
         elif self.upgrade_type == "offline":
-            t = threading.Thread(target=self.offline_upgrade, args=())
+            t = threading.Thread(target=self._run_capturing,
+                                 args=(self.offline_upgrade,
+                                       self._upgrade_errors))
         t.daemon = True
         t.start()
         thread_list.append(t)
@@ -758,16 +777,31 @@ class UpgradeTests(NewUpgradeBaseTest):
         if kv_quota + fts_quota <= node_max:
             return
         new_fts = min(fts_quota, 512)
-        new_kv = max(256, node_max - new_fts - 100)
+        # Only ever lower kv. Shrinking fts can leave room for more kv than the
+        # cluster currently has, but raising a bucket above the cluster kv
+        # quota is rejected ("RAM quota specified is too large to be
+        # provisioned into this cluster") and fails the rebalance_in.
+        new_kv = min(kv_quota, max(256, node_max - new_fts - 100))
         self.log.info(
             "Node {} mcdMemoryReserved={}MB < cluster kv+fts={}MB; "
             "adjusting quotas: kv {} -> {}, fts {} -> {}".format(
                 node.ip, node_max, kv_quota + fts_quota,
                 kv_quota, new_kv, fts_quota, new_fts))
-        for bucket in rest.get_buckets():
-            rest.change_bucket_props(bucket, ramQuotaMB=new_kv)
-        rest.init_cluster_memoryQuota(rest.username, rest.password, new_kv)
-        rest.set_service_memoryQuota(service='ftsMemoryQuota', memoryQuota=new_fts)
+        if new_kv < kv_quota:
+            # Buckets must shrink before the cluster kv quota can drop below
+            # them; leave buckets that already fit untouched.
+            for bucket in rest.get_buckets():
+                per_node_mb = None
+                try:
+                    if bucket.stats and bucket.nodes:
+                        per_node_mb = int(bucket.stats.ram) // len(bucket.nodes) // (1024 * 1024)
+                except Exception:
+                    per_node_mb = None
+                if per_node_mb is None or per_node_mb > new_kv:
+                    rest.change_bucket_props(bucket, ramQuotaMB=new_kv)
+            rest.init_cluster_memoryQuota(rest.username, rest.password, new_kv)
+        if new_fts != fts_quota:
+            rest.set_service_memoryQuota(service='ftsMemoryQuota', memoryQuota=new_fts)
 
     def rebalance_out(self, queue=None):
         rebalance_out = False
@@ -1041,6 +1075,16 @@ class UpgradeTests(NewUpgradeBaseTest):
             self.log.info(ex)
             raise
     
+    def _run_capturing(self, target, errors, *args):
+        """Run `target` in a thread, recording any exception so the caller can
+        re-raise it. A thread exception never reaches the main thread, so
+        without this a failed rebalance is silently followed by vbucket
+        verification against a cluster that never swapped."""
+        try:
+            target(*args)
+        except BaseException as ex:
+            errors.append(ex)
+
     def trigger_rebalance(self,servers, servers_in,servers_out,servicesNodeOut):
         start_services_num = 0
         try:
@@ -1070,6 +1114,10 @@ class UpgradeTests(NewUpgradeBaseTest):
             self.isRebalanceComplete = True
         except BaseException as ex:
             self.fail(ex)
+        finally:
+            # load_items_during_rebalance loops until this flips, so a failed
+            # rebalance would otherwise leave it spinning (and join() blocked).
+            self.isRebalanceComplete = True
 
 
     def online_upgrade_swap_rebalance(self):
@@ -1078,6 +1126,12 @@ class UpgradeTests(NewUpgradeBaseTest):
         servers = self._convert_server_map(self.servers[:self.nodes_init])
         out_servers = self._convert_server_map(self.servers[self.nodes_init:])
         self.swap_num_servers = min(self.swap_num_servers, len(out_servers))
+        if not self.swap_num_servers:
+            raise Exception(
+                "online swap upgrade needs at least one spare node beyond the "
+                "cluster: nodes_init=%s but the ini only provides %s servers. "
+                "Use an ini with more nodes than nodes_init."
+                % (self.nodes_init, len(self.servers)))
         start_services_num = 0
         for i in range(self.nodes_init // self.swap_num_servers):
             servers_in = {}
@@ -1138,10 +1192,15 @@ class UpgradeTests(NewUpgradeBaseTest):
             if not load_data_target_server:
                 load_data_target_server = next(iter(servers_in.values()))
 
+            self.isRebalanceComplete = False
+            rebalance_errors = []
             try:
                 thread1 = threading.Thread(target=self.load_items_during_rebalance, args=(load_data_target_server,))
-                thread2 = threading.Thread(target=self.trigger_rebalance, args=(servers, servers_in,servers_out,servicesNodeOut,))
-                
+                thread2 = threading.Thread(
+                    target=self._run_capturing,
+                    args=(self.trigger_rebalance, rebalance_errors,
+                          servers, servers_in, servers_out, servicesNodeOut))
+
                 thread1.start()
                 thread2.start()
 
@@ -1150,6 +1209,8 @@ class UpgradeTests(NewUpgradeBaseTest):
             except Exception as ex:
                 self.log.info("Could not push data while rebalancing")
                 self.log.info(ex)
+            if rebalance_errors:
+                raise rebalance_errors[0]
 
             self.out_servers_pool = servers_out
             self.in_servers_pool = new_servers
@@ -1257,11 +1318,11 @@ class UpgradeTests(NewUpgradeBaseTest):
             self.nodes_in_list = self.out_servers_pool.values()[:self.nodes_in]
             if int(self.nodes_in) == 1:
                 if len(free_nodes.keys()) > 1:
-                    free_node_in = [free_nodes.values()[0]]
-                    if len(self.after_upgrade_services_in) > 1:
+                    free_node_in = [list(free_nodes.values())[0]]
+                    if len(self.after_upgrade_services_in) >1:
                         service_in = [self.after_upgrade_services_in[0]]
                 else:
-                    free_node_in = free_nodes.values()
+                    free_node_in = list(free_nodes.values())
                 self.log.info("<<<=== rebalance_in node {0} with services {1}" \
                               .format(free_node_in, service_in[0]))
                 shell = RemoteMachineShellConnection(free_node_in[0])
@@ -1277,7 +1338,7 @@ class UpgradeTests(NewUpgradeBaseTest):
             if any("index" in services for services in service_in):
                 self.log.info("Set storageMode to forestdb after add "
                               "index node {0} to cluster".format(free_nodes.keys()))
-                RestConnection(free_nodes.values()[0]).set_indexer_storage_mode()
+                RestConnection(list(free_nodes.values())[0]).set_indexer_storage_mode()
             if self.after_upgrade_services_in and \
                     len(self.after_upgrade_services_in) > 1:
                 self.log.info("remove service '{0}' from service list after "

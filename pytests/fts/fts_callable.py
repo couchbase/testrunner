@@ -758,7 +758,10 @@ class FTSCallable:
         index_body['planParams']['numReplicas'] = plans['numReplicas']
 
         try:
-            status, result = RestConnection(self.servers[1]).create_fts_index(index_name, index_body, mode="upgrade")
+            # servers[1] is not necessarily an FTS node (e.g. kv-kv-fts-fts);
+            # prefer variable_node, which callers set to an actual FTS node.
+            target = self.variable_node or self.servers[1]
+            status, result = RestConnection(target).create_fts_index(index_name, index_body, mode="upgrade")
             if status:
                 time.sleep(100)
                 return str(result), 200
@@ -773,16 +776,20 @@ class FTSCallable:
         self.store_in_xattr = xattr_flag
         self.encode_base64_vector = base64_flag
 
+        target = self.variable_node or self.servers[1]
+
         uuid = ""
         try:
-            uuid = RestConnection(self.servers[1]).get_fts_index_uuid(index_name, bucket="default")
+            uuid = RestConnection(target).get_fts_index_uuid(index_name, bucket="default")
         except Exception as e:
             print(e)
 
-
-        index_body_def = RestConnection(self.servers[1]).get_fts_index_definition(name=index_name)[1]['indexDef']
-        index_partition = index_body_def['planParams']['indexPartitions']
-        num_replicas = index_body_def['planParams']['numReplicas']
+        index_body_def = RestConnection(target).get_fts_index_definition(name=index_name)[1]['indexDef']
+        # The server omits planParams keys that are at their default, so read
+        # them defensively rather than assuming they are echoed back.
+        plan_params = index_body_def.get('planParams') or {}
+        index_partition = plan_params.get('indexPartitions', 1)
+        num_replicas = plan_params.get('numReplicas', 0)
 
 
         try:
@@ -829,7 +836,7 @@ class FTSCallable:
             print(f"error occured while trying to update index . reason : {ex}\n")
 
         try:
-            status, result = RestConnection(self.servers[1]).update_fts_index(index_name, index_body, mode="upgrade")
+            status, result = RestConnection(target).update_fts_index(index_name, index_body, mode="upgrade")
             if status:
                 time.sleep(50)
                 return str(result), 200
@@ -980,6 +987,9 @@ class FTSCallable:
         common_elements = set(listA) & set(listB)
         not_common_elements = set(listA) ^ set(listB)
         self.log.info(f"Elements not common in both lists: {not_common_elements}")
+        if len(listA) == 0 or len(listB) == 0:
+            self.log.info(f"{nameB if len(listB) == 0 else nameA} is empty - scoring this query as a miss")
+            return 0, 0.0
         percentage_exist = (len(common_elements) / len(listB)) * 100
         self.log.info(f"Percentage of elements in {nameB} that exist in {nameA}: {percentage_exist:.2f}%")
         accuracy = 0
@@ -990,7 +1000,10 @@ class FTSCallable:
     def run_fts_query(self, index_name, query_dict, bucket_name=None, scope_name=None, node=None, timeout=100,
                       rest=None):
         if not node:
-            node = self.servers[0]
+            # servers[0] is not necessarily an FTS node -- under a dedicated
+            # topology (kv-kv-fts-fts) it is KV-only and 8094 is closed there.
+            # Honour variable_node, which callers set to an actual FTS node.
+            node = self.variable_node or self.servers[0]
         if not rest:
             rest = RestConnection(node)
         try:

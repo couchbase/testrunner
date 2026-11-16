@@ -192,6 +192,13 @@ class NodeInitializeTask(Task):
             if cluster_setting["ftsMemoryQuota"] and \
                     int(cluster_setting["ftsMemoryQuota"]) >= 256:
                 fts_quota = int(cluster_setting["ftsMemoryQuota"])
+        # Explicit per-service quotas from the test params win over both the
+        # defaults above and whatever the cluster happens to be set to already.
+        if TestInputSingleton.input is not None:
+            index_quota = int(TestInputSingleton.input.param("index_quota",
+                                                             index_quota))
+            fts_quota = int(TestInputSingleton.input.param("fts_quota",
+                                                           fts_quota))
         kv_quota = int(info.mcdMemoryReserved * CLUSTER_QUOTA_RATIO)
         if self.index_quota_percent:
             index_quota = self.index_quota
@@ -199,6 +206,12 @@ class NodeInitializeTask(Task):
             set_services = copy.deepcopy(self.services)
             if set_services is None:
                 set_services = ["kv"]
+            # services may arrive as a single comma separated entry per node,
+            # e.g. ['fts,index,n1ql'] - flatten so the checks below can see
+            # each service instead of missing them all.
+            set_services = [service
+                            for entry in set_services
+                            for service in str(entry).split(",")]
             if "index" in set_services:
                 self.log.info("quota for index service will be %s MB" % (index_quota))
                 kv_quota -= index_quota
@@ -213,11 +226,15 @@ class NodeInitializeTask(Task):
                 self.log.info("quota for cbas service will be %s MB" % (CBAS_QUOTA))
                 kv_quota -= CBAS_QUOTA
                 rest.set_service_memoryQuota(service="cbasMemoryQuota", memoryQuota=CBAS_QUOTA)
-            if kv_quota < MIN_KV_QUOTA:
-                raise Exception("KV RAM needs to be more than %s MB"
-                                " at node  %s" % (MIN_KV_QUOTA, self.server.ip))
-            if kv_quota < int(self.quota):
-                self.quota = kv_quota
+            # A node without kv needs no kv budget - only the services it
+            # actually runs count against its quota, so don't let the leftover
+            # drag the cluster kv quota down or fail the node outright.
+            if "kv" in set_services:
+                if kv_quota < MIN_KV_QUOTA:
+                    raise Exception("KV RAM needs to be more than %s MB"
+                                    " at node  %s" % (MIN_KV_QUOTA, self.server.ip))
+                if kv_quota < int(self.quota):
+                    self.quota = kv_quota
 
         rest.init_cluster_memoryQuota(username, password, self.quota)
 
@@ -794,6 +811,16 @@ class RebalanceTask(Task):
         self.use_hostnames = use_hostnames
         self.previous_progress = 0
         self.old_vbuckets = {}
+        # Wall-clock stall detection, independent of the poll-count budget
+        # below: a rebalance that keeps improving gets the full budget, one
+        # that stops moving is called early. Reset on IMPROVEMENT only, so a
+        # percentage that oscillates or goes backwards still counts as stalled.
+        self.rebalance_stall_timeout = 1800
+        if TestInputSingleton.input is not None:
+            self.rebalance_stall_timeout = TestInputSingleton.input.param(
+                "rebalance_stall_timeout", 1800)
+        self.best_progress = -1
+        self.last_progress_time = None
 
     def execute(self, task_manager):
         try:
@@ -898,6 +925,12 @@ class RebalanceTask(Task):
                 new_vbuckets = RestHelper(self.rest)._get_vbuckets(non_swap_servers, None)
                 for vb_type in ["active_vb", "replica_vb"]:
                     for srv in non_swap_servers:
+                        # _get_vbuckets returns early, without this node, when a node
+                        # reports no buckets -- e.g. the bucket was deleted or the node
+                        # left the cluster -- which used to surface as a bare KeyError.
+                        if srv not in new_vbuckets or srv not in self.old_vbuckets:
+                            raise Exception("Cannot read the vbucket map of bucket on {0}: the bucket is "
+                                            "missing or the node has left the cluster".format(srv.ip))
                         if not (len(self.old_vbuckets[srv][vb_type]) + 1 >= len(new_vbuckets[srv][vb_type]) and \
                                 len(self.old_vbuckets[srv][vb_type]) - 1 <= len(new_vbuckets[srv][vb_type])):
                             msg = "Vbuckets were suffled! Expected %s for %s" % (vb_type, srv.ip) + \
@@ -918,6 +951,28 @@ class RebalanceTask(Task):
                 self.retry_get_progress = 0
             else:
                 self.retry_get_progress += 1
+            now = time.time()
+            if self.last_progress_time is None:
+                self.last_progress_time = now
+            if progress is None or progress < 0:
+                pass                      # sentinel: the retry budget owns it
+            elif progress > self.best_progress:
+                self.best_progress = progress
+                self.last_progress_time = now
+            elif (self.rebalance_stall_timeout
+                    and now - self.last_progress_time >
+                    self.rebalance_stall_timeout):
+                stalled_for = int(now - self.last_progress_time)
+                self.state = FINISHED
+                self.rest.print_UI_logs()
+                self.set_exception(RebalanceFailedException(
+                    "rebalance stalled at {0:.2f}% for {1}s with no further "
+                    "progress (limit {2}s). Raise rebalance_stall_timeout if a "
+                    "rebalance here is legitimately this slow, otherwise it is "
+                    "not going to finish.".format(
+                        self.best_progress, stalled_for,
+                        self.rebalance_stall_timeout)))
+                return
         except RebalanceFailedException as ex:
             self.state = FINISHED
             self.set_exception(ex)
@@ -6995,7 +7050,13 @@ class SDKLoadDocumentsTask(Task):
 
     def execute_for_collection(self, collection, start_seq_num_shift=0):
         import subprocess
-        command = f"java -jar java_sdk_client/collections/target/javaclient/javaclient.jar " \
+        # -Dfile.encoding=UTF-8: the client writes the ES bulk file with a
+        # plain FileWriter (ElasticSync/FileUtils), i.e. the JVM default
+        # charset. On slaves with a POSIX/C locale that is ASCII, so every
+        # non-ASCII char reaches ES as '?' ("Sebastián" -> "Sebasti?n") while
+        # Couchbase gets proper UTF-8 - FTS vs ES hit counts then differ for
+        # exactly the queries with accented names.
+        command = f"java -Dfile.encoding=UTF-8 -jar java_sdk_client/collections/target/javaclient/javaclient.jar " \
                   f"-i {self.server.ip} -u '{self.sdk_docloader.username}' -p '{self.sdk_docloader.password}' -b {self.bucket} " \
                   f"-s {self.sdk_docloader.scope} -c {collection} " \
                   f"-n {self.sdk_docloader.num_ops} -pc {self.sdk_docloader.percent_create} -pu {self.sdk_docloader.percent_update} " \
