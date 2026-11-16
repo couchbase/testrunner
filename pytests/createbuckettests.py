@@ -68,7 +68,9 @@ class CreateMembaseBucketsTests(unittest.TestCase):
         for serverInfo in self.servers:
             rest = RestConnection(serverInfo)
             try:
-                rest.create_bucket(bucket=name, ramQuotaMB=255)
+                # 99 MB is below ns_server's 100 MB floor for every bucket
+                # (membase_min_ram_quota)
+                rest.create_bucket(bucket=name, ramQuotaMB=99)
                 self.fail('create-bucket did not throw exception while creating a new bucket with 99 MB quota')
             #make sure it raises bucketcreateexception
             except BucketCreationException as ex:
