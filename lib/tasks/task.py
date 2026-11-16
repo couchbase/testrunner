@@ -5718,7 +5718,8 @@ class CancelBucketCompactionTask(Task):
 class EnterpriseBackupTask(Task):
 
     def __init__(self, backupset, objstore_provider, resume=False, purge=False, no_progress_bar=False,
-                 cli_command_location='', cb_version=None, num_shards='', enforce_tls=False, x509=False):
+                 cli_command_location='', cb_version=None, num_shards='', enforce_tls=False, x509=False,
+                 encryption_args='', encryption_env_prefix=''):
         Task.__init__(self, "enterprise_backup_task")
         self.backupset = backupset
         self.objstore_provider = objstore_provider
@@ -5731,6 +5732,9 @@ class EnterpriseBackupTask(Task):
         self.num_shards = num_shards
         self.enforce_tls = enforce_tls
         self.x509 = x509
+        # Encryption at rest: the repo's credential flags and env exports, as built by the backup test base
+        self.encryption_args = encryption_args
+        self.encryption_env_prefix = encryption_env_prefix
         if self.cb_version is None:
             raise Exception("Need to pass Couchbase version to run correctly bk/rt ")
         self.output = []
@@ -5773,7 +5777,8 @@ class EnterpriseBackupTask(Task):
                 args += " --purge"
             if self.no_progress_bar:
                 args += " --no-progress-bar"
-            command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
+            args += self.encryption_args
+            command = "{2}{0}/cbbackupmgr {1}".format(self.cli_command_location, args, self.encryption_env_prefix)
             self.output, self.error = self.remote_client.execute_command(command)
             self.state = CHECKING
         except Exception as e:

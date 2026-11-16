@@ -1403,7 +1403,8 @@ class Cluster(object):
         return status
 
     def async_backup_cluster(self, backupset, objstore_provider, resume=False, purge=False, no_progress_bar=False,
-                             cli_command_location='', cb_version=None, num_shards='', enforce_tls=False, x509=False):
+                             cli_command_location='', cb_version=None, num_shards='', enforce_tls=False, x509=False,
+                             encryption_args='', encryption_env_prefix=''):
         """
         Asynchronously starts backup cluster
 
@@ -1415,10 +1416,13 @@ class Cluster(object):
         :param cli_command_location: command location with respect to os
         :param enforce_tls: bool to connect to the cluster over https
         :param x509: bool to authenticate with the backupset client certificates
+        :param encryption_args: encryption at rest credential flags (e.g. --passphrase) for an encrypted repo
+        :param encryption_env_prefix: shell exports for encryption at rest (e.g. CB_ENCRYPTION_PASSPHRASE)
         :return: task with the output or error message
         """
         _task = EnterpriseBackupTask(backupset, objstore_provider, resume, purge, no_progress_bar, cli_command_location,
-                                     cb_version, num_shards, enforce_tls=enforce_tls, x509=x509)
+                                     cb_version, num_shards, enforce_tls=enforce_tls, x509=x509,
+                                     encryption_args=encryption_args, encryption_env_prefix=encryption_env_prefix)
         self.task_manager.schedule(_task)
         return _task
 

@@ -1572,7 +1572,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             cli_command_location=self.cli_command_location,
             cb_version=self.cb_version,
             num_shards=num_shards,
-            enforce_tls=self.enforce_tls, x509=self.input.param("x509", False))
+            enforce_tls=self.enforce_tls, x509=self.input.param("x509", False),
+            **self._encryption_task_kwargs())
         conn_bk = RemoteMachineShellConnection(self.backupset.cluster_host)
         conn_bk.pause_memcached(timesleep=8, delay=10)
         conn_bk.unpause_memcached()
@@ -1621,7 +1622,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             cli_command_location=self.cli_command_location,
             cb_version=self.cb_version,
             num_shards=num_shards,
-            enforce_tls=self.enforce_tls, x509=self.input.param("x509", False))
+            enforce_tls=self.enforce_tls, x509=self.input.param("x509", False),
+            **self._encryption_task_kwargs())
         conn = RemoteMachineShellConnection(self.backupset.cluster_host)
         conn.kill_erlang(delay=10)
         conn.start_couchbase()
@@ -1638,7 +1640,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 cli_command_location=self.cli_command_location,
                 cb_version=self.cb_version,
                 num_shards=num_shards,
-                enforce_tls=self.enforce_tls, x509=self.input.param("x509", False))
+                enforce_tls=self.enforce_tls, x509=self.input.param("x509", False),
+                **self._encryption_task_kwargs())
             output = backup_result.result(timeout=300)
         self.assertTrue(self._check_output("Backup completed successfully", output),
                         "Backup failed with erlang crash and restart within 180 seconds")
@@ -1678,7 +1681,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             cli_command_location=self.cli_command_location,
             cb_version=self.cb_version,
             num_shards=num_shards,
-            enforce_tls=self.enforce_tls, x509=self.input.param("x509", False))
+            enforce_tls=self.enforce_tls, x509=self.input.param("x509", False),
+            **self._encryption_task_kwargs())
         conn = RemoteMachineShellConnection(self.backupset.cluster_host)
         conn.stop_couchbase()
         conn.start_couchbase()
@@ -1697,7 +1701,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 cli_command_location=self.cli_command_location,
                 cb_version=self.cb_version,
                 num_shards=num_shards,
-                enforce_tls=self.enforce_tls, x509=self.input.param("x509", False))
+                enforce_tls=self.enforce_tls, x509=self.input.param("x509", False),
+                **self._encryption_task_kwargs())
             output = backup_result.result(timeout=300)
         self.assertTrue(self._check_output("Backup completed successfully", output),
                        "Backup failed with couchbase stop and start within 180 seconds")
@@ -1740,7 +1745,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     cli_command_location=self.cli_command_location,
                     cb_version=self.cb_version,
                     num_shards=num_shards,
-                    enforce_tls=self.enforce_tls, x509=self.input.param("x509", False))
+                    enforce_tls=self.enforce_tls, x509=self.input.param("x509", False),
+                    **self._encryption_task_kwargs())
                 self.wait_for_DCP_stream_start(backup_result)
                 conn.kill_erlang(self.os_name)
                 try:
@@ -3591,6 +3597,12 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if self.ear_enabled and self.backupset.disable_log_encryption:
             prefix += "export CB_DISABLE_LOG_ENCRYPTION=1; "
         return prefix
+
+    def _encryption_task_kwargs(self):
+        """Encryption at Rest options for EnterpriseBackupTask (async_backup_cluster), which builds its own
+        cbbackupmgr command and would otherwise back up to an encrypted repo without the repo's credentials."""
+        return {"encryption_args": self._common_encryption_arguments(),
+                "encryption_env_prefix": self._encryption_env_prefix()}
 
     def _ear_provision_aws_kms_key(self):
         """Create a temporary AWS KMS key for this test run.
