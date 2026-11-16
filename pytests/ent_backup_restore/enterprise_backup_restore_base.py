@@ -288,6 +288,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.backupset.disable_ft_alias = self.input.param("disable-ft-alias", False)
         self.backupset.disable_analytics = self.input.param("disable-analytics", False)
         self.backupset.disable_data = self.input.param("disable-data", False)
+        self.backupset.disable_cluster_query = self.input.param("disable-cluster-query", False)
+        self.backupset.disable_external_catalogs = self.input.param("disable-external-catalogs", False)
         self.backupset.enable_users = self.input.param("enable-users", False)
         self.backupset.disable_conf_res_restriction = self.input.param("disable-conf-res-restriction", False)
         self.backupset.force_updates = self.input.param("force-updates", False)
@@ -678,6 +680,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             args += " --disable-analytics"
         if self.backupset.disable_data:
             args += " --disable-data"
+        if self.backupset.disable_cluster_query:
+            args += " --disable-cluster-query"
+        if self.backupset.disable_external_catalogs:
+            args += " --disable-external-catalogs"
         if self.backupset.enable_users:
             args += " --enable-users"
         if self.backupset.current_bkrs_client_version[:3] >= "7.0":
@@ -3976,6 +3982,8 @@ class Backupset:
         self.disable_gsi_indexes = False
         self.disable_ft_indexes = False
         self.disable_data = False
+        self.disable_cluster_query = False
+        self.disable_external_catalogs = False
         self.disable_conf_res_restriction = False
         self.force_updates = False
         self.resume = False
