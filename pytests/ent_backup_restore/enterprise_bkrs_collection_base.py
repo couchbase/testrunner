@@ -815,6 +815,12 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
         shell.log_command_output(output, error)
         shell.disconnect()
 
+    def change_root_of_path(self, os_info, path):
+        """ If the operating system is windows changes the path's root to c:/ """
+        if os_info == "windows":
+            path = re.sub(r"^/", "c:/", path)
+        return path
+
     def _archive(self):
         """ The archive to pass to cbbackupmgr, in the object store's bucket when one is in use """
         if self.objstore_provider:
