@@ -921,17 +921,18 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             if not status:
                 self.fail(msg)
             self.log.info(msg)
-        if not self.backupset.deleted_buckets:
-            if not self.backupset.force_updates:
-                if not self.done_failover:
-                    self.store_vbucket_seqno()
-                else:
-                    return
-            backup_servers = self._n1ql_node_first(self.cluster_to_backup)
-            self.validation_helper.store_keys(backup_servers, self.buckets, self.number_of_backups_taken,
-                                              self.backup_validation_files_location)
-            self.validation_helper.store_latest(backup_servers, self.buckets, self.number_of_backups_taken,
-                                                self.backup_validation_files_location)
+        # Keep storing the expected data after a bucket is deleted: self.buckets only holds the buckets that still
+        # exist, and without this the restore is validated against the data from before the deletion
+        if not self.backupset.force_updates:
+            if not self.done_failover:
+                self.store_vbucket_seqno()
+            else:
+                return
+        backup_servers = self._n1ql_node_first(self.cluster_to_backup)
+        self.validation_helper.store_keys(backup_servers, self.buckets, self.number_of_backups_taken,
+                                          self.backup_validation_files_location)
+        self.validation_helper.store_latest(backup_servers, self.buckets, self.number_of_backups_taken,
+                                            self.backup_validation_files_location)
 
     def backup_restore(self):
         if self.restore_only:
