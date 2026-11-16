@@ -61,6 +61,9 @@ class cbstatsTests(CliBaseTest):
                 key = "test_docs-%s" % i
                 try:
                     mc_conn.set(key, 0, 0, json.dumps('{ "test" : "test"}').encode("ascii", "ignore"), vb_id)
+                    # mc_bin_client treats vbucket 0 as "not given" and uses the key's hashed vbucket instead
+                    # (every 128th key with 128 vbuckets), so check the key in the vbucket it was actually set in
+                    vb_id = mc_conn.vbucketId
                     # mc_conn is connected to self.master only. On a multi-node
                     # cluster it cannot store a key whose vbucket is active on
                     # another node: the set does not raise, but the key isn't
