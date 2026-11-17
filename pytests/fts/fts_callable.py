@@ -365,7 +365,7 @@ class FTSCallable:
                     else:
                         break
         if not found:
-            self.log.critical(f"Couldn't wait for indexing since index {idx.name} was not found")
+            self.log.critical(f"Couldn't wait for indexing since index {idx.name if idx else '<any>'} was not found")
 
     def create_alias(self, target_indexes, name=None, alias_def=None, bucket=None, scope=None):
         """

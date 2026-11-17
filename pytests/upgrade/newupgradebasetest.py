@@ -1605,7 +1605,11 @@ class NewUpgradeBaseTest(BaseTestCase):
                     self.fail(f"Failure. Cannot create a 4096 dimensions vector index. Result : {result}")
 
             except Exception as e:
-                print(e)
+                # this runs as an event thread, so an exception here would never
+                # reach the test; record the failure where test_upgrade checks it
+                self.log.error("Vector queries post upgrade failed: {0}".format(e))
+                self._report_event_failure("run_fts_vector_query_and_compare", queue)
+                return
         else:
             try:
                 plans = self.construct_custom_plan_params(1, random.choice(self.partition_list))
@@ -1624,8 +1628,25 @@ class NewUpgradeBaseTest(BaseTestCase):
                     self.fail(f"Failure. Cannot update index to a vector index. Result : {result}")
 
             except Exception as e:
-                print(e)
+                # this runs as an event thread, so an exception here would never
+                # reach the test; record the failure where test_upgrade checks it
+                self.log.error("Vector queries post upgrade failed: {0}".format(e))
+                self._report_event_failure("run_fts_vector_query_and_compare", queue)
+                return
+        if queue is not None:
+            queue.put(True)
 
+
+    def _report_event_failure(self, event, queue=None):
+        """Mark an upgrade event as failed. Events run inside threads, so
+        raising is lost. With a queue (run_event_in_sequence) report through
+        it; a single event is started by run_event without a queue, so set
+        the flags test_upgrade checks after finish_events directly."""
+        if queue is not None:
+            queue.put(False)
+        else:
+            self.success_run = False
+            self.failed_thread = event
 
     def setup_for_test(self, queue=None):
         self.set_bleve_max_result_window()

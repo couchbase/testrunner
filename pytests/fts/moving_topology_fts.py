@@ -938,6 +938,8 @@ class MovingTopFTS(FTSBaseTest):
             self.log.info("Index count for %s: %s"
                           %(index.name, index.get_indexed_doc_count()))
         NodeHelper.kill_memcached(self._cb_cluster.get_master_node())
+        NodeHelper.wait_warmup_completed([self._cb_cluster.get_master_node()],
+                                         [bucket.name for bucket in self._cb_cluster.get_buckets()])
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
         self.sleep(30, "Sleep additional 30 seconds to refresh actual bucket and index docs counts.")

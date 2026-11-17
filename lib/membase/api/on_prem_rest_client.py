@@ -3393,7 +3393,7 @@ class RestConnection(object):
                 raise Exception("Erroneously able to set bucket settings %s for bucket on time-sync" % (params, bucket))
             return status, content
         if not status:
-            raise Exception("Unable to set bucket settings %s for bucket" % (params, bucket))
+            raise Exception("Unable to set bucket settings %s for bucket %s, reason: %s" % (params, bucket, content))
         log.info("bucket %s updated" % bucket)
         return status
 

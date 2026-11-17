@@ -692,9 +692,26 @@ class NodeHelper:
         NodeHelper._log.info("Killing erlang on server: {0}".format(server))
         shell = RemoteMachineShellConnection(server)
         os_info = shell.extract_remote_info()
-        shell.kill_erlang(os_info)
-        shell.start_couchbase()
-        shell.disconnect()
+        try:
+            try:
+                shell.kill_erlang(os_info)
+            except Exception as e:
+                # killall sends SIGTERM, and beam.smp can take longer to exit
+                # than kill_erlang polls for; escalate to SIGKILL, but still
+                # fail if erlang survives, since the crash is what's under test
+                NodeHelper._log.warning("{0} on {1}, sending SIGKILL".format(e, server.ip))
+                shell.execute_command("pkill -9 beam.smp")
+                time.sleep(5)
+                out, _ = shell.execute_command("ps -eo args | grep '[b]eam.smp'")
+                out = [line for line in out if "/opt/couchbase" in line]
+                if out:
+                    raise Exception("erlang still running on {0} after SIGKILL: {1}"
+                                    .format(server.ip, out))
+        finally:
+            # always bring the node back, otherwise every later test fails
+            # against a dead node
+            shell.start_couchbase()
+            shell.disconnect()
         NodeHelper.wait_warmup_completed([server], bucket_names)
 
     @staticmethod
@@ -1494,7 +1511,13 @@ class FTSIndex:
 
     def get_num_mutations_to_index(self, rest=None):
         if not rest:
-            rest = RestConnection(self.__cluster.get_random_fts_node())
+            # the stat only covers the partitions on the node that reports it,
+            # so a single random node can say 0 while another is still behind
+            counts = [self.get_num_mutations_to_index(RestConnection(node))
+                      for node in self.__cluster.get_fts_nodes()]
+            if any(count is None for count in counts):
+                return None
+            return sum(counts)
 
         # Couchbase 8.x keys scoped FTS stats as "{bucket}.{scope}.{index}:{stat}"
         # rather than the legacy "{bucket}:{index}:{stat}". Fetch the full blob
@@ -4140,6 +4163,11 @@ class CouchbaseCluster:
                     1, len(
                         self.__nodes))]
         NodeHelper.do_a_warm_up(warmup_node)
+        # the restarted node's collection item counts stay low until its buckets
+        # finish warming up, so wait for that before anyone compares counts
+        if warmup_node.ip in [node.ip for node in self.get_kv_nodes()]:
+            NodeHelper.wait_warmup_completed(
+                [warmup_node], [bucket.name for bucket in self.get_buckets()])
         return warmup_node
 
     def reboot_one_node(self, test_case, master=False):

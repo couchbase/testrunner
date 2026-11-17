@@ -764,15 +764,18 @@ class UpgradeTests(NewUpgradeBaseTest):
         if kv_quota + fts_quota <= node_max:
             return
         new_fts = min(fts_quota, 512)
-        new_kv = max(256, node_max - new_fts - 100)
+        # only ever lower kv: raising it oversizes the buckets, which the
+        # server rejects, and dropping fts is usually enough for the join
+        new_kv = min(kv_quota, max(256, node_max - new_fts - 100))
         self.log.info(
             "Node {} mcdMemoryReserved={}MB < cluster kv+fts={}MB; "
             "adjusting quotas: kv {} -> {}, fts {} -> {}".format(
                 node.ip, node_max, kv_quota + fts_quota,
                 kv_quota, new_kv, fts_quota, new_fts))
-        for bucket in rest.get_buckets():
-            rest.change_bucket_props(bucket, ramQuotaMB=new_kv)
-        rest.init_cluster_memoryQuota(rest.username, rest.password, new_kv)
+        if new_kv < kv_quota:
+            for bucket in rest.get_buckets():
+                rest.change_bucket_props(bucket, ramQuotaMB=new_kv)
+            rest.init_cluster_memoryQuota(rest.username, rest.password, new_kv)
         rest.set_service_memoryQuota(service='ftsMemoryQuota', memoryQuota=new_fts)
 
     def rebalance_out(self, queue=None):
