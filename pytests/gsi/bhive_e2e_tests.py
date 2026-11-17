@@ -1269,7 +1269,7 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
                 bhive_index=self.bhive_index,
                 description_dimension=self.dimension
             )
-                create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace)
+                create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace, bhive_index=self.bhive_index)
                 select_queries = self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace, limit=self.scan_limit)
                 drop_queries = self.gsi_util_obj.get_drop_index_list(definition_list=definitions, namespace=namespace)
                 self.gsi_util_obj.async_create_indexes(create_queries=create_queries, database=namespace, query_node=query_node)
@@ -2064,7 +2064,16 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
         # TODO uncomment after https://jira.issues.couchbase.com/browse/MB-65934 is fixed
         # if not self.validate_memory_released():
         #     raise AssertionError("Memory not released despite dropping all the indexes")
-        self.check_storage_directory_cleaned_up(threshold_gb=0.05)
+        # DROP of a vector index is deferred while it trains and retried by the janitor;
+        # poll for the shards to drain instead of checking once.
+        for _ in range(20):
+            try:
+                self.check_storage_directory_cleaned_up(threshold_gb=0.05)
+                break
+            except Exception:
+                self.sleep(60, "waiting for deferred index drops and shard destroy")
+        else:
+            self.check_storage_directory_cleaned_up(threshold_gb=0.05)
         if not self.validate_cpu_normalized:
             self.log.error("CPU normalized validation failed")
             raise AssertionError("CPU normalized validation failed")
