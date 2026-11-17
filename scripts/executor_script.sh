@@ -108,7 +108,7 @@ echo "4/4 Creating file: aws_cleanup_job_params"
 echo "servers=${servers}" > aws_cleanup_job_params
 echo "###########################################"
 
-if [ "${slave}" == "deb12_P0_slave" ]; then
+if [ "${slave_base}" == "deb12_P0_slave" ]; then
   # Component - backup_recovery / xdcr needs Couchbase SDK4 slave to run
   export PYENV_VERSION="3.10.13"
   export PYENV_ROOT="$HOME/.pyenv"
@@ -280,6 +280,17 @@ else
     if [ ! "$majorRelease" = "7" ]; then
        SKIP_LOCAL_DOWNLOAD="True"
     fi
+
+    # AWS_ONDEMAND: an s3:// build must be fetched ONCE ON THE SLAVE (`aws s3 cp`,
+    # via the slave's instance profile) and SCP'd to the nodes. With
+    # skip_local_download=True, install_utils.download_build() takes its per-node
+    # branch and runs install_constants.DOWNLOAD_CMD -> WGET_CMD *on each CB node*,
+    # and wget cannot speak s3:// -- so the install fails on every node even with
+    # the s3 support in install_utils. The block above forces True for every
+    # majorRelease except 7, which is why trinity (7.6) never hit this and 8.x does.
+    case "${url}" in
+      s3://*) SKIP_LOCAL_DOWNLOAD="False" ;;
+    esac
 
     echo "Starting server installation"
     if [[ "${slave_base}" = "bhive_slave_test" ]]; then
