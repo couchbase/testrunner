@@ -2852,7 +2852,7 @@ class QueryAutoPrepareTests(QueryTests):
         self.assertEqual(len(plans), 1, f'MB-74473: expected one meta().plan row for the inline UDF entry '
                                         f'on {node.ip}: {plans}')
 
-    def _restart_query_service(self, node):
+    def _restart_cbq_engine(self, node):
         """Kill cbq-engine; ns_server restarts it. Wait until the new process answers queries."""
         shell = RemoteMachineShellConnection(node)
         pid_cmd = 'pidof cbq-engine || pgrep -x cbq-engine'
@@ -2862,6 +2862,9 @@ class QueryAutoPrepareTests(QueryTests):
         self.with_retry(lambda: shell.execute_command(pid_cmd)[0] not in ([], old_pid), eval=True, delay=3, tries=40)
         shell.disconnect()
         self.with_retry(lambda: self.run_cbq_query('SELECT 1', server=node)['status'], eval='success', delay=3, tries=40)
+
+    def _restart_query_service(self, node):
+        self._restart_cbq_engine(node)
         # Saved plans are reloaded from QUERY_METADATA after startup, not before the first query is
         # served (build 217: system:prepareds was still empty right after SELECT 1 succeeded)
         try:
@@ -2936,3 +2939,93 @@ class QueryAutoPrepareTests(QueryTests):
             self._execute_udf_prepared(node_b)
         finally:
             self._cleanup_udf_plan_stability()
+
+    # Prepared plans for a nested-loop join onto a GROUP BY subquery whose MIN is pushed down
+    # to ix_nl_agg (index_group_aggs). The ad-hoc statement plans the subquery at run time and
+    # works; the bug was that the prepared statement kept the subquery plan without its cover
+    # transformation, so every EXECUTE failed with 5010 "Aggregate min((`d`.`c22`)) not found".
+    # Verified manually: 8.5.0-1374 fails every variant below, 8.5.0-1399 returns the rows.
+    NL_AGG_INDEX = "ix_nl_agg"
+    NL_AGG_EXPECTED = [{"c11": 1, "m": 10}, {"c11": 2, "m": 20}, {"c11": 3, "m": 30}]
+
+    def _nl_agg_statement(self):
+        return (f'SELECT d1.c11, d2.m FROM {self.query_bucket} AS d1 '
+                f'JOIN (SELECT d.c21, MIN(d.c22) AS m FROM {self.query_bucket} AS d '
+                f'WHERE d.c21 IS NOT NULL AND d.type = "right" GROUP BY d.c21) AS d2 USE NL '
+                f'ON d1.c11 = d2.c21 WHERE d1.type = "left"')
+
+    def _setup_nl_agg(self):
+        self._cleanup_nl_agg()
+        left = [(1, 10), (2, 20), (3, 30), (4, 40)]
+        right = [(1, 10), (2, 20), (2, 21), (3, 30), (3, 31), (3, 32)]
+        values = [f'VALUES("nl_agg_l{i}", {{"type": "left", "c11": {c11}, "c12": {c12}, "test_id": "nl_agg"}})'
+                  for i, (c11, c12) in enumerate(left)]
+        values += [f'VALUES("nl_agg_r{i}", {{"type": "right", "c21": {c21}, "c22": {c22}, "test_id": "nl_agg"}})'
+                   for i, (c21, c22) in enumerate(right)]
+        self.run_cbq_query(f'UPSERT INTO {self.query_bucket} (KEY, VALUE) {", ".join(values)}')
+        self.run_cbq_query(f'CREATE INDEX {self.NL_AGG_INDEX} ON {self.query_bucket}(c21, c22) WHERE type = "right"')
+        self.wait_for_all_indexes_online()
+        explain = str(self.run_cbq_query(f'EXPLAIN {self._nl_agg_statement()}')['results'])
+        self.assertIn('index_group_aggs', explain,
+                      f'MIN is not pushed down to {self.NL_AGG_INDEX}, so the plan cannot hit the bug: {explain}')
+        self._run_nl_agg(self._nl_agg_statement(), 'ad-hoc statement')
+
+    def _cleanup_nl_agg(self):
+        self._set_auto_prepare(False)
+        self._cleanup_plan_stability_state()
+        self.run_cbq_query(f'DROP INDEX {self.NL_AGG_INDEX} IF EXISTS ON {self.query_bucket}')
+        self.run_cbq_query(f'DELETE FROM {self.query_bucket} WHERE test_id = "nl_agg"')
+
+    def _run_nl_agg(self, statement, label):
+        try:
+            results = self.run_cbq_query(statement)['results']
+        except CBQError as ex:
+            self.fail(f'{label}: NL join onto index-aggregated GROUP BY subquery failed: {ex}')
+        self.assertEqual(sorted(results, key=lambda r: r['c11']), self.NL_AGG_EXPECTED,
+                         f'{label}: wrong rows for NL join onto index-aggregated GROUP BY subquery')
+
+    def test_prepared_nl_join_index_aggregate_subquery(self):
+        """EXECUTE and auto-prepare of an NL join onto an index-aggregated GROUP BY subquery return the ad-hoc rows."""
+        try:
+            self._setup_nl_agg()
+            self.run_cbq_query(f'PREPARE nl_agg FROM {self._nl_agg_statement()}')
+            for run in range(1, 3):
+                self._run_nl_agg('EXECUTE nl_agg', f'EXECUTE #{run}')
+
+            self.run_cbq_query('DELETE FROM system:prepareds')
+            self._set_auto_prepare(True)
+            # the auto-prepared plan is used from the very first run
+            for run in range(1, 3):
+                self._run_nl_agg(self._nl_agg_statement(), f'auto-prepared run #{run}')
+        finally:
+            self._cleanup_nl_agg()
+
+    def test_plan_stability_nl_join_index_aggregate_subquery(self):
+        """Saved plans (prepared_only and ad_hoc) of an NL join onto an index-aggregated GROUP BY subquery work,
+        also after the plans are reloaded from QUERY_METADATA by a query restart."""
+        node = self.get_nodes_from_services_map(service_type="n1ql")
+        try:
+            self._setup_nl_agg()
+
+            self.run_cbq_query('UPDATE system:settings SET plan_stability.mode = "prepared_only"')
+            self.run_cbq_query(f'PREPARE nl_agg_ps FROM {self._nl_agg_statement()}')
+            self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = false') >= 1,
+                            eval=True, delay=2, tries=30)
+            self._run_nl_agg('EXECUTE nl_agg_ps', 'prepared_only EXECUTE')
+            self._restart_cbq_engine(node)
+            # saved plans are reloaded after startup, not before the first query is served; an
+            # EXECUTE right after the restart gets 4040 "No such prepared statement"
+            self.with_retry(lambda: self.run_cbq_query(
+                'SELECT RAW COUNT(*) FROM system:prepareds WHERE name = "nl_agg_ps"')['results'][0],
+                eval=1, delay=5, tries=24)
+            self._run_nl_agg('EXECUTE nl_agg_ps', 'prepared_only EXECUTE after query restart')
+
+            self.run_cbq_query('UPDATE system:settings SET plan_stability.mode = "ad_hoc"')
+            self._run_nl_agg(self._nl_agg_statement(), 'ad_hoc run')
+            self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = true') >= 1,
+                            eval=True, delay=2, tries=30)
+            self._run_nl_agg(self._nl_agg_statement(), 'ad_hoc second run')
+            self._restart_cbq_engine(node)
+            self._run_nl_agg(self._nl_agg_statement(), 'ad_hoc run after query restart')
+        finally:
+            self._cleanup_nl_agg()
