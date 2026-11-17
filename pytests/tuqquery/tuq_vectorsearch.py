@@ -674,6 +674,42 @@ class VectorSearchTests(QueryTests):
         finally:
             IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
 
+    def _ann_ids_using_index(self, vector_expr, index_name):
+        ann_query = f'SELECT meta().id FROM default ORDER BY ANN_DISTANCE({vector_expr}, {self._format_vec(self.xq[1])}, "{self.distance}") LIMIT 10'
+        explain_plan = self.run_cbq_query(f'EXPLAIN {ann_query}')
+        index_scan = explain_plan['results'][0]['plan']['~children'][0]['~children'][0]
+        self.assertEqual(index_scan.get('index'), index_name, f'Vector index {index_name} not used for {vector_expr}, please check plan {explain_plan}')
+        self.assertTrue('Order' not in str(explain_plan), f'Expected ORDER/LIMIT pushed to {index_name} for {vector_expr}, please check plan {explain_plan}')
+        # each SIFT vector is loaded once per brand/size (vec_<brand>_<size>_<n>) with equal distances,
+        # so tie order varies; compare the vector number <n> only
+        return [row['id'].rsplit('_', 1)[-1] for row in self.run_cbq_query(ann_query)['results']]
+
+    def test_explain_ann_decode_vector_equivalent_args(self):
+        '''A vector index on DECODE_VECTOR(...) must be used by queries whose DECODE_VECTOR call
+        is equivalent but writes optional arguments differently (omitted defaults, 'dense', case).'''
+        endian = str(self.use_bigendian).lower()
+        # base64 data is decoded directly; array data is encoded in the expression so the same DECODE_VECTOR key applies
+        vector_field = 'vec' if self.use_base64 else f'ENCODE_VECTOR(vec, {endian})'
+        exact_expr = f'DECODE_VECTOR({vector_field}, {self.use_bigendian})'
+        equivalent_exprs = [f"DECODE_VECTOR({vector_field}, {endian}, 'dense')", f"DECODE_VECTOR({vector_field}, {endian.upper()}, 'DENSE')"]
+        if not self.use_bigendian:
+            equivalent_exprs.append(f'DECODE_VECTOR({vector_field})')
+        index_name = f'vector_bhive_index_{self.distance}' if self.use_bhive else f'vector_index_{self.distance}'
+        try:
+            # Index key is DECODE_VECTOR(vec, <endian>) as created by IndexVector for base64 data
+            IndexVector().create_index(self.database, index_order='lead', vector_field=vector_field, similarity=self.distance, nprobes=self.nprobes, is_base64=True, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive)
+            expected_ids = self._ann_ids_using_index(exact_expr, index_name)
+            for vector_expr in equivalent_exprs:
+                actual_ids = self._ann_ids_using_index(vector_expr, index_name)
+                self.assertEqual(actual_ids, expected_ids, f'Results for {vector_expr} differ from {exact_expr}')
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
+
+            # Reverse: index spells out the optional args, query leaves them as IndexVector does
+            IndexVector().create_index(self.database, index_order='lead', vector_field=f"DECODE_VECTOR({vector_field}, {endian}, 'dense')", similarity=self.distance, nprobes=self.nprobes, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive)
+            self._ann_ids_using_index(exact_expr, index_name)
+        finally:
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
+
     def test_advise_ann(self):
         similarity = self.distance.lower()
         if similarity in ['l2', 'euclidean']:
