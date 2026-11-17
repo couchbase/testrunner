@@ -340,11 +340,11 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                     self.run_test_udf_inline_nested_js_library(phase=phase,scoping="global_global")
                     self.run_test_udf_inline_nested_js_library(phase=phase,scoping="global_scoped")
                     self.run_test_udf_inline_nested_js_library(phase=phase,scoping="scoped_scoped")
-                with self.subTest("PRE JS LIBRARY NESTED UDF INLINE TEST"):
-                    self.run_test_js_library_nested_udf_inline(phase=phase,scoping="global_global")
-                    self.run_test_js_library_nested_udf_inline(phase=phase,scoping="global_scoped")
-                    self.run_test_js_library_nested_udf_inline(phase=phase,scoping="scoped_scoped")
                 if (int(self.initial_version[0]) == 7 and int(self.initial_version[2]) >= 6) or int(self.initial_version[0]) >= 8:
+                    with self.subTest("PRE JS LIBRARY NESTED UDF INLINE TEST"):
+                        self.run_test_js_library_nested_udf_inline(phase=phase,scoping="global_global")
+                        self.run_test_js_library_nested_udf_inline(phase=phase,scoping="global_scoped")
+                        self.run_test_js_library_nested_udf_inline(phase=phase,scoping="scoped_scoped")
                     with self.subTest("PRE UDF INLINE NESTED JS INLINE TEST"):
                         self.run_test_udf_inline_nested_js_inline(phase=phase,scoping="global_global")
                         self.run_test_udf_inline_nested_js_inline(phase=phase,scoping="global_scoped")
@@ -386,11 +386,11 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 self.run_test_udf_inline_nested_js_library(phase=phase,scoping="global_global")
                 self.run_test_udf_inline_nested_js_library(phase=phase,scoping="global_scoped")
                 self.run_test_udf_inline_nested_js_library(phase=phase,scoping="scoped_scoped")
-            with self.subTest("MIXED JS LIBRARY NESTED UDF INLINE TEST"):
-                self.run_test_js_library_nested_udf_inline(phase=phase,scoping="global_global")
-                self.run_test_js_library_nested_udf_inline(phase=phase,scoping="global_scoped")
-                self.run_test_js_library_nested_udf_inline(phase=phase,scoping="scoped_scoped")
             if (int(self.initial_version[0]) == 7 and int(self.initial_version[2]) >= 6) or int(self.initial_version[0]) >= 8:
+                with self.subTest("MIXED JS LIBRARY NESTED UDF INLINE TEST"):
+                    self.run_test_js_library_nested_udf_inline(phase=phase,scoping="global_global")
+                    self.run_test_js_library_nested_udf_inline(phase=phase,scoping="global_scoped")
+                    self.run_test_js_library_nested_udf_inline(phase=phase,scoping="scoped_scoped")
                 with self.subTest("MIXED UDF INLINE NESTED JS INLINE TEST"):
                     self.run_test_udf_inline_nested_js_inline(phase=phase,scoping="global_global")
                     self.run_test_udf_inline_nested_js_inline(phase=phase,scoping="global_scoped")
@@ -431,7 +431,8 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 with self.subTest("MIXED PREPARE TEST"):
                     self.run_test_prepare(phase=phase)
                     self.run_test_prepare_cte(phase=phase)
-                    self.run_test_prepare_udf(phase=phase)
+                    if (int(self.initial_version[0]) == 7 and int(self.initial_version[2]) >= 6) or int(self.initial_version[0]) >= 8:
+                        self.run_test_prepare_udf(phase=phase)
             with self.subTest("MIXED SYSTEM TABLE TEST"):
                 self.run_test_system_tables()
             with self.subTest("MIXED ENCODE DECODE TEST"):
@@ -462,11 +463,11 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 self.run_test_udf_inline_nested_js_library(phase=phase,scoping="global_global")
                 self.run_test_udf_inline_nested_js_library(phase=phase,scoping="global_scoped")
                 self.run_test_udf_inline_nested_js_library(phase=phase,scoping="scoped_scoped")
-            with self.subTest("POST JS LIBRARY NESTED UDF INLINE TEST"):
-                self.run_test_js_library_nested_udf_inline(phase=phase,scoping="global_global")
-                self.run_test_js_library_nested_udf_inline(phase=phase,scoping="global_scoped")
-                self.run_test_js_library_nested_udf_inline(phase=phase,scoping="scoped_scoped")
             if (int(self.initial_version[0]) == 7 and int(self.initial_version[2]) >= 6) or int(self.initial_version[0]) >= 8:
+                with self.subTest("POST JS LIBRARY NESTED UDF INLINE TEST"):
+                    self.run_test_js_library_nested_udf_inline(phase=phase,scoping="global_global")
+                    self.run_test_js_library_nested_udf_inline(phase=phase,scoping="global_scoped")
+                    self.run_test_js_library_nested_udf_inline(phase=phase,scoping="scoped_scoped")
                 with self.subTest("POST UDF INLINE NESTEDJS INLINE TEST"):
                     self.run_test_udf_inline_nested_js_inline(phase=phase,scoping="global_global")
                     self.run_test_udf_inline_nested_js_inline(phase=phase,scoping="global_scoped")
@@ -516,8 +517,9 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 self.run_test_collection(phase=phase)
             with self.subTest("POST TRANSACTION TEST"):
                 self.run_test_transaction()
-            with self.subTest("POST SEQUENCE TEST"):
-                self.run_test_sequences(phase=phase)
+            if (int(self.initial_version[0]) == 7 and int(self.initial_version[2]) >= 6) or int(self.initial_version[0]) >= 8:
+                with self.subTest("POST SEQUENCE TEST"):
+                    self.run_test_sequences(phase=phase)
             with self.subTest("POST BUCKET TEST"):
                 self.run_test_bucket()
             with self.subTest("POST TYPE FUNCTION TEST"):
@@ -534,7 +536,8 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 with self.subTest("POST PREPARE TEST"):
                     self.run_test_prepare(phase=phase)
                     self.run_test_prepare_cte(phase=phase)
-                    self.run_test_prepare_udf(phase=phase)
+                    if (int(self.initial_version[0]) == 7 and int(self.initial_version[2]) >= 6) or int(self.initial_version[0]) >= 8:
+                        self.run_test_prepare_udf(phase=phase)
             with self.subTest("POST SYSTEM TABLE TEST"):
                 self.run_test_system_tables()
         else:
@@ -925,16 +928,18 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             try:
                 if phase == "post-upgrade":
                     if scoping == "global_scoped":
-                        self.run_cbq_query("DROP FUNCTION default:default._default.nestedjslibrarygs")
+                        self.run_cbq_query("DROP FUNCTION default:`travel-sample`.inventory.nestedjslibrarygs")
                         self.run_cbq_query("DROP FUNCTION nestedinlinegs3")
                     elif scoping == "scoped_scoped":
-                        self.run_cbq_query("DROP FUNCTION default:default._default.nestedjslibraryss")
-                        self.run_cbq_query("DROP FUNCTION default:default._default.nestedinliness3")
+                        self.run_cbq_query("DROP FUNCTION default:`travel-sample`.inventory.nestedjslibraryss")
+                        self.run_cbq_query("DROP FUNCTION default:`travel-sample`.inventory.nestedinliness3")
                     else:
                         self.run_cbq_query("DROP FUNCTION nestedjslibrarygg")
                         self.run_cbq_query("DROP FUNCTION nestedinlinegg3")
-                    self.log.info("Delete n1ql library")
-                    self.delete_library("n1ql2")
+                    # n1ql2 is shared by all scopings; drop it only after the last one
+                    if scoping == "scoped_scoped":
+                        self.log.info("Delete n1ql library")
+                        self.delete_library("n1ql2")
             except Exception as e:
                 self.log.error(str(e))
 
@@ -1146,8 +1151,10 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                     else:
                         self.run_cbq_query("DROP FUNCTION nestedjslibrarygg2")
                         self.run_cbq_query("DROP FUNCTION nestedinlinegglibrary")
-                    self.log.info("Delete n1ql library")
-                    self.delete_library("n1ql3")
+                    # n1ql3 is shared by all scopings; drop it only after the last one
+                    if scoping == "scoped_scoped":
+                        self.log.info("Delete n1ql library")
+                        self.delete_library("n1ql3")
             except Exception as e:
                 self.log.error(str(e))
 
