@@ -1215,7 +1215,16 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         command = "{4} {3} {2} {0}/cbbackupmgr {1}".format(self.cli_command_location, args,
                                                            password_env, user_env,
                                                            self._encryption_env_prefix())
-        output, error = shell.execute_command_raw(command)
+        # With --no-progress-bar a restore prints nothing until it ends, and a DGM restore over existing data
+        # (every item is conflict checked against disk) can stay silent past the default 900s SSH read timeout
+        try:
+            output, error = shell.execute_command_raw(command, timeout=3600 if self.dgm_run else 900)
+        except Exception:
+            diag_shell = RemoteMachineShellConnection(self.backupset.backup_host)
+            log_tail, _ = diag_shell.execute_command("tail -n 40 {0} 2>/dev/null".format(self._backup_log_path_glob()))
+            self.log.error("Restore did not finish, last lines of the cbbackupmgr log:\n{0}".format("\n".join(log_tail)))
+            diag_shell.disconnect()
+            raise
         self.restore_outputs.append(output)
         self.restore_errors.append(error)
         shell.log_command_output(output, error)
@@ -2518,7 +2527,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
 
     def _reset_storage_mode(self, rest, storageMode, reset_node=True):
         if not storageMode:
-            storageMode = "memory_optimized"
+            # A reset cluster has no storage mode yet, so use the Enterprise default. memory_optimized cannot be
+            # changed back while index nodes exist, so later tests inherit it, and it cannot index DGM data
+            storageMode = "memory_optimized" if "community" in (self.cb_version or "") else "plasma"
         nodes_in_cluster = rest.get_nodes()
         for node in nodes_in_cluster:
             matched_server = None
