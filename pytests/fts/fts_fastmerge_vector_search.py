@@ -1,9 +1,12 @@
+import itertools
 import json
 import os
 import re
 import time
 import random
 import threading
+
+import requests
 
 import logger
 
@@ -259,3 +262,230 @@ class FastMergeVectorSearch(VectorSearch):
             self.log.info(f"Correctly rejected on CE: {e}")
 
         self.log.info("test_fm_community_edition_negative passed")
+
+    # ---------------------------------------------------------------------------
+    # MB-75211: index-level doc count stuck on a stale cached alias
+    #
+    # GET /api/index/{name}/count answers from a cached alias built over the
+    # pindexes registered *at the time of the call*; pindexes not yet registered
+    # are treated as missing. cbftx clears that cache from the pindex
+    # registration callback. cbft change 256024 replaced that callback instead of
+    # wrapping it, so a pindex registering after the first count call is never
+    # added to the cached alias and the count stays short by exactly that
+    # pindex's docs (perf: 16,659,000 of 20,000,000 = all but one of 6 pindexes),
+    # which hangs anything that waits for the count to reach the source count.
+    #
+    # Repro: hit the count API on every FTS node continuously from before the
+    # index exists until its partitions have registered, then check that the
+    # index-level count converges on the sum of the per-pindex counts.
+    # ---------------------------------------------------------------------------
+
+    def _fts_get(self, rest, path, timeout=5):
+        """GET an FTS endpoint without urllib_request's per-call logging/retries.
+        Returns (http status or exception name, parsed JSON or None)."""
+        try:
+            resp = requests.get(rest.fts_baseUrl + path,
+                                headers=rest._create_capi_headers(),
+                                timeout=timeout, verify=False)
+        except requests.RequestException as e:
+            return type(e).__name__, None
+        if resp.status_code != 200:
+            return resp.status_code, None
+        try:
+            return 200, resp.json()
+        except ValueError:
+            return "bad-json", None
+
+    def _fts_get_json(self, rest, path, timeout=5):
+        return self._fts_get(rest, path, timeout)[1]
+
+    @staticmethod
+    def _index_count_paths(index_obj):
+        """Count endpoints to try, in order. On 8.x an index created in b1.s1 is
+        stored as b1.s1.<name>, so the legacy endpoint needs the full name (that
+        is what perfrunner calls); the scoped endpoint takes the short name. The
+        last entry covers an index in _default._default."""
+        bucket, scope, name = index_obj._source_name, index_obj.scope or "_default", index_obj.name
+        short = name.split(".")[-1]
+        return [f"api/bucket/{bucket}/scope/{scope}/index/{short}/count",
+                f"api/index/{bucket}.{scope}.{short}/count",
+                f"api/index/{name}/count"]
+
+    def _index_count_on(self, rest, index_obj, misses=None):
+        """Index-level doc count from one node, or None. Remembers the first
+        endpoint that answers; records the last failure per endpoint in `misses`."""
+        paths = self._index_count_paths(index_obj)
+        chosen = getattr(self, "_count_path_idx", None)
+        for i in ([chosen] if chosen is not None else range(len(paths))):
+            status, body = self._fts_get(rest, paths[i])
+            if body is not None and "count" in body:
+                self._count_path_idx = i
+                return body["count"]
+            if misses is not None:
+                misses[f"{rest.ip} {paths[i]}"] = status
+        return None
+
+    def _pindex_counts(self, fts_rests, index_obj):
+        """{planPIndex name: count or None} for the index's current UUID, each
+        count read from whichever FTS node hosts that pindex."""
+        uuid = index_obj.get_uuid()
+        cfg = self._fts_get_json(fts_rests[0], "api/cfg") or {}
+        plan = (cfg.get("planPIndexes") or {}).get("planPIndexes") or {}
+        names = [p["name"] for p in plan.values() if p.get("indexUUID") == uuid]
+        counts = {}
+        for name in names:
+            counts[name] = None
+            for rest in fts_rests:
+                body = self._fts_get_json(rest, f"api/pindex/{name}/count")
+                if body and body.get("status") == "ok":
+                    counts[name] = body["count"]
+                    break
+        return counts
+
+    @staticmethod
+    def _explain_gap(gap, pindex_counts):
+        """Names of the pindex subsets whose doc counts sum exactly to `gap`."""
+        known = {n: c for n, c in pindex_counts.items() if c is not None}
+        hits = []
+        for r in range(1, len(known) + 1):
+            for combo in itertools.combinations(known, r):
+                if sum(known[n] for n in combo) == gap:
+                    hits.append([n.split("_")[-1] for n in combo])
+        return hits
+
+    def test_fm_index_count_late_partition_registration(self):
+        """MB-75211: index doc count must include partitions that register after
+        the count API has already been served.
+
+        Params:
+          num_partitions           partitions for the index (perf: 6)
+          count_poll_interval      seconds between count calls per node during
+                                   registration (default 0.2)
+          rebalance_in_fts         rebalance an extra FTS node in while the index
+                                   builds, so pindexes register on it late
+                                   (perf: "Dynamic Service Rebalance, Adding FTS")
+          stale_check_secs         how long the index count may lag the pindex
+                                   total once indexing is done (default 180)
+          fastmerge                default True; False is the non-FM control
+        """
+        self.fastmerge = self.input.param("fastmerge", True)
+        poll_interval = float(self.input.param("count_poll_interval", 0.2))
+        rebalance_in_fts = self.input.param("rebalance_in_fts", False)
+        stale_check_secs = int(self.input.param("stale_check_secs", 180))
+        wait_timeout = int(self.input.param("index_wait_timeout", 1200))
+        index_name = "fm_cnt"
+
+        containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client)
+        self.load_vector_data(containers, dataset=self.vector_dataset)
+
+        # Placeholder so the poller can build the count path before the index exists.
+        class _Target:
+            name, _source_name, scope = index_name, "b1", "s1"
+        target = _Target()
+
+        stop = threading.Event()
+        seen = {}     # ip:port -> list of (elapsed, count) whenever the count changes
+        misses = {}   # "ip path" -> last non-200 status, for when nothing is seen
+        poller_errors = []
+        t0 = time.time()
+
+        def poll_counts():
+            rests, refreshed = [], 0
+            while not stop.is_set():
+                try:
+                    if time.time() - refreshed > 5:   # pick up a rebalanced-in node
+                        rests = [RestConnection(n) for n in self._cb_cluster.get_fts_nodes()]
+                        refreshed = time.time()
+                    for rest in rests:
+                        count = self._index_count_on(rest, target, misses)
+                        if count is None:
+                            continue
+                        hist = seen.setdefault(f"{rest.ip}:{rest.fts_port}", [])
+                        if not hist or hist[-1][1] != count:
+                            hist.append((round(time.time() - t0, 2), count))
+                except Exception as e:   # keep polling; a dead poller looks like "no answers"
+                    if len(poller_errors) < 20:
+                        poller_errors.append(repr(e))
+                stop.wait(poll_interval)
+
+        poller = threading.Thread(target=poll_counts, name="mb75211-count-poller", daemon=True)
+        poller.start()
+        rebalance_task = None
+        try:
+            index = self._create_fts_index_parameterized(
+                field_name=self.vector_field_name,
+                field_type=self.vector_field_type,
+                test_indexes=[(index_name, "b1.s1.c1")],
+                vector_fields={"dims": self.dimension, "similarity": self.similarity},
+                create_vector_index=True,
+                extra_fields=[{"sno": "number"}],
+                wait_for_index_complete=False)
+            index_obj = index[0]['index_obj']
+            target.name, target._source_name, target.scope = \
+                index_obj.name, index_obj._source_name, index_obj.scope
+            if self.fastmerge:
+                self._validate_fm_in_store(index_obj)
+
+            if rebalance_in_fts:
+                rebalance_task = self._cb_cluster.async_rebalance_in(num_nodes=1, services=["fts"])
+
+            # Ground truth: per-pindex counts summing to the source count.
+            source_count = index_obj.get_src_collections_doc_count()
+            deadline = time.time() + wait_timeout
+            while True:
+                fts_rests = [RestConnection(n) for n in self._cb_cluster.get_fts_nodes()]
+                pindex_counts = self._pindex_counts(fts_rests, index_obj)
+                pindex_total = sum(c or 0 for c in pindex_counts.values())
+                self.log.info(f"pindex total {pindex_total}/{source_count}: "
+                              f"{ {n.split('_')[-1]: c for n, c in pindex_counts.items()} }")
+                if pindex_counts and None not in pindex_counts.values() \
+                        and pindex_total >= source_count \
+                        and (rebalance_task is None or rebalance_task.done()):
+                    break
+                if time.time() > deadline:
+                    self.fail(f"Per-pindex counts never reached the source count "
+                              f"({pindex_total}/{source_count}) within {wait_timeout}s; "
+                              f"this is an indexing problem, not MB-75211")
+                time.sleep(10)
+        finally:
+            stop.set()
+            poller.join(timeout=30)
+            if rebalance_task is not None:
+                rebalance_task.result()
+
+        self.log.info(f"Count history during registration (node -> [(t, count)]): {seen}")
+        if poller_errors:
+            self.log.warning(f"Count poller errors: {poller_errors}")
+        self.assertTrue(seen, f"Count API never answered during registration, so the "
+                              f"cache was never primed; the race was not exercised. "
+                              f"Last failures per endpoint: {misses}; poller errors: "
+                              f"{poller_errors}")
+        self.assertGreater(len(pindex_counts), 1,
+                           f"Need several pindexes registering independently to race; "
+                           f"found {len(pindex_counts)}")
+
+        # Every node's index-level count must converge on the pindex total.
+        fts_rests = [RestConnection(n) for n in self._cb_cluster.get_fts_nodes()]
+        deadline = time.time() + stale_check_secs
+        while True:
+            node_counts = {f"{r.ip}:{r.fts_port}": self._index_count_on(r, index_obj)
+                           for r in fts_rests}
+            if all(c == pindex_total for c in node_counts.values()):
+                self.log.info(f"Index count matches pindex total {pindex_total} on all "
+                              f"nodes: {node_counts}")
+                break
+            if time.time() > deadline:
+                pindex_counts = self._pindex_counts(fts_rests, index_obj)
+                pindex_total = sum(c or 0 for c in pindex_counts.values())
+                gaps = {node: {"count": c,
+                               "missing": pindex_total - c if c is not None else None,
+                               "missing_pindexes": self._explain_gap(pindex_total - c, pindex_counts)
+                               if c is not None and c < pindex_total else []}
+                        for node, c in node_counts.items() if c != pindex_total}
+                self.fail(
+                    f"MB-75211 reproduced: /count still disagrees with the per-pindex "
+                    f"total ({pindex_total}, source {source_count}) {stale_check_secs}s "
+                    f"after indexing finished. Per node: {gaps}. Per-pindex: "
+                    f"{ {n.split('_')[-1]: c for n, c in pindex_counts.items()} }. "
+                    f"Count history during registration: {seen}")
+            time.sleep(5)
