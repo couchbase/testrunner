@@ -105,14 +105,22 @@ class basic_ops(BaseTestCase):
         self._load_doc_data_all_buckets(batch_size=1000)
         end_time = time.time()
 
+        # The DGM load can run for an hour, and the connections opened above
+        # sit idle for all of it. They do not reliably survive that (memcached
+        # has been seen dropping them with ETIMEDOUT, so the next getMeta gets
+        # ECONNRESET), so reconnect before using them again.
+        client.done()
+        client = VBucketAwareMemcached(rest, 'default')
+
         for i in range(1000):
             try:
                 mcd = client.memcached(KEY_NAME + str(i))
-                _, flags, exp, seqno, cas = client.memcached(KEY_NAME + str(i)).getMeta(KEY_NAME + str(i))
+                _, flags, exp, seqno, cas = mcd.getMeta(KEY_NAME + str(i))
                 # Use the current revSeqno (+1) so the delete always wins conflict
                 # resolution. Hardcoding seqno=2 assumed set(rev 1)+subdoc(rev 2),
-                # which breaks (Memcached error #2 'Exists') when the server bumps
-                # the revSeqno past 2 for the set + xattr-subdoc sequence.
+                # which breaks (Memcached error #2 'Exists') once the revSeqno
+                # moves past 2, e.g. when the DGM load outlasts the bucket
+                # maxTTL and the expiry pager deletes these docs (rev 3).
                 rc = mcd.del_with_meta(KEY_NAME + str(i), 0, 0, seqno + 1, cas + 1)
             except MemcachedError as exp:
                 self.fail("Exception with del_with meta - {0}".format(exp))
@@ -123,12 +131,27 @@ class basic_ops(BaseTestCase):
             self.sleep(max(0, int(time_to_sleep)))
         else:
             self.sleep(60)
-        active_bucket_items = rest.get_active_key_count("default")
-        replica_bucket_items = rest.get_replica_key_count("default")
-        print('active_bucket_items ', active_bucket_items)
-        print('replica_bucket_items ', replica_bucket_items)
-        if active_bucket_items * self.num_replicas != replica_bucket_items:
-            self.fail("Mismatch in data !!!")
+        # maxttl expiry (compaction/pager) keeps deleting docs on the
+        # actives while we check, and the replicas apply those deletes via
+        # DCP a little later, so a single stats sample can catch the
+        # counts mid-flight. Wait for them to converge; a real replica
+        # count bug (MB-32114) never does.
+        timeout = 600
+        deadline = time.time() + timeout
+        while True:
+            samples = rest.fetch_bucket_stats("default")["op"]["samples"]
+            active_bucket_items = samples["curr_items"][-1]
+            replica_bucket_items = samples["vb_replica_curr_items"][-1]
+            self.log.info("active_bucket_items %s, replica_bucket_items %s"
+                          % (active_bucket_items, replica_bucket_items))
+            if active_bucket_items * self.num_replicas == replica_bucket_items:
+                break
+            if time.time() > deadline:
+                self.fail("Mismatch in data !!! active %s * replicas %s != "
+                          "replica %s after %ss"
+                          % (active_bucket_items, self.num_replicas,
+                             replica_bucket_items, timeout))
+            self.sleep(10, "Waiting for active/replica counts to converge")
 
     def test_MB_36087(self):
         try:

@@ -3360,7 +3360,8 @@ class RestConnection(object):
                       maxTTL=None,
                       compressionMode=None,
                       enableCrossClusterVersioning=None,
-                      versionPruningWindowHrs=None):
+                      versionPruningWindowHrs=None,
+                      expiryPagerSleepTime=None):
         api = '{0}{1}{2}'.format(self.baseUrl, 'pools/default/buckets/', bucket)
         if isinstance(bucket, Bucket):
             api = '{0}{1}{2}'.format(self.baseUrl, 'pools/default/buckets/', bucket.name)
@@ -3387,6 +3388,8 @@ class RestConnection(object):
             params_dict["enableCrossClusterVersioning"] = enableCrossClusterVersioning
         if versionPruningWindowHrs:
             params_dict["versionPruningWindowHrs"] = versionPruningWindowHrs
+        if expiryPagerSleepTime is not None:
+            params_dict["expiryPagerSleepTime"] = expiryPagerSleepTime
 
         params = urllib.parse.urlencode(params_dict)
 
@@ -3397,7 +3400,8 @@ class RestConnection(object):
                 raise Exception("Erroneously able to set bucket settings %s for bucket on time-sync" % (params, bucket))
             return status, content
         if not status:
-            raise Exception("Unable to set bucket settings %s for bucket" % (params, bucket))
+            raise Exception("Unable to set bucket settings %s for bucket %s: %s"
+                            % (params, bucket, content))
         log.info("bucket %s updated" % bucket)
         return status
 

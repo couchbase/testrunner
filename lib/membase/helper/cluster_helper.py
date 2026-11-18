@@ -362,6 +362,19 @@ class ClusterOperationHelper(object):
     @staticmethod
     def flushctl_set(master, key, val, bucket='default'):
         rest = RestConnection(master)
+        if key == "exp_pager_stime":
+            # From 8.0 (MB-61457) ns_server owns exp_pager_stime as the
+            # bucket setting expiryPagerSleepTime and re-applies it to
+            # memcached every ~10s, so a direct set_param is reverted before
+            # the pager ever runs. Set it through the bucket REST API and
+            # fall back to the per-node param for clusters that predate it.
+            try:
+                rest.change_bucket_props(bucket, expiryPagerSleepTime=val)
+                return
+            except Exception as e:
+                logger.Logger.get_logger().warning(
+                    "Unable to set expiryPagerSleepTime via REST, falling "
+                    "back to memcached set_param: %s" % e)
         servers = rest.get_nodes()
         for server in servers:
             if "kv" in server.services:
