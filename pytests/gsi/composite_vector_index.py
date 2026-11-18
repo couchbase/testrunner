@@ -2381,6 +2381,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                         for index, stats in indexes.items()
                         for key, val in stats.items() if 'num_docs_pending' in key]
         self.log.info(f"Docs Pending after indexer kill: {docs_pending}")
+        self.wait_for_mutation_processing(index_nodes)
         for namespace in self.namespaces:
             count_query = f"select count(year) from {namespace} where year > 0;"
             result = self.run_cbq_query(query=count_query, server=query_node)['results'][0]["$1"]
@@ -3211,18 +3212,18 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
             # Add invalid/scalar values for vector fields in some of the docs and run scans
             collection_namespace = self.namespaces[0]
-            upsert_query = (f"update {collection_namespace} set colorRGBVector = 12 and "
-                            f"descriptionVector = 'abcd' where rating > 2")
+            upsert_query = (f"UPDATE {collection_namespace} SET colorRGBVector = 12, "
+                            f"descriptionVector = 'abcd' WHERE rating > 2")
             self.run_cbq_query(query=upsert_query)
 
-            for query in select_queries:
-                self.run_cbq_query(query=query)
-
-            # Fetch no of docs which will be mutated to validate the stats count
-            select_query = f"select count(*) from {collection_namespace} where rating > 2 and colorRGBVector != [0, 0, 0]"
+            # Fetch doc count for validation
+            select_query = f"SELECT COUNT(*) FROM {collection_namespace} WHERE rating > 2 AND colorRGBVector != [0, 0, 0]"
             result = self.run_cbq_query(query=select_query)
             doc_count = int(result["results"][0]["$1"])
             self.log.info(f'doc count {doc_count}')
+
+            for query in select_queries:
+                self.run_cbq_query(query=query)
 
 
             self.sleep(10)
@@ -3235,7 +3236,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                             percent_update=100, percent_delete=0, workers=16, scope=scope,
                                             collection=collection, json_template="Cars", timeout=2000,
                                             op_type="update", dim=384, mutate=1,
-                                            update_start=0, update_end=self.num_of_docs_per_collection)
+                                            update_start=1, update_end=self.num_of_docs_per_collection)
             # Load via the remote magma-server: DocLoader's PyTorch embedding lib is not supported on the CentOS 7 slaves
             self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_update)
 
@@ -3332,13 +3333,15 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.item_count_related_validations()
 
             # Updating dimensions of vector fields for subset of documents and running scans
+            # DocLoader update range is [update_start, update_end)
+            update_start, update_end = 1, 10000
             keyspace = namespace.split(":")[-1]
             bucket, scope, collection = keyspace.split(".")
             self.gen_update = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=0,
                                             percent_update=100, percent_delete=0, workers=16, scope=scope,
                                             collection=collection, json_template="Cars", timeout=2000,
                                             op_type="update", mutate=1, dim=128,
-                                            update_start=0, update_end=10000)
+                                            update_start=update_start, update_end=update_end)
             # Load via the remote magma-server: DocLoader's PyTorch embedding lib is not supported on the CentOS 7 slaves
             self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_update)
 
@@ -3352,13 +3355,13 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                             percent_update=100, percent_delete=0, workers=16, scope=scope,
                                             collection=collection, json_template="Cars", timeout=2000,
                                             op_type="update", mutate=1, dim=384,
-                                            update_start=0, update_end=10000)
+                                            update_start=update_start, update_end=update_end)
             # Load via the remote magma-server: DocLoader's PyTorch embedding lib is not supported on the CentOS 7 slaves
             self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_update)
 
             self.item_count_related_validations()
 
-            error_msg_and_doc_count = (f'"invalid_vec_dim":10000')
+            error_msg_and_doc_count = (f'"invalid_vec_dim":{update_end - update_start}')
             self.assertTrue(self.validate_error_msg_and_doc_count_in_cbcollect(self.master, error_msg_and_doc_count))
 
             query_stats_map = {}

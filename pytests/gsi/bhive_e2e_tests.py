@@ -6,6 +6,7 @@ __git_user__ = "dananjay-s"
 """
 from copy import deepcopy
 import logging
+import json
 from concurrent.futures import ThreadPoolExecutor
 from sentence_transformers import SentenceTransformer
 from couchbase_helper.documentgenerator import SDKDataLoader
@@ -1927,13 +1928,7 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
         self.sleep(120, "Sleeping for 2 minutes to allow indexes to be dropped")
 
         self.log.info("Performing final validations...")
-        self.check_storage_directory_cleaned_up(threshold_gb=0.05)
-        self.log.info("Storage directory cleanup validation completed")
-
-        if not self.validate_cpu_normalized:
-            self.log.error("CPU normalized validation failed")
-            raise AssertionError("CPU normalized validation failed")
-        self.log.info("CPU normalization validation completed successfully")
+        self.drop_index_node_resources_utilization_validations()
 
         self.log.info("=== test_bhive_rebalance_comprehensive completed successfully ===")
 
