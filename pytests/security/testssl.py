@@ -235,7 +235,13 @@ class TestSSLTests(BaseTestCase):
                                                       format(line, node_port, node.ip))
                     elif "LUCKY13 (CVE-2013-0169)" in line:
                         scan_count = scan_count + 1
-                        if "VULNERABLE" in line:
+                        # testssl.sh's LUCKY13 check is experimental and reports
+                        # "potentially VULNERABLE" for any port offering CBC ciphers
+                        # (e.g. memcached on 11207); only fail on a definite finding.
+                        if "potentially VULNERABLE" in line:
+                            self.log.warning("\"{0}\" reported in port {1} node {2}".
+                                             format(line, node_port, node.ip))
+                        elif "VULNERABLE" in line:
                             vulnerability_list.append("\"{0}\" is detected in port {1} node {2}".
                                                       format(line, node_port, node.ip))
                     elif "Winshock" in line:
