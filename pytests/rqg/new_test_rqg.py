@@ -303,7 +303,7 @@ class RQGTestsNew(BaseRQGTests):
             if self.use_mysql:
                 client = RQGMySQLClient(database=self.database, host=self.mysql_url, user_id=self.user_id, password=self.password)
             elif self.use_postgres:
-                client = RQGPostgresClient()
+                client = RQGPostgresClient(host=self.postgres_url, user=self.user_id, password=self.password, database=self.database)
 
             if expected_result is None:
                 columns, rows = client._execute_query(query=sql_query)
