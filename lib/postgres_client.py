@@ -1,4 +1,5 @@
 import psycopg2
+from psycopg2 import sql
 import pdb
 
 class PostgresClient(object):
@@ -30,4 +31,28 @@ class PostgresClient(object):
             print(f"[PostgreSQL] Make sure PostgreSQL is running and the database exists.")
             raise
         return connection
+
+    @staticmethod
+    def create_database(host='localhost', user='root', password='password', database='test', port=5432):
+        PostgresClient._run_on_maintenance_database(host, user, password, port,
+                                                    sql.SQL("CREATE DATABASE {}").format(sql.Identifier(database)))
+
+    @staticmethod
+    def drop_database(host='localhost', user='root', password='password', database='test', port=5432):
+        # DROP DATABASE fails while any session is still connected to it
+        PostgresClient._run_on_maintenance_database(host, user, password, port,
+                                                    sql.SQL("SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+                                                            "WHERE datname = {} AND pid <> pg_backend_pid()").format(sql.Literal(database)))
+        PostgresClient._run_on_maintenance_database(host, user, password, port,
+                                                    sql.SQL("DROP DATABASE IF EXISTS {}").format(sql.Identifier(database)))
+
+    @staticmethod
+    def _run_on_maintenance_database(host, user, password, port, statement):
+        connection = psycopg2.connect(f"host={host} port={port} dbname=postgres user={user} password={password} connect_timeout=10")
+        # CREATE/DROP DATABASE cannot run inside a transaction block
+        connection.autocommit = True
+        try:
+            connection.cursor().execute(statement)
+        finally:
+            connection.close()
 
