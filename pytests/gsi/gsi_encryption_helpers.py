@@ -15,6 +15,17 @@ from lib.remote.remote_util import RemoteMachineShellConnection
 from lib.testconstants import LINUX_COUCHBASE_LOGS_PATH, WIN_COUCHBASE_LOGS_PATH
 from membase.api.rest_client import RestConnection
 
+# node IP -> OS type, so the OS lookup costs one SSH round-trip per node
+_NODE_OS_TYPE = {}
+
+
+def _is_windows(node):
+    if node.ip not in _NODE_OS_TYPE:
+        shell = RemoteMachineShellConnection(node, verbose=False)
+        _NODE_OS_TYPE[node.ip] = shell.extract_remote_info().type.lower()
+        shell.disconnect()
+    return _NODE_OS_TYPE[node.ip] == 'windows'
+
 
 class GSIEncryptionHelpers:
     ENCRYPTION_MAGIC_BYTES = "Couchbase Encrypted"
@@ -90,7 +101,11 @@ class GSIEncryptionHelpers:
 
     @staticmethod
     def _shell_quote(path):
-        """Quote a path for remote shell commands if it contains spaces (Windows paths)."""
+        """Quote a path for remote shell commands if it contains spaces (Windows paths).
+        Accepts a pre-escaped path (e.g. WIN_COUCHBASE_LOGS_PATH, 'Program\\ Files') or an
+        unescaped one: '\\ ' is unescaped first, since a backslash inside quotes is kept
+        literally, so both forms end up quoted the same way."""
+        path = path.replace('\\ ', ' ')
         return shlex.quote(path) if ' ' in path else path
 
     def _log_directory_tree(self, node, root_dir, maxdepth=4, cap=60):
@@ -3318,6 +3333,9 @@ class GSIEncryptionHelpers:
     def _run_cbcat(self, node, args):
         """Run cbcat on node. Runs from /tmp so a tool crash cannot leave
         erl_crash.dump in the logs directory."""
+        if _is_windows(node):
+            # cbcat is a native Windows binary and cannot open Cygwin paths
+            args = args.replace('/cygdrive/c/', 'C:/')
         shell = RemoteMachineShellConnection(node, verbose=False)
         try:
             out, _ = shell.execute_command(f"cd /tmp && {self.get_bin_path(node)}cbcat {args} 2>&1")
@@ -3419,6 +3437,31 @@ class GSIEncryptionAtRestBase:
     as self.rest, self.master, self.cluster, etc. are available at runtime.
     """
 
+    def _wait_for_log_data_encrypted(self, timeout=300, interval=15, label=""):
+        """Wait until ns_server reports every log-key file as encrypted."""
+        deadline = time.time() + timeout
+        data_status = None
+        while time.time() < deadline:
+            status, config = self.rest.get_encryption_at_rest_config()
+            if isinstance(config, (bytes, bytearray)):
+                config = json.loads(config)
+            if status and isinstance(config, dict):
+                data_status = config.get("log", {}).get("info", {}).get("dataStatus")
+            if data_status == "encrypted":
+                return
+            self.sleep(interval, f"{label}Waiting for log dataStatus=encrypted (now {data_status})")
+        self.fail(f"{label}Log data not encrypted after {timeout}s (dataStatus={data_status})")
+
+    def kill_indexer(self, node):
+        """kill -9 the indexer on node; ns_server restarts it. pkill runs under Cygwin on
+        Windows and cannot see the native indexer.exe, so taskkill is used there."""
+        kill_cmd = "taskkill /F /IM indexer.exe" if _is_windows(node) else "pkill -9 -x indexer"
+        shell = RemoteMachineShellConnection(node, verbose=False)
+        try:
+            shell.execute_command(kill_cmd)
+        finally:
+            shell.disconnect()
+
     UUID_PATTERN = re.compile(
         r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
     )
@@ -3444,11 +3487,7 @@ class GSIEncryptionAtRestBase:
         self.log.info(f"indexer.statsPersistenceInterval {current} -> {self.stats_persistence_interval}; "
                       f"killing the indexers so they bootstrap with it")
         for node in index_nodes:
-            shell = RemoteMachineShellConnection(node, verbose=False)
-            try:
-                shell.execute_command("pkill -9 -x indexer")
-            finally:
-                shell.disconnect()
+            self.kill_indexer(node)
         self.sleep(10, "Waiting for ns_server to restart the indexers")
         self.wait_for_indexer_ready(index_nodes, label="[setUp] ")
 
@@ -4120,17 +4159,17 @@ class GSIEncryptionAtRestBase:
             state_before = self._capture_read_back_state(index_nodes)
 
         for node in index_nodes:
-            remote = RemoteMachineShellConnection(node)
             if restart_mode == "kill":
                 self.log.info(f"[RESTART] Killing indexer (kill -9) on node {node.ip}...")
-                remote.execute_command("pkill -9 -x indexer")
+                self.kill_indexer(node)
             else:
+                remote = RemoteMachineShellConnection(node)
                 self.log.info(f"[RESTART] Stopping indexer on node {node.ip}...")
                 remote.stop_server()
                 self.sleep(20, f"Waiting after stopping {node.ip}")
                 self.log.info(f"[RESTART] Starting indexer on node {node.ip}...")
                 remote.start_server()
-            remote.disconnect()
+                remote.disconnect()
             self.wait_for_indexer_ready([node], timeout=900, label="[RESTART] ")
         self.log.info("[RESTART] All index nodes restarted. Waiting for indexes to be online...")
         self.wait_until_indexes_online(timeout=1200)

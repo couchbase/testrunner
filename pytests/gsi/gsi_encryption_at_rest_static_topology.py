@@ -5956,11 +5956,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
             for node in index_nodes:
                 self.sleep(kill_delay_s, f"[STEP 6 restart] Waiting before kill -9 on {node.ip}")
                 self.log.info(f"[STEP 6 restart] kill -9 indexer on {node.ip}")
-                shell = RemoteMachineShellConnection(node)
-                try:
-                    shell.execute_command("pkill -9 -x indexer")
-                finally:
-                    shell.disconnect()
+                self.kill_indexer(node)
                 # ns_server restarts the indexer; wait until it is Active and serves
                 # GetInUseKeys again before killing the next node.
                 self.wait_for_indexer_ready([node], timeout=300, interval=2,
@@ -5970,11 +5966,7 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
             try:
                 for node in index_nodes:
                     self.log.info(f"[STEP 6 restart] kill -9 indexer on {node.ip}")
-                    shell = RemoteMachineShellConnection(node)
-                    try:
-                        shell.execute_command("pkill -9 -x indexer")
-                    finally:
-                        shell.disconnect()
+                    self.kill_indexer(node)
             finally:
                 # Release the key-op thread even if a kill failed, so it never hangs.
                 kills_done.set()
@@ -9137,21 +9129,6 @@ class GSIEncryptionAtRestStaticTopology(GSIEncryptionAtRestBase, BaseSecondaryIn
         self._bucket_key_op("disable", bucket_2, index_nodes, "[STEP 5] ")
         corrupt_and_expect_backup("[STEP 5] ")
         self.log.info("TEST PASSED: test_gsi_encryption_at_rest_corrupt_backup_lifecycle")
-
-    def _wait_for_log_data_encrypted(self, timeout=300, interval=15, label=""):
-        """Wait until ns_server reports every log-key file as encrypted."""
-        deadline = time.time() + timeout
-        data_status = None
-        while time.time() < deadline:
-            status, config = self.rest.get_encryption_at_rest_config()
-            if isinstance(config, (bytes, bytearray)):
-                config = json.loads(config)
-            if status and isinstance(config, dict):
-                data_status = config.get("log", {}).get("info", {}).get("dataStatus")
-            if data_status == "encrypted":
-                return
-            self.sleep(interval, f"{label}Waiting for log dataStatus=encrypted (now {data_status})")
-        self.fail(f"{label}Log data not encrypted after {timeout}s (dataStatus={data_status})")
 
     def test_gsi_log_encryption_cbcollect_decodes(self):
         """

@@ -885,6 +885,12 @@ class GSIEncryptionAtRestRebalance(GSIEncryptionAtRestBase, BaseSecondaryIndexin
                 raise Exception("File encryption validation failed after rebalance")
 
         if getattr(self, "enable_log_encryption_at_rest", False):
+            # Stats logs rotated before log encryption was enabled stay plaintext .gz
+            # until forceEncryptionAtRest/log re-encrypts them
+            status, response = self.rest.force_log_encryption_at_rest()
+            if not status:
+                raise Exception(f"forceEncryptionAtRest/log failed: {response}")
+            self._wait_for_log_data_encrypted(label="[POST-REBALANCE] ")
             self.log.info("[POST-REBALANCE] Validating log-key encrypted files...")
             post_rebal_index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
             kv_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
@@ -1963,7 +1969,7 @@ class GSIEncryptionAtRestRebalance(GSIEncryptionAtRestBase, BaseSecondaryIndexin
         removed_pattern = ["removeStaleCodebookFiles: Removed stale file"]
         removed_before = len(self.gsi_encryption_helper.grep_with_cbcat(node, indexer_log, removed_pattern,
                                                                         max_hits=100000))
-        self._remote_command(node, "pkill -9 -x indexer")
+        self.kill_indexer(node)
         self.sleep(10, "[STEP 4] Waiting for ns_server to restart the indexer")
         self.wait_for_indexer_ready([node], label="[STEP 4] ")
         self.wait_until_indexes_online()
@@ -2008,7 +2014,7 @@ class GSIEncryptionAtRestRebalance(GSIEncryptionAtRestBase, BaseSecondaryIndexin
         corrupted_pattern = ["Codebook corrupted and unrecoverable", "Error observed while decryptCodebookByChunk"]
         corrupted_before = len(self.gsi_encryption_helper.grep_with_cbcat(node, indexer_log, corrupted_pattern,
                                                                           max_hits=100000))
-        self._remote_command(node, "pkill -9 -x indexer")
+        self.kill_indexer(node)
         self.sleep(10, "[STEP 5] Waiting for ns_server to restart the indexer")
         self.wait_for_indexer_ready([node], label="[STEP 5] ")
         self.wait_until_indexes_online()
