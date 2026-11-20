@@ -9,6 +9,8 @@ class RebalanceProgressTests(RebalanceBaseTest):
         super(RebalanceProgressTests, self).setUp()
         self.rest = RestConnection(self.master)
         self.num_views = self.input.param("num_views", 3)
+        # Nodes that legitimately left detailedProgress mid-rebalance
+        self._finished_nodes = set()
         if self.num_views:
             self._create_indexes()
 
@@ -140,8 +142,14 @@ class RebalanceProgressTests(RebalanceBaseTest):
         rebalance.result()
 
     def _check_vb_sums(self, servers_ingoing, servers_outgoing, new_stats):
-        active_vb_sum_1 = sum([new_stats[server.ip]["ingoing"]['activeVBucketsLeft'] for server in servers_ingoing])
-        active_vb_sum_2 = sum([new_stats[server.ip]["outgoing"]['activeVBucketsLeft'] for server in servers_outgoing])
+        # Nodes in self._finished_nodes have no moves left (validated in
+        # _check_stats), so they contribute 0
+        active_vb_sum_1 = sum([new_stats[server.ip]["ingoing"]['activeVBucketsLeft']
+                               for server in servers_ingoing
+                               if server.ip not in self._finished_nodes])
+        active_vb_sum_2 = sum([new_stats[server.ip]["outgoing"]['activeVBucketsLeft']
+                               for server in servers_outgoing
+                               if server.ip not in self._finished_nodes])
         self.assertTrue(active_vb_sum_1 == active_vb_sum_2,
                         "Active vbuckets left should be equal in servers_in and init. %s" % new_stats)
 
@@ -152,6 +160,27 @@ class RebalanceProgressTests(RebalanceBaseTest):
                         "Expected buckets %s. Actual stat %s" % (
                                 len(self.buckets), new_stats))
         for server in servers:
+            if server.ip not in new_stats:
+                # ns_server drops a node from detailedProgress.perNode once
+                # it has no vbucket moves left (e.g. an ejected node after
+                # all its vbuckets moved out), while the rebalance itself is
+                # still running. That is only valid if the node's last
+                # reported stats showed nothing left to move.
+                if server.ip in self._finished_nodes:
+                    continue
+                last_stat = previous_stats.get(server.ip)
+                self.assertTrue(
+                    last_stat is not None and all(
+                        last_stat[direction]['activeVBucketsLeft'] == 0
+                        and last_stat[direction]['replicaVBucketsLeft'] == 0
+                        for direction in ("ingoing", "outgoing")),
+                    "Node %s disappeared from detailedProgress with vbuckets "
+                    "still left to move. Previous stat %s. Actual: %s" % (
+                        server.ip, previous_stats, new_stats))
+                self.log.info("Node %s finished its vbucket moves and left "
+                              "detailedProgress" % server.ip)
+                self._finished_nodes.add(server.ip)
+                continue
             current_stat = new_stats[server.ip][type]
             previous_stat = previous_stats[server.ip][type]
             if new_stats["bucket"] != previous_stats["bucket"]:

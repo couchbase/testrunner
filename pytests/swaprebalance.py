@@ -256,6 +256,22 @@ class SwapRebalanceBase(unittest.TestCase):
                 loader["thread"].join()
 
     @staticmethod
+    def _add_orchestrator(opt_node_ids, orchestrator, swap_all_nodes):
+        """Make sure the orchestrator is one of the nodes to remove.
+
+        pick_nodes() may already have picked the orchestrator. Replacing
+        opt_node_ids[0] with it then lists the same node twice, which makes
+        controller/rebalance fail with {"mismatch":1} and the second
+        controller/failOver fail with 'Inactive server given.'
+        """
+        if orchestrator in opt_node_ids:
+            return
+        if swap_all_nodes:
+            opt_node_ids.append(orchestrator)
+        else:
+            opt_node_ids[0] = orchestrator
+
+    @staticmethod
     def create_buckets(self):
         if self.num_buckets == 1:
             SwapRebalanceBase._create_default_bucket(self, replica=self.replica)
@@ -312,10 +328,8 @@ class SwapRebalanceBase(unittest.TestCase):
             status, content = ClusterOperationHelper.find_orchestrator(master)
             self.assertTrue(status, msg="Unable to find orchestrator: {0}:{1}".\
                 format(status, content))
-            if self.num_swap is len(current_nodes):
-                optNodesIds.append(content)
-            else:
-                optNodesIds[0] = content
+            SwapRebalanceBase._add_orchestrator(optNodesIds, content,
+                                                self.num_swap == len(current_nodes))
 
         for node in optNodesIds:
             self.log.info("removing node {0} and rebalance afterwards".format(node))
@@ -402,10 +416,8 @@ class SwapRebalanceBase(unittest.TestCase):
             self.assertTrue(status, msg="Unable to find orchestrator: {0}:{1}".\
             format(status, content))
             # When swapping all the nodes
-            if self.num_swap is len(current_nodes):
-                optNodesIds.append(content)
-            else:
-                optNodesIds[0] = content
+            SwapRebalanceBase._add_orchestrator(optNodesIds, content,
+                                                self.num_swap == len(current_nodes))
 
         for node in optNodesIds:
             self.log.info("removing node {0} and rebalance afterwards".format(node))
@@ -533,10 +545,8 @@ class SwapRebalanceBase(unittest.TestCase):
             self.assertTrue(status, msg="Unable to find orchestrator: {0}:{1}".\
                 format(status, content))
             # When swapping all the nodes
-            if self.num_swap is len(current_nodes):
-                optNodesIds.append(content)
-            else:
-                optNodesIds[0] = content
+            SwapRebalanceBase._add_orchestrator(optNodesIds, content,
+                                                self.num_swap == len(current_nodes))
             master = not_failed_over[-1]
 
         self.log.info("DATA ACCESS PHASE")
@@ -620,7 +630,7 @@ class SwapRebalanceBase(unittest.TestCase):
             status, content = ClusterOperationHelper.find_orchestrator(master)
             self.assertTrue(status, msg="Unable to find orchestrator: {0}:{1}".\
             format(status, content))
-            optNodesIds[0] = content
+            SwapRebalanceBase._add_orchestrator(optNodesIds, content, False)
 
         self.log.info("FAILOVER PHASE")
         # Failover selected nodes
