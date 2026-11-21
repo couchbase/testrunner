@@ -89,7 +89,11 @@ class LogScanner(object):
             "n1ql": {
                 "query.log": {
                     "keywords" : ["panic","FATAL","SEVERE","Fatal","Severe"],
-                    "ignore_keywords" : ["not available", "EnableNonFatalGets"]
+                    # "Fail to due generate SSL certificate": transient torn read of the
+                    # cert/key pair while ns_server rotates certs; eventually consistent
+                    # by design per ns_server (MB-73273)
+                    "ignore_keywords" : ["not available", "EnableNonFatalGets",
+                                         "Fail to due generate SSL certificate"]
                 }
             }
         }

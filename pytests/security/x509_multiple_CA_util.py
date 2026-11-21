@@ -1263,18 +1263,51 @@ class x509main:
         rest = RestConnection(server)
         rest.regenerate_cluster_certificate()
 
+    def wait_for_all_nodes_healthy(self, server, timeout=180):
+        """
+        Waits until every node of the cluster that server belongs to
+        reports healthy. Returns the list of cluster node IPs (empty for
+        a node that is not part of an initialised cluster).
+        """
+        rest = RestConnection(server)
+        end_time = time.time() + timeout
+        while True:
+            nodes = rest.get_nodes(get_all_nodes=True)
+            unhealthy = [node.ip for node in nodes if node.status != 'healthy']
+            if not unhealthy:
+                return [node.ip for node in nodes]
+            if time.time() > end_time:
+                raise Exception("Nodes {0} not healthy after {1}s".format(
+                    unhealthy, timeout))
+            self.log.info("Waiting for nodes {0} to become healthy".format(
+                unhealthy))
+            time.sleep(5)
+
     def teardown_certs(self, servers):
         """
         1. Remove dir from slave
-        2. Delete all trusted CAs & regenerate certs
+        2. Regenerate certs & delete all trusted CAs, once per cluster
+
+        regenerateCertificate resets the CA of the whole cluster, after which
+        nodes re-establish their node-to-node connections. Since MB-61591 the
+        server refuses a CA reset (503) while any node is unreachable, so
+        regenerate once per cluster and wait for every node to be healthy
+        before and after it, instead of resetting the CA from every node.
         """
         self.remove_directory(x509main.CACERTFILEPATH)
         for server in servers:
             self.delete_inbox_folder_on_server(server=server)
             self.delete_scripts_folder_on_server(server=server)
+        done_ips = set()
         for server in servers:
+            if server.ip in done_ips:
+                continue
+            cluster_ips = self.wait_for_all_nodes_healthy(server)
             self.regenerate_certs(server=server)
+            self.wait_for_all_nodes_healthy(server)
             self.delete_trusted_CAs(server=server)
+            done_ips.add(server.ip)
+            done_ips.update(cluster_ips)
 
 
 class Validation:

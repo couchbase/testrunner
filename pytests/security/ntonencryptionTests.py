@@ -312,6 +312,9 @@ class ntonencryptionTest(BaseTestCase):
         rebalance.result()
         if self.ntonencrypt == 'disable' and self.enable_nton_local == True:
             ntonencryptionBase().setup_nton_cluster(self.servers,'enable',self.local_clusterEncryption)
+            # Encryption level change restarts index/query services; creating an
+            # index right away fails with "Terminate Request due to server termination"
+            self.sleep(30, "Wait for services to restart after cluster encryption change")
 
         #ntonencryptionBase().get_ntonencryption_status(self.servers)
         cbas_node = self.get_nodes_from_services_map(service_type="cbas")
