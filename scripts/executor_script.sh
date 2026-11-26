@@ -132,20 +132,16 @@ if [[ "${slave_base}" = "bhive_slave" ]]; then
   cd magma_loader/DocLoader
   mvn clean install
   cd ../..
-  touch $WORKSPACE/testexec.$$.ini
   set -x
-  docker run --rm \
-    -v /tmp/testexec_reformat.$$.ini:/testrunner/testexec_reformat.$$.ini \
-    -v /tmp/testexec.$$.ini:/testrunner/testexec.$$.ini  \
-    testrunner:install python3 scripts/populateIni.py $skip_mem_info \
+  ${py_executable} scripts/populateIni.py $skip_mem_info \
     -s ${servers} $internal_servers_param \
     -d ${addPoolServerId} \
     -a ${addPoolServers} \
-    -i testexec_reformat.$$.ini \
+    -i /tmp/testexec_reformat.$$.ini \
     -p ${os} \
-    -o testexec.$$.ini \
+    -o /tmp/testexec.$$.ini \
     -k '{'${UPDATE_INI_VALUES}'}'
-    set +x
+  set +x
 else
   if [ "${small_ver}" = "7.0" ]; then
     echo ${py_executable}  scripts/populateIni.py -s ${servers} -d ${addPoolServerId} -a ${addPoolServers} -i /tmp/testexec_reformat.$$.ini -p ${os} -o /tmp/testexec.$$.ini -k '{'${UPDATE_INI_VALUES}'}'
@@ -200,29 +196,18 @@ else
     fi
 
     echo "Starting server installation"
-    if [[ "${slave_base}" = "bhive_slave_test" ]]; then
-      set -x
-      docker run --rm \
-        -v /tmp/testexec.$$.ini:/testrunner/testexec.$$.ini \
-        testrunner:install python3 scripts/new_install.py \
-        -i testexec.$$.ini \
-        -p force_reinstall=True,timeout=${INSTALL_TIMEOUT},skip_local_download=${SKIP_LOCAL_DOWNLOAD},get-cbcollect-info=True,version=${version_number},product=cb,debug_logs=True,ntp=True,url=${url}${extraInstall}
-      status=$?
-      set +x
+    cp /tmp/testexec.$$.ini $WORKSPACE/
+    initial_version=$(echo "$parameters" | sed -n 's/.*initial_version=\([^,]*\).*/\1/p')
+    echo "Initial version: $initial_version"
+    if [ -n "$initial_version" ]; then
+      version_to_use=$initial_version
     else
-      cp /tmp/testexec.$$.ini $WORKSPACE/
-      initial_version=$(echo "$parameters" | sed -n 's/.*initial_version=\([^,]*\).*/\1/p')
-	  echo "Initial version: $initial_version"
-      if [ -n "$initial_version" ]; then
-        version_to_use=$initial_version
-   	  else
-        version_to_use=$version_number
-      fi
-      set -x
-      ${py_executable} scripts/new_install.py -i /tmp/testexec.$$.ini -p force_reinstall=True,timeout=${INSTALL_TIMEOUT},skip_local_download=${SKIP_LOCAL_DOWNLOAD},get-cbcollect-info=True,version=${version_to_use},product=cb,debug_logs=True,ntp=True,url=${url}${extraInstall}
-      status=$?
-      set +x
+      version_to_use=$version_number
     fi
+    set -x
+    ${py_executable} scripts/new_install.py -i /tmp/testexec.$$.ini -p force_reinstall=True,timeout=${INSTALL_TIMEOUT},skip_local_download=${SKIP_LOCAL_DOWNLOAD},get-cbcollect-info=True,version=${version_to_use},product=cb,debug_logs=True,ntp=True,url=${url}${extraInstall}
+    status=$?
+    set +x
 fi
 
 # Set to available and mark it as failed install only if `exit status=2`
